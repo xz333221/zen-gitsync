@@ -1203,6 +1203,7 @@ function toggleFullscreen() {
           <el-select
             v-model="authorFilter"
             :placeholder="$t('@A1833:选择作者')"
+            :aria-label="$t('@A1833:作者')"
             multiple
             clearable
             filterable
@@ -1225,6 +1226,7 @@ function toggleFullscreen() {
           <el-select
             v-model="branchFilter"
             :placeholder="$t('@A1833:选择分支')"
+            :aria-label="$t('@A1833:分支')"
             multiple
             clearable
             filterable
@@ -1247,6 +1249,7 @@ function toggleFullscreen() {
           <el-input
             v-model="messageFilter"
             :placeholder="$t('@A1833:提交信息关键词')"
+            :aria-label="$t('@A1833:提交信息关键词')"
             clearable
             class="filter-input"
             size="small"
@@ -1265,6 +1268,7 @@ function toggleFullscreen() {
             :range-separator="$t('@A1833:至')"
             :start-placeholder="$t('@A1833:开始日期')"
             :end-placeholder="$t('@A1833:结束日期')"
+            :aria-label="$t('@A1833:日期')"
             format="YYYY-MM-DD"
             value-format="YYYY-MM-DD"
             class="filter-input date-range"
@@ -1316,7 +1320,7 @@ function toggleFullscreen() {
             size="small"
             v-loading="isLoading"
             class="log-table compact-table"
-            :empty-text="isLoading ? $t('@A1833:加载中...') : $t('@A1833:没有匹配的提交记录')"
+            :empty-text="isLoading ? $t('@A1833:加载中…') : $t('@A1833:没有匹配的提交记录')"
             height="450"
             @row-contextmenu="handleContextMenu"
             @row-click="(row) => viewCommitDetail(row)"
@@ -1377,7 +1381,7 @@ function toggleFullscreen() {
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="date" :label="$t('@A1833:日期')" min-width="130" width="150" resizable />
+            <el-table-column prop="date" class-name="commit-date-cell" :label="$t('@A1833:日期')" min-width="130" width="150" resizable />
             <el-table-column :label="$t('@A1833:作者')" min-width="90" width="120" resizable>
               <template #default="scope">
                 <el-tooltip
@@ -1523,19 +1527,21 @@ function toggleFullscreen() {
       role="menuitem"
       tabindex="-1"
       @click="viewCommitDetail(selectedContextCommit)"
+      @keydown.enter.prevent="viewCommitDetail(selectedContextCommit)"
+      @keydown.space.prevent="viewCommitDetail(selectedContextCommit)"
     >
       <i class="el-icon-view" aria-hidden="true"></i> {{ $t('@A1833:查看详情') }}
     </li>
-    <li class="context-menu-item" role="menuitem" tabindex="-1" @click="copyCommitHash(selectedContextCommit)">
+    <li class="context-menu-item" role="menuitem" tabindex="-1" @click="copyCommitHash(selectedContextCommit)" @keydown.enter.prevent="copyCommitHash(selectedContextCommit)" @keydown.space.prevent="copyCommitHash(selectedContextCommit)">
       <i class="el-icon-document-copy" aria-hidden="true"></i> {{ $t('@A1833:复制提交哈希') }}
     </li>
-    <li class="context-menu-item" role="menuitem" tabindex="-1" @click="copyCommitContent(selectedContextCommit)">
+    <li class="context-menu-item" role="menuitem" tabindex="-1" @click="copyCommitContent(selectedContextCommit)" @keydown.enter.prevent="copyCommitContent(selectedContextCommit)" @keydown.space.prevent="copyCommitContent(selectedContextCommit)">
       <i class="el-icon-document" aria-hidden="true"></i> {{ $t('@A1833:复制提交内容') }}
     </li>
-    <li class="context-menu-item" role="menuitem" tabindex="-1" @click="resetToCommit(selectedContextCommit)">
+    <li class="context-menu-item" role="menuitem" tabindex="-1" @click="resetToCommit(selectedContextCommit)" @keydown.enter.prevent="resetToCommit(selectedContextCommit)" @keydown.space.prevent="resetToCommit(selectedContextCommit)">
       <i class="el-icon-refresh-right" aria-hidden="true"></i> {{ $t('@A1833:重置到该提交(hard)') }}
     </li>
-    <li class="context-menu-item" role="menuitem" tabindex="-1" @click="revertCommit(selectedContextCommit)">
+    <li class="context-menu-item" role="menuitem" tabindex="-1" @click="revertCommit(selectedContextCommit)" @keydown.enter.prevent="revertCommit(selectedContextCommit)" @keydown.space.prevent="revertCommit(selectedContextCommit)">
       <i class="el-icon-delete" aria-hidden="true"></i> {{ $t('@A1833:撤销提交 (Revert)') }}
     </li>
     <li
@@ -1543,6 +1549,8 @@ function toggleFullscreen() {
       role="menuitem"
       tabindex="-1"
       @click="cherryPickCommit(selectedContextCommit)"
+      @keydown.enter.prevent="cherryPickCommit(selectedContextCommit)"
+      @keydown.space.prevent="cherryPickCommit(selectedContextCommit)"
     >
       <i class="el-icon-edit" aria-hidden="true"></i> Cherry{{ $t('@A1833:-Pick 到当前分支') }}
     </li>
@@ -1649,7 +1657,7 @@ function toggleFullscreen() {
 }
 
 :deep(.el-table__row) {
-  transition: all var(--transition-base) ease;
+  transition: var(--transition-ui-base);
   cursor: pointer;
 }
 
@@ -1669,7 +1677,7 @@ function toggleFullscreen() {
 .branch-tag {
   margin-right: 0;
   border-radius: var(--radius-base);
-  transition: all var(--transition-base) ease;
+  transition: var(--transition-ui-base);
   font-size: var(--font-size-xs);
   padding: 0 var(--spacing-sm);
   height: 14px;
@@ -1721,10 +1729,11 @@ function toggleFullscreen() {
   color: var(--commit-hash-fg);
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
   border-radius: var(--radius-base);
   padding: 2px 5px;
   background-color: var(--commit-hash-bg);
-  transition: all var(--transition-base) ease;
+  transition: var(--transition-ui-base);
   /* 按钮重置:保持 span 视觉 */
   border: none;
   font-size: inherit;
@@ -1745,6 +1754,11 @@ function toggleFullscreen() {
 .commit-hash:active {
   background-color: color-mix(in srgb, var(--commit-hash-bg) 50%, var(--color-primary) 50%);
   transform: scale(0.96);
+}
+
+/* 日期列:等宽数字,避免逐行抖动 */
+:deep(.commit-date-cell) {
+  font-variant-numeric: tabular-nums;
 }
 
 .commit-detail-container {
@@ -1865,7 +1879,7 @@ function toggleFullscreen() {
   font-size: var(--font-size-xs);
   color: var(--color-primary);
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: var(--transition-ui-base);
 }
 
 .info-message-toggle:hover {
@@ -1925,7 +1939,7 @@ function toggleFullscreen() {
   margin-bottom: var(--spacing-base);
   border-radius: var(--radius-lg);
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
   width: 100%;
   position: sticky;
   top: 36px; /* 紧贴log-header下方 */
@@ -1992,7 +2006,7 @@ function toggleFullscreen() {
 .filter-action-button {
   padding: var(--spacing-xs) var(--spacing-md);
   border-radius: var(--radius-md);
-  transition: all var(--transition-slow);
+  transition: var(--transition-ui-slow);
   min-width: 60px;
   font-weight: 500;
 }
@@ -2146,7 +2160,7 @@ function toggleFullscreen() {
 .context-menu-item {
   display: flex;
   align-items: center;
-  transition: all var(--transition-base) ease;
+  transition: var(--transition-ui-base);
   color: var(--text-secondary);
 }
 

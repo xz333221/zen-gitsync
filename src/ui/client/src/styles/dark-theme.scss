@@ -10,6 +10,9 @@
    ======================================================= */
    
 html[data-theme="dark"] {
+  /* 原生控件（滚动条 / <select> 弹层 / 日期控件）跟随深色渲染 */
+  color-scheme: dark;
+
   /* Element Plus深色主题CSS变量 */
   --el-bg-color: var(--bg-container-dark);
   --el-bg-color-page: var(--bg-page-dark);

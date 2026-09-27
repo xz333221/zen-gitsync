@@ -310,7 +310,7 @@ const tagTypeDescription = computed(() => {
   .el-input__inner {
     border-radius: var(--radius-lg);
     border: 2px solid var(--color-gray-200);
-    transition: all var(--transition-slow) ease;
+    transition: var(--transition-ui-slow);
     
     &:hover {
       border-color: var(--color-gray-300);
@@ -327,7 +327,7 @@ const tagTypeDescription = computed(() => {
   .el-textarea__inner {
     border-radius: var(--radius-lg);
     border: 2px solid var(--color-gray-200);
-    transition: all var(--transition-slow) ease;
+    transition: var(--transition-ui-slow);
     
     line-height: 1.5;
     
@@ -351,7 +351,7 @@ const tagTypeDescription = computed(() => {
     .el-radio-button__inner {
       width: 100%;
       border-radius: var(--radius-lg);
-      transition: all var(--transition-slow) ease;
+      transition: var(--transition-ui-slow);
     }
   }
 }
@@ -385,7 +385,7 @@ const tagTypeDescription = computed(() => {
     .el-button {
       border-radius: var(--radius-lg);
       font-weight: 500;
-      transition: all var(--transition-slow) ease;
+      transition: var(--transition-ui-slow);
       
       &:hover {
         transform: scale(1.02);

@@ -550,7 +550,7 @@ function handleClose() {
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   background: var(--bg-container);
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
 
   &:hover {
     border-color: var(--color-primary);

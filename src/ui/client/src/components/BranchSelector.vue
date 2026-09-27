@@ -433,7 +433,7 @@ async function refreshCurrentBranch() {
     border-radius: var(--radius-lg);
     border: 1px solid var(--border-input);
     box-shadow: var(--shadow-sm);
-    transition: all var(--transition-base) ease;
+    transition: var(--transition-ui-base);
     padding: 10px var(--spacing-md);
     background: var(--bg-container);
   }

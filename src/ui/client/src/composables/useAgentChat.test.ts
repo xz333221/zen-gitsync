@@ -163,6 +163,44 @@ describe('useAgentChat parallel sessions', () => {
     expect(last?.status).toBe('done')
   })
 
+  // 回归：停止 = 服务端仍会落盘，但 writeSession 往往晚于停止后立刻发起的这次列表刷新。
+  // 之前的实现直接以服务端列表覆盖，左栏这一条就消失了（用户报的"一停止任务就没了"）。
+  test('停止后服务端列表还没这条会话时，左栏条目要保留', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+
+    // 新会话首轮：meta 事件才带回真实 sessionId
+    const sendPromise = chat.sendMessage('请列出当前项目的目录结构')
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'N1', title: '请列出当前项目的目录结构' })
+    chatStreams[0].send({ type: 'content', delta: '正在看目录' })
+    await flush()
+    expect(chat.sessions.value.map((s) => s.sessionId)).toEqual(['N1', 'A', 'B'])
+
+    chat.stop()
+    chatStreams[0].error(new DOMException('aborted', 'AbortError'))
+    await sendPromise
+    await flush()
+
+    // beforeEach 的列表桩里没有 N1：这次刷新拿不到它，但条目不能被吞掉
+    const kept = chat.sessions.value.find((s) => s.sessionId === 'N1')
+    expect(kept).toBeTruthy()
+    expect(kept?.isGenerating).toBe(false)
+    expect(kept?.title).toBe('请列出当前项目的目录结构')
+
+    // 服务端落盘后再刷新：同一条 sessionId 只有一条，且完全以服务端数据为准
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.startsWith('/api/agent/sessions?')) {
+        return json({ success: true, sessions: [sessionMeta('N1', '服务端标题'), sessionMeta('A', '会话 A')] })
+      }
+      return json({ success: true })
+    }))
+    await chat.loadSessions()
+    const n1 = chat.sessions.value.filter((s) => s.sessionId === 'N1')
+    expect(n1).toHaveLength(1)
+    expect(n1[0].title).toBe('服务端标题')
+  })
+
   // 复用同一套 fetch/SSE mock:命令执行中的 tool_output 要能在运行期间看到,
   // 结束时被 tool_result(带 exit code 的最终结果)整体覆盖
   test('命令实时输出：tool_output 执行中累加，tool_result 到达后覆盖', async () => {

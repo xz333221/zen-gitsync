@@ -88,6 +88,11 @@ function onSidebarSplitterMouseDown(e: MouseEvent) {
   window.addEventListener('mousemove', onMove)
   window.addEventListener('mouseup', onUp, { once: true })
 }
+// 分隔条键盘替代:←/→ 微调宽度,复用同一 sidebarWidth 状态与落盘逻辑
+function nudgeSidebarWidth(delta: number) {
+  sidebarWidth.value = Math.min(SIDEBAR_MAX_W, Math.max(SIDEBAR_MIN_W, sidebarWidth.value + delta))
+  try { localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth.value)) } catch { /* quota 不阻塞 UI */ }
+}
 function readLastTaskMap(): Record<string, string> {
   try {
     const raw = localStorage.getItem(LAST_TASK_BY_PROJECT_KEY)
@@ -1003,9 +1008,16 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
     <div
       class="wb-splitter"
       role="separator"
+      tabindex="0"
       aria-orientation="vertical"
+      :aria-label="$t('@WORKBENCH:拖动调整侧边栏宽度')"
+      :aria-valuenow="sidebarWidth"
+      :aria-valuemin="SIDEBAR_MIN_W"
+      :aria-valuemax="SIDEBAR_MAX_W"
       :title="$t('@WORKBENCH:拖动调整侧边栏宽度')"
       @mousedown="onSidebarSplitterMouseDown"
+      @keydown.left.prevent="nudgeSidebarWidth(-16)"
+      @keydown.right.prevent="nudgeSidebarWidth(16)"
     />
 
     <!-- 中：单任务编辑区 -->
@@ -1021,6 +1033,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
               class="wb-input wb-input--title"
               v-model="selectedTask.title"
               :placeholder="$t('@WORKBENCH:任务标题')"
+              :aria-label="$t('@WORKBENCH:任务标题')"
             />
             <button
               type="button"
@@ -1059,7 +1072,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
               : $t('@WORKBENCH:有未保存的更改')
             }}
           </span>
-          <select class="wb-select" v-model="selectedTask.promptId">
+          <select class="wb-select" v-model="selectedTask.promptId" :aria-label="$t('@WORKBENCH:预置提示词')">
             <option :value="null">{{ $t('@WORKBENCH:不绑定预置提示词') }}</option>
             <option v-for="p in availablePrompts" :key="p.id" :value="p.id">{{ p.name }}</option>
           </select>
@@ -1165,6 +1178,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
             class="wb-textarea wb-textarea--autogrow"
             v-model="selectedTask.desc"
             :placeholder="$t('@WORKBENCH:任务描述（可选）')"
+            :aria-label="$t('@WORKBENCH:任务描述（可选）')"
             @input="autoGrowTextarea($event)"
             @focus="autoGrowTextarea($event)"
             @blur="autoGrowTextarea($event)"
@@ -1220,6 +1234,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
                   class="wb-textarea"
                   v-model="selectedTask.simpleOverride"
                   :placeholder="$t('@WORKBENCH:留空则使用上方选定的「预置提示词」模板;可用变量:｛｛task.title｝｝ ｛｛task.desc｝｝ ｛｛repo.path｝｝ ｛｛branch｝｝')"
+                  :aria-label="$t('@WORKBENCH:覆盖预置提示词（可选）')"
                   rows="6"
                 />
               </details>

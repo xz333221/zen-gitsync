@@ -549,7 +549,7 @@ defineExpose({
   border-radius: var(--radius-md);
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.05);
-  transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
+  transition: var(--transition-ui-slow);
   position: relative;
   overflow: hidden;
   
@@ -593,7 +593,7 @@ defineExpose({
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
+  transition: var(--transition-ui-slow);
   position: relative;
   
   &.active {
@@ -629,7 +629,7 @@ defineExpose({
   flex-shrink: 0;
   
   font-weight: 600;
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
   
   .icon-finish {
     color: var(--color-success);
@@ -700,7 +700,7 @@ defineExpose({
   
   :deep(.el-progress-bar__inner) {
     background: linear-gradient(90deg, var(--color-primary), var(--color-primary-light));
-    transition: all var(--transition-slow) ease;
+    transition: var(--transition-ui-slow);
   }
   
   .finished & :deep(.el-progress-bar__inner) {

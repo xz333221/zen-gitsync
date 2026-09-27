@@ -981,6 +981,7 @@ function onBrowserSelect(path: string) {
             <el-input
               v-model="newDirectoryPath"
               :placeholder="$t('@67CE7:请输入目录路径')"
+              :aria-label="$t('@67CE7:目录路径')"
               class="modern-input"
               size="large"
             />
@@ -1091,7 +1092,7 @@ function onBrowserSelect(path: string) {
   /* border: 1px solid var(--border-component);
   box-shadow: var(--shadow-sm); */
   flex-shrink: 0;
-  transition: all var(--transition-base) ease;
+  transition: var(--transition-ui-base);
 }
 
 .directory-selector:hover {
@@ -1446,7 +1447,7 @@ function onBrowserSelect(path: string) {
   font-size: var(--font-size-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-base) ease;
+  transition: var(--transition-ui-base);
   white-space: nowrap;
   min-height: 40px;
 }

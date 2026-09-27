@@ -406,7 +406,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   font-size: var(--font-size-mid);
   font-family: inherit;
   cursor: pointer;
-  transition: all var(--transition-fast) ease;
+  transition: var(--transition-ui-fast);
 
   &:hover {
     border-color: var(--color-primary);
@@ -576,7 +576,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   color: var(--text-tertiary);
   cursor: pointer;
   border-radius: var(--radius-xs);
-  transition: all var(--transition-fast) ease;
+  transition: var(--transition-ui-fast);
   padding: 0;
 
   &:hover {

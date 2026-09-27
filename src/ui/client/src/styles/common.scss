@@ -20,31 +20,31 @@
 }
 
 /* =======================================================
-   全局滚动条：统一隐藏显示（滚动能力保留，只是看不见条）
+   全局滚动条：统一细滚动条（可见滚动位置）
 
    两句各管一条渲染通路，缺一不可：
-   · scrollbar-width: none —— 标准属性（Chromium 121+ / Firefox）。
+   · scrollbar-width: thin —— 标准属性（Chromium 121+ / Firefox）。
      ⚠️ 必须写在 `*` 上：实测 Chromium 不会把根元素上的 scrollbar-width
-     传给内部滚动容器（.proj__list 等算出来仍是 auto），逐个元素命中才藏得住。
+     传给内部滚动容器（.proj__list 等算出来仍是 auto），逐个元素命中才统一得了。
      也**不要**顺手写 scrollbar-color —— 那会让 Chromium 切到标准滚动条渲染、
      反过来忽略下面 ::-webkit-scrollbar 整条规则。
-   · ::-webkit-scrollbar 的 display: none —— WebKit/Chromium 伪元素通路，
+   · ::-webkit-scrollbar 的宽高 —— WebKit/Chromium 伪元素通路，
      给不支持 scrollbar-width 的版本兜底。
-   想恢复"细滚动条"外观：把 scrollbar-width 改回 thin、去掉 display: none
-   即可，下面的 thumb / track 配色定义保持原样、直接复用。
+   · thumb / track 配色见下方，滚动条宽度统一取 --scrollbar-width(6px)。
+   2026-09 之所以从"隐藏"改回"细条"：提交历史 / 执行日志 / 文件差异这些长列表
+   在隐藏滚动条时看不到滚动位置，长内容容易误以为已经到底。
    ======================================================= */
 * {
-  /* !important：要压过第三方样式里写死的 thin
+  /* !important：要压过第三方样式里写死的 thin / auto
      （zen-ai-chat-ui 藏在 @supports not selector(::-webkit-scrollbar) 块里、
-     Element Plus 的 .el-splitter-panel 直接声明），否则会漏出几条 */
-  scrollbar-width: none !important;
+     Element Plus 的 .el-splitter-panel 直接声明），否则宽度不统一 */
+  scrollbar-width: thin !important;
 }
 
 /* WebKit 浏览器（Chrome/Edge/Safari） */
 *::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
 }
 
 *::-webkit-scrollbar-thumb {
@@ -334,6 +334,8 @@ select option {
   /* scroll only vertically by default */
   overflow-x: hidden;
   overflow-y: auto;
+  /* 弹窗内滚到底时不要把滚动链传给背后的看板 / 页面 */
+  overscroll-behavior: contain;
   box-sizing: border-box;
 }
 

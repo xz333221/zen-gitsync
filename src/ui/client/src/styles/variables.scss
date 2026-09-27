@@ -3,6 +3,9 @@
    ======================================================= */
 
 :root {
+  /* 原生控件（滚动条 / <select> 弹层 / 日期控件）跟随主题渲染 */
+  color-scheme: light;
+
   /* ===== 基础颜色定义 ===== */
   
   /* 主色调 */
@@ -327,8 +330,20 @@
   --btn-success-shadow-hover: 0 8px 18px rgba(16, 185, 129, 0.16);
   --btn-warning-shadow-hover: 0 8px 18px rgba(245, 158, 11, 0.16);
   --btn-danger-shadow-hover: 0 8px 18px rgba(239, 68, 68, 0.16);
-  --dialog-transition: all var(--transition-base) var(--ease-enter);
-  --dialog-transition-fast: all var(--transition-fast) var(--ease-enter);
+  --dialog-transition:
+    color var(--transition-base) var(--ease-enter),
+    background-color var(--transition-base) var(--ease-enter),
+    border-color var(--transition-base) var(--ease-enter),
+    box-shadow var(--transition-base) var(--ease-enter),
+    opacity var(--transition-base) var(--ease-enter),
+    transform var(--transition-base) var(--ease-enter);
+  --dialog-transition-fast:
+    color var(--transition-fast) var(--ease-enter),
+    background-color var(--transition-fast) var(--ease-enter),
+    border-color var(--transition-fast) var(--ease-enter),
+    box-shadow var(--transition-fast) var(--ease-enter),
+    opacity var(--transition-fast) var(--ease-enter),
+    transform var(--transition-fast) var(--ease-enter);
 
   /* ===== 文字颜色 ===== */
   
@@ -461,12 +476,58 @@
   --ease-custom: var(--ease-standard);   /* 兼容别名 */
   
   /* 常用过渡组合 */
-  --transition-all: all var(--transition-base) var(--ease-custom);
+  --transition-all:
+    color var(--transition-base) var(--ease-custom),
+    background-color var(--transition-base) var(--ease-custom),
+    border-color var(--transition-base) var(--ease-custom),
+    box-shadow var(--transition-base) var(--ease-custom),
+    opacity var(--transition-base) var(--ease-custom),
+    transform var(--transition-base) var(--ease-custom);
   --transition-color: color var(--transition-base) var(--ease-custom);
   --transition-bg: background-color var(--transition-base) var(--ease-custom);
   --transition-border: border-color var(--transition-base) var(--ease-custom);
   --transition-shadow: box-shadow var(--transition-base) var(--ease-custom);
   --transition-transform: transform var(--transition-base) var(--ease-custom);
+
+  /* "显式版 all"：需要宽过渡（含尺寸 / 滤镜，如展开收起、悬停发光）时用这组，
+     不再直接写 `transition: all` —— all 会连 display/visibility 一并尝试过渡，
+     且容易误伤新加的属性。属性表固定，语义与旧 all 等价。 */
+  --transition-ui-fast:
+    color var(--transition-fast) ease,
+    background-color var(--transition-fast) ease,
+    border-color var(--transition-fast) ease,
+    box-shadow var(--transition-fast) ease,
+    opacity var(--transition-fast) ease,
+    transform var(--transition-fast) ease,
+    filter var(--transition-fast) ease,
+    width var(--transition-fast) ease,
+    height var(--transition-fast) ease,
+    max-height var(--transition-fast) ease,
+    padding var(--transition-fast) ease;
+  --transition-ui-base:
+    color var(--transition-base) ease,
+    background-color var(--transition-base) ease,
+    border-color var(--transition-base) ease,
+    box-shadow var(--transition-base) ease,
+    opacity var(--transition-base) ease,
+    transform var(--transition-base) ease,
+    filter var(--transition-base) ease,
+    width var(--transition-base) ease,
+    height var(--transition-base) ease,
+    max-height var(--transition-base) ease,
+    padding var(--transition-base) ease;
+  --transition-ui-slow:
+    color var(--transition-slow) ease,
+    background-color var(--transition-slow) ease,
+    border-color var(--transition-slow) ease,
+    box-shadow var(--transition-slow) ease,
+    opacity var(--transition-slow) ease,
+    transform var(--transition-slow) ease,
+    filter var(--transition-slow) ease,
+    width var(--transition-slow) ease,
+    height var(--transition-slow) ease,
+    max-height var(--transition-slow) ease,
+    padding var(--transition-slow) ease;
   
   /* ===== 层级 ===== */
   

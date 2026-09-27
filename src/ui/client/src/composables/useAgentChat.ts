@@ -254,6 +254,10 @@ export function useAgentChat() {
   let sessionsRequestNonce = 0
   let localKeySeed = 0
 
+  // 刚被"停止"、服务端 writeSession 可能还没写完盘的会话：列表刷新时先保留它的条目，
+  // 等某次刷新在服务端列表里看到它再交回给服务端数据（见 mergeGeneratingSessions）
+  const pendingPersistIds = new Set<string>()
+
   // ── 运行时状态存取 ─────────────────────────────────────
   function createRun(key: string): SessionRun {
     return {
@@ -295,30 +299,35 @@ export function useAgentChat() {
   }
 
   // ── 加载会话列表(按当前项目隔离) ─────────────────────
-  // 服务端只返回已落盘的会话；正在后台流式、尚未落盘的会话要补回列表，
-  // 否则并发/切会话时刷新列表会把还在生成的那条"吞掉"。
+  // 服务端只返回已落盘的会话；正在后台流式、以及刚被停止但还没写完盘的会话要补回列表，
+  // 否则并发/切会话/点停止时刷新列表会把还在生成的那条"吞掉"。
   function mergeGeneratingSessions(server: SessionMeta[]): SessionMeta[] {
     const merged = [...server]
     for (const run of runs.values()) {
-      if (!run.isStreaming || !run.sessionId) continue
+      if (!run.sessionId) continue
       const idx = merged.findIndex(s => s.sessionId === run.sessionId)
-      if (idx === -1) {
-        const nowIso = new Date().toISOString()
-        merged.unshift({
-          sessionId: run.sessionId,
-          title: run.title || $t('@AGENT:无标题'),
-          source: 'web',
-          cwd: configStore.currentDirectory || '',
-          model: '',
-          createdAt: nowIso,
-          updatedAt: nowIso,
-          messageCount: run.messages.filter(m => m.role === 'user').length || 1,
-          size: 0,
-          isGenerating: true
-        })
-      } else {
-        merged[idx] = { ...merged[idx], isGenerating: true }
+      if (idx !== -1) {
+        // 服务端已落盘：撤掉待落盘标记，之后完全以服务端数据为准
+        pendingPersistIds.delete(run.sessionId)
+        if (run.isStreaming) merged[idx] = { ...merged[idx], isGenerating: true }
+        continue
       }
+      // 停止后的这次刷通常早于服务端 writeSession —— 列表里还没有这条时不能直接丢弃，
+      // 否则用户看到的就是"一停止，左栏这条会话就没了"。保留到服务端列表出现为止。
+      if (!run.isStreaming && !pendingPersistIds.has(run.sessionId)) continue
+      const nowIso = new Date().toISOString()
+      merged.unshift({
+        sessionId: run.sessionId,
+        title: run.title || $t('@AGENT:无标题'),
+        source: 'web',
+        cwd: configStore.currentDirectory || '',
+        model: '',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        messageCount: run.messages.filter(m => m.role === 'user').length || 1,
+        size: 0,
+        isGenerating: run.isStreaming
+      })
     }
     return merged
   }
@@ -543,6 +552,8 @@ export function useAgentChat() {
 
     // 本轮实际落盘的会话 ID（meta 事件到达后才有值）
     let streamSessionId: string | null = run.sessionId
+    // 本轮是否被用户"停止"中止（中止后的列表刷新要保留条目，见 pendingPersistIds）
+    let stoppedByUser = false
 
     try {
       const resp = await fetch('/api/agent/chat', {
@@ -736,6 +747,7 @@ export function useAgentChat() {
     } catch (err: any) {
       if (myNonce !== run.nonce) return
       if (err?.name === 'AbortError' || myController.signal.aborted) {
+        stoppedByUser = true
         assistantMsg.content = (assistantMsg.content || '') + '\n\n[' + $t('@AGENT:已停止') + ']'
         assistantMsg.status = 'done'
         if (assistantMsg.reasoningStatus === 'streaming') {
@@ -755,7 +767,12 @@ export function useAgentChat() {
       }
       // 清掉乐观徽章；成功路径的 loadSessions() 会拉到服务端真实数据，
       // 中止/出错路径靠这一步兜底，避免左栏一直显示"正在生成中..."
-      if (streamSessionId) clearGeneratingSession(streamSessionId)
+      if (streamSessionId) {
+        // 被停止的轮次服务端仍会落盘，但 writeSession 往往晚于下面这次刷新：
+        // 先标记保留这条，别让刚停止的会话从列表里消失
+        if (stoppedByUser) pendingPersistIds.add(streamSessionId)
+        clearGeneratingSession(streamSessionId)
+      }
       // 刷新会话列表：并入仍在后台流的其它会话，并顺带清掉未落盘的幽灵条目
       loadSessions().catch(() => {})
     }

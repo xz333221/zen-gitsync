@@ -449,7 +449,9 @@
 
 .dialog-zoom-enter-active,
 .dialog-zoom-leave-active {
-  transition: all var(--transition-base) var(--ease-enter);
+  transition:
+    opacity var(--transition-base) var(--ease-enter),
+    transform var(--transition-base) var(--ease-enter);
 }
 
 .dialog-zoom-enter-from,

@@ -333,7 +333,7 @@ function handleStashMessageKeydown(e: KeyboardEvent) {
   .el-textarea__inner {
     border-radius: var(--radius-lg);
     border: 2px solid var(--color-gray-200);
-    transition: all var(--transition-slow) ease;
+    transition: var(--transition-ui-slow);
     line-height: 1.5;
     
     &:hover {
@@ -472,7 +472,7 @@ function handleStashMessageKeydown(e: KeyboardEvent) {
     .el-button {
       border-radius: var(--radius-lg);
       font-weight: 500;
-      transition: all var(--transition-slow) ease;
+      transition: var(--transition-ui-slow);
       
       &:hover {
         transform: scale(1.02);

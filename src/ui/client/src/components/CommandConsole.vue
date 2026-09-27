@@ -2883,7 +2883,7 @@ onActivated(() => {
   border-radius: var(--radius-md);
   padding: 0;
   box-shadow: var(--console-shadow);
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -3155,11 +3155,11 @@ onActivated(() => {
   height: 36px;
   padding: var(--spacing-base);
   border-radius: var(--radius-md);
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
   
   .el-icon {
     color: var(--text-tertiary);
-    transition: all var(--transition-slow) ease;
+    transition: var(--transition-ui-slow);
   }
   
   &:hover {
@@ -3225,7 +3225,7 @@ onActivated(() => {
   padding: var(--spacing-sm) var(--spacing-base);
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
   
   &:hover {
     color: var(--color-primary);
@@ -3245,7 +3245,7 @@ onActivated(() => {
 /* 内容区域过渡动画 */
 .console-content-slide-enter-active,
 .console-content-slide-leave-active {
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
   overflow: hidden;
 }
 
@@ -3268,7 +3268,7 @@ onActivated(() => {
   padding: var(--spacing-xs) var(--spacing-sm);
   background: var(--bg-console-input);
   border: 1px solid var(--border-console-input);
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
   
   &:focus-within {
     border-color: rgba(74, 222, 128, 0.4);
@@ -3289,7 +3289,7 @@ onActivated(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: help;
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
   
   /* &:hover {
     background: linear-gradient(135deg, rgba(103, 194, 58, 0.15), rgba(103, 194, 58, 0.08));
@@ -3324,7 +3324,7 @@ onActivated(() => {
   padding: var(--spacing-base) var(--spacing-xl);
   font-weight: 500;
   border-radius: var(--radius-md);
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
   
   &:hover {
     transform: scale(1.02);
@@ -3351,7 +3351,7 @@ onActivated(() => {
   margin: var(--spacing-base) 0 0 0;
   border-radius: var(--radius-md);
   border: 1px solid rgba(103, 194, 58, 0.3);
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
   
   &:focus-within {
     border-color: var(--color-success);
@@ -3514,7 +3514,7 @@ onActivated(() => {
   min-width: auto;
   color: var(--text-secondary);
   flex-shrink: 0;
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
   
   &:hover {
     color: var(--color-primary);
@@ -3538,7 +3538,7 @@ onActivated(() => {
 /* 输出内容滑动动画 */
 .output-slide-enter-active,
 .output-slide-leave-active {
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
   overflow: hidden;
 }
 
@@ -3734,7 +3734,7 @@ pre.stderr {
   border-radius: var(--radius-md);
   min-width: 120px;
   max-width: 200px;
-  transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
+  transition: var(--transition-ui-slow);
   flex-shrink: 0;
   position: relative;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
@@ -3909,7 +3909,7 @@ pre.stderr {
   border-radius: 50%;
   background: var(--bg-panel);
   flex-shrink: 0;
-  transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
+  transition: var(--transition-ui-slow);
   position: relative;
   
   .step-type-icon {
@@ -3992,7 +3992,7 @@ pre.stderr {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
   line-height: 1.3;
 }
 

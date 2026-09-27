@@ -592,7 +592,7 @@ function handleOpenInEditor(filePath: string, _context: string) {
   border-radius: var(--radius-lg);
   padding: var(--spacing-xs) var(--spacing-base);
   font-weight: 500;
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
   
   &:hover {
     transform: scale(1.02);
@@ -627,7 +627,7 @@ function handleOpenInEditor(filePath: string, _context: string) {
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-component);
   box-shadow: var(--shadow-md);
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
   overflow: hidden;
   
   &:hover {
@@ -736,7 +736,7 @@ function handleOpenInEditor(filePath: string, _context: string) {
 .action-btn {
   border-radius: var(--radius-md);
   font-weight: 500;
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
   min-width: 60px;
   padding: 6px var(--spacing-md);
   font-size: var(--font-size-sm);

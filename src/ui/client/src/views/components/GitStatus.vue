@@ -1188,7 +1188,7 @@ defineExpose({
       >
         <span class="git-status-sync-bar__dot" aria-hidden="true"></span>
         <span class="git-status-sync-bar__text">
-          {{ gitStore.isGitPulling ? $t('@13D1C:正在拉取代码...') : $t('@13D1C:正在获取远程分支信息...') }}
+          {{ gitStore.isGitPulling ? $t('@13D1C:正在拉取代码…') : $t('@13D1C:正在获取远程分支信息…') }}
         </span>
       </div>
       <div class="status-box-wrap">
@@ -1205,6 +1205,7 @@ defineExpose({
                 v-model="newRemoteUrl"
                 size="small"
                 :placeholder="$t('@13D1C:输入远程仓库地址，例如 https://github.com/user/repo.git')"
+                :aria-label="$t('@13D1C:请输入远程仓库地址')"
                 :disabled="isAddingRemote"
                 @keyup.enter="addRemoteAndSetUpstream"
               />
@@ -1618,6 +1619,7 @@ defineExpose({
               v-model="newRemoteUrl"
               size="small"
               :placeholder="$t('@13D1C:输入远程仓库地址，例如 https://github.com/user/repo.git')"
+              :aria-label="$t('@13D1C:请输入远程仓库地址')"
               :disabled="isInitializingRepo"
               @keyup.enter="initGitRepo"
             />
@@ -1991,6 +1993,7 @@ defineExpose({
     font-size: var(--font-size-xs);
     color: var(--text-secondary);
     font-weight: var(--font-weight-medium);
+    font-variant-numeric: tabular-nums;
     background: var(--bg-panel);
     padding: var(--spacing-xs) var(--spacing-sm);
     border-radius: var(--radius-full);
@@ -2170,7 +2173,7 @@ defineExpose({
   border-radius: var(--radius-lg);
   overflow: hidden;
   border: 1px solid var(--border-card);
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
 }
 
 .branch-status-info:hover {
@@ -2205,7 +2208,7 @@ defineExpose({
   width: 100%;
   border-radius: var(--radius-base);
   padding: var(--spacing-base);
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
 }
 
 .status-badge.el-tag--warning {
@@ -2233,7 +2236,7 @@ defineExpose({
 
 /* 按钮悬停效果 */
 .el-button {
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
 }
 
 .el-button:not(:disabled):hover {
@@ -2366,7 +2369,7 @@ defineExpose({
   padding: var(--spacing-base);
   border: 1px solid var(--action-amber-border);
   border-radius: var(--radius-md);
-  transition: all var(--transition-base) ease;
+  transition: var(--transition-ui-base);
 }
 
 /* 未配置远程仓库提示样式 */
@@ -2376,7 +2379,7 @@ defineExpose({
   border-radius: var(--radius-xl);
   padding: var(--spacing-xl);
   margin-bottom: var(--spacing-lg);
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
 }
 
 .no-remote-tip:hover {
@@ -2441,7 +2444,7 @@ html.dark .no-remote-tip:hover {
   border-radius: var(--radius-xl);
   padding: var(--spacing-xl);
   margin-bottom: var(--spacing-lg);
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
 }
 
 .upstream-tip:hover {
@@ -2557,6 +2560,7 @@ html.dark .upstream-tip:hover {
     padding: var(--spacing-xs) var(--spacing-sm);
     border-radius: var(--radius-full);
     font-weight: var(--font-weight-medium);
+    font-variant-numeric: tabular-nums;
   }
 }
 

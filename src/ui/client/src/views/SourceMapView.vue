@@ -1037,7 +1037,7 @@ onBeforeUnmount(() => {
   font-size: var(--font-size-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: var(--transition-ui-fast);
   white-space: nowrap;
 }
 
@@ -1066,7 +1066,7 @@ onBeforeUnmount(() => {
   border-radius: 5px;
   cursor: pointer;
   color: var(--text-tertiary);
-  transition: all var(--transition-fast);
+  transition: var(--transition-ui-fast);
 }
 
 .sm-panel-btn:hover, .sm-panel-btn.active {
@@ -1638,7 +1638,7 @@ onBeforeUnmount(() => {
   font-size: var(--font-size-xs);
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: var(--transition-ui-fast);
   white-space: nowrap;
 }
 
@@ -1707,7 +1707,7 @@ onBeforeUnmount(() => {
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  transition: all var(--transition-fast);
+  transition: var(--transition-ui-fast);
   white-space: nowrap;
 }
 

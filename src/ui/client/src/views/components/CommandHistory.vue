@@ -663,7 +663,7 @@ onUnmounted(() => {
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
   font-weight: 500;
-  transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
+  transition: var(--transition-ui-slow);
   position: relative;
   overflow: hidden;
 }
@@ -952,7 +952,7 @@ onUnmounted(() => {
 .history-item {
   border: 1px solid var(--border-card);
   border-radius: var(--radius-base);
-  transition: all var(--transition-base);
+  transition: var(--transition-ui-base);
   overflow: hidden;
 }
 

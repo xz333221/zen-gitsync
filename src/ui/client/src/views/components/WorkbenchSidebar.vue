@@ -233,7 +233,12 @@ function onWindowMouseUp(_e: MouseEvent) {
               :data-task-id="t.id"
               :data-group-path="group.path"
               :title="taskTooltip(t)"
+              role="button"
+              tabindex="0"
+              :aria-pressed="t.id === selectedTaskId"
               @click="emit('select-task', t)"
+              @keydown.enter.prevent="emit('select-task', t)"
+              @keydown.space.prevent="emit('select-task', t)"
               @mousedown="onTaskMouseDown($event, t, group.path, $event.currentTarget as HTMLElement)"
             >
               <!-- 单行展示:只显示标题;没写标题用任务描述压平后顶上(CSS ellipsis 截断)。
@@ -253,6 +258,7 @@ function onWindowMouseUp(_e: MouseEvent) {
                   :title="$t('@WORKBENCH:复制任务')"
                   :aria-label="$t('@WORKBENCH:复制任务')"
                   @click.stop="emit('copy-task', t)"
+                  @keydown.stop
                 >
                   <el-icon><CopyDocument /></el-icon>
                 </button>
@@ -263,6 +269,7 @@ function onWindowMouseUp(_e: MouseEvent) {
                   v-if="!taskIsRunning(t)"
                   class="wb-task-item__del"
                   @click.stop="emit('delete-task', t)"
+                  @keydown.stop
                   :title="$t('@WORKBENCH:删除')"
                   :aria-label="$t('@WORKBENCH:删除')"
                 >
@@ -306,9 +313,9 @@ function onWindowMouseUp(_e: MouseEvent) {
           <div class="wb-prompt-item__icon">
             <el-icon><Memo /></el-icon>
           </div>
-          <span class="wb-prompt-item__name" @click="emit('open-edit-prompt', p)" :title="p.content">
+          <button type="button" class="wb-prompt-item__name" @click="emit('open-edit-prompt', p)" :title="p.content">
             {{ p.name }}
-          </span>
+          </button>
           <span
             v-if="!p.projectPath"
             class="wb-prompt-item__tag"
@@ -567,7 +574,8 @@ function onWindowMouseUp(_e: MouseEvent) {
 .wb-prompt-item:hover { background: var(--bg-container-hover); }
 .wb-prompt-item:hover .wb-prompt-item__del { opacity: 1; }
 .wb-prompt-item__icon { width: 22px; height: 22px; border-radius: var(--radius-base); background: var(--tint-primary-08); color: var(--color-primary); display: inline-flex; align-items: center; justify-content: center; font-size: var(--font-size-sm); flex-shrink: 0; }
-.wb-prompt-item__name { flex: 1; min-width: 0; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary); font-weight: 500; letter-spacing: -0.05px; }
+/* button 重置:视觉保持原 <span> 不变 */
+.wb-prompt-item__name { border: none; background: transparent; font: inherit; padding: 0; width: 100%; text-align: left; flex: 1; min-width: 0; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary); font-weight: 500; letter-spacing: -0.05px; }
 .wb-prompt-item__tag { flex-shrink: 0; max-width: 96px; padding: 1px 6px; border-radius: var(--radius-xs); font-size: var(--font-size-xs); line-height: 16px; letter-spacing: 0.1px; background: var(--tint-primary-08); color: var(--color-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wb-prompt-item__tag--project { background: var(--bg-subtle); color: var(--text-secondary); border: 1px solid var(--border-color-light); }
 .wb-prompt-item__del {

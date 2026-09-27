@@ -209,8 +209,12 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- KPI 卡片 -->
-    <div class="monitor-cards" v-if="store.overview">
+    <!-- KPI 卡片 + 磁盘占用 -->
+    <div
+      class="monitor-cards"
+      :class="{ 'monitor-cards--no-disks': !store.overview?.disks }"
+      v-if="store.overview"
+    >
       <div class="metric-card">
         <div class="metric-card__header">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -299,40 +303,40 @@ onBeforeUnmount(() => {
           {{ store.showAllPorts ? $t('@MONITOR:显示全部连接') : $t('@MONITOR:仅监听端口') }}
         </div>
       </div>
-    </div>
 
-    <!-- 磁盘占用 -->
-    <div class="monitor-disks" v-if="store.overview && store.overview.disks">
-      <div class="disks-header">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="22" y1="12" x2="2" y2="12" />
-          <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
-          <line x1="6" y1="16" x2="6.01" y2="16" />
-          <line x1="10" y1="16" x2="10.01" y2="16" />
-        </svg>
-        <span class="disks-title">{{ $t('@MONITOR:磁盘占用') }}</span>
-        <span class="disks-summary">
+      <!-- 磁盘占用：与四个 KPI 卡片同排 -->
+      <div class="metric-card disk-card" v-if="store.overview.disks">
+        <div class="metric-card__header">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="12" x2="2" y2="12" />
+            <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+            <line x1="6" y1="16" x2="6.01" y2="16" />
+            <line x1="10" y1="16" x2="10.01" y2="16" />
+          </svg>
+          <span>{{ $t('@MONITOR:磁盘占用') }}</span>
+        </div>
+        <div class="disks-rows" v-if="store.overview.disks.drives.length > 0">
+          <div class="disk-row" v-for="d in store.overview.disks.drives" :key="d.mount">
+            <span class="disk-mount">{{ d.mount }}</span>
+            <el-progress
+              class="disk-bar"
+              :percentage="d.usagePercent"
+              :stroke-width="6"
+              :show-text="false"
+              :color="usageColor(d.usagePercent)"
+            />
+            <span class="disk-usage">{{ formatBytes(d.used) }} / {{ formatBytes(d.total) }}</span>
+            <span class="disk-percent" :style="{ color: usageColor(d.usagePercent) }">
+              {{ d.usagePercent.toFixed(1) }}%
+            </span>
+          </div>
+        </div>
+        <div v-else class="disks-empty">{{ $t('@MONITOR:暂无磁盘数据') }}</div>
+        <div class="metric-card__footer disks-summary">
           {{ formatBytes(store.overview.disks.used) }} / {{ formatBytes(store.overview.disks.total) }}
           · {{ store.overview.disks.usagePercent.toFixed(1) }}%
-        </span>
-      </div>
-      <div class="disks-rows" v-if="store.overview.disks.drives.length > 0">
-        <div class="disk-row" v-for="d in store.overview.disks.drives" :key="d.mount">
-          <span class="disk-mount">{{ d.mount }}</span>
-          <el-progress
-            class="disk-bar"
-            :percentage="d.usagePercent"
-            :stroke-width="6"
-            :show-text="false"
-            :color="usageColor(d.usagePercent)"
-          />
-          <span class="disk-usage">{{ formatBytes(d.used) }} / {{ formatBytes(d.total) }}</span>
-          <span class="disk-percent" :style="{ color: usageColor(d.usagePercent) }">
-            {{ d.usagePercent.toFixed(1) }}%
-          </span>
         </div>
       </div>
-      <div v-else class="disks-empty">{{ $t('@MONITOR:暂无磁盘数据') }}</div>
     </div>
 
     <!-- 加载占位 -->
@@ -489,10 +493,16 @@ onBeforeUnmount(() => {
 /* ── KPI 卡片 ───────────────────────────────────────────────────────── */
 .monitor-cards {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* 四张 KPI 卡片 + 右侧磁盘卡片同排；磁盘卡片多占一点宽度放进度条 */
+  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.35fr);
   gap: 12px;
   padding: 12px 16px;
   flex-shrink: 0;
+}
+
+/* 无磁盘数据时退回四列，避免右侧留出空列 */
+.monitor-cards--no-disks {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .metric-card {
@@ -558,54 +568,27 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
 }
 
-/* ── 磁盘占用 ───────────────────────────────────────────────────────── */
-.monitor-disks {
-  background: var(--bg-container);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  margin: 0 16px 12px;
-  padding: 10px 14px;
-  flex-shrink: 0;
-  box-shadow: var(--shadow-sm);
-}
-
-.disks-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: var(--text-tertiary);
-}
-
-.disks-header svg {
-  color: var(--text-tertiary);
-}
-
-.disks-title {
-  font-weight: 600;
-}
-
-.disks-summary {
-  margin-left: auto;
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
+/* ── 磁盘卡片 ───────────────────────────────────────────────────────── */
+.disk-card {
+  min-width: 0;
 }
 
 .disks-rows {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 6px;
+  flex: 1;
+  min-height: 0;
 }
 
 .disk-row {
   display: grid;
-  /* 进度条不撑满整行：最长 220px，整行限宽，避免视觉上一条横贯全屏 */
-  grid-template-columns: 40px minmax(120px, 220px) auto 56px;
+  /* 盘符 + 进度条 + 用量 + 百分比 */
+  grid-template-columns: 40px minmax(60px, 1fr) auto 56px;
   align-items: center;
-  gap: 12px;
-  max-width: 560px;
+  gap: 10px;
+  min-width: 0;
 }
 
 .disk-bar {
@@ -638,9 +621,15 @@ onBeforeUnmount(() => {
   text-align: right;
 }
 
+.disks-summary {
+  font-variant-numeric: tabular-nums;
+}
+
 .disks-empty {
-  padding: 8px 0 4px;
-  text-align: center;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: var(--font-size-sm);
   color: var(--text-tertiary);
 }
@@ -860,14 +849,20 @@ onBeforeUnmount(() => {
 }
 
 /* ── 响应式 ─────────────────────────────────────────────────────────── */
-@media (max-width: 1100px) {
-  .monitor-cards {
-    grid-template-columns: repeat(2, 1fr);
+@media (max-width: 1200px) {
+  .monitor-cards,
+  .monitor-cards--no-disks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* 磁盘卡片换行后占满整行 */
+  .disk-card {
+    grid-column: 1 / -1;
   }
 }
 
 @media (max-width: 720px) {
-  .monitor-cards {
+  .monitor-cards,
+  .monitor-cards--no-disks {
     grid-template-columns: 1fr;
   }
   .ports-search {

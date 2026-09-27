@@ -192,7 +192,7 @@ withDefaults(defineProps<Props>(), {
 /* 过渡动画 */
 .loading-fade-enter-active,
 .loading-fade-leave-active {
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
 }
 
 .loading-fade-enter-from,
@@ -207,7 +207,7 @@ withDefaults(defineProps<Props>(), {
 
 .loading-fade-enter-active .loading-container,
 .loading-fade-leave-active .loading-container {
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
 }
 
 .loading-fade-enter-from .loading-container,

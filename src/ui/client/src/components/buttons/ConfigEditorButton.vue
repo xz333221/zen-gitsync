@@ -348,7 +348,7 @@ defineExpose({ openConfigEditor })
   
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
   border: 1px solid transparent;
 
   &:disabled {

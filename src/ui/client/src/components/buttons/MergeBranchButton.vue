@@ -451,7 +451,7 @@ async function handleMergeBranch() {
   .el-textarea__inner {
     border-radius: var(--radius-lg);
     border: 2px solid var(--color-gray-200);
-    transition: all var(--transition-slow) ease;
+    transition: var(--transition-ui-slow);
     
     &:hover {
       border-color: var(--color-gray-300);
@@ -476,7 +476,7 @@ async function handleMergeBranch() {
   .el-radio-button__inner {
     width: 100%;
     border-radius: var(--radius-lg);
-    transition: all var(--transition-slow) ease;
+    transition: var(--transition-ui-slow);
   }
 }
 
@@ -561,7 +561,7 @@ async function handleMergeBranch() {
     .el-button {
       border-radius: var(--radius-lg);
       font-weight: 500;
-      transition: all var(--transition-slow) ease;
+      transition: var(--transition-ui-slow);
       
       &:hover {
         transform: scale(1.02);

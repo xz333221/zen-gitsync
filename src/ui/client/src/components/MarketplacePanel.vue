@@ -507,7 +507,7 @@ async function onRemove(item: InstalledItem) {
   background: var(--bg-panel);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--transition-fast) ease;
+  transition: var(--transition-ui-fast);
 
   &:hover { color: var(--color-primary); border-color: var(--color-primary); }
 
@@ -550,7 +550,7 @@ async function onRemove(item: InstalledItem) {
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: all var(--transition-fast) ease;
+  transition: var(--transition-ui-fast);
 
   &:hover { color: var(--text-secondary); border-color: var(--text-tertiary); }
 
@@ -750,7 +750,7 @@ async function onRemove(item: InstalledItem) {
   background: transparent;
   color: var(--color-primary);
   cursor: pointer;
-  transition: all var(--transition-fast) ease;
+  transition: var(--transition-ui-fast);
 
   &:hover:not(:disabled) {
     background: var(--color-primary);
@@ -830,7 +830,7 @@ async function onRemove(item: InstalledItem) {
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: all var(--transition-fast) ease;
+  transition: var(--transition-ui-fast);
 
   &:hover:not(:disabled) {
     color: var(--color-danger);
@@ -897,7 +897,7 @@ async function onRemove(item: InstalledItem) {
   font-family: inherit;
   border-radius: var(--radius-base);
   cursor: pointer;
-  transition: all var(--transition-fast) ease;
+  transition: var(--transition-ui-fast);
 }
 
 .mkt-cancel {

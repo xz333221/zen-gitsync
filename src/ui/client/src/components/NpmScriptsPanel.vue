@@ -552,7 +552,7 @@ onMounted(() => {
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   overflow: hidden;
-  transition: all var(--transition-base) ease;
+  transition: var(--transition-ui-base);
 }
 
 .package-item:last-child {
@@ -565,7 +565,7 @@ onMounted(() => {
   padding: 5px 8px;
   background: var(--bg-input);
   cursor: pointer;
-  transition: all var(--transition-base) ease;
+  transition: var(--transition-ui-base);
   gap: 6px;
 }
 
@@ -621,7 +621,7 @@ onMounted(() => {
   font-size: var(--font-size-md);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--transition-base) ease;
+  transition: var(--transition-ui-base);
   margin-left: var(--spacing-base);
   flex-shrink: 0;
   opacity: 0;
@@ -663,7 +663,7 @@ onMounted(() => {
   justify-content: space-between;
   padding: 4px 12px 4px 20px;
   cursor: pointer;
-  transition: all var(--transition-base) ease;
+  transition: var(--transition-ui-base);
   gap: var(--spacing-md);
   border-bottom: 1px solid var(--border-card);
 }
@@ -692,7 +692,7 @@ onMounted(() => {
 .play-icon {
   font-size: var(--font-size-md);
   color: var(--text-secondary);
-  transition: all var(--transition-base) ease;
+  transition: var(--transition-ui-base);
 }
 
 .script-name {

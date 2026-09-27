@@ -1266,7 +1266,7 @@ async function openSystemConfigFile() {
   padding: 10px 14px;
   border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: all var(--transition-base) ease;
+  transition: var(--transition-ui-base);
   color: var(--el-text-color-regular);
   font-size: var(--font-size-sm);
   position: relative;
@@ -1582,7 +1582,7 @@ html.dark .label-icon {
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-input);
   box-shadow: var(--shadow-sm);
-  transition: all var(--transition-base) ease;
+  transition: var(--transition-ui-base);
   background: var(--bg-container);
 }
 
@@ -1621,7 +1621,7 @@ html.dark .label-icon {
   border-radius: var(--radius-xl);
   position: relative;
   overflow: hidden;
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
 }
 
 .info-card:hover {
@@ -1844,7 +1844,7 @@ html.dark .label-icon {
   background: transparent;
   color: var(--el-text-color-regular);
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: var(--transition-ui-base);
 }
 
 .model-btn:hover {
@@ -1948,7 +1948,7 @@ html.dark .label-icon {
   color: var(--el-text-color-regular);
   font-size: var(--font-size-sm);
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: var(--transition-ui-base);
 }
 
 .model-test-btn:hover:not(:disabled) {

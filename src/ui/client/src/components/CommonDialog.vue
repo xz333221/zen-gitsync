@@ -305,6 +305,8 @@ function handleCancel() {
     box-sizing: border-box;
     overflow-x: hidden;
     overflow-y: auto;
+    /* 滚到底时不要把滚动链传给背后的页面 */
+    overscroll-behavior: contain;
   }
 }
 
@@ -346,6 +348,7 @@ function handleCancel() {
     min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 8px var(--spacing-md) var(--spacing-md);
     box-sizing: border-box;
   }

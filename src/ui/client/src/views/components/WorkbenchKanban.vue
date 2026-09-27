@@ -176,6 +176,7 @@ function hasError(t: BoardTask): boolean {
             type="search"
             v-model="search"
             :placeholder="$t('@WORKBENCH:搜索任务标题或描述')"
+            :aria-label="$t('@WORKBENCH:搜索任务标题或描述')"
           />
         </div>
       </div>
@@ -196,7 +197,11 @@ function hasError(t: BoardTask): boolean {
             :key="t.id"
             class="kb-card"
             :class="{ 'is-running': t.runningJobs > 0, 'has-error': hasError(t) }"
+            role="button"
+            tabindex="0"
             @click="emit('open-task', t)"
+            @keydown.enter.prevent="emit('open-task', t)"
+            @keydown.space.prevent="emit('open-task', t)"
           >
             <div class="kb-card__row1">
               <span v-if="t.runningJobs > 0" class="kb-card__running" aria-hidden="true" />
@@ -214,6 +219,7 @@ function hasError(t: BoardTask): boolean {
                 class="kb-card__btn"
                 :title="$t('@WORKBENCH:执行')"
                 @click.stop="emit('run-task', t)"
+                @keydown.stop
               >{{ $t('@WORKBENCH:执行') }}</button>
               <button
                 type="button"
@@ -221,6 +227,7 @@ function hasError(t: BoardTask): boolean {
                 :title="$t('@WORKBENCH:删除')"
                 :aria-label="$t('@WORKBENCH:删除')"
                 @click.stop="emit('delete-task', t)"
+                @keydown.stop
               >×</button>
             </div>
           </li>
@@ -246,7 +253,15 @@ function hasError(t: BoardTask): boolean {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="t in filtered" :key="t.id" class="kb-table__row" @click="emit('open-task', t)">
+          <tr
+            v-for="t in filtered"
+            :key="t.id"
+            class="kb-table__row"
+            tabindex="0"
+            @click="emit('open-task', t)"
+            @keydown.enter.prevent="emit('open-task', t)"
+            @keydown.space.prevent="emit('open-task', t)"
+          >
             <td class="kb-table__td">
               <span class="kb-table__name">{{ cardTitle(t) || $t('@WORKBENCH:未命名任务') }}</span>
               <span v-if="showProjectLabel && projectLabel(t)" class="kb-table__project">{{ projectLabel(t) }}</span>

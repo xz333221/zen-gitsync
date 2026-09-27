@@ -316,7 +316,7 @@ function clearCommitFields() {
 function handleQuickPushBefore() {
   // 显示全局loading，初始显示暂存文件
   showLoading({
-    text: $t("@76872:正在暂存文件..."),
+    text: $t("@76872:正在暂存文件…"),
     showProgress: false,
   });
 }
@@ -440,7 +440,7 @@ watch(
   () => gitStore.isAddingFiles,
   (isAdding) => {
     if (isAdding && loadingState.visible) {
-      setLoadingText($t("@76872:正在暂存文件..."));
+      setLoadingText($t("@76872:正在暂存文件…"));
     }
   }
 );
@@ -528,7 +528,7 @@ function queryDescriptionTemplates(
   // 添加设置选项到下拉列表
   const results = [
     ...templateResults,
-    { value: "⚙️ 管理模板...", isSettings: true },
+    { value: "⚙️ 管理模板…", isSettings: true },
   ];
   callback(results);
 }
@@ -549,7 +549,7 @@ function queryScopeTemplates(
   // 添加设置选项到下拉列表
   const results = [
     ...templateResults,
-    { value: "⚙️ 管理模板...", isSettings: true },
+    { value: "⚙️ 管理模板…", isSettings: true },
   ];
   callback(results);
 }
@@ -595,7 +595,7 @@ function queryMessageTemplates(
   // 添加设置选项到下拉列表
   const results = [
     ...templateResults,
-    { value: "⚙️ 管理模板...", isSettings: true },
+    { value: "⚙️ 管理模板…", isSettings: true },
   ];
   callback(results);
 }
@@ -752,8 +752,10 @@ git config --global user.email "your.email@example.com"</pre
               </div>
 
               <!-- 添加展开/收起高级选项的控制按钮 -->
-              <div
+              <button
+                type="button"
                 class="advanced-options-toggle"
+                :aria-expanded="showAdvancedFields"
                 @click="showAdvancedFields = !showAdvancedFields"
               >
                 <span>{{
@@ -767,7 +769,7 @@ git config --global user.email "your.email@example.com"</pre
                 >
                   <ArrowDown />
                 </el-icon>
-              </div>
+              </button>
 
               <!-- 使用过渡效果包装高级字段 -->
               <div v-show="showAdvancedFields" class="advanced-fields">
@@ -952,7 +954,7 @@ git config --global user.email "your.email@example.com"</pre
   background: transparent;
   border-radius: var(--radius-xl);
   box-shadow: none;
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
 }
 
 /* 行内模式（与类型/作用域同一行） */
@@ -980,7 +982,7 @@ git config --global user.email "your.email@example.com"</pre
     background: var(--bg-container);
     border: 2px solid var(--color-primary);
     box-shadow: var(--shadow-sm);
-    transition: all var(--transition-slow) ease;
+    transition: var(--transition-ui-slow);
     height: 40px; /* 统一高度，与其它输入保持一致 */
   }
 
@@ -1013,7 +1015,7 @@ git config --global user.email "your.email@example.com"</pre
     background: var(--bg-container);
     border: 2px solid var(--color-danger);
     box-shadow: var(--shadow-sm);
-    transition: all var(--transition-slow) ease;
+    transition: var(--transition-ui-slow);
     height: 40px; /* 统一高度 */
   }
 
@@ -1047,7 +1049,7 @@ git config --global user.email "your.email@example.com"</pre
     background: var(--bg-container);
     border: 2px solid var(--color-success);
     box-shadow: var(--shadow-sm);
-    transition: all var(--transition-slow) ease;
+    transition: var(--transition-ui-slow);
     height: 40px; /* 统一高度 */
   }
 
@@ -1083,7 +1085,7 @@ git config --global user.email "your.email@example.com"</pre
     box-shadow: var(--shadow-sm);
     
     font-weight: 500;
-    transition: all var(--transition-slow) ease;
+    transition: var(--transition-ui-slow);
   }
 
   .el-textarea__inner:hover {
@@ -1128,6 +1130,13 @@ git config --global user.email "your.email@example.com"</pre
 }
 
 .advanced-options-toggle {
+  /* button 重置:视觉保持原 <div> 不变 */
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  text-align: left;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1135,7 +1144,7 @@ git config --global user.email "your.email@example.com"</pre
   background-color: var(--bg-panel);
   border-radius: var(--radius-base);
   cursor: pointer;
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
   user-select: none;
   
 }
@@ -1198,7 +1207,7 @@ git config --global user.email "your.email@example.com"</pre
   border-radius: var(--radius-md);
   font-weight: 500;
   min-width: 100px;
-  transition: all var(--transition-slow) ease;
+  transition: var(--transition-ui-slow);
 
   &:hover {
     transform: scale(1.02);

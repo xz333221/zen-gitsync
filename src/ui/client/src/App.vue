@@ -367,7 +367,11 @@ function formatBytes(bytes: number): string {
     v /= 1024
     i++
   }
-  return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+  // 数字部分走 Intl，保证小数位与千分位跟随运行环境语言（不手写格式化）
+  const formatted = new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: i === 0 ? 0 : 1,
+  }).format(v)
+  return `${formatted} ${units[i]}`
 }
 
 function usageColor(percent: number): string {
@@ -658,11 +662,13 @@ function stopHResize() {
 <template>
   <el-config-provider :locale="localeStore.elementPlusLocale">
   <!-- OPT-5: 全局网络错误横幅(header 下方置顶,不影响主区布局) -->
+  <!-- 跳过导航:键盘用户第一次 Tab 就能直达主内容(WCAG 2.4.1) -->
+  <a class="skip-link" href="#main-content">{{ $t('@F13B4:跳到主内容') }}</a>
   <AppErrorBanner />
   <header class="main-header app-header">
     <div class="header-left">
       <a href="https://github.com/xz333221/zen-gitsync" target="_blank" class="header-brand-link">
-        <img :src="logo" alt="Zen GitSync Logo" class="logo" />
+        <img :src="logo" alt="Zen GitSync Logo" class="logo" width="32" height="32" />
         <h1>Zen GitSync</h1>
       </a>
     </div>
@@ -776,7 +782,7 @@ function stopHResize() {
     </div>
   </div>
 
-  <main class="main-container" :style="{ top: configStore.hasConfigLoadError ? '104px' : '64px' }">
+  <main id="main-content" tabindex="-1" class="main-container" :style="{ top: configStore.hasConfigLoadError ? '104px' : '64px' }">
     <div v-if="!initCompleted" class="loading-container">
       <div class="loading-card" role="status" aria-live="polite">
         <!-- 三层错位旋转环 spinner -->
@@ -851,17 +857,19 @@ function stopHResize() {
         <button
           v-for="tab in GIT_TABS"
           :key="tab.id"
+          :id="'git-tab-' + tab.id"
           type="button"
           role="tab"
           class="git-tab"
           :class="{ 'is-active': gitTab === tab.id }"
           :aria-selected="gitTab === tab.id"
+          :aria-controls="'git-panel-' + tab.id"
           @click="gitTab = tab.id"
         >{{ $t(tab.labelKey) }}</button>
       </div>
 
       <div class="git-pane__body">
-      <div v-show="gitTab === 'current'" class="grid-layout" :class="{ 'grid-layout--no-bottom': !gitStore.isGitRepo }">
+      <div v-show="gitTab === 'current'" id="git-panel-current" role="tabpanel" aria-labelledby="git-tab-current" class="grid-layout" :class="{ 'grid-layout--no-bottom': !gitStore.isGitRepo }">
       <!-- 左侧Git状态 -->
       <div class="git-status-panel">
         <GitStatus ref="gitStatusRef" :initial-directory="currentDirectory" />
@@ -954,10 +962,22 @@ function stopHResize() {
 
       <!-- GitHub 仓库列表。v-if 而非 v-show:切过来才发请求、才去检测 gh ——
            否则每次启动都会白跑一次 CLI 探测。 -->
-      <RemoteReposList v-if="gitTab === 'github'" provider="github" />
+      <RemoteReposList
+        v-if="gitTab === 'github'"
+        id="git-panel-github"
+        role="tabpanel"
+        aria-labelledby="git-tab-github"
+        provider="github"
+      />
 
       <!-- Gitee 仓库列表(检测 gitee / @gitee/gitee-cli) -->
-      <RemoteReposList v-if="gitTab === 'gitee'" provider="gitee" />
+      <RemoteReposList
+        v-if="gitTab === 'gitee'"
+        id="git-panel-gitee"
+        role="tabpanel"
+        aria-labelledby="git-tab-gitee"
+        provider="gitee"
+      />
 
       </div><!-- /git-pane__body -->
 
@@ -1377,9 +1397,33 @@ body {
   width: auto;
 }
 
+/* 跳过导航链接:默认移出视口,获得焦点时滑入(仅键盘用户可见) */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 2000;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: #fff;
+  font-size: var(--font-size-base);
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform var(--transition-fast) var(--ease-standard);
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: translateY(0);
+  outline: 2px solid var(--color-primary-dark);
+  outline-offset: 2px;
+}
+
 h1 {
   margin: 0;
   font-size: var(--font-size-xl);
+  text-wrap: balance; /* 避免标题末行只剩一个词 */
   font-weight: 700;
   letter-spacing: -0.6px;
   font-family: var(--font-sans);
