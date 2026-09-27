@@ -501,11 +501,11 @@ watch(
       // 更新计数器
       gitStore.totalCommits = logs.value.length;
 
-      // 重置当前页为第1页
+      // 重置当前页为第1页。注意**不要**在这里把 hasMoreData 清成 false：
+      // store 的 fetchLog 也会更新 log（页面初始化、每次 git 操作后都会刷），
+      // 清掉之后表格滚到底的"加载更多"就被永久挡住，只剩服务端第一页的 50 条。
+      // 分页标记只认 /api/log 返回的 hasMore（store.fetchLog 与本组件 loadLog 各自写入）。
       gitStore.currentPage = 1;
-
-      // 重置分页标记：如果是通过gitStore.refreshLog()加载的全量数据，没有更多数据
-      gitStore.hasMoreData = false;
     } catch (error) {
       // 静默处理错误
     }

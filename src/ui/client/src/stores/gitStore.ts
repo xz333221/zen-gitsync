@@ -942,6 +942,10 @@ export const useGitStore = defineStore('git', () => {
       if (data && data.data && Array.isArray(data.data)) {
         // 清空并更新日志数组
         log.value = [...data.data]
+        // 分页标记必须认服务端的 hasMore：/api/log 是按 limit 分页的（默认 50 条），
+        // 这里只取了第 1 页，不能当成"全量已加载"，否则提交历史滚到底不会加载下一页
+        currentPage.value = 1
+        hasMoreData.value = data.hasMore === true
         console.log(`${$t('@C298B:提交历史加载完成，共 ')}${log.value.length}${$t('@C298B: 条记录')}`)
       } else {
         console.warn('API返回的提交历史格式不正确:', data)
@@ -964,10 +968,10 @@ export const useGitStore = defineStore('git', () => {
   async function refreshLog() {
     console.log($t('@C298B:刷新提交历史...'))
     
-    // 重置分页状态
+    // 重置分页状态：hasMoreData 交给 fetchLog 按服务端返回的 hasMore 决定
+    // （/api/log 是按 limit 分页的，fetchLog 只取第 1 页，不能在这里当成"没有更多"）
     currentPage.value = 1
-    hasMoreData.value = false // fetchLog加载的是全量数据，没有更多分页
-    
+
     await fetchLog(true)
     
     // 更新总数
