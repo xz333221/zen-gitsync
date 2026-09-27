@@ -277,9 +277,9 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   position: relative;
   /* 颜色 + 背景平滑过渡 */
   transition:
-    color 0.18s cubic-bezier(0.4, 0, 0.2, 1),
-    background-color 0.18s cubic-bezier(0.4, 0, 0.2, 1),
-    transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+    color var(--transition-base) cubic-bezier(0.4, 0, 0.2, 1),
+    background-color var(--transition-base) cubic-bezier(0.4, 0, 0.2, 1),
+    transform var(--transition-base) cubic-bezier(0.4, 0, 0.2, 1);
   outline: none;
 }
 
@@ -313,18 +313,18 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   transform: translateY(-50%) scaleY(1);
   box-shadow: 0 0 8px 0 color-mix(in srgb, var(--color-primary) 55%, transparent);
   /* 从 0 高度展开，避免初次渲染跳动 */
-  animation: actbar-indicator-in 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: actbar-indicator-in var(--transition-base) cubic-bezier(0.4, 0, 0.2, 1);
   transform-origin: center;
 }
 
 /* active 态的图标轻微缩放，增强反馈 */
 .activity-btn.active svg {
   transform: scale(1.06);
-  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform var(--transition-base) cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .activity-btn svg {
-  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform var(--transition-base) cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* 按下反馈 */
@@ -343,15 +343,15 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   line-height: 1;
   color: #fff;
-  background: var(--color-success, #34d399);
-  border-radius: 8px;
+  background: var(--color-success, var(--action-emerald));
+  border-radius: var(--radius-lg);
   box-shadow: 0 0 0 2px var(--bg-container);
   pointer-events: none;
-  animation: wb-badge-in 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), wb-badge-pulse 2s ease-in-out 0.3s infinite;
+  animation: wb-badge-in var(--transition-base) cubic-bezier(0.34, 1.56, 0.64, 1), wb-badge-pulse 2s ease-in-out var(--transition-slow) infinite;
   z-index: 1;
 }
 
@@ -362,7 +362,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
 }
 @keyframes wb-badge-pulse {
   0%, 100% { box-shadow: 0 0 0 2px var(--bg-container); }
-  50%      { box-shadow: 0 0 0 2px var(--bg-container), 0 0 6px 1px color-mix(in srgb, var(--color-success, #34d399) 60%, transparent); }
+  50%      { box-shadow: 0 0 0 2px var(--bg-container), 0 0 6px 1px color-mix(in srgb, var(--color-success, var(--action-emerald)) 60%, transparent); }
 }
 
 /* ── 控制台终端会话数量徽标 ─────────────────────────────────────── */
@@ -378,21 +378,21 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   line-height: 1;
   color: #fff;
-  background: var(--color-info, #06b6d4);
-  border-radius: 8px;
+  background: var(--color-info, var(--action-teal));
+  border-radius: var(--radius-lg);
   box-shadow: 0 0 0 2px var(--bg-container);
   pointer-events: none;
-  animation: wb-badge-in 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), console-badge-pulse 2s ease-in-out 0.3s infinite;
+  animation: wb-badge-in var(--transition-base) cubic-bezier(0.34, 1.56, 0.64, 1), console-badge-pulse 2s ease-in-out var(--transition-slow) infinite;
   z-index: 1;
 }
 
 @keyframes console-badge-pulse {
   0%, 100% { box-shadow: 0 0 0 2px var(--bg-container); }
-  50%      { box-shadow: 0 0 0 2px var(--bg-container), 0 0 6px 1px color-mix(in srgb, var(--color-info, #06b6d4) 60%, transparent); }
+  50%      { box-shadow: 0 0 0 2px var(--bg-container), 0 0 6px 1px color-mix(in srgb, var(--color-info, var(--action-teal)) 60%, transparent); }
 }
 
 /* ── Git 未提交文件数量徽标 ─────────────────────────────────────── */
@@ -406,16 +406,16 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   line-height: 1;
   color: #fff;
   background: var(--color-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 0 0 2px var(--bg-container);
   pointer-events: none;
   /* 数字变化时的入场动画 */
-  animation: git-badge-pop-in 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: git-badge-pop-in var(--transition-base) cubic-bezier(0.34, 1.56, 0.64, 1);
   z-index: 1;
 }
 
@@ -438,15 +438,15 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   line-height: 1;
   color: #fff;
   background: var(--color-warning);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 0 0 2px var(--bg-container);
   pointer-events: none;
-  animation: git-badge-pop-in 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: git-badge-pop-in var(--transition-base) cubic-bezier(0.34, 1.56, 0.64, 1);
   z-index: 1;
 }
 

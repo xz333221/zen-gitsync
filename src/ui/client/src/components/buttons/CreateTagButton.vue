@@ -253,7 +253,7 @@ const tagTypeDescription = computed(() => {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+  background: linear-gradient(90deg, var(--action-green) 0%, var(--action-green-dark) 100%);
 }
 
 .tag-info-card .info-icon {
@@ -262,8 +262,8 @@ const tagTypeDescription = computed(() => {
   justify-content: center;
   width: 40px;
   height: 40px;
-  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-  border-radius: 10px;
+  background: linear-gradient(135deg, var(--action-green) 0%, var(--action-green-dark) 100%);
+  border-radius: var(--radius-md);
   color: white;
   font-size: var(--font-size-lg);
   flex-shrink: 0;
@@ -310,14 +310,14 @@ const tagTypeDescription = computed(() => {
   .el-input__inner {
     border-radius: var(--radius-lg);
     border: 2px solid var(--color-gray-200);
-    transition: all 0.3s ease;
+    transition: all var(--transition-slow) ease;
     
     &:hover {
       border-color: var(--color-gray-300);
     }
     
     &:focus-visible {
-      border-color: #22c55e;
+      border-color: var(--action-green);
       box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
     }
   }
@@ -327,7 +327,7 @@ const tagTypeDescription = computed(() => {
   .el-textarea__inner {
     border-radius: var(--radius-lg);
     border: 2px solid var(--color-gray-200);
-    transition: all 0.3s ease;
+    transition: all var(--transition-slow) ease;
     
     line-height: 1.5;
     
@@ -336,7 +336,7 @@ const tagTypeDescription = computed(() => {
     }
     
     &:focus-visible {
-      border-color: #22c55e;
+      border-color: var(--action-green);
       box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
     }
   }
@@ -351,7 +351,7 @@ const tagTypeDescription = computed(() => {
     .el-radio-button__inner {
       width: 100%;
       border-radius: var(--radius-lg);
-      transition: all 0.3s ease;
+      transition: all var(--transition-slow) ease;
     }
   }
 }
@@ -385,7 +385,7 @@ const tagTypeDescription = computed(() => {
     .el-button {
       border-radius: var(--radius-lg);
       font-weight: 500;
-      transition: all 0.3s ease;
+      transition: all var(--transition-slow) ease;
       
       &:hover {
         transform: scale(1.02);

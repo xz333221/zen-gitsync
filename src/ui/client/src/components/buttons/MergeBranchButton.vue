@@ -369,7 +369,7 @@ async function handleMergeBranch() {
   gap: var(--spacing-base);
   padding: var(--spacing-base);
   background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-  border: 1px solid #93c5fd;
+  border: 1px solid var(--action-blue-soft-border);
   border-radius: var(--radius-xl);
   position: relative;
   overflow: hidden;
@@ -382,7 +382,7 @@ async function handleMergeBranch() {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+  background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
 }
 
 .merge-info-card .info-icon {
@@ -391,8 +391,8 @@ async function handleMergeBranch() {
   justify-content: center;
   width: 40px;
   height: 40px;
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  border-radius: 10px;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  border-radius: var(--radius-md);
   color: white;
   font-size: var(--font-size-lg);
   flex-shrink: 0;
@@ -414,17 +414,17 @@ async function handleMergeBranch() {
 .merge-info-card .info-content p {
   margin: 0;
   
-  color: #1e40af;
+  color: var(--action-navy);
   line-height: 1.4;
 }
 
 .merge-info-card .info-content code {
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--tint-primary-10);
   padding: var(--spacing-xs) 6px;
   border-radius: var(--radius-base);
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-weight: 600;
-  color: #1e40af;
+  color: var(--action-navy);
 }
 
 .merge-form {
@@ -451,7 +451,7 @@ async function handleMergeBranch() {
   .el-textarea__inner {
     border-radius: var(--radius-lg);
     border: 2px solid var(--color-gray-200);
-    transition: all 0.3s ease;
+    transition: all var(--transition-slow) ease;
     
     &:hover {
       border-color: var(--color-gray-300);
@@ -460,8 +460,8 @@ async function handleMergeBranch() {
   
   .el-input__wrapper.is-focus,
   .el-textarea__inner:focus-visible {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--tint-primary-10);
   }
 }
 
@@ -476,7 +476,7 @@ async function handleMergeBranch() {
   .el-radio-button__inner {
     width: 100%;
     border-radius: var(--radius-lg);
-    transition: all 0.3s ease;
+    transition: all var(--transition-slow) ease;
   }
 }
 
@@ -561,7 +561,7 @@ async function handleMergeBranch() {
     .el-button {
       border-radius: var(--radius-lg);
       font-weight: 500;
-      transition: all 0.3s ease;
+      transition: all var(--transition-slow) ease;
       
       &:hover {
         transform: scale(1.02);

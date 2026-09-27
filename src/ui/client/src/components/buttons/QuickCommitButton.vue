@@ -177,7 +177,7 @@ defineExpose({
 <style scoped lang="scss">
 .one-commit-button {
   height: 100%;
-  background: linear-gradient(135deg, var(--color-primary-dark, #2563eb) 0%, #1d4ed8 100%) !important;
+  background: linear-gradient(135deg, var(--color-primary-dark, var(--color-primary-dark)) 0%, #1d4ed8 100%) !important;
   border: none !important;
   color: white !important;
   &.form {
@@ -193,7 +193,7 @@ defineExpose({
     align-items: center;
     gap: 6px;
     .one-commit-icon {
-      font-size: 14px;
+      font-size: var(--font-size-base);
     }
     .one-commit-text {
       display: flex;
@@ -201,10 +201,10 @@ defineExpose({
       align-items: flex-start;
       gap: 2px;
       .one-commit-title {
-        font-size: 13px;
+        font-size: var(--font-size-mid);
       }
       .one-commit-desc {
-        font-size: 11px;
+        font-size: var(--font-size-xs);
         opacity: 0.72;
         font-weight: 400;
         letter-spacing: 0.1px;

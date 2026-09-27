@@ -78,7 +78,7 @@ function syncTheme() {
 const previewSrcdoc = computed(() => {
   if (!isHtmlLike.value) return ''
   const bg = isDark.value ? '#0d1117' : '#ffffff'
-  const textColor = isDark.value ? '#e6edf3' : '#1f2328'
+  const textColor = isDark.value ? '#e6edf3' : 'var(--md-text-strong)'
   if (ext.value === 'svg') {
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:${bg};color:${textColor};display:flex;align-items:center;justify-content:center;min-height:100vh;}svg{max-width:100%;max-height:90vh;}</style></head><body>${props.content || ''}</body></html>`
   }
@@ -163,7 +163,7 @@ syncTheme()
 }
 
 .diff-preview-title {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -172,11 +172,11 @@ syncTheme()
 }
 
 .diff-preview-ext-badge {
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   padding: 1px 5px;
-  border-radius: 3px;
-  background: rgba(59, 130, 246, 0.15);
+  border-radius: var(--radius-base);
+  background: var(--tint-primary-16);
   color: var(--color-primary);
   letter-spacing: 0.04em;
 }
@@ -194,8 +194,8 @@ syncTheme()
   border-radius: var(--radius-base);
   display: flex;
   align-items: center;
-  transition: color 0.1s, background 0.1s;
-  font-size: 13px;
+  transition: color var(--transition-fast), background var(--transition-fast);
+  font-size: var(--font-size-mid);
 }
 
 .diff-preview-btn:hover {
@@ -234,11 +234,11 @@ syncTheme()
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
 }
 
 .diff-preview-error {
-  color: var(--color-danger, #f56c6c);
+  color: var(--color-danger, var(--color-danger));
 }
 
 .diff-preview-unsupported {
@@ -248,6 +248,6 @@ syncTheme()
 
 .diff-preview-empty {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 </style>

@@ -693,7 +693,7 @@ defineExpose({ reload: load });
   color: var(--text-primary);
 }
 .dir-list__hint {
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   color: var(--text-secondary);
 }
 .dir-list__head-actions {
@@ -716,7 +716,7 @@ defineExpose({ reload: load });
   background: transparent;
   color: var(--text-secondary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   /* 显式行高:按钮高度只由 height 决定,不受外部继承的行高影响 */
   line-height: 1;
   cursor: pointer;
@@ -736,7 +736,7 @@ defineExpose({ reload: load });
   outline-offset: 2px;
 }
 .dir-list__refresh .el-icon {
-  font-size: 14px;
+  font-size: var(--font-size-base);
 }
 .dir-list__refresh .el-icon.is-spinning {
   animation: dir-list-spin 0.9s linear infinite;
@@ -755,7 +755,7 @@ defineExpose({ reload: load });
   align-items: center;
   margin-top: var(--spacing-sm);
   border: 1px solid var(--border-color-light);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-panel);
   padding: 0 var(--spacing-md);
   height: 40px;
@@ -815,7 +815,7 @@ defineExpose({ reload: load });
   gap: var(--spacing-sm);
   padding: var(--spacing-md);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
 }
 
 /* ── 卡片网格 ─────────────────────────────────────────────────────── */
@@ -896,7 +896,7 @@ defineExpose({ reload: load });
   justify-content: center;
   width: 38px;
   height: 38px;
-  font-size: 20px;
+  font-size: var(--font-size-xl);
   border-radius: var(--radius-lg);
   background: var(--tint-primary-08);
   color: var(--color-primary);
@@ -915,7 +915,7 @@ defineExpose({ reload: load });
 }
 .dir-card__name-base {
   font-family: ui-monospace, monospace;
-  font-size: var(--font-size-15);
+  font-size: var(--font-size-base);
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
   overflow: hidden;
@@ -929,7 +929,7 @@ defineExpose({ reload: load });
 }
 .dir-card__name-path {
   font-family: ui-monospace, monospace;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -961,7 +961,7 @@ defineExpose({ reload: load });
   line-height: 1.4;
   padding: 2px var(--spacing-sm);
   font-size: var(--font-size-xs);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   white-space: nowrap;
 }
 /* 目录不存在:危险色,与卡片 is-missing 状态一致 */
@@ -1032,10 +1032,10 @@ defineExpose({ reload: load });
   border: none;
   background: transparent;
   color: var(--text-tertiary);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   cursor: pointer;
   padding: 0;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   transition: color var(--transition-fast);
 }
 .dir-card__copy:hover {

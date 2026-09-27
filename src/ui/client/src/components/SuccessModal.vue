@@ -150,7 +150,7 @@ withDefaults(defineProps<Props>(), {
 /* 过渡动画 */
 .success-fade-enter-active,
 .success-fade-leave-active {
-  transition: opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity var(--transition-base) cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .success-fade-enter-from,
@@ -166,8 +166,8 @@ withDefaults(defineProps<Props>(), {
 .success-fade-enter-active .success-container,
 .success-fade-leave-active .success-container {
   transition:
-    opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    opacity var(--transition-base) cubic-bezier(0.22, 1, 0.36, 1),
+    transform var(--transition-base) cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .success-fade-enter-from .success-container,

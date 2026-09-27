@@ -229,7 +229,7 @@ defineExpose({
                     :loading="gitStore.isGitPulling"
                     :disabled="!gitStore.hasUpstream || gitStore.hasConflictedFiles"
                     class="action-button"
-                    :style="gitStore.hasUpstream && !gitStore.hasConflictedFiles ? {color: 'white', backgroundColor: '#1e90ff', borderColor: '#1e90ff'} : {}"
+                    :style="gitStore.hasUpstream && !gitStore.hasConflictedFiles ? {color: 'white', backgroundColor: 'var(--color-primary)', borderColor: 'var(--color-primary)'} : {}"
                   >
                     {{ $t('@76872:拉取') }}
                     <span v-if="needsPull">({{gitStore.branchBehind}})</span>
@@ -243,7 +243,7 @@ defineExpose({
                     @click="handleGitFetchAll"
                     :loading="gitStore.isGitFetching"
                     class="action-button"
-                    style="color: white; background-color: #1e90ff; border-color: #1e90ff;"
+                    style="color: white; background-color: var(--color-primary); border-color: var(--color-primary);"
                   >
                     {{ $t('@76872:获取所有远程分支') }}
                   </el-button>
@@ -376,7 +376,7 @@ defineExpose({
 }
 
 .group-title {
-  font-size: 14px;  // 从 --font-size-sm (12px) 提到 14px,标题更突出
+  font-size: var(--font-size-base);  // 从 --font-size-sm (12px) 提到 14px,标题更突出
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 10px;  // 略增,标题和按钮间距更舒展
@@ -410,26 +410,26 @@ defineExpose({
   align-items: flex-start;
   gap: 10px;
   padding: 12px 14px;
-  border-radius: 8px;
-  font-size: 13px;
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-mid);
   line-height: 1.6;
 
   &.is-warning {
     background: rgba(250, 173, 20, 0.1);
     border: 1px solid rgba(250, 173, 20, 0.4);
-    color: #b45309;
+    color: var(--color-warning-dark);
   }
 
   &.is-error {
     background: rgba(245, 108, 108, 0.08);
     border: 1px solid rgba(245, 108, 108, 0.35);
-    color: #c0392b;
+    color: var(--action-coral);
   }
 }
 
 .pull-error-icon {
   margin-top: 2px;
-  font-size: 16px;
+  font-size: var(--font-size-md);
   flex-shrink: 0;
 }
 
@@ -440,7 +440,7 @@ defineExpose({
 }
 
 .pull-error-label {
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -450,9 +450,9 @@ defineExpose({
   padding: 12px 14px;
   background: rgba(0, 0, 0, 0.06);
   border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1.6;
   color: var(--text-primary);
   white-space: pre-wrap;

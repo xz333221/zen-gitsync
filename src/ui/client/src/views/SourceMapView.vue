@@ -221,14 +221,14 @@ function buildFileTree(paths: string[]): TreeNode[] {
   return root.children
 }
 
-const SUBSYSTEM_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6']
+const SUBSYSTEM_COLORS = ['var(--color-warning-light)', 'var(--color-primary)', 'var(--color-success-light)', 'var(--color-think)']
 
 function nodeColor(node: GraphNode): string {
   if (node.subsystemColor) return node.subsystemColor
   if (node.subsystemIndex !== undefined) return SUBSYSTEM_COLORS[node.subsystemIndex % SUBSYSTEM_COLORS.length]
-  if (node.importance === 'high') return '#f59e0b'
+  if (node.importance === 'high') return 'var(--color-warning-light)'
   if (node.importance === 'low') return '#94a3b8'
-  return '#3b82f6'
+  return 'var(--color-primary)'
 }
 
 function getLanguageFromFile(filePath: string): string {
@@ -865,7 +865,7 @@ onBeforeUnmount(() => {
             <Background :variant="BackgroundVariant.Dots" :gap="20" :size="1" :pattern-color="dotColor" />
             <Controls />
             <MiniMap
-              node-color="#3b82f6"
+              node-color="var(--color-primary)"
               :mask-color="currentTheme === 'dark' ? 'rgba(0,0,0,0.55)' : 'rgba(15,23,42,0.06)'"
             />
           </VueFlow>
@@ -959,7 +959,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   background: var(--sm-graph-bg);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
 }
 
 /* ── 工具栏 ──────────────────────────────── */
@@ -994,11 +994,11 @@ onBeforeUnmount(() => {
 }
 
 .sm-icon-map {
-  color: #f59e0b;
+  color: var(--color-warning-light);
 }
 
 .sm-title {
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -1009,16 +1009,16 @@ onBeforeUnmount(() => {
   padding: 0 10px;
   background: var(--bg-input);
   border: 1px solid var(--border-input);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--transition-fast);
   font-family: 'Consolas', 'Monaco', monospace;
 }
 
 .sm-path-input:focus {
-  border-color: #f59e0b;
+  border-color: var(--color-warning-light);
 }
 
 .sm-path-input:disabled {
@@ -1033,21 +1033,21 @@ onBeforeUnmount(() => {
   height: 30px;
   padding: 0 14px;
   border: none;
-  border-radius: 6px;
-  font-size: 12px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
   white-space: nowrap;
 }
 
 .sm-btn-primary {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
+  background: linear-gradient(135deg, var(--color-warning-light), var(--action-amber));
   color: #fff;
 }
 
 .sm-btn-primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  background: linear-gradient(135deg, var(--action-amber-bright), var(--color-warning-light));
 }
 
 .sm-btn-primary:disabled {
@@ -1066,7 +1066,7 @@ onBeforeUnmount(() => {
   border-radius: 5px;
   cursor: pointer;
   color: var(--text-tertiary);
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .sm-panel-btn:hover, .sm-panel-btn.active {
@@ -1076,7 +1076,7 @@ onBeforeUnmount(() => {
 }
 
 .sm-panel-btn.active {
-  color: #f59e0b;
+  color: var(--color-warning-light);
   border-color: #f59e0b40;
 }
 
@@ -1092,7 +1092,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   position: relative;
   background: transparent;
-  transition: background 0.15s;
+  transition: background var(--transition-fast);
   z-index: 2;
 }
 
@@ -1112,9 +1112,9 @@ onBeforeUnmount(() => {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: var(--border-color);
-  transition: background 0.15s;
+  transition: background var(--transition-fast);
 }
 
 .sm-resizer-v::after {
@@ -1128,11 +1128,11 @@ onBeforeUnmount(() => {
 }
 
 .sm-resizer:hover {
-  background: rgba(59, 130, 246, 0.06);
+  background: var(--tint-primary-06);
 }
 
 .sm-resizer:hover::after {
-  background: var(--color-primary, #3b82f6);
+  background: var(--color-primary, var(--color-primary));
   box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
 }
 
@@ -1175,7 +1175,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -1208,10 +1208,10 @@ onBeforeUnmount(() => {
   padding: 1px 7px;
   background: #f59e0b22;
   border: 1px solid #f59e0b44;
-  border-radius: 4px;
-  font-size: 10px;
+  border-radius: var(--radius-base);
+  font-size: var(--font-size-xs);
   font-weight: 600;
-  color: #f59e0b;
+  color: var(--color-warning-light);
 }
 
 .sm-tech-tag {
@@ -1221,9 +1221,9 @@ onBeforeUnmount(() => {
   padding: 1px 6px;
   background: #3b82f611;
   border: 1px solid #3b82f630;
-  border-radius: 4px;
-  font-size: 10px;
-  color: #93c5fd;
+  border-radius: var(--radius-base);
+  font-size: var(--font-size-xs);
+  color: var(--action-blue-soft-border);
 }
 
 .sm-subsystem-tag {
@@ -1234,14 +1234,14 @@ onBeforeUnmount(() => {
   padding: 1px 7px;
   background: transparent;
   border: 1px solid currentColor;
-  border-radius: 4px;
-  font-size: 10px;
+  border-radius: var(--radius-base);
+  font-size: var(--font-size-xs);
   font-weight: 600;
   opacity: 0.85;
 }
 
 .sm-summary-text {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   overflow: hidden;
   white-space: nowrap;
@@ -1272,7 +1272,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   gap: 12px;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   pointer-events: none;
 }
 
@@ -1290,7 +1290,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--text-tertiary);
   text-transform: uppercase;
@@ -1302,7 +1302,7 @@ onBeforeUnmount(() => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #f59e0b;
+  background: var(--color-warning-light);
   animation: pulse 1s infinite;
   margin-left: auto;
 }
@@ -1317,7 +1317,7 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   padding: 4px 0;
   font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
 }
 
 .sm-log-entry {
@@ -1326,9 +1326,9 @@ onBeforeUnmount(() => {
 }
 
 .sm-log-entry--info { color: var(--text-tertiary); }
-.sm-log-entry--success { color: var(--text-success, #16a34a); }
-.sm-log-entry--error { color: var(--text-danger, #dc2626); }
-.sm-log-entry--thinking { color: #f59e0b; }
+.sm-log-entry--success { color: var(--text-success, var(--action-green-dark)); }
+.sm-log-entry--error { color: var(--text-danger, var(--git-status-locked)); }
+.sm-log-entry--thinking { color: var(--color-warning-light); }
 
 /* ── 文件树 ─────────────────────────────── */
 .sm-file-tree {
@@ -1344,12 +1344,12 @@ onBeforeUnmount(() => {
   gap: 4px;
   height: 24px;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   padding-right: 8px;
   user-select: none;
   color: var(--text-primary);
-  font-size: 13px;
-  transition: background 0.1s;
+  font-size: var(--font-size-mid);
+  transition: background var(--transition-fast);
   white-space: nowrap;
   overflow: hidden;
   box-sizing: border-box;
@@ -1360,7 +1360,7 @@ onBeforeUnmount(() => {
 }
 
 .sm-tree-node--active {
-  background: rgba(59, 130, 246, 0.12);
+  background: var(--tint-primary-12);
   color: var(--color-primary);
 }
 
@@ -1369,7 +1369,7 @@ onBeforeUnmount(() => {
   align-items: center;
   flex-shrink: 0;
   color: var(--text-tertiary);
-  transition: transform 0.15s;
+  transition: transform var(--transition-fast);
   width: 12px;
 }
 
@@ -1387,7 +1387,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   line-height: 1;
 }
 
@@ -1404,11 +1404,11 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   flex: 1;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
 }
 
 .sm-tree-empty {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   text-align: center;
   padding: 24px 12px;
@@ -1423,21 +1423,21 @@ onBeforeUnmount(() => {
 }
 
 .sm-node-name {
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-weight: 600;
-  color: #f59e0b;
+  color: var(--color-warning-light);
   font-family: 'Consolas', monospace;
 }
 
 .sm-node-file {
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   font-family: 'Consolas', monospace;
   margin-top: 2px;
 }
 
 .sm-node-desc {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   margin-top: 4px;
   line-height: 1.4;
@@ -1462,7 +1462,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   background: var(--sm-source-overlay-bg);
   z-index: 10;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   pointer-events: none;
 }
@@ -1480,7 +1480,7 @@ onBeforeUnmount(() => {
   height: 100%;
   min-height: 60px;
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   text-align: center;
   padding: 12px;
 }
@@ -1491,8 +1491,8 @@ onBeforeUnmount(() => {
   padding: 1px 6px;
   background: var(--bg-page);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
-  font-size: 10px;
+  border-radius: var(--radius-base);
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--text-secondary);
   margin-left: 4px;
@@ -1501,7 +1501,7 @@ onBeforeUnmount(() => {
 .sm-badge-amber {
   background: #f59e0b15;
   border-color: #f59e0b40;
-  color: #f59e0b;
+  color: var(--color-warning-light);
 }
 
 /* ── 加载动画 ────────────────────────── */
@@ -1520,7 +1520,7 @@ onBeforeUnmount(() => {
   height: 32px;
   border-width: 3px;
   border-color: #f59e0b20;
-  border-top-color: #f59e0b;
+  border-top-color: var(--color-warning-light);
 }
 
 @keyframes spin {
@@ -1535,7 +1535,7 @@ onBeforeUnmount(() => {
 :deep(.vue-flow__controls) {
   background: var(--sm-controls-bg);
   border: 1px solid var(--sm-controls-border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   box-shadow: none;
 }
 
@@ -1553,7 +1553,7 @@ onBeforeUnmount(() => {
 :deep(.vue-flow__minimap) {
   background: var(--sm-minimap-bg);
   border: 1px solid var(--sm-controls-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 
 :deep(.vue-flow__minimap-mask) {
@@ -1579,7 +1579,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.vue-flow__node) {
-  transition: box-shadow 0.15s;
+  transition: box-shadow var(--transition-fast);
 }
 
 :deep(.vue-flow__node:hover) {
@@ -1587,22 +1587,22 @@ onBeforeUnmount(() => {
 }
 
 :deep(.vue-flow__node.selected) {
-  box-shadow: 0 0 0 2px #f59e0b;
+  box-shadow: 0 0 0 2px var(--color-warning-light);
 }
 
 /* ── 自定义节点（class 注入） ──────────────────── */
 :deep(.sm-fn-node) {
   background: var(--sm-node-bg);
   color: var(--sm-node-text);
-  border: 2px solid var(--node-accent, #3b82f6);
-  border-radius: 8px;
-  font-size: 12px;
+  border: 2px solid var(--node-accent, var(--color-primary));
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-sm);
   padding: 8px 12px;
   min-width: 140px;
   max-width: 200px;
   cursor: pointer;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.06);
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 [data-theme="dark"] :deep(.sm-fn-node) {
@@ -1633,17 +1633,17 @@ onBeforeUnmount(() => {
   padding: 0 10px;
   background: var(--sm-controls-bg);
   border: 1px solid var(--sm-controls-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
   white-space: nowrap;
 }
 
 .sm-layout-btn:hover:not(:disabled) {
-  color: #f59e0b;
+  color: var(--color-warning-light);
   border-color: #f59e0b50;
   background: #f59e0b08;
 }
@@ -1665,7 +1665,7 @@ onBeforeUnmount(() => {
 }
 
 .sm-fn-label {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--sm-node-text);
   white-space: nowrap;
@@ -1675,7 +1675,7 @@ onBeforeUnmount(() => {
 }
 
 .sm-fn-desc {
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   color: var(--sm-node-desc);
   white-space: nowrap;
   overflow: hidden;
@@ -1702,12 +1702,12 @@ onBeforeUnmount(() => {
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
   white-space: nowrap;
 }
 
@@ -1717,8 +1717,8 @@ onBeforeUnmount(() => {
 }
 
 .sm-tab-btn.active {
-  color: #f59e0b;
-  border-bottom-color: #f59e0b;
+  color: var(--color-warning-light);
+  border-bottom-color: var(--color-warning-light);
 }
 
 /* ── 大纲视图 ─────────────────────────── */
@@ -1738,7 +1738,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 5px;
   padding: 5px 10px 3px;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -1755,7 +1755,7 @@ onBeforeUnmount(() => {
   height: 26px;
   padding: 0 8px 0 16px;
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background var(--transition-fast);
   overflow: hidden;
 }
 
@@ -1764,7 +1764,7 @@ onBeforeUnmount(() => {
 }
 
 .sm-outline-node--active {
-  background: rgba(59, 130, 246, 0.12);
+  background: var(--tint-primary-12);
 }
 
 .sm-outline-dot {
@@ -1776,7 +1776,7 @@ onBeforeUnmount(() => {
 
 .sm-outline-label {
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-primary);
   font-family: 'Consolas', monospace;
@@ -1788,7 +1788,7 @@ onBeforeUnmount(() => {
 
 .sm-outline-desc {
   flex: 1;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;

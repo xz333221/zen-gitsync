@@ -256,13 +256,13 @@ async function refreshCurrentBranch() {
   padding: 0 6px;
   background: transparent;
   border: none;
-  border-radius: 3px;
+  border-radius: var(--radius-base);
   cursor: pointer;
   color: var(--color-text);
   font-family: var(--font-mono, monospace);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   white-space: nowrap;
-  transition: background 0.15s;
+  transition: background var(--transition-fast);
 
   &:hover {
     background: var(--bg-hover, rgba(255,255,255,0.08));
@@ -289,7 +289,7 @@ async function refreshCurrentBranch() {
   display: flex;
   align-items: center;
   opacity: 0.6;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
 }
 
 /* 分支弹出列表内容 */
@@ -314,7 +314,7 @@ async function refreshCurrentBranch() {
   }
   &::-webkit-scrollbar-thumb {
     background: var(--border-color, rgba(128,128,128,0.3));
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
   }
 }
 
@@ -325,10 +325,10 @@ async function refreshCurrentBranch() {
   height: 28px;
   padding: 0 12px;
   cursor: pointer;
-  border-radius: 3px;
-  font-size: 13px;
+  border-radius: var(--radius-base);
+  font-size: var(--font-size-mid);
   color: var(--color-text);
-  transition: background 0.1s;
+  transition: background var(--transition-fast);
 
   &:hover {
     background: var(--bg-hover, rgba(255,255,255,0.08));
@@ -340,7 +340,7 @@ async function refreshCurrentBranch() {
 }
 
 .branch-item-check {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   flex-shrink: 0;
   color: var(--color-primary);
 }
@@ -369,7 +369,7 @@ async function refreshCurrentBranch() {
   padding: 12px;
   text-align: center;
   color: var(--color-text-secondary, #888);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 
 .branch-popover-footer {
@@ -386,12 +386,12 @@ async function refreshCurrentBranch() {
   padding: 0 12px;
   background: transparent;
   border: none;
-  border-radius: 3px;
+  border-radius: var(--radius-base);
   cursor: pointer;
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   text-align: left;
-  transition: background 0.1s;
+  transition: background var(--transition-fast);
 
   &:hover {
     background: var(--bg-hover, rgba(255,255,255,0.08));
@@ -433,7 +433,7 @@ async function refreshCurrentBranch() {
     border-radius: var(--radius-lg);
     border: 1px solid var(--border-input);
     box-shadow: var(--shadow-sm);
-    transition: all 0.2s ease;
+    transition: all var(--transition-base) ease;
     padding: 10px var(--spacing-md);
     background: var(--bg-container);
   }

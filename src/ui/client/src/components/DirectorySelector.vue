@@ -715,11 +715,10 @@ function onBrowserSelect(path: string) {
         @click="onOpenTerminal"
       >
         <!-- 圆角命令行图标：不用 element-plus 的显示器图标，观感与控制台 tab 对齐。
-             尺寸跟着同排 el-icon 走（22px），否则会明显小一圈。 -->
+             尺寸绑定 --icon-glyph-size-lg（与同排图标字形同档），否则会明显小一圈。 -->
         <svg
+          class="terminal-icon"
           viewBox="0 0 24 24"
-          width="22"
-          height="22"
           fill="none"
           stroke="currentColor"
           stroke-width="1.7"
@@ -1074,6 +1073,12 @@ function onBrowserSelect(path: string) {
 </template>
 
 <style scoped>
+/* 终端图标：与外层大号图标按钮的字形同档，避免混排时小一圈 */
+.terminal-icon {
+  width: var(--icon-glyph-size-lg);
+  height: var(--icon-glyph-size-lg);
+}
+
 .directory-selector {
   width: 100%;
   display: flex;
@@ -1086,7 +1091,7 @@ function onBrowserSelect(path: string) {
   /* border: 1px solid var(--border-component);
   box-shadow: var(--shadow-sm); */
   flex-shrink: 0;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base) ease;
 }
 
 .directory-selector:hover {
@@ -1095,7 +1100,7 @@ function onBrowserSelect(path: string) {
 
 .directory-selector--header {
   padding: 4px 10px;
-  border-radius: 14px;
+  border-radius: var(--radius-xl);
   border: 1px solid rgba(59, 130, 246, 0.16);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 1) 100%);
   box-shadow:
@@ -1119,11 +1124,11 @@ function onBrowserSelect(path: string) {
     0 16px 38px rgba(15, 23, 42, 0.16),
     0 6px 14px rgba(15, 23, 42, 0.1),
     0 0 0 1px rgba(255, 255, 255, 0.82) inset,
-    0 0 0 3px rgba(59, 130, 246, 0.08);
+    0 0 0 3px var(--tint-primary-08);
 }
 
 .directory-selector--header .directory-display {
-  font-size: 18px;
+  font-size: var(--font-size-md);
 }
 
 .directory-selector--header .directory-actions {
@@ -1165,9 +1170,9 @@ function onBrowserSelect(path: string) {
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 2px 8px;
-  transition: background 0.15s, color 0.15s;
+  transition: background var(--transition-fast), color var(--transition-fast);
   /* 按钮重置:继承 div 视觉,但移除浏览器默认样式 */
   border: none;
   background: transparent;
@@ -1181,13 +1186,13 @@ function onBrowserSelect(path: string) {
 }
 
 .directory-display:hover {
-  background: rgba(59, 130, 246, 0.1);
-  color: var(--color-primary, #3b82f6);
+  background: var(--tint-primary-10);
+  color: var(--color-primary, var(--color-primary));
 }
 
 [data-theme="dark"] .directory-display:hover {
   background: rgba(96, 165, 250, 0.12);
-  color: #60a5fa;
+  color: var(--color-primary-light);
 }
 
 /* 旧版 "当前目录不是Git仓库" 状态徽章样式已随 UI 调整移除(左侧 GitStatus 面板兜底) */
@@ -1230,15 +1235,15 @@ function onBrowserSelect(path: string) {
   padding: 8px 12px;
   cursor: pointer;
   user-select: none;
-  transition: background-color 0.15s ease;
+  transition: background-color var(--transition-fast) ease;
 }
 
 .claude-menu__item:hover {
-  background-color: rgba(64, 158, 255, 0.12);
+  background-color: var(--tint-primary-12);
 }
 
 .claude-menu__item:active {
-  background-color: rgba(64, 158, 255, 0.2);
+  background-color: var(--tint-primary-18);
 }
 
 .claude-menu__label {
@@ -1247,13 +1252,13 @@ function onBrowserSelect(path: string) {
 }
 
 .claude-menu__hint {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   letter-spacing: 0.2px;
 }
 
 .claude-menu__item--accent .claude-menu__hint {
-  color: var(--color-primary, #409eff);
+  color: var(--color-primary, var(--color-primary));
   font-weight: 600;
 }
 
@@ -1265,13 +1270,13 @@ function onBrowserSelect(path: string) {
 }
 
 .claude-menu__warn {
-  color: #e6a23c;
-  font-size: 13px;
+  color: var(--color-warning);
+  font-size: var(--font-size-mid);
   vertical-align: middle;
 }
 
 .claude-menu__item--danger .claude-menu__hint {
-  color: #e6a23c;
+  color: var(--color-warning);
   font-weight: 600;
 }
 
@@ -1286,8 +1291,8 @@ function onBrowserSelect(path: string) {
 /* 箭头图标比其它工具图标小一档：Element Plus 的 ArrowDown 是实心粗箭头，
    按 large 的 22px 渲染会明显压过旁边的 svg-icon，缩到 18px 视觉才齐平 */
 :deep(.tool-button--more) .tools-more__arrow {
-  font-size: 18px;
-  transition: transform 0.18s ease, color 0.18s ease;
+  font-size: var(--font-size-md);
+  transition: transform var(--transition-base) ease, color var(--transition-base) ease;
 }
 
 /* 菜单展开时箭头轻微上挑，给出"已展开"的额外反馈 */
@@ -1301,7 +1306,7 @@ function onBrowserSelect(path: string) {
 
 .tools-more__title {
   padding: 4px 12px 6px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: 0.3px;
   color: var(--text-tertiary);
@@ -1325,21 +1330,21 @@ function onBrowserSelect(path: string) {
   border-radius: var(--btn-radius-sm, 6px);
   cursor: pointer;
   user-select: none;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color var(--transition-fast) ease, color var(--transition-fast) ease;
 }
 
 .tools-more__item:hover,
 .tools-more__item:focus-visible {
-  background-color: rgba(64, 158, 255, 0.12);
+  background-color: var(--tint-primary-12);
   outline: none;
 }
 
 .tools-more__item:focus-visible {
-  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.3);
+  box-shadow: 0 0 0 2px var(--tint-primary-30);
 }
 
 .tools-more__item:active {
-  background-color: rgba(64, 158, 255, 0.2);
+  background-color: var(--tint-primary-18);
 }
 
 .tools-more__icon {
@@ -1349,7 +1354,7 @@ function onBrowserSelect(path: string) {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
-  transition: opacity 0.15s ease, filter 0.15s ease;
+  transition: opacity var(--transition-fast) ease, filter var(--transition-fast) ease;
 }
 
 /* 只有「未安装」的工具降饱和度（和常驻按钮的 missing 态一致，暗示"点了去安装"）；
@@ -1388,15 +1393,15 @@ function onBrowserSelect(path: string) {
 
 .tools-more__hint {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  transition: color 0.15s ease;
+  transition: color var(--transition-fast) ease;
 }
 
 /* hover 时右侧提示变主色，从"状态描述"变成"可执行的动作" */
 .tools-more__item:hover .tools-more__hint,
 .tools-more__item:focus-visible .tools-more__hint {
-  color: var(--color-primary, #409eff);
+  color: var(--color-primary, var(--color-primary));
 }
 
 /* 对话框样式（复用 App.vue 中样式） */
@@ -1441,17 +1446,17 @@ function onBrowserSelect(path: string) {
   font-size: var(--font-size-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base) ease;
   white-space: nowrap;
   min-height: 40px;
 }
 
 .browse-btn:hover {
-  background: rgba(59, 130, 246, 0.08);
+  background: var(--tint-primary-08);
 }
 
 .browse-btn:active {
-  background: rgba(59, 130, 246, 0.15);
+  background: var(--tint-primary-16);
 }
 
 /* 常用目录列表(RecentDirectoriesList)在弹窗里贴着 form-item 左侧排布,

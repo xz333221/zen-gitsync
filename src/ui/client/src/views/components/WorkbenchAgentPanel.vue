@@ -122,14 +122,14 @@ const rows = computed(() => props.running.map(r => ({
 }
 .agents__title {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-secondary);
   flex: 1;
   min-width: 0;
 }
 .agents__count {
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
@@ -145,7 +145,7 @@ const rows = computed(() => props.running.map(r => ({
 
 .agent-item {
   padding: 7px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--color-warning) 7%, transparent);
   margin-bottom: 4px;
 }
@@ -172,7 +172,7 @@ const rows = computed(() => props.running.map(r => ({
   50% { opacity: 0.45; transform: scale(1.3); }
 }
 .agent-item__project {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
@@ -183,12 +183,12 @@ const rows = computed(() => props.running.map(r => ({
 }
 .agent-item__status {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   color: var(--color-warning);
 }
 .agent-item__task {
   margin: 3px 0 0 12px;
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -200,7 +200,7 @@ const rows = computed(() => props.running.map(r => ({
   align-items: center;
   gap: 8px;
   margin: 3px 0 0 12px;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
@@ -209,7 +209,7 @@ const rows = computed(() => props.running.map(r => ({
 .agents-empty {
   padding: 14px 10px;
   text-align: center;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   list-style: none;
 }

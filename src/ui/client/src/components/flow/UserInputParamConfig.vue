@@ -267,7 +267,7 @@ function getCurrentReferenceValue(row: UserInputParam): string {
 
   .el-icon {
     color: var(--color-primary);
-    font-size: 14px;
+    font-size: var(--font-size-base);
   }
 }
 </style>

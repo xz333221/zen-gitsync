@@ -293,7 +293,7 @@ const getFileIcon = (filePath: string) => {
   height: 100%;
   background: transparent;
   transition: var(--transition-all);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border-radius: 0 var(--radius-base) var(--radius-base) 0;
 }
 
 .file-item:hover {
@@ -437,7 +437,7 @@ const getFileIcon = (filePath: string) => {
   font-weight: var(--font-weight-normal);
   background: var(--bg-file-path);
   padding: 1px var(--spacing-sm);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   transition: var(--transition-all);
 }
 
@@ -471,8 +471,8 @@ const getFileIcon = (filePath: string) => {
 }
 
 .file-item.selected {
-  background: rgba(64, 158, 255, 0.1);
-  border-color: rgba(64, 158, 255, 0.3);
+  background: var(--tint-primary-10);
+  border-color: var(--tint-primary-30);
 }
 
 .file-item.selected::before {
@@ -481,7 +481,7 @@ const getFileIcon = (filePath: string) => {
 }
 
 .file-item.selected:hover {
-  background: rgba(64, 158, 255, 0.15);
+  background: var(--tint-primary-16);
   border-color: rgba(64, 158, 255, 0.4);
 }
 </style>

@@ -37,7 +37,7 @@ defineProps<{
 
   .node-warning {
     color: var(--color-error);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     line-height: 1.2;
   }
 }

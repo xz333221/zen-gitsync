@@ -158,7 +158,7 @@ function close() {
 }
 .pd__intro {
   margin: 0;
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   line-height: 1.6;
   color: var(--text-tertiary);
 }
@@ -169,13 +169,13 @@ function close() {
   gap: 8px;
 }
 .pd__label {
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-secondary);
 }
 .pd__count {
   margin-left: auto;
-  font-size: 10.5px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
@@ -186,7 +186,7 @@ function close() {
   min-height: 92px;
   max-height: 280px;
   padding: 7px 9px;
-  font-size: 12.5px;
+  font-size: var(--font-size-mid);
   font-family: inherit;
   line-height: 1.5;
   color: var(--text-primary);
@@ -201,7 +201,7 @@ function close() {
 .pd__area:disabled { opacity: 0.55; cursor: not-allowed; }
 .pd__hint {
   margin: 0;
-  font-size: 10.5px;
+  font-size: var(--font-size-xs);
   line-height: 1.6;
   color: var(--text-tertiary);
 }
@@ -212,7 +212,7 @@ function close() {
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 28px;
   padding: 0 12px;
   border-radius: var(--radius-md);

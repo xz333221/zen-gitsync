@@ -112,7 +112,7 @@ select option {
   font-size: var(--font-size-sm);
   line-height: var(--line-height-normal);
   margin: 1px 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   display: block;
   font-weight: var(--font-weight-semibold);
   transition: var(--transition-all);
@@ -204,7 +204,7 @@ select option {
 }
 
 .diff-conflict-end {
-  background-color: rgba(64, 158, 255, 0.3);
+  background-color: var(--tint-primary-30);
   color: #2d4a6d;
   padding: var(--spacing-xs) var(--spacing-base);
   font-family: var(--font-mono);
@@ -213,8 +213,8 @@ select option {
   font-weight: var(--font-weight-medium);
   display: block;
   margin: 0;
-  border-top: 1px solid rgba(64, 158, 255, 0.5);
-  border-bottom: 1px solid rgba(64, 158, 255, 0.5);
+  border-top: 1px solid var(--tint-primary-50);
+  border-bottom: 1px solid var(--tint-primary-50);
 }
 
 /* 冲突内容区域高亮 - 类似VSCode */
@@ -230,7 +230,7 @@ select option {
 }
 
 .diff-conflict-incoming {
-  background-color: rgba(64, 158, 255, 0.2);
+  background-color: var(--tint-primary-18);
   color: var(--text-primary);
   padding: var(--spacing-xs) var(--spacing-base);
   font-family: var(--font-mono);
@@ -377,7 +377,7 @@ select option {
   background-color: var(--bg-container);
   border-radius: 0;
   box-shadow: none;
-  transition: var(--transition-all, all 0.3s ease);
+  transition: var(--transition-all, all var(--transition-slow) ease);
   height: 100%;
   width: 100%;
   display: flex;
@@ -584,7 +584,7 @@ select option {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: var(--spacing-base) var(--spacing-lg);
+  padding: var(--spacing-base) var(--control-padding-x-lg);
   border: none;
   border-radius: var(--radius-md);
 
@@ -607,8 +607,8 @@ select option {
   color: var(--el-text-color-regular);
   border: 1px solid var(--el-border-color);
   min-width: 80px;
-  height: 36px;
-  padding: var(--spacing-base) var(--spacing-lg);
+  height: var(--control-height-lg);
+  padding: var(--spacing-base) var(--control-padding-x-lg);
   border-radius: var(--radius-md);
 
   font-weight: 500;
@@ -631,12 +631,12 @@ select option {
 
 /* 对话框确认按钮 - 统一样式 */
 .dialog-confirm-btn {
-  background: linear-gradient(135deg, var(--color-primary) 0%, #3a8ee6 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
   color: white;
   border: none;
   min-width: 80px;
-  height: 36px;
-  padding: var(--spacing-base) var(--spacing-lg);
+  height: var(--control-height-lg);
+  padding: var(--spacing-base) var(--control-padding-x-lg);
   border-radius: var(--radius-md);
 
   font-weight: 500;
@@ -677,8 +677,8 @@ select option {
   color: var(--color-primary);
   border: 1px solid var(--color-primary);
   min-width: 100px;
-  height: 36px;
-  padding: var(--spacing-base) var(--spacing-lg);
+  height: var(--control-height-lg);
+  padding: var(--spacing-base) var(--control-padding-x-lg);
   border-radius: var(--radius-md);
   font-weight: 500;
   cursor: pointer;
@@ -693,16 +693,16 @@ select option {
 }
 
 .dialog-newtab-btn:hover {
-  background: rgba(var(--color-primary-rgb, 64, 128, 255), 0.08);
+  background: var(--tint-primary-08);
 }
 
 [data-theme="dark"] .dialog-newtab-btn {
-  color: #5b9ef0;
-  border-color: #5b9ef0;
+  color: var(--color-primary-light);
+  border-color: var(--color-primary-light);
 }
 
 [data-theme="dark"] .dialog-newtab-btn:hover {
-  background: rgba(91, 158, 240, 0.12);
+  background: var(--tint-primary-14);
 }
 
 /* 深色主题下的对话框按钮 */
@@ -720,7 +720,7 @@ select option {
 
 /* 兼容旧样式类名 —— 与 dialog-* 按钮保持一致手感，不引入 scale */
 .primary-btn {
-  background: linear-gradient(135deg, var(--color-primary) 0%, #3a8ee6 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
   color: white;
   box-shadow: var(--shadow-md);
   transition:
@@ -814,7 +814,7 @@ select option {
   }
 
   .el-button--primary {
-    background: linear-gradient(135deg, var(--color-primary) 0%, #3a8ee6 100%) !important;
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%) !important;
     border: none !important;
     box-shadow: var(--shadow-md) !important;
 
@@ -829,7 +829,7 @@ select option {
   }
 
   .el-button--danger {
-    background: linear-gradient(135deg, var(--color-danger) 0%, var(--color-danger-dark, #c0392b) 100%) !important;
+    background: linear-gradient(135deg, var(--color-danger) 0%, var(--color-danger-dark, var(--action-coral)) 100%) !important;
     border: none !important;
     box-shadow: var(--shadow-md) !important;
 
@@ -892,7 +892,7 @@ select option {
   padding: var(--spacing-2xl) var(--spacing-xl);
   gap: var(--spacing-md);
   min-height: 200px;
-  animation: state-block-fade-in 0.32s var(--ease-custom);
+  animation: state-block-fade-in var(--transition-slow) var(--ease-custom);
 }
 
 .state-block__icon {
@@ -1107,7 +1107,7 @@ select option {
   }
 
   .main-footer {
-    font-size: 11px;
+    font-size: var(--font-size-xs);
   }
 
   .footer-model-hint__name {

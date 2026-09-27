@@ -76,7 +76,7 @@ const hasMore = computed(() => paramNames.value.length > 3)
 
   .node-warning {
     color: var(--color-error);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     line-height: 1.2;
   }
 
@@ -88,7 +88,7 @@ const hasMore = computed(() => paramNames.value.length > 3)
   }
 
   .param-count {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--text-secondary);
   }
 
@@ -103,11 +103,11 @@ const hasMore = computed(() => paramNames.value.length > 3)
     align-items: center;
     gap: 2px;
     padding: 2px 6px;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-base);
     background: var(--bg-panel);
     border: 1px solid var(--border-component);
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     max-width: 160px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -127,7 +127,7 @@ const hasMore = computed(() => paramNames.value.length > 3)
   }
 
   .more {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--text-tertiary);
     padding: 2px 2px;
   }

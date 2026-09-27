@@ -666,7 +666,7 @@ async function runCommand(cmd: any) {
   height: 8px;
   cursor: ns-resize;
   z-index: 10;
-  transition: background 0.2s ease;
+  transition: background var(--transition-base) ease;
   /* OPT-4: padding 提命中区,背景只画在 content-box 不影响视觉 */
   padding: 2px 0;
   background: transparent;
@@ -693,7 +693,7 @@ async function runCommand(cmd: any) {
   height: 3px;
   border-radius: var(--radius-xs);
   background: transparent;
-  transition: background 0.2s ease;
+  transition: background var(--transition-base) ease;
 }
 
 .resize-handle:hover::before {
@@ -715,7 +715,7 @@ async function runCommand(cmd: any) {
 
 .accordion-chevron {
   color: var(--text-secondary);
-  transition: transform 0.2s ease;
+  transition: transform var(--transition-base) ease;
   transform: rotate(90deg);
   flex-shrink: 0;
 }
@@ -787,7 +787,7 @@ async function runCommand(cmd: any) {
   justify-content: space-between;
   padding: 5px var(--spacing-md);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast) ease;
   border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.04));
   user-select: none;
 }
@@ -814,10 +814,10 @@ async function runCommand(cmd: any) {
 
 .play-icon {
   flex-shrink: 0;
-  font-size: 15px;
+  font-size: var(--font-size-base);
   color: var(--color-primary);
   opacity: 0.85;
-  transition: opacity 0.15s;
+  transition: opacity var(--transition-fast);
 }
 
 .command-item:hover .play-icon {
@@ -839,7 +839,7 @@ async function runCommand(cmd: any) {
 }
 
 .command-desc {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
@@ -849,7 +849,7 @@ async function runCommand(cmd: any) {
 
 .command-text {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
 }
 
 /* ── 定时提交区块 ── */
@@ -873,7 +873,7 @@ async function runCommand(cmd: any) {
 }
 
 .schedule-icon {
-  font-size: 15px;
+  font-size: var(--font-size-base);
   color: var(--color-primary);
   flex-shrink: 0;
 }
@@ -885,7 +885,7 @@ async function runCommand(cmd: any) {
 }
 
 .schedule-countdown {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--color-success);
   font-family: var(--font-mono);
   white-space: nowrap;
@@ -911,7 +911,7 @@ async function runCommand(cmd: any) {
 }
 
 .schedule-label {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   flex-shrink: 0;
   min-width: 52px;
@@ -930,7 +930,7 @@ async function runCommand(cmd: any) {
 }
 
 .schedule-commit-now :deep(.el-checkbox__label) {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
 }
 
@@ -945,11 +945,11 @@ async function runCommand(cmd: any) {
 
 .schedule-message-input :deep(.el-input__inner) {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
 }
 
 .schedule-help-icon {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   margin-left: 2px;
   vertical-align: middle;
@@ -977,7 +977,7 @@ async function runCommand(cmd: any) {
   flex: 1;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   line-height: 1.5;
   color: var(--text-secondary);
   /* 窄侧栏里命令普遍超宽:换行显示完整内容,而不是横向截断 */
@@ -999,7 +999,7 @@ async function runCommand(cmd: any) {
 }
 
 .schedule-cli-hint {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   line-height: 1.5;
   color: var(--text-tertiary);
 }
@@ -1024,7 +1024,7 @@ async function runCommand(cmd: any) {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   line-height: 1.6;
   min-width: 0;
 }

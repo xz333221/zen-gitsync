@@ -1237,7 +1237,7 @@ onUnmounted(() => {
   }
   
   &.active {
-    background: rgba(64, 158, 255, 0.15);
+    background: var(--tint-primary-16);
     border-color: var(--color-primary);
     
     h4 {
@@ -1317,7 +1317,7 @@ onUnmounted(() => {
   
   &:hover {
     border-color: var(--color-primary);
-    background: rgba(64, 158, 255, 0.08);
+    background: var(--tint-primary-08);
     box-shadow: var(--shadow-hover);
     
     .tool-label {
@@ -1326,7 +1326,7 @@ onUnmounted(() => {
   }
   
   .tool-icon {
-    font-size: 20px;
+    font-size: var(--font-size-xl);
     margin-bottom: var(--spacing-sm);
   }
   
@@ -1371,7 +1371,7 @@ onUnmounted(() => {
     }
     
     .el-icon {
-      font-size: 16px;
+      font-size: var(--font-size-md);
       color: var(--text-primary);
     }
   }
@@ -1402,7 +1402,7 @@ onUnmounted(() => {
 //       display: flex !important;
 //       align-items: center !important;
 //       padding: 8px 16px !important;
-//       font-size: 14px !important;
+//       font-size: var(--font-size-base) !important;
       
 //       &:hover {
 //         background: var(--bg-component-hover) !important;
@@ -1412,7 +1412,7 @@ onUnmounted(() => {
 //       .el-icon {
 //         margin-right: 8px !important;
 //         color: currentColor !important;
-//         font-size: 16px !important;
+//         font-size: var(--font-size-md) !important;
 //       }
 //     }
 //   }

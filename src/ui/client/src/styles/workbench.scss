@@ -65,7 +65,7 @@
   background: var(--tint-primary-14);
 }
 .wb-pill--success {
-  color: #047857;
+  color: var(--color-success-dark);
   background: var(--tint-success-14);
   border-color: transparent;
 }
@@ -108,17 +108,17 @@
 .wb-icon-btn--sm {
   width: var(--icon-btn-size-sm);
   height: var(--icon-btn-size-sm);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 .wb-icon-btn--md {
   width: var(--icon-btn-size-md);
   height: var(--icon-btn-size-md);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
 }
 .wb-icon-btn--lg {
   width: var(--icon-btn-size-lg);
   height: var(--icon-btn-size-lg);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 .wb-icon-btn--danger:hover {
   background: var(--icon-btn-bg-hover);
@@ -295,10 +295,10 @@
   padding: 4px 8px;
   background: var(--color-primary);
   color: #fff;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 500;
   text-align: center;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   margin-bottom: 4px;
   letter-spacing: 0.2px;
 }
@@ -307,7 +307,7 @@
   align-items: center;
   gap: 8px;
   padding: 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   border-bottom: none;
   min-height: 0;
@@ -320,13 +320,13 @@
   font-weight: 500;
   color: var(--text-tertiary);
   letter-spacing: 0.2px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   text-transform: uppercase;
 }
 .wb-attachments__count {
   font-variant-numeric: tabular-nums;
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   padding: 0;
   border-radius: 0;
@@ -359,7 +359,7 @@
   max-width: 180px;
   min-width: 0;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 .wb-attachment:hover {
   background: var(--tint-primary-14);
@@ -392,17 +392,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   background: transparent;
   color: var(--text-tertiary);
-  font-size: 9px;
+  font-size: var(--font-size-xs);
   font-weight: 700;
   letter-spacing: 0.3px;
   overflow: hidden;
 }
 .wb-attachment__icon--img { background: transparent; }
 .wb-attachment__icon img {
-  width: 100%; height: 100%; object-fit: cover; border-radius: 4px;
+  width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-base);
 }
 /* 名字只显示一行，不显示 mime + size 副信息 → 胶囊更短 */
 .wb-attachment__meta {
@@ -413,7 +413,7 @@
   gap: 4px;
 }
 .wb-attachment__name {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   font-weight: 500;
   white-space: nowrap;
@@ -431,7 +431,7 @@
   border: none;
   background: transparent;
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1;
   width: 14px;
   height: 14px;
@@ -443,7 +443,7 @@
   justify-content: center;
   margin-left: 2px;
   opacity: 0;
-  transition: opacity 0.15s, background 0.15s, color 0.15s;
+  transition: opacity var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
 }
 .wb-attachment:hover .wb-attachment__del { opacity: 1; }
 .wb-attachment__del:hover {
@@ -457,7 +457,7 @@
 }
 /* 整个 wb-attachments 区在主任务头和详情面板里都需要小一些 */
 .wb-attachments {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
 }
 /* 附件头部"添加附件"按钮：紧凑 inline 文字按钮 + 纸夹 icon */
 .wb-attachments__head .wb-attachments__add,
@@ -471,13 +471,13 @@
   border: none;
   background: transparent;
   color: var(--color-primary);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: 0.1px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   margin-left: auto;
-  transition: background 0.15s, color 0.15s;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 .wb-attachments__add::before {
   content: '';

@@ -18,6 +18,7 @@ import { ref, watch, nextTick } from 'vue'
 import { Loading, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { $t } from '@/lang/static'
+import CommonDialog from '@/components/CommonDialog.vue'
 
 type Status = 'running' | 'success' | 'failed'
 
@@ -102,11 +103,12 @@ async function onCopyCommand() {
 </script>
 
 <template>
-  <el-dialog
+  <CommonDialog
     :model-value="modelValue"
     @update:model-value="emit('update:modelValue', $event)"
     :title="$t('@F13B4:升级')"
     width="680px"
+    type="flex"
     :close-on-click-modal="false"
     :close-on-press-escape="false"
     :show-close="status !== 'running'"
@@ -115,8 +117,8 @@ async function onCopyCommand() {
   >
     <div class="upgrade-status" :class="`is-${status}`">
       <el-icon v-if="status === 'running'" class="is-loading"><Loading /></el-icon>
-      <el-icon v-else-if="status === 'success'" color="#67c23a"><CircleCheck /></el-icon>
-      <el-icon v-else color="#f56c6c"><CircleClose /></el-icon>
+      <el-icon v-else-if="status === 'success'" color="var(--color-success)"><CircleCheck /></el-icon>
+      <el-icon v-else color="var(--color-danger)"><CircleClose /></el-icon>
       <span v-if="status === 'running'">{{ $t('@F13B4:升级中') }}</span>
       <span v-else-if="status === 'success'">{{ $t('@F13B4:升级完成') }}</span>
       <span v-else>{{ $t('@F13B4:升级失败') }}</span>
@@ -153,7 +155,7 @@ async function onCopyCommand() {
         {{ $t('@F13B4:升级中') }}...
       </el-button>
     </template>
-  </el-dialog>
+  </CommonDialog>
 </template>
 
 <style scoped lang="scss">
@@ -162,7 +164,7 @@ async function onCopyCommand() {
   align-items: center;
   gap: var(--spacing-base);
   margin-bottom: var(--spacing-md);
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 500;
 
   &.is-running {
@@ -184,12 +186,12 @@ async function onCopyCommand() {
   background: #1e1e1e;
   color: #d4d4d4;
   padding: 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   height: 320px;
   overflow: auto;
   margin: 0;
   font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
@@ -200,9 +202,9 @@ async function onCopyCommand() {
   padding: 8px 12px;
   background: rgba(103, 194, 58, 0.08);
   border-left: 3px solid var(--el-color-success);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   color: var(--el-color-success);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
 }
 
 .upgrade-countdown {
@@ -211,8 +213,8 @@ async function onCopyCommand() {
   padding: 1px 8px;
   background: var(--el-color-success);
   color: #fff;
-  border-radius: 10px;
-  font-size: 12px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
   font-weight: 600;
   animation: pulse 1s ease-in-out infinite;
 }
@@ -223,8 +225,8 @@ async function onCopyCommand() {
   padding: 8px 12px;
   background: rgba(245, 108, 108, 0.08);
   border-left: 3px solid var(--el-color-danger);
-  border-radius: 4px;
-  font-size: 13px;
+  border-radius: var(--radius-base);
+  font-size: var(--font-size-mid);
 
   &__label {
     display: block;
@@ -237,9 +239,9 @@ async function onCopyCommand() {
     display: block;
     padding: 6px 8px;
     background: rgba(0, 0, 0, 0.04);
-    border-radius: 3px;
+    border-radius: var(--radius-base);
     font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--text-primary, #303133);
     word-break: break-all;
     user-select: all;

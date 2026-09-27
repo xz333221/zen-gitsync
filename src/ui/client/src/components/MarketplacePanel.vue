@@ -11,6 +11,7 @@ import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, Delete, Link, Check, Star, Download, Warning } from '@element-plus/icons-vue'
 import { useConfigStore } from '@/stores/configStore'
+import CommonDialog from '@/components/CommonDialog.vue'
 
 const props = defineProps<{
   type: 'skill' | 'mcp'
@@ -411,10 +412,11 @@ async function onRemove(item: InstalledItem) {
     </div>
 
     <!-- ── MCP 安装前配置 ───────────────────────── -->
-    <el-dialog
+    <CommonDialog
       v-model="configDialog.visible"
       :title="$t('@MKT:配置 MCP')"
       width="460px"
+      type="flex"
       :close-on-click-modal="false"
       append-to-body
     >
@@ -440,7 +442,7 @@ async function onRemove(item: InstalledItem) {
         <button class="mkt-cancel" @click="configDialog.visible = false">{{ $t('@MKT:取消') }}</button>
         <button class="mkt-confirm" @click="confirmConfig">{{ $t('@MKT:安装') }}</button>
       </template>
-    </el-dialog>
+    </CommonDialog>
   </div>
 </template>
 
@@ -473,7 +475,7 @@ async function onRemove(item: InstalledItem) {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--bg-panel);
-  transition: border-color 0.15s ease;
+  transition: border-color var(--transition-fast) ease;
 
   &:focus-within { border-color: var(--color-primary); }
 
@@ -484,7 +486,7 @@ async function onRemove(item: InstalledItem) {
     border: none;
     background: transparent;
     color: var(--text-primary);
-    font-size: 13px;
+    font-size: var(--font-size-mid);
     font-family: inherit;
     outline: none;
 
@@ -505,7 +507,7 @@ async function onRemove(item: InstalledItem) {
   background: var(--bg-panel);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast) ease;
 
   &:hover { color: var(--color-primary); border-color: var(--color-primary); }
 
@@ -526,7 +528,7 @@ async function onRemove(item: InstalledItem) {
 }
 
 .mp-target-hint {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
 
   b { color: var(--color-primary); font-weight: 600; }
@@ -541,14 +543,14 @@ async function onRemove(item: InstalledItem) {
 
 .mp-chip {
   padding: 2px 10px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-family: inherit;
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast) ease;
 
   &:hover { color: var(--text-secondary); border-color: var(--text-tertiary); }
 
@@ -590,7 +592,7 @@ async function onRemove(item: InstalledItem) {
 
 .mp-group-title {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -602,8 +604,8 @@ async function onRemove(item: InstalledItem) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
-  border-radius: 9px;
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-lg);
   background: var(--bg-hover);
   color: var(--text-tertiary);
 }
@@ -612,14 +614,14 @@ async function onRemove(item: InstalledItem) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--color-warning);
 }
 
 .mp-group-link {
   display: inline-flex;
   color: var(--text-tertiary);
-  transition: color 0.15s ease;
+  transition: color var(--transition-fast) ease;
 
   &:hover { color: var(--color-primary); }
 }
@@ -639,7 +641,7 @@ async function onRemove(item: InstalledItem) {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--bg-panel);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color var(--transition-fast) ease, box-shadow var(--transition-fast) ease;
 
   &:hover {
     border-color: color-mix(in srgb, var(--color-primary) 40%, var(--border-color));
@@ -656,7 +658,7 @@ async function onRemove(item: InstalledItem) {
 .mp-card-name {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
@@ -668,14 +670,14 @@ async function onRemove(item: InstalledItem) {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   flex-shrink: 0;
 }
 
 .mp-card-desc {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1.5;
   color: var(--text-secondary);
   display: -webkit-box;
@@ -695,7 +697,7 @@ async function onRemove(item: InstalledItem) {
 
 .mp-meta-pkg,
 .mp-meta-repo {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
@@ -705,15 +707,15 @@ async function onRemove(item: InstalledItem) {
 
 .mp-tag {
   padding: 1px 6px;
-  font-size: 10px;
-  border-radius: 8px;
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-lg);
   background: var(--bg-hover);
   color: var(--text-tertiary);
   flex-shrink: 0;
 
   &.remote {
-    background: color-mix(in srgb, var(--color-info, #06b6d4) 14%, transparent);
-    color: var(--color-info, #06b6d4);
+    background: color-mix(in srgb, var(--color-info, var(--action-teal)) 14%, transparent);
+    color: var(--color-info, var(--action-teal));
   }
 
   &.warn {
@@ -730,7 +732,7 @@ async function onRemove(item: InstalledItem) {
 }
 
 .mp-card-link {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   text-decoration: none;
 
@@ -741,14 +743,14 @@ async function onRemove(item: InstalledItem) {
 
 .mp-install-btn {
   padding: 4px 14px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-family: inherit;
   border: 1px solid var(--color-primary);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   background: transparent;
   color: var(--color-primary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast) ease;
 
   &:hover:not(:disabled) {
     background: var(--color-primary);
@@ -762,18 +764,18 @@ async function onRemove(item: InstalledItem) {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 11px;
-  color: var(--color-success, #34d399);
+  font-size: var(--font-size-xs);
+  color: var(--color-success, var(--action-emerald));
 }
 
 .mp-not-installable {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }
 
 .mp-empty {
   padding: 16px 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
 
   &.all { text-align: center; padding: 48px 0; }
@@ -783,7 +785,7 @@ async function onRemove(item: InstalledItem) {
 .mp-installed-block { margin-bottom: 12px; }
 
 .mp-installed-target {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--text-tertiary);
   margin-bottom: 6px;
@@ -803,12 +805,12 @@ async function onRemove(item: InstalledItem) {
   gap: 10px;
   padding: 6px 10px;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   background: var(--bg-panel);
 }
 
 .mp-installed-name {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
@@ -821,14 +823,14 @@ async function onRemove(item: InstalledItem) {
   align-items: center;
   gap: 4px;
   padding: 3px 10px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-family: inherit;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast) ease;
 
   &:hover:not(:disabled) {
     color: var(--color-danger);
@@ -851,7 +853,7 @@ async function onRemove(item: InstalledItem) {
 
 .mkt-form-name {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -862,7 +864,7 @@ async function onRemove(item: InstalledItem) {
   gap: 4px;
 
   label {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     font-weight: 600;
     color: var(--text-secondary);
   }
@@ -871,12 +873,12 @@ async function onRemove(item: InstalledItem) {
     height: 30px;
     padding: 0 8px;
     border: 1px solid var(--border-color);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background: var(--bg-container);
     color: var(--text-primary);
-    font-size: 13px;
+    font-size: var(--font-size-mid);
     font-family: inherit;
-    transition: border-color 0.15s ease;
+    transition: border-color var(--transition-fast) ease;
 
     &:focus { outline: none; border-color: var(--color-primary); }
   }
@@ -884,18 +886,18 @@ async function onRemove(item: InstalledItem) {
 
 .mkt-hint {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }
 
 .mkt-cancel,
 .mkt-confirm {
   padding: 6px 16px;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-family: inherit;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast) ease;
 }
 
 .mkt-cancel {

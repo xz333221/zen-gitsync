@@ -400,7 +400,7 @@ watch(() => props.modelValue, (newValue) => {
 }
 
 .option-path {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   font-family: var(--font-mono);
   margin-left: var(--spacing-xl);

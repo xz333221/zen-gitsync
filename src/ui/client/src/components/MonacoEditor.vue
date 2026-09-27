@@ -766,7 +766,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   pointer-events: auto;
   user-select: none;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   display: flex;
   align-items: center;
   justify-content: center;

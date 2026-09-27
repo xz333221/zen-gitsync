@@ -109,8 +109,8 @@ function onBackdrop() {
   max-width: calc(100% - 32px);
   max-height: calc(100% - 32px);
   background: var(--el-bg-color, #ffffff);
-  color: var(--el-text-color-primary, #1e293b);
-  border-radius: 6px;
+  color: var(--el-text-color-primary, var(--color-slate-deep));
+  border-radius: var(--radius-md);
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
   z-index: 51;
   display: flex;
@@ -122,13 +122,13 @@ function onBackdrop() {
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--el-border-color-lighter, #f1f5f9);
+  border-bottom: 1px solid var(--el-border-color-lighter, var(--color-slate-panel));
   flex-shrink: 0;
 }
 .canvas-modal-title {
   margin: 0;
   flex: 1;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -139,15 +139,15 @@ function onBackdrop() {
   background: transparent;
   color: #94a3b8;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 .canvas-modal-close:hover {
-  background: var(--el-fill-color-light, #f1f5f9);
-  color: var(--el-text-color-primary, #1e293b);
+  background: var(--el-fill-color-light, var(--color-slate-panel));
+  color: var(--el-text-color-primary, var(--color-slate-deep));
 }
 .canvas-modal-body {
   padding: 16px;
@@ -160,12 +160,12 @@ function onBackdrop() {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  border-top: 1px solid var(--el-border-color-lighter, #f1f5f9);
+  border-top: 1px solid var(--el-border-color-lighter, var(--color-slate-panel));
   flex-shrink: 0;
 }
 .cm-fade-enter-active,
 .cm-fade-leave-active {
-  transition: opacity 0.18s ease;
+  transition: opacity var(--transition-base) ease;
 }
 .cm-fade-enter-from,
 .cm-fade-leave-to {
@@ -173,7 +173,7 @@ function onBackdrop() {
 }
 .cm-pop-enter-active,
 .cm-pop-leave-active {
-  transition: opacity 0.18s ease, transform 0.22s ease;
+  transition: opacity var(--transition-base) ease, transform var(--transition-base) ease;
 }
 .cm-pop-enter-from,
 .cm-pop-leave-to {

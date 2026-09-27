@@ -663,7 +663,7 @@ onUnmounted(() => {
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
   font-weight: 500;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
 }
@@ -754,7 +754,7 @@ onUnmounted(() => {
 
 /* 深色主题下：危险按钮配色与可读性 */
 [data-theme="dark"] .dialog-toolbar .danger-btn {
-  background: #c0392b;
+  background: var(--action-coral);
   color: #ffffff;
   border-color: #e74c3c;
 }
@@ -811,12 +811,12 @@ onUnmounted(() => {
   width: 32px;
   height: 32px;
   color: var(--text-secondary);
-  transition: transform 0.3s ease;
+  transition: transform var(--transition-slow) ease;
 }
 
 .expand-button .btn-icon {
   font-size: var(--font-size-md);
-  transition: transform 0.3s ease;
+  transition: transform var(--transition-slow) ease;
 }
 
 .enhanced-btn:active {
@@ -867,7 +867,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-md);
-  background: linear-gradient(135deg, #f8f9fa 0%, var(--border-component) 100%);
+  background: linear-gradient(135deg, var(--color-gray-soft) 0%, var(--border-component) 100%);
   border-radius: 8px 8px 0 0;
   flex-wrap: wrap;
 }
@@ -952,7 +952,7 @@ onUnmounted(() => {
 .history-item {
   border: 1px solid var(--border-card);
   border-radius: var(--radius-base);
-  transition: all 0.2s;
+  transition: all var(--transition-base);
   overflow: hidden;
 }
 
@@ -981,7 +981,7 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color var(--transition-base);
 }
 
 .item-header:hover {
@@ -1131,7 +1131,7 @@ onUnmounted(() => {
 
 .output-content::-webkit-scrollbar-thumb {
   background-color: var(--text-placeholder);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
 }
 
 .output-content::-webkit-scrollbar-track {

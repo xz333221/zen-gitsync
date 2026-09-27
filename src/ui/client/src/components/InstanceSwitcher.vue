@@ -348,7 +348,7 @@ async function requestCloseAll() {
 
 .self-closed-title {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--font-size-md);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -374,13 +374,13 @@ async function requestCloseAll() {
   height: 32px;
   padding: 0;
   cursor: pointer;
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-component);
   background: var(--bg-subtle);
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium, 500);
-  transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease, color 180ms ease, transform 120ms ease;
+  transition: border-color var(--transition-base) ease, box-shadow var(--transition-base) ease, background var(--transition-base) ease, color var(--transition-base) ease, transform var(--transition-fast) ease;
   user-select: none;
   flex-shrink: 0;
 }
@@ -461,7 +461,7 @@ async function requestCloseAll() {
   color: var(--color-primary);
   background: color-mix(in srgb, var(--color-primary) 5%, transparent);
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-variant-numeric: tabular-nums;
 }
 
@@ -480,18 +480,18 @@ async function requestCloseAll() {
   place-items: center;
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   color: var(--text-secondary);
   background: var(--bg-panel);
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 700;
 }
 
 .instance-current-label {
   flex-shrink: 0;
   color: var(--color-primary);
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
 }
 
@@ -511,14 +511,14 @@ async function requestCloseAll() {
   height: 28px;
   padding: 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
   opacity: 0;
   transform: scale(0.86);
   pointer-events: none;
-  transition: opacity 150ms ease, transform 150ms ease, color 150ms ease, background 150ms ease;
+  transition: opacity var(--transition-fast) ease, transform var(--transition-fast) ease, color var(--transition-fast) ease, background var(--transition-fast) ease;
 }
 
 .instance-close:hover {
@@ -544,7 +544,7 @@ async function requestCloseAll() {
 :global(.instance-switcher-popper.el-popper) {
   overflow: hidden;
   border: 1px solid var(--dialog-border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   box-shadow: var(--dialog-shadow);
 }
 
@@ -571,14 +571,14 @@ async function requestCloseAll() {
 
 :global(.instance-switcher-popper .instance-menu-header strong) {
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-weight: 650;
   letter-spacing: -0.1px;
 }
 
 :global(.instance-switcher-popper .instance-menu-header span) {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
 }
 
 :global(.instance-switcher-popper .instance-menu-header .instance-total) {
@@ -586,11 +586,11 @@ async function requestCloseAll() {
   place-items: center;
   min-width: 24px;
   height: 24px;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   color: var(--text-primary);
   background: var(--bg-panel);
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 700;
 }
 
@@ -607,14 +607,14 @@ async function requestCloseAll() {
   height: 24px;
   padding: 0 8px;
   border: 1px solid color-mix(in srgb, var(--el-color-danger) 28%, var(--border-color));
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--el-color-danger) 4%, transparent);
   color: var(--el-color-danger);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
+  transition: background var(--transition-fast) ease, border-color var(--transition-fast) ease, color var(--transition-fast) ease, opacity var(--transition-fast) ease;
 }
 
 :global(.instance-switcher-popper .instance-close-all:hover) {
@@ -637,13 +637,13 @@ async function requestCloseAll() {
 }
 
 :global(.instance-switcher-popper .instance-close-all .el-icon) {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 
 :global(.instance-switcher-popper .instance-menu-item) {
   height: auto;
   padding: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   line-height: normal;
 }
 
@@ -664,7 +664,7 @@ async function requestCloseAll() {
   position: absolute;
   inset: 7px auto 7px 0;
   width: 2px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: var(--color-primary);
 }
 
@@ -710,7 +710,7 @@ async function requestCloseAll() {
 }
 
 :global(.instance-switcher-popper .port-badge) {
-  transition: opacity 140ms ease, transform 140ms ease;
+  transition: opacity var(--transition-fast) ease, transform var(--transition-fast) ease;
 }
 
 @keyframes rotating {

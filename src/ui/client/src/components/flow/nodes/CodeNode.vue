@@ -49,13 +49,13 @@ const info = computed(() => {
 .code-node-content {
   .node-warning {
     color: var(--color-error);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     margin-top: 4px;
   }
 
   .code-details {
     margin-top: 8px;
-    font-size: 11px;
+    font-size: var(--font-size-xs);
 
     .code-meta {
       display: flex;

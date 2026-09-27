@@ -468,7 +468,7 @@ function executeItem(item: any) {
 .after-quick-push {
   padding: 10px 12px;
   border: 1px solid var(--border-component);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-panel);
 }
 
@@ -493,7 +493,7 @@ function executeItem(item: any) {
 }
 
 .after-quick-push__label {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 
 .after-quick-push__row {
@@ -508,7 +508,7 @@ function executeItem(item: any) {
 
 .after-quick-push__hint {
   margin-top: 6px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
 }
 
@@ -537,7 +537,7 @@ function executeItem(item: any) {
 .startup-toolbar__warn {
   margin-left: 6px;
   color: var(--color-warning);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 
 .startup-auto-run {
@@ -549,13 +549,13 @@ function executeItem(item: any) {
 }
 
 .startup-auto-run__label {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 
 .startup-empty {
   padding: 14px;
   border: 1px dashed var(--border-component);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
   background: var(--bg-panel);
 }
@@ -573,7 +573,7 @@ function executeItem(item: any) {
   gap: 12px;
   padding: 10px 12px;
   border: 1px solid var(--border-component);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-container);
 }
 
@@ -595,15 +595,15 @@ function executeItem(item: any) {
   align-items: center;
   padding: 1px 6px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 700;
   margin-right: 6px;
   border: 1px solid transparent;
 
   &.is-command {
     color: var(--color-primary);
-    background: rgba(64, 158, 255, 0.12);
-    border-color: rgba(64, 158, 255, 0.25);
+    background: var(--tint-primary-12);
+    border-color: var(--tint-primary-22);
   }
 
   &.is-workflow {
@@ -616,7 +616,7 @@ function executeItem(item: any) {
 .startup-item__desc {
   margin-top: 4px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -625,7 +625,7 @@ function executeItem(item: any) {
 
 .startup-item__dir {
   margin-top: 6px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
@@ -668,7 +668,7 @@ function executeItem(item: any) {
 }
 
 .startup-option__cmd {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   white-space: nowrap;

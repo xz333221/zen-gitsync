@@ -278,17 +278,17 @@ onBeforeUnmount(() => {
   list-style: none;
   background: var(--bg-container);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   user-select: none;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
 
   &__item {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 6px 10px;
-    border-radius: 4px;
+    border-radius: var(--radius-base);
     cursor: pointer;
     color: var(--text-primary);
 

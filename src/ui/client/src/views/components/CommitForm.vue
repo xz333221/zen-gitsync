@@ -952,7 +952,7 @@ git config --global user.email "your.email@example.com"</pre
   background: transparent;
   border-radius: var(--radius-xl);
   box-shadow: none;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
 }
 
 /* 行内模式（与类型/作用域同一行） */
@@ -980,7 +980,7 @@ git config --global user.email "your.email@example.com"</pre
     background: var(--bg-container);
     border: 2px solid var(--color-primary);
     box-shadow: var(--shadow-sm);
-    transition: all 0.3s ease;
+    transition: all var(--transition-slow) ease;
     height: 40px; /* 统一高度，与其它输入保持一致 */
   }
 
@@ -1013,7 +1013,7 @@ git config --global user.email "your.email@example.com"</pre
     background: var(--bg-container);
     border: 2px solid var(--color-danger);
     box-shadow: var(--shadow-sm);
-    transition: all 0.3s ease;
+    transition: all var(--transition-slow) ease;
     height: 40px; /* 统一高度 */
   }
 
@@ -1047,7 +1047,7 @@ git config --global user.email "your.email@example.com"</pre
     background: var(--bg-container);
     border: 2px solid var(--color-success);
     box-shadow: var(--shadow-sm);
-    transition: all 0.3s ease;
+    transition: all var(--transition-slow) ease;
     height: 40px; /* 统一高度 */
   }
 
@@ -1083,7 +1083,7 @@ git config --global user.email "your.email@example.com"</pre
     box-shadow: var(--shadow-sm);
     
     font-weight: 500;
-    transition: all 0.3s ease;
+    transition: all var(--transition-slow) ease;
   }
 
   .el-textarea__inner:hover {
@@ -1135,7 +1135,7 @@ git config --global user.email "your.email@example.com"</pre
   background-color: var(--bg-panel);
   border-radius: var(--radius-base);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   user-select: none;
   
 }
@@ -1147,7 +1147,7 @@ git config --global user.email "your.email@example.com"</pre
 
 .toggle-icon {
   margin-left: var(--spacing-base);
-  transition: transform 0.3s ease;
+  transition: transform var(--transition-slow) ease;
   font-size: var(--font-size-sm);
 }
 
@@ -1159,7 +1159,7 @@ git config --global user.email "your.email@example.com"</pre
   display: flex;
   flex-direction: column;
   gap: var(--spacing-base);
-  animation: fade-in 0.3s ease-in-out;
+  animation: fade-in var(--transition-slow) ease-in-out;
 }
 
 @keyframes fade-in {
@@ -1198,7 +1198,7 @@ git config --global user.email "your.email@example.com"</pre
   border-radius: var(--radius-md);
   font-weight: 500;
   min-width: 100px;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
 
   &:hover {
     transform: scale(1.02);

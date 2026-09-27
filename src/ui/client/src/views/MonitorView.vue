@@ -455,7 +455,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -467,7 +467,7 @@ onBeforeUnmount(() => {
 .toolbar-host {
   margin-left: 8px;
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 500;
   color: var(--text-tertiary);
   background: var(--bg-subtle);
@@ -481,7 +481,7 @@ onBeforeUnmount(() => {
 }
 
 .toolbar-label {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   margin-right: 4px;
 }
@@ -504,7 +504,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 8px;
   box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.18s ease, transform 0.18s ease;
+  transition: box-shadow var(--transition-base) ease, transform var(--transition-base) ease;
 }
 
 .metric-card:hover {
@@ -515,7 +515,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-tertiary);
 }
@@ -531,7 +531,7 @@ onBeforeUnmount(() => {
 }
 
 .metric-value {
-  font-size: 24px;
+  font-size: var(--font-size-2xl);
   font-weight: 700;
   line-height: 1.2;
   color: var(--text-primary);
@@ -539,19 +539,19 @@ onBeforeUnmount(() => {
 }
 
 .metric-unit {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 600;
   margin-left: 2px;
 }
 
 .metric-sub {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
 .metric-card__footer {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
@@ -574,7 +574,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-tertiary);
 }
@@ -614,17 +614,17 @@ onBeforeUnmount(() => {
 
 .disk-mount {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-primary);
   text-align: center;
   padding: 1px 0;
   background: var(--tint-primary-12);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
 }
 
 .disk-usage {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -632,7 +632,7 @@ onBeforeUnmount(() => {
 }
 
 .disk-percent {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -641,7 +641,7 @@ onBeforeUnmount(() => {
 .disks-empty {
   padding: 8px 0 4px;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
 }
 
@@ -655,7 +655,7 @@ onBeforeUnmount(() => {
   gap: 12px;
   padding: 60px 20px;
   color: var(--text-tertiary);
-  font-size: 14px;
+  font-size: var(--font-size-base);
 }
 
 .monitor-error {
@@ -686,7 +686,7 @@ onBeforeUnmount(() => {
 }
 
 .ports-title {
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -704,7 +704,7 @@ onBeforeUnmount(() => {
 .ports-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12.5px;
+  font-size: var(--font-size-mid);
   table-layout: fixed;
 }
 
@@ -737,8 +737,8 @@ onBeforeUnmount(() => {
   display: inline-block;
   margin-left: 4px;
   opacity: 0.4;
-  font-size: 11px;
-  transition: opacity 0.15s ease;
+  font-size: var(--font-size-xs);
+  transition: opacity var(--transition-fast) ease;
 }
 
 .sort-arrow.active {
@@ -788,10 +788,10 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   padding: 1px 6px;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 700;
   letter-spacing: 0.5px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   font-family: var(--font-mono);
 }
 
@@ -822,9 +822,9 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   padding: 1px 6px;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   letter-spacing: 0.3px;
 }
 
@@ -856,7 +856,7 @@ onBeforeUnmount(() => {
   text-align: center;
   padding: 40px 12px;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
 }
 
 /* ── 响应式 ─────────────────────────────────────────────────────────── */

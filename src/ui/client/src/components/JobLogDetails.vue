@@ -98,12 +98,13 @@
       </footer>
 
       <!-- 全屏查看 dialog -->
-      <el-dialog
+      <CommonDialog
         v-model="fullscreenOpen"
         :title="$t('@WORKBENCH:模型返回 - 全屏查看')"
-        fullscreen
+        size="fullscreen"
+        type="flex"
         :close-on-click-modal="false"
-        class="wb-log-fullscreen-dialog"
+        custom-class="wb-log-fullscreen-dialog"
         @closed="onFullscreenClosed"
       >
         <div ref="fullscreenContainerRef" class="wb-log-fullscreen">
@@ -114,7 +115,7 @@
           />
           <div v-else class="wb-log-fullscreen__empty">{{ $t('@WORKBENCH:（暂无输出）') }}</div>
         </div>
-      </el-dialog>
+      </CommonDialog>
     </div><!-- /.wb-log-details__body -->
   </div>
 </template>
@@ -129,6 +130,7 @@ import { avatarForExecutor } from '@/utils/agentAvatar'
 import { taskExecutorName } from '@/utils/taskExecutor'
 import { buildJobToolCalls } from '@/utils/jobToolCalls'
 import { $t } from '@/lang/static'
+import CommonDialog from '@/components/CommonDialog.vue'
 import type { Job, JobStatus } from '@/types/workbench'
 import { useConfigStore } from '@/stores/configStore'
 
@@ -398,16 +400,16 @@ function onReExecute() {
   gap: 10px;
 }
 .wb-job-chat :deep(.acu-bubble) {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 .wb-job-chat :deep(.acu-bubble-name) {
-  font-size: 10px;
+  font-size: var(--font-size-xs);
 }
 
 .wb-log-summary {
   cursor: pointer;
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   user-select: none;
   display: flex;
@@ -431,7 +433,7 @@ function onReExecute() {
   flex-shrink: 0;
 }
 .wb-log-summary__meta {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
@@ -440,7 +442,7 @@ function onReExecute() {
   align-items: center;
   gap: 3px;
   padding: 2px 7px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 500;
   color: var(--text-secondary);
   background: var(--bg-container);
@@ -449,7 +451,7 @@ function onReExecute() {
   cursor: pointer;
   user-select: none;
   flex-shrink: 0;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 .wb-log-copy:hover {
   background: color-mix(in srgb, var(--color-primary) 10%, transparent);
@@ -479,26 +481,26 @@ function onReExecute() {
   align-items: center;
   gap: 3px;
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 500;
   color: #6d28d9;
-  background: color-mix(in srgb, #8b5cf6 10%, var(--bg-container));
-  border: 1px solid color-mix(in srgb, #8b5cf6 30%, transparent);
+  background: color-mix(in srgb, var(--color-think) 10%, var(--bg-container));
+  border: 1px solid color-mix(in srgb, var(--color-think) 30%, transparent);
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
   user-select: none;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 .wb-chat__action:hover {
-  background: color-mix(in srgb, #8b5cf6 18%, var(--bg-container));
-  border-color: color-mix(in srgb, #8b5cf6 50%, transparent);
+  background: color-mix(in srgb, var(--color-think) 18%, var(--bg-container));
+  border-color: color-mix(in srgb, var(--color-think) 50%, transparent);
   color: #5b21b6;
 }
 .wb-chat__action:active {
-  background: color-mix(in srgb, #8b5cf6 26%, var(--bg-container));
+  background: color-mix(in srgb, var(--color-think) 26%, var(--bg-container));
 }
 .wb-chat__action:focus-visible {
-  outline: 2px solid color-mix(in srgb, #8b5cf6 50%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--color-think) 50%, transparent);
   outline-offset: 1px;
 }
 
@@ -523,7 +525,7 @@ function onReExecute() {
   flex: 1;
   min-height: 0;
   padding: 14px 18px;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   line-height: 1.65;
   color: var(--text-primary);
   overflow: auto;
@@ -541,10 +543,10 @@ function onReExecute() {
   align-items: center;
   gap: 6px;
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 .wb-log-summary__status--running {
-  color: var(--color-warning-dark, #b45309);
+  color: var(--color-warning-dark, var(--color-warning-dark));
 }
 .wb-log-summary__status--pending {
   color: var(--color-primary);
@@ -552,19 +554,19 @@ function onReExecute() {
 .wb-log-summary__status--done {
   color: var(--color-success-dark, #15803d);
 }
-/* cancelled 用中性灰（与 statusColor.ts 里 cancelled=#9ca3af 对齐），区别于 error 红和 done 绿 */
+/* cancelled 用中性灰（与 statusColor.ts 里 cancelled=var(--color-gray-400) 对齐），区别于 error 红和 done 绿 */
 .wb-log-summary__status--cancelled {
-  color: #9ca3af;
+  color: var(--color-gray-400);
 }
 .wb-log-summary__status--error {
-  color: var(--color-danger, #ef4444);
+  color: var(--color-danger, var(--color-danger-light));
 }
 .wb-log-summary__icon {
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   line-height: 1;
 }
 .wb-log-summary__elapsed {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 400;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
@@ -586,18 +588,18 @@ function onReExecute() {
   opacity: 0.35;
   animation: wb-log-dot-bounce 1.4s ease-in-out infinite;
 }
-.wb-log-dots__dot:nth-child(2) { animation-delay: 0.2s; }
+.wb-log-dots__dot:nth-child(2) { animation-delay: var(--transition-base); }
 .wb-log-dots__dot:nth-child(3) { animation-delay: 0.4s; }
 
 /* 状态行背景:running 暖色,pending 主色,done 绿色 */
 .wb-log-details.is-running .wb-log-summary {
-  background: color-mix(in srgb, var(--color-warning, #f59e0b) 8%, transparent);
+  background: color-mix(in srgb, var(--color-warning, var(--color-warning-light)) 8%, transparent);
 }
 .wb-log-details.is-pending .wb-log-summary {
   background: color-mix(in srgb, var(--color-primary) 6%, transparent);
 }
 .wb-log-details.is-finished .wb-log-summary {
-  background: color-mix(in srgb, var(--color-success, #22c55e) 6%, transparent);
+  background: color-mix(in srgb, var(--color-success, var(--action-green)) 6%, transparent);
 }
 
 /* 完成时整条详情面板闪一下绿光,持续 1.5s 后渐隐,吸引注意力 */
@@ -610,8 +612,8 @@ function onReExecute() {
   40% { opacity: 1; transform: translateY(-2px); }
 }
 @keyframes wb-log-finished-flash {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success, #22c55e) 50%, transparent); }
-  60% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-success, #22c55e) 0%, transparent); }
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success, var(--action-green)) 50%, transparent); }
+  60% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-success, var(--action-green)) 0%, transparent); }
   100% { box-shadow: 0 0 0 0 transparent; }
 }
 

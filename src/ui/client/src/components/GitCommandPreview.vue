@@ -84,7 +84,7 @@ async function copyCommand() {
   border: 1px solid var(--border-console);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  transition: border-color 0.2s ease;
+  transition: border-color var(--transition-base) ease;
 
   &:hover {
     border-color: var(--border-console-hover);
@@ -108,7 +108,7 @@ async function copyCommand() {
     content: '$';
     color: var(--text-console-prompt);
     font-weight: 700;
-    font-size: 13px;
+    font-size: var(--font-size-mid);
   }
 }
 
@@ -128,7 +128,7 @@ async function copyCommand() {
   &::-webkit-scrollbar-track { background: transparent; }
   &::-webkit-scrollbar-thumb {
     background: var(--console-scrollbar);
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
   }
 }
 

@@ -146,7 +146,7 @@ const segments = computed<Segment[]>(() => {
 .md-preview {
   padding: 20px 24px;
   color: inherit;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   line-height: 1.6;
   word-break: break-word;
 }
@@ -158,7 +158,7 @@ const segments = computed<Segment[]>(() => {
 .md-preview :deep(h4),
 .md-preview :deep(h5),
 .md-preview :deep(h6) {
-  border-bottom: 1px solid var(--border-color, #d0d7de);
+  border-bottom: 1px solid var(--border-color, var(--md-border));
   padding-bottom: 0.3em;
   margin-top: 24px;
   margin-bottom: 16px;
@@ -171,20 +171,20 @@ const segments = computed<Segment[]>(() => {
 .md-preview :deep(a) { color: var(--text-link, #0969da); text-decoration: none; }
 .md-preview :deep(a:hover) { text-decoration: underline; }
 .md-preview :deep(code) {
-  background: var(--bg-code, #f6f8fa);
+  background: var(--bg-code, var(--md-bg-subtle));
   color: var(--text-primary, inherit);
   border: 1px solid var(--border-color-light, transparent);
   padding: 2px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
   font-size: 87%;
 }
 .md-preview :deep(pre) {
-  background: var(--bg-code, #f6f8fa);
+  background: var(--bg-code, var(--md-bg-subtle));
   color: var(--text-primary, inherit);
   border: 1px solid var(--border-color-light, transparent);
   padding: 14px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   overflow: auto;
   margin: 0 0 16px;
 }
@@ -195,15 +195,15 @@ const segments = computed<Segment[]>(() => {
   font-size: 100%;
 }
 .md-preview :deep(blockquote) {
-  border-left: 3px solid var(--border-color, #d0d7de);
+  border-left: 3px solid var(--border-color, var(--md-border));
   margin: 0 0 16px;
   padding: 0 16px;
-  color: var(--text-secondary, #656d76);
+  color: var(--text-secondary, var(--md-text-muted));
 }
-.md-preview :deep(img) { max-width: 100%; border-radius: 4px; }
+.md-preview :deep(img) { max-width: 100%; border-radius: var(--radius-base); }
 .md-preview :deep(hr) {
   border: none;
-  border-top: 1px solid var(--border-color, #d0d7de);
+  border-top: 1px solid var(--border-color, var(--md-border));
   margin: 24px 0;
 }
 .md-preview :deep(table) {
@@ -213,10 +213,10 @@ const segments = computed<Segment[]>(() => {
 }
 .md-preview :deep(th),
 .md-preview :deep(td) {
-  border: 1px solid var(--border-color, #d0d7de);
+  border: 1px solid var(--border-color, var(--md-border));
   padding: 6px 13px;
 }
-.md-preview :deep(thead tr) { background: var(--bg-code, #f6f8fa); }
+.md-preview :deep(thead tr) { background: var(--bg-code, var(--md-bg-subtle)); }
 .md-preview :deep(ul),
 .md-preview :deep(ol) { padding-left: 2em; margin-bottom: 16px; }
 .md-preview :deep(li) { margin: 4px 0; }
@@ -225,17 +225,17 @@ const segments = computed<Segment[]>(() => {
 
 .md-mindmap {
   margin: 18px 0 28px;
-  border: 1px solid var(--border-color, #d0d7de);
-  border-radius: 8px;
+  border: 1px solid var(--border-color, var(--md-border));
+  border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--bg-panel, #ffffff);
 }
 .md-mindmap-title {
   padding: 8px 12px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
-  color: var(--text-secondary, #656d76);
-  background: var(--bg-code, #f6f8fa);
+  color: var(--text-secondary, var(--md-text-muted));
+  background: var(--bg-code, var(--md-bg-subtle));
   letter-spacing: 0.5px;
 }
 .md-mindmap-canvas {

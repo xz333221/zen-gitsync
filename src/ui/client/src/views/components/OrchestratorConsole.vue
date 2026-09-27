@@ -709,7 +709,7 @@ const gitSummary = computed(() => {
   background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 .oc__rail:focus-visible { outline: var(--focus-outline); outline-offset: -2px; }
-.oc__rail-icon { font-size: 14px; flex-shrink: 0; }
+.oc__rail-icon { font-size: var(--font-size-base); flex-shrink: 0; }
 .oc__rail-live {
   width: 6px;
   height: 6px;
@@ -723,7 +723,7 @@ const gitSummary = computed(() => {
 .oc__rail-text {
   writing-mode: vertical-rl;
   letter-spacing: 1px;
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   user-select: none;
 }
@@ -750,7 +750,7 @@ const gitSummary = computed(() => {
 }
 .oc__title {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-secondary);
   flex: 1;
@@ -760,9 +760,9 @@ const gitSummary = computed(() => {
   border: none;
   background: transparent;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   cursor: pointer;
   transition: color var(--transition-fast) var(--ease-custom), background var(--transition-fast) var(--ease-custom);
 }
@@ -782,8 +782,8 @@ const gitSummary = computed(() => {
   border: none;
   background: transparent;
   color: var(--text-tertiary);
-  border-radius: 4px;
-  font-size: 13px;
+  border-radius: var(--radius-base);
+  font-size: var(--font-size-mid);
   cursor: pointer;
   transition: color var(--transition-fast) var(--ease-custom);
 }
@@ -795,7 +795,7 @@ const gitSummary = computed(() => {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   background: var(--bg-subtle);
   flex-shrink: 0;
@@ -817,7 +817,7 @@ const gitSummary = computed(() => {
   align-items: center;
   gap: 6px;
   margin: 0 12px 6px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   flex-shrink: 0;
 }
@@ -843,7 +843,7 @@ const gitSummary = computed(() => {
   align-items: center;
   gap: 6px;
   margin-bottom: 2px;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
 }
 .oc-row__kind { color: var(--text-tertiary); }
 .oc-row--user .oc-row__kind { color: var(--color-primary); }
@@ -852,7 +852,7 @@ const gitSummary = computed(() => {
 .oc-row__time { margin-left: auto; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
 .oc-row__text {
   margin: 0;
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   line-height: 1.55;
   color: var(--text-secondary);
   word-break: break-word;
@@ -861,12 +861,12 @@ const gitSummary = computed(() => {
 .oc-row--user .oc-row__text { color: var(--text-primary); }
 .oc-row__note {
   margin: 2px 0 0;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }
 .oc-row__error {
   margin: 3px 0 0;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   line-height: 1.5;
   color: var(--color-danger-light);
   overflow: hidden;
@@ -878,7 +878,7 @@ const gitSummary = computed(() => {
 .oc-empty {
   padding: 20px 10px;
   text-align: center;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   list-style: none;
 }
@@ -897,7 +897,7 @@ const gitSummary = computed(() => {
   grid-template-columns: auto 1fr;
   gap: 4px 10px;
   margin: 0;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
 }
 .oc__git-label { color: var(--text-tertiary); }
 .oc__git-value {
@@ -926,7 +926,7 @@ const gitSummary = computed(() => {
   min-height: 76px;
   max-height: min(380px, 45vh);
   padding: 7px 8px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1.5;
   font-family: inherit;
   color: var(--text-primary);
@@ -960,7 +960,7 @@ const gitSummary = computed(() => {
   border: none;
   background: transparent;
   color: var(--text-tertiary);
-  font-size: 14px;
+  font-size: var(--font-size-base);
   cursor: pointer;
   transition: color var(--transition-fast) var(--ease-custom);
 }
@@ -973,7 +973,7 @@ const gitSummary = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
@@ -988,10 +988,10 @@ const gitSummary = computed(() => {
   height: 22px;
   padding: 0 8px;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   background: var(--bg-panel);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   cursor: pointer;
   transition:
     color var(--transition-fast) var(--ease-custom),
@@ -1003,18 +1003,18 @@ const gitSummary = computed(() => {
   border-color: var(--color-primary);
 }
 .oc__executor-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
-.oc__executor-btn__icon { font-size: 13px; }
-.oc__executor-btn__caret { font-size: 10px; opacity: 0.7; }
+.oc__executor-btn__icon { font-size: var(--font-size-mid); }
+.oc__executor-btn__caret { font-size: var(--font-size-xs); opacity: 0.7; }
 .oc__executor-item {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   min-width: 132px;
 }
-.oc__executor-item__icon { font-size: 14px; flex: none; }
+.oc__executor-item__icon { font-size: var(--font-size-base); flex: none; }
 .oc__executor-item__name { flex: 1; }
-.oc__executor-item__check { color: var(--color-primary); font-size: 12px; }
-.oc__executor-item__missing { font-size: 10px; color: var(--text-tertiary, var(--text-secondary)); }
+.oc__executor-item__check { color: var(--color-primary); font-size: var(--font-size-sm); }
+.oc__executor-item__missing { font-size: var(--font-size-xs); color: var(--text-tertiary, var(--text-secondary)); }
 .oc__send {
   margin-left: auto;
   display: inline-flex;
@@ -1024,7 +1024,7 @@ const gitSummary = computed(() => {
   border-radius: var(--radius-md);
   background: var(--color-primary);
   color: #fff;
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   line-height: 24px;
   padding: 0 12px;
   cursor: pointer;
@@ -1033,10 +1033,10 @@ const gitSummary = computed(() => {
 .oc__send:hover:not(:disabled) { opacity: 0.88; }
 .oc__send:disabled { opacity: 0.45; cursor: default; }
 .oc__send:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
-.oc__send-icon { font-size: 12px; }
+.oc__send-icon { font-size: var(--font-size-sm); }
 .oc__hint {
   margin: 6px 0 0;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   line-height: 1.5;
   color: var(--text-tertiary);
 }

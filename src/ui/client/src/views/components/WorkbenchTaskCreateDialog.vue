@@ -204,7 +204,7 @@ async function submit(openEditor: boolean) {
 }
 .nc__field { display: flex; flex-direction: column; gap: 5px; }
 .nc__label {
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-secondary);
 }
@@ -212,7 +212,7 @@ async function submit(openEditor: boolean) {
 .nc__select {
   width: 100%;
   padding: 7px 9px;
-  font-size: 12.5px;
+  font-size: var(--font-size-mid);
   font-family: inherit;
   line-height: 1.5;
   color: var(--text-primary);
@@ -232,12 +232,12 @@ async function submit(openEditor: boolean) {
   min-height: 92px;
   max-height: 260px;
 }
-.nc__hint { margin: 0; font-size: 10.5px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nc__hint { margin: 0; font-size: var(--font-size-xs); color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .nc__error {
   margin: 0;
   padding: 6px 8px;
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   border-radius: var(--radius-md);
   color: var(--color-danger-light);
   background: color-mix(in srgb, var(--color-danger) 10%, transparent);
@@ -249,7 +249,7 @@ async function submit(openEditor: boolean) {
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 28px;
   padding: 0 12px;
   border-radius: var(--radius-md);

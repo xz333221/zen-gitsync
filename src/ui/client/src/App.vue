@@ -44,7 +44,7 @@ import ViewLoading from '@/components/ViewLoading.vue'
 import ConsoleView from '@views/ConsoleView.vue'
 // 视图懒加载:首屏只下载 git 视图,其它视图切过去才请求 chunk。
 // loadingComponent:chunk 下载期间显示的内联占位(轻量 spinner,非全屏遮罩)。
-// delay:200ms 后才显示 loading,避免本地秒加载时 loading 一闪而过造成抖动。
+// delay:var(--transition-base) 后才显示 loading,避免本地秒加载时 loading 一闪而过造成抖动。
 // KeepAlive 缓存命中(已加载过的视图再切回)时 defineAsyncComponent 同步 resolve,
 // loadingComponent 不会显示 → 首次切有 loading,之后秒切。
 const asyncOpts = {
@@ -785,7 +785,7 @@ function stopHResize() {
             <defs>
               <linearGradient id="loading-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stop-color="var(--color-primary)" />
-                <stop offset="100%" stop-color="#0ea5e9" />
+                <stop offset="100%" stop-color="var(--action-sky)" />
               </linearGradient>
             </defs>
             <!-- 外环 -->
@@ -1042,7 +1042,7 @@ function stopHResize() {
 
 <style>
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, 'Plus Jakarta Sans', sans-serif;
+  font-family: var(--font-sans);
   margin: 0;
   padding: 0;
   background-color: var(--bg-page);
@@ -1092,7 +1092,7 @@ body {
   background: var(--tint-warning-14);
   border-bottom: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
   color: var(--text-primary);
-  animation: banner-slide-down 0.32s var(--ease-custom);
+  animation: banner-slide-down var(--transition-slow) var(--ease-custom);
 }
 
 [data-theme="dark"] .config-broken-banner {
@@ -1136,7 +1136,7 @@ body {
 }
 
 .config-broken-banner .banner-detail {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   cursor: pointer;
   white-space: nowrap;
@@ -1150,7 +1150,7 @@ body {
 }
 
 .config-broken-banner .banner-path {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1215,7 +1215,7 @@ body {
   right: var(--spacing-sm);
   bottom: -1px;
   height: 2px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: var(--color-primary);
 }
 .git-tab:focus-visible {
@@ -1382,7 +1382,7 @@ h1 {
   font-size: var(--font-size-xl);
   font-weight: 700;
   letter-spacing: -0.6px;
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-family: var(--font-sans);
   color: var(--color-primary-dark);
 }
 
@@ -1479,14 +1479,14 @@ h1 {
 }
 
 .header-monitor__label {
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--text-tertiary);
   letter-spacing: 0.3px;
 }
 
 .header-monitor__value {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   min-width: 30px;
@@ -1496,14 +1496,14 @@ h1 {
 .header-monitor__bar {
   width: 24px;
   height: 3px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: var(--border-color);
   overflow: hidden;
 }
 
 .header-monitor__fill {
   height: 100%;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   transition: width 0.4s ease, background 0.4s ease;
 }
 
@@ -1512,7 +1512,7 @@ h1 {
 }
 
 .header-monitor__tooltip {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1.6;
   white-space: nowrap;
 }
@@ -1524,7 +1524,7 @@ h1 {
 .user-name {
   font-weight: bold;
   cursor: help;
-  transition: color 0.2s ease;
+  transition: color var(--transition-base) ease;
   max-width: 80px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1536,7 +1536,7 @@ h1 {
 }
 
 .branch-name {
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 .status-box {
@@ -1587,7 +1587,7 @@ h1 {
   font-size: var(--font-size-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
+  transition: opacity var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .user-unconfigured-primary-btn:hover {
@@ -1781,13 +1781,13 @@ h1 {
 }
 
 .loading-dots__dot:nth-child(2) {
-  animation-delay: 0.15s;
+  animation-delay: var(--transition-fast);
   background: var(--color-primary-light);
 }
 
 .loading-dots__dot:nth-child(3) {
-  animation-delay: 0.3s;
-  background: #0ea5e9;
+  animation-delay: var(--transition-slow);
+  background: var(--action-sky);
 }
 
 @keyframes loading-dot-bounce {
@@ -1892,12 +1892,12 @@ h1 {
 }
 
 .footer-model-hint__label {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   opacity: 0.55;
 }
 
 .footer-model-hint__name {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 500;
   opacity: 0.85;
   max-width: 200px;
@@ -1946,7 +1946,7 @@ h1 {
 <style scoped>
 .logo {
   will-change: filter;
-  transition: filter 300ms;
+  transition: filter var(--transition-slow);
 }
 
 .logo:hover {
@@ -1960,7 +1960,7 @@ h1 {
   position: relative;
   z-index: 10;
   background-color: transparent;
-  transition: background-color 0.15s;
+  transition: background-color var(--transition-fast);
 }
 
 .vertical-resizer::after {
@@ -1972,7 +1972,7 @@ h1 {
   transform: translateX(-50%);
   width: 1px;
   background-color: transparent;
-  transition: background-color 0.15s, width 0.15s, box-shadow 0.15s;
+  transition: background-color var(--transition-fast), width var(--transition-fast), box-shadow var(--transition-fast);
   pointer-events: none;
 }
 
@@ -1993,7 +1993,7 @@ h1 {
   grid-area: h-resizer;
   background-color: transparent;
   cursor: row-resize;
-  transition: background-color 0.2s;
+  transition: background-color var(--transition-base);
   position: relative;
   z-index: 10;
   border-radius: var(--radius-base);
@@ -2008,8 +2008,8 @@ h1 {
   width: 32px;
   height: 3px;
   background-color: var(--color-gray-300);
-  border-radius: 2px;
-  transition: background-color 0.2s, height 0.2s, width 0.2s, box-shadow 0.2s;
+  border-radius: var(--radius-xs);
+  transition: background-color var(--transition-base), height var(--transition-base), width var(--transition-base), box-shadow var(--transition-base);
 }
 
 .horizontal-resizer:hover,
@@ -2022,7 +2022,7 @@ h1 {
   background-color: var(--color-primary);
   height: 4px;
   width: 48px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   box-shadow: 0 0 10px var(--tint-primary-45);
 }
 
@@ -2083,7 +2083,7 @@ h1 {
   flex-shrink: 0;
   background: var(--bg-subtle);
   border: 1px solid var(--border-component);
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   padding: 0;
   color: var(--text-secondary);
   box-shadow: none;
@@ -2114,7 +2114,7 @@ h1 {
 }
 
 .theme-toggle-btn .btn-icon {
-  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform var(--transition-slow) cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .theme-toggle-btn:hover .btn-icon {

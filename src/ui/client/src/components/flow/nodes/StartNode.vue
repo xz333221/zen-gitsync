@@ -53,7 +53,7 @@ defineProps<{
   
   // 选中状态
   &.selected {
-    box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.3), var(--shadow-xl);
+    box-shadow: 0 0 0 3px var(--tint-primary-30), var(--shadow-xl);
   }
   
   .flow-node-icon {

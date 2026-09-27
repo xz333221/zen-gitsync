@@ -412,7 +412,7 @@ defineExpose({
 
 .template-list-scroll::-webkit-scrollbar-thumb {
   background-color: var(--text-placeholder);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
 }
 
 .template-list-scroll::-webkit-scrollbar-track {
@@ -422,7 +422,7 @@ defineExpose({
 .template-item {
   margin-bottom: var(--spacing-base);
   border-radius: var(--radius-md);
-  transition: background-color 0.2s ease, border-color 0.2s ease;
+  transition: background-color var(--transition-base) ease, border-color var(--transition-base) ease;
 }
 
 /* Remove shadows, use lightweight border style */
@@ -530,7 +530,7 @@ defineExpose({
 
 .templates-scroll-area::-webkit-scrollbar-thumb {
   background-color: var(--text-placeholder);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
 }
 
 .templates-scroll-area::-webkit-scrollbar-track {

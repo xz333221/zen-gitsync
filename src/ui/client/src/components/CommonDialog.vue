@@ -42,9 +42,13 @@ interface Props {
   
   // 样式相关
   customClass?: string
+  /** 遮罩层自定义类名（透传给 el-dialog 的 modal-class，例如 npm-sync-overlay） */
+  modalClass?: string
   appendToBody?: boolean
   lockScroll?: boolean
   zIndex?: number
+  /** 是否显示右上角关闭按钮（透传 el-dialog 的 show-close） */
+  showClose?: boolean
   // 高度控制：'fixed' 使用固定高度 calc(100% - offset)；'max' 使用最大高度
   heightMode?: 'fixed' | 'max'
   // 计算高度时的偏移量（例如头尾合计占用高度），默认 '160px'
@@ -68,6 +72,7 @@ const props = withDefaults(defineProps<Props>(), {
   draggable: false,
   appendToBody: true,
   lockScroll: true,
+  showClose: true,
   heightMode: 'max',
   heightOffset: '100px',
   showFooter: false,
@@ -218,6 +223,9 @@ function handleCancel() {
     :destroy-on-close="destroyOnClose"
     :draggable="draggable"
     :class="dialogClass"
+    :show-close="showClose"
+    :modal-class="modalClass"
+    data-dialog-shell="common"
     :append-to-body="appendToBody"
     :lock-scroll="lockScroll"
     :aria-modal="true"

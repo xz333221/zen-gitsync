@@ -1269,11 +1269,11 @@ onBeforeUnmount(stopPolling)
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   color: var(--text-secondary);
 }
 .repo-list__status .el-icon {
-  font-size: 13px;
+  font-size: var(--font-size-mid);
 }
 
 /* 有边框的动作按钮:与「刷新全部」同一套语汇 —— 要花几秒的动作值得一个明确的
@@ -1290,7 +1290,7 @@ onBeforeUnmount(stopPolling)
   background: transparent;
   color: var(--text-secondary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   line-height: 1;
   cursor: pointer;
   transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
@@ -1309,7 +1309,7 @@ onBeforeUnmount(stopPolling)
   outline-offset: 2px;
 }
 .repo-list__action .el-icon {
-  font-size: 14px;
+  font-size: var(--font-size-base);
 }
 .repo-list__action .el-icon.is-spinning {
   animation: repo-list-spin 0.9s linear infinite;
@@ -1332,11 +1332,11 @@ onBeforeUnmount(stopPolling)
   gap: var(--spacing-sm);
   padding: var(--spacing-xl) var(--spacing-md);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   text-align: center;
 }
 .repo-list__center .el-icon {
-  font-size: 20px;
+  font-size: var(--font-size-xl);
 }
 .repo-list__center--error {
   color: var(--text-primary);
@@ -1367,7 +1367,7 @@ onBeforeUnmount(stopPolling)
   width: 52px;
   height: 52px;
   flex: 0 0 52px;
-  border-radius: 14px;
+  border-radius: var(--radius-xl);
   color: var(--color-primary);
   background: var(--tint-primary-08);
 }
@@ -1384,7 +1384,7 @@ onBeforeUnmount(stopPolling)
 .repo-list__guide-desc {
   margin: 0;
   max-width: 560px;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   line-height: 1.7;
   color: var(--text-secondary);
 }
@@ -1399,7 +1399,7 @@ onBeforeUnmount(stopPolling)
 .repo-list__cmd-label {
   display: block;
   margin-bottom: 8px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -1418,7 +1418,7 @@ onBeforeUnmount(stopPolling)
   background: var(--bg-container);
   color: var(--text-primary);
   font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   /* 换行而不是横向滚动:winget 的安装命令有 100+ 字符,横向滚动会让尾巴
      (--accept-source-agreements)看不见 —— 而用户来这里就是为了看清并复制它。
      实测 1600px 宽下也会被截断,所以不能指望容器够宽。 */
@@ -1428,7 +1428,7 @@ onBeforeUnmount(stopPolling)
 }
 .repo-list__cmd-note {
   margin: 9px 0 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1.6;
   color: var(--text-secondary);
 }
@@ -1474,7 +1474,7 @@ onBeforeUnmount(stopPolling)
   background: transparent;
   color: var(--text-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   line-height: 1;
   cursor: pointer;
   transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
@@ -1503,12 +1503,12 @@ onBeforeUnmount(stopPolling)
   border-color: var(--color-primary-dark);
 }
 .repo-list__btn .el-icon {
-  font-size: 14px;
+  font-size: var(--font-size-base);
 }
 .repo-list__guide-note {
   margin: 0;
   max-width: 560px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1.6;
   color: var(--text-secondary);
 }
@@ -1525,14 +1525,14 @@ onBeforeUnmount(stopPolling)
   max-width: 620px;
   padding: 8px 12px;
   text-align: left;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--color-warning);
   background: color-mix(in srgb, var(--color-warning) 12%, transparent);
 }
 .repo-list__guide-note--warn .el-icon {
   flex: none;
   margin-top: 2px;
-  font-size: 14px;
+  font-size: var(--font-size-base);
 }
 
 /* ── 工具行:搜索 + 排序 ───────────────────────────────────────────── */
@@ -1552,7 +1552,7 @@ onBeforeUnmount(stopPolling)
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-sm);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   color: var(--text-secondary);
 }
 /* 两个下拉(分组 / 排序)共用一套外观:`__sort-select` 这个名字是历史原因保留的
@@ -1562,7 +1562,7 @@ onBeforeUnmount(stopPolling)
   height: 40px; /* 与搜索框同高:一行里两个控件视觉齐平 */
   padding: 0 28px 0 12px;
   border: 1px solid var(--border-color-light);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   /* ⚠️ 必须是**不透明**的 --bg-container,不能用 --bg-panel:后者在深色主题下是
      rgba(255,255,255,.06),而原生下拉的弹出层是独立画布,会拿 select 自身的
      background-color 当底色 → 半透明叠在 UA 浅色兜底上 = 白底弹出层。
@@ -1570,7 +1570,7 @@ onBeforeUnmount(stopPolling)
   background-color: var(--bg-container);
   color: var(--text-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   cursor: pointer;
   /* 自绘 chevron,与工作台的 .wb-select 同一个图形,避免默认箭头的视觉噪音 */
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 4.5l3 3 3-3' fill='none' stroke='%236b7280' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
@@ -1600,7 +1600,7 @@ onBeforeUnmount(stopPolling)
   height: 40px;
   padding: 0 var(--spacing-md);
   border: 1px solid var(--border-color-light);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-panel);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
@@ -1661,7 +1661,7 @@ onBeforeUnmount(stopPolling)
   border-radius: var(--radius-base);
   background: var(--tint-danger-06);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1.5;
 }
 .repo-list__banner .el-icon {
@@ -1718,7 +1718,7 @@ onBeforeUnmount(stopPolling)
   background: var(--border-color-light);
 }
 .repo-group__owner {
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-weight: var(--font-weight-semibold);
   letter-spacing: 0.01em;
   color: var(--text-primary);
@@ -1797,14 +1797,14 @@ onBeforeUnmount(stopPolling)
 .repo-card__avatar {
   width: 36px;
   height: 36px;
-  font-size: 14px;
+  font-size: var(--font-size-base);
 }
 /* 组头的块比卡片小一档:它是分组的标点,不该和卡片本身抢注意力 */
 .repo-group__avatar {
   width: 22px;
   height: 22px;
   border-radius: var(--radius-md);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
 }
 .repo-card__btn {
   display: flex;
@@ -1843,7 +1843,7 @@ onBeforeUnmount(stopPolling)
 }
 /* 第二行放描述(没有描述时退回 fullName):次要信息,允许省略 */
 .repo-card__name-path {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1872,7 +1872,7 @@ onBeforeUnmount(stopPolling)
   line-height: 1.4;
   padding: 2px var(--spacing-sm);
   font-size: var(--font-size-xs);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   white-space: nowrap;
 }
 .repo-card__tag .el-icon {
@@ -1971,11 +1971,11 @@ onBeforeUnmount(stopPolling)
   align-items: center;
   gap: 5px;
   margin: 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
 }
 .repo-list__footnote .el-icon {
   color: var(--el-color-success);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 </style>

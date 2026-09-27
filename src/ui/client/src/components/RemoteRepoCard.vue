@@ -91,11 +91,11 @@ const gitStore = useGitStore()
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   text-decoration: none;
   color: var(--color-text);
   opacity: 0.7;
-  transition: color 0.18s ease, opacity 0.18s ease, background 0.18s ease;
+  transition: color var(--transition-base) ease, opacity var(--transition-base) ease, background var(--transition-base) ease;
 
   &:hover {
     opacity: 1;
@@ -130,7 +130,7 @@ const gitStore = useGitStore()
 
   &.clickable {
     cursor: pointer;
-    transition: color 0.2s;
+    transition: color var(--transition-base);
 
     &:hover {
       color: var(--el-color-primary);

@@ -19,7 +19,7 @@ import { ArrowDown, ArrowUp, FullScreen, Loading, Memo, Refresh, Warning } from 
 import MarkdownPreview from '@/components/MarkdownPreview.vue'
 import { $t } from '@/lang/static'
 import { useConfigStore } from '@stores/configStore'
-import { ElDialog } from 'element-plus'
+import CommonDialog from '@/components/CommonDialog.vue'
 
 type SummaryScope = 'file' | 'overall'
 type SummaryStatus = 'idle' | 'loading' | 'done' | 'error' | 'empty' | 'no-model'
@@ -294,13 +294,14 @@ const context = computed(() => {
     </div>
 
     <!-- 弹窗：完整显示 AI 说明 -->
-    <el-dialog
+    <CommonDialog
       v-model="dialogVisible"
       :title="title"
       width="680px"
+      type="flex"
       :close-on-click-modal="true"
       destroy-on-close
-      class="ai-summary-dialog"
+      custom-class="ai-summary-dialog"
     >
       <div class="dialog-context" v-if="context">{{ context }}</div>
       <div class="dialog-body">
@@ -312,7 +313,7 @@ const context = computed(() => {
           {{ $t('@DIFFAI:暂无说明内容') }}
         </div>
       </div>
-    </el-dialog>
+    </CommonDialog>
   </section>
 </template>
 
@@ -350,10 +351,10 @@ const context = computed(() => {
 .ai-badge {
   width: 20px;
   height: 20px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   background: color-mix(in srgb, var(--color-primary) 9%, transparent);
   color: color-mix(in srgb, var(--color-primary) 82%, var(--text-primary));
-  font-size: 13px;
+  font-size: var(--font-size-mid);
 }
 .summary-label {
   color: var(--text-primary);
@@ -392,7 +393,7 @@ const context = computed(() => {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  color: var(--color-danger, #f56c6c);
+  color: var(--color-danger, var(--color-danger));
 }
 .err-msg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .spin { animation: ai-spin 1s linear infinite; color: var(--color-primary); }

@@ -84,7 +84,7 @@ withDefaults(defineProps<Props>(), {
   height: auto !important;
   gap: var(--spacing-md);
   padding: 28px 32px;
-  border-radius: 16px;
+  border-radius: var(--radius-xl);
   background: linear-gradient(135deg, rgba(64, 158, 255, 0.9) 0%, rgba(103, 194, 58, 0.9) 100%);
   backdrop-filter: blur(25px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
@@ -152,7 +152,7 @@ withDefaults(defineProps<Props>(), {
   height: 100%;
   background: linear-gradient(90deg, var(--bg-container) 0%, rgba(255, 255, 255, 0.8) 100%);
   border-radius: var(--radius-xs);
-  transition: width 0.3s ease;
+  transition: width var(--transition-slow) ease;
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
 }
 
@@ -192,7 +192,7 @@ withDefaults(defineProps<Props>(), {
 /* 过渡动画 */
 .loading-fade-enter-active,
 .loading-fade-leave-active {
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
 }
 
 .loading-fade-enter-from,
@@ -207,7 +207,7 @@ withDefaults(defineProps<Props>(), {
 
 .loading-fade-enter-active .loading-container,
 .loading-fade-leave-active .loading-container {
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
 }
 
 .loading-fade-enter-from .loading-container,
@@ -246,6 +246,6 @@ withDefaults(defineProps<Props>(), {
 
 [data-theme="dark"] .progress-bar {
   background: linear-gradient(90deg, rgba(64,158,255,0.85) 0%, rgba(103,194,58,0.85) 100%);
-  box-shadow: 0 0 10px rgba(64, 158, 255, 0.45);
+  box-shadow: 0 0 10px var(--tint-primary-45);
 }
 </style>

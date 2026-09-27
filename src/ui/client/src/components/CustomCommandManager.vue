@@ -22,6 +22,7 @@ import { useConfigStore } from '@stores/configStore'
 import { useLocaleStore } from '@stores/localeStore'
 import { storeToRefs } from 'pinia'
 import IconButton from '@components/IconButton.vue'
+import CommonDialog from '@components/CommonDialog.vue'
 import TemplateManager from '@components/TemplateManager.vue'
 import { FilePickerModal as FilePicker } from 'local-file-picker/client'
 
@@ -575,18 +576,18 @@ defineExpose({
 </script>
 
 <template>
-  <el-dialog
+  <CommonDialog
     v-model="dialogVisible"
     :title="$t('@CMD01:自定义命令管理')"
     :close-on-click-modal="false"
     :append-to-body="true"
-    :modal-append-to-body="true"
-    :fullscreen="!!fullscreen"
+    :size="fullscreen ? 'fullscreen' : 'medium'"
     :width="fullscreen ? '100vw' : '90%'"
     :top="fullscreen ? '0' : '50px'"
+    type="flex"
     :z-index="3000000"
     modal-class="custom-command-overlay"
-    class="custom-command-dialog"
+    custom-class="custom-command-dialog"
   >
     <div class="command-container">
       <div class="left-panel">
@@ -825,7 +826,7 @@ defineExpose({
         </div>
       </div>
     </div>
-  </el-dialog>
+  </CommonDialog>
 
   <TemplateManager
     v-model:visible="commandTemplateDialogVisible"
@@ -848,16 +849,16 @@ defineExpose({
   />
 
   <!-- NPM 命令选择弹窗 -->
-  <el-dialog
+  <CommonDialog
     v-model="npmDialogVisible"
     :title="$t('@CMD01:选择NPM命令')"
     :close-on-click-modal="false"
     :append-to-body="true"
-    :modal-append-to-body="true"
     width="680px"
+    type="flex"
     :z-index="3000010"
     modal-class="npm-sync-overlay"
-    class="npm-sync-dialog"
+    custom-class="npm-sync-dialog"
   >
     <div v-loading="isLoadingNpm" class="npm-dialog-body">
       <el-table
@@ -898,7 +899,7 @@ defineExpose({
         </el-button>
       </div>
     </template>
-  </el-dialog>
+  </CommonDialog>
 </template>
 
 <style scoped lang="scss">
@@ -1189,7 +1190,7 @@ defineExpose({
 
 .npm-sync-dialog .npm-selected-count {
   flex: 1;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   color: var(--color-primary);
 }
 

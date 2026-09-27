@@ -299,10 +299,10 @@ function hasError(t: BoardTask): boolean {
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   line-height: 20px;
   padding: 0 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   cursor: pointer;
   transition: background var(--transition-fast) var(--ease-custom), color var(--transition-fast) var(--ease-custom);
 }
@@ -323,7 +323,7 @@ function hasError(t: BoardTask): boolean {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
@@ -333,7 +333,7 @@ function hasError(t: BoardTask): boolean {
 .kb__search-icon {
   position: absolute;
   left: 7px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   pointer-events: none;
 }
@@ -341,7 +341,7 @@ function hasError(t: BoardTask): boolean {
   width: 168px;
   height: 24px;
   padding: 0 8px 0 24px;
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   color: var(--text-primary);
   background: var(--bg-subtle);
   border: 1px solid var(--border-color);
@@ -390,14 +390,14 @@ function hasError(t: BoardTask): boolean {
 }
 .kb-col__title {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-secondary);
   flex: 1;
   min-width: 0;
 }
 .kb-col__count {
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
@@ -431,7 +431,7 @@ function hasError(t: BoardTask): boolean {
   gap: 4px;
   min-width: 0;
   margin-bottom: 4px;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }
 .kb-card__running {
@@ -445,7 +445,7 @@ function hasError(t: BoardTask): boolean {
 .kb-card__time { margin-left: auto; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .kb-card__title {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--font-size-mid);
   line-height: 1.5;
   color: var(--text-primary);
   display: -webkit-box;
@@ -457,7 +457,7 @@ function hasError(t: BoardTask): boolean {
 }
 .kb-card__project {
   margin: 3px 0 0;
-  font-size: 10.5px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
@@ -510,22 +510,22 @@ function hasError(t: BoardTask): boolean {
   border: none;
   background: transparent;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   line-height: 18px;
   padding: 0 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   cursor: pointer;
   transition: color var(--transition-fast) var(--ease-custom);
 }
 .kb-card__btn:hover { color: var(--color-primary); }
-.kb-card__btn--danger { font-size: 14px; padding: 0 4px; }
+.kb-card__btn--danger { font-size: var(--font-size-base); padding: 0 4px; }
 .kb-card__btn--danger:hover { color: var(--color-danger-light); }
 .kb-card__btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
 .kb-col__empty {
   padding: 18px 8px;
   text-align: center;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   list-style: none;
 }
@@ -533,7 +533,7 @@ function hasError(t: BoardTask): boolean {
   border: 1px dashed var(--border-color-medium);
   background: transparent;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   padding: 3px 10px;
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -550,7 +550,7 @@ function hasError(t: BoardTask): boolean {
 .kb-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 .kb-table__th {
   position: sticky;
@@ -558,7 +558,7 @@ function hasError(t: BoardTask): boolean {
   z-index: 1;
   text-align: left;
   padding: 7px 10px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 500;
   color: var(--text-tertiary);
   background: var(--bg-subtle);
@@ -581,13 +581,13 @@ function hasError(t: BoardTask): boolean {
 .kb-table__name { color: var(--text-primary); }
 .kb-table__project {
   margin-left: 6px;
-  font-size: 10.5px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }
 .kb-table__status {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-base);
   background: var(--bg-subtle);
   color: var(--text-secondary);
 }

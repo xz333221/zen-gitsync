@@ -1266,7 +1266,7 @@ async function openSystemConfigFile() {
   padding: 10px 14px;
   border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base) ease;
   color: var(--el-text-color-regular);
   font-size: var(--font-size-sm);
   position: relative;
@@ -1283,7 +1283,7 @@ async function openSystemConfigFile() {
   height: 0;
   background: var(--color-primary);
   border-radius: 0 3px 3px 0;
-  transition: height 0.2s ease;
+  transition: height var(--transition-base) ease;
 }
 
 .tab-item:hover {
@@ -1296,7 +1296,7 @@ async function openSystemConfigFile() {
 }
 
 .tab-item.active {
-  background: rgba(64, 158, 255, 0.08);
+  background: var(--tint-primary-08);
   color: var(--color-primary);
   font-weight: 600;
 }
@@ -1446,7 +1446,7 @@ async function openSystemConfigFile() {
   width: 16px;
   height: 16px;
   flex: 0 0 16px;
-  font-size: 16px;
+  font-size: var(--font-size-md);
 }
 .header-tool__name {
   min-width: 0;
@@ -1482,6 +1482,12 @@ async function openSystemConfigFile() {
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
+  flex-wrap: wrap; /* 空间不足时让提示文案换行到下一行，而不是被压成一列字 */
+}
+/* CJK 文本在 flex 里的 min-content 只有一个字宽，不给下限会被压成竖排 */
+.layout-actions .setting-hint-block {
+  flex: 1 1 auto;
+  min-width: 16ch;
 }
 .project-toggle {
   display: flex;
@@ -1535,12 +1541,12 @@ async function openSystemConfigFile() {
 
 /* 深色主题适配 */
 html.dark .info-card {
-  background: linear-gradient(135deg, rgba(64, 158, 255, 0.12) 0%, rgba(64, 158, 255, 0.06) 100%);
-  border-color: rgba(64, 158, 255, 0.25);
+  background: linear-gradient(135deg, var(--tint-primary-12) 0%, var(--tint-primary-06) 100%);
+  border-color: var(--tint-primary-22);
 }
 
 html.dark .info-card:hover {
-  border-color: rgba(64, 158, 255, 0.35);
+  border-color: var(--tint-primary-35);
   box-shadow: var(--shadow-md);
 }
 
@@ -1550,7 +1556,7 @@ html.dark .basic-info-section {
 }
 
 html.dark .basic-info-section:hover {
-  border-color: rgba(64, 158, 255, 0.3);
+  border-color: var(--tint-primary-30);
   box-shadow: var(--shadow-md);
 }
 
@@ -1576,7 +1582,7 @@ html.dark .label-icon {
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-input);
   box-shadow: var(--shadow-sm);
-  transition: all 0.2s ease;
+  transition: all var(--transition-base) ease;
   background: var(--bg-container);
 }
 
@@ -1610,16 +1616,16 @@ html.dark .label-icon {
   align-items: flex-start;
   gap: var(--spacing-md);
   padding: var(--spacing-lg);
-  background: linear-gradient(135deg, rgba(64, 158, 255, 0.08) 0%, rgba(64, 158, 255, 0.04) 100%);
-  border: 1px solid rgba(64, 158, 255, 0.2);
+  background: linear-gradient(135deg, var(--tint-primary-08) 0%, rgba(64, 158, 255, 0.04) 100%);
+  border: 1px solid var(--tint-primary-18);
   border-radius: var(--radius-xl);
   position: relative;
   overflow: hidden;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
 }
 
 .info-card:hover {
-  border-color: rgba(64, 158, 255, 0.3);
+  border-color: var(--tint-primary-30);
   box-shadow: var(--shadow-md);
 }
 
@@ -1630,7 +1636,7 @@ html.dark .label-icon {
   left: 0;
   width: 4px;
   height: 100%;
-  background: linear-gradient(135deg, var(--color-primary) 0%, #3a8ee6 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
 }
 
 .info-icon {
@@ -1686,7 +1692,7 @@ html.dark .label-icon {
   border-radius: var(--radius-lg);
   overflow: hidden;
   border: 1.5px solid var(--border-color-medium);
-  transition: border-color 0.2s ease;
+  transition: border-color var(--transition-base) ease;
   min-height: 280px;
 }
 
@@ -1752,7 +1758,7 @@ html.dark .label-icon {
   background: transparent;
   color: var(--color-primary);
   cursor: pointer;
-  transition: background 0.2s, color 0.2s;
+  transition: background var(--transition-base), color var(--transition-base);
 }
 
 .add-model-btn:hover {
@@ -1782,7 +1788,7 @@ html.dark .label-icon {
   border: 1px solid var(--el-border-color);
   border-radius: var(--radius-lg);
   background: var(--bg-container);
-  transition: border-color 0.2s;
+  transition: border-color var(--transition-base);
 }
 
 .model-card:hover {
@@ -1808,16 +1814,16 @@ html.dark .label-icon {
 }
 
 .model-default-badge {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   padding: 1px 7px;
   border-radius: var(--radius-pill);
-  background: rgba(64, 158, 255, 0.12);
+  background: var(--tint-primary-12);
   color: var(--color-primary);
   font-weight: 500;
 }
 
 .model-meta {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--el-text-color-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1831,14 +1837,14 @@ html.dark .label-icon {
 }
 
 .model-btn {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   padding: 3px 10px;
   border-radius: var(--radius-md);
   border: 1px solid var(--el-border-color);
   background: transparent;
   color: var(--el-text-color-regular);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base);
 }
 
 .model-btn:hover {
@@ -1910,7 +1916,7 @@ html.dark .label-icon {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   padding: 3px 10px;
   border-radius: var(--radius-lg);
   max-width: 100%;
@@ -1942,7 +1948,7 @@ html.dark .label-icon {
   color: var(--el-text-color-regular);
   font-size: var(--font-size-sm);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base);
 }
 
 .model-test-btn:hover:not(:disabled) {
@@ -1978,7 +1984,7 @@ html.dark .label-icon {
 
 .preset-option-url {
   display: block;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--el-text-color-secondary);
   margin-top: 1px;
 }
@@ -1997,11 +2003,11 @@ html.dark .label-icon {
   width: 100%;
 }
 
-.executor-option__icon { font-size: 14px; flex: none; }
+.executor-option__icon { font-size: var(--font-size-base); flex: none; }
 
 .executor-option__missing {
   margin-left: auto;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--el-text-color-secondary);
 }
 </style>

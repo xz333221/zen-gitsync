@@ -269,7 +269,7 @@ function handleProgressComplete(_success: boolean) {
 <style scoped lang="scss">
 .one-push-button {
   height: 100%;
-  background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%) !important;
+  background: linear-gradient(135deg, var(--action-navy) 0%, #1e3a8a 100%) !important;
   border: none !important;
   color: white !important;
   &.form {
@@ -285,7 +285,7 @@ function handleProgressComplete(_success: boolean) {
     align-items: center;
     gap: 6px;
     .one-push-icon {
-      font-size: 14px;
+      font-size: var(--font-size-base);
     }
     .one-push-text {
       display: flex;
@@ -293,10 +293,10 @@ function handleProgressComplete(_success: boolean) {
       align-items: flex-start;
       gap: 2px;
       .one-push-title {
-        font-size: 13px;
+        font-size: var(--font-size-mid);
       }
       .one-push-desc {
-        font-size: 11px;
+        font-size: var(--font-size-xs);
         opacity: 0.72;
         font-weight: 400;
         letter-spacing: 0.1px;

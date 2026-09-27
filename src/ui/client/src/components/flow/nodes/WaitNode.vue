@@ -32,14 +32,14 @@ defineProps<{
 <style scoped lang="scss">
 .wait-node-content {
   .wait-seconds {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     margin-top: 4px;
     color: var(--text-secondary);
   }
 
   .node-warning {
     color: var(--color-error);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     margin-top: 4px;
   }
 }

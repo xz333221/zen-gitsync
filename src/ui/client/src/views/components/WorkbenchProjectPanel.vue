@@ -602,14 +602,14 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 }
 .proj__title {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-secondary);
   flex: 1;
   min-width: 0;
 }
 .proj__count {
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -638,7 +638,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 }
 .proj__search:focus-within { border-color: var(--color-primary); }
 .proj__search-icon {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   flex-shrink: 0;
 }
@@ -649,7 +649,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   background: transparent;
   outline: none;
   font-family: inherit;
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   color: var(--text-primary);
 }
 .proj__search-input::placeholder { color: var(--text-tertiary); }
@@ -669,7 +669,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   background: transparent;
   color: var(--text-tertiary);
   font-family: inherit;
-  font-size: 10.5px;
+  font-size: var(--font-size-xs);
   line-height: 1;
   cursor: pointer;
   transition:
@@ -706,7 +706,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   /* hover 操作按钮的定位锚点 */
   position: relative;
   padding: 7px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: background var(--transition-fast) var(--ease-custom);
   outline: none;
@@ -724,10 +724,10 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 }
 .proj-item__num {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   line-height: 15px;
   padding: 0 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   color: var(--text-secondary);
   background: var(--bg-subtle);
   font-variant-numeric: tabular-nums;
@@ -746,13 +746,13 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   min-width: 0;
 }
 .proj-item__icon {
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   color: var(--text-tertiary);
   flex-shrink: 0;
 }
 .proj-item.is-active .proj-item__icon { color: var(--color-primary); }
 .proj-item__name {
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
@@ -795,10 +795,10 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 }
 .proj-item__badge {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   line-height: 15px;
   padding: 0 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   color: var(--color-primary);
   background: var(--tint-primary-12);
 }
@@ -834,10 +834,10 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   height: 20px;
   padding: 0;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   background: transparent;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   cursor: pointer;
   transition:
     color var(--transition-fast) var(--ease-custom),
@@ -862,7 +862,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   margin: 0;
   padding: 2px 0;
   list-style: none;
-  font-size: 12.5px;
+  font-size: var(--font-size-mid);
   color: var(--text-primary);
 }
 .proj-menu__item {
@@ -889,7 +889,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-  font-size: 15px;
+  font-size: var(--font-size-base);
   color: var(--text-secondary);
 }
 .proj-menu__icon :deep(svg) { width: 16px; height: 16px; }
@@ -908,7 +908,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 }
 .proj-menu__hint {
   flex-shrink: 0;
-  font-size: 10.5px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   transition: color var(--transition-fast) var(--ease-custom);
 }
@@ -920,7 +920,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 }
 .proj-menu__title {
   padding: 4px 10px 3px;
-  font-size: 10.5px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: 0.3px;
   color: var(--text-tertiary);
@@ -937,7 +937,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   gap: 5px;
   margin-top: 2px;
   min-width: 0;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }
 .proj-item__branch {
@@ -975,10 +975,10 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 }
 .proj-chip {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   line-height: 14px;
   padding: 0 4px;
-  border-radius: 3px;
+  border-radius: var(--radius-base);
   font-variant-numeric: tabular-nums;
 }
 .proj-chip--ahead { color: var(--color-primary); background: var(--tint-primary-12); }
@@ -996,20 +996,20 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   flex: 1;
   min-width: 0;
   height: 3px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: var(--bg-subtle);
   overflow: hidden;
 }
 .proj-item__bar-fill {
   display: block;
   height: 100%;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: var(--color-primary);
   transition: width var(--transition-base) var(--ease-custom);
 }
 .proj-item__progress-text {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
@@ -1021,12 +1021,12 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 }
 .proj-empty__title {
   margin: 0 0 4px;
-  font-size: 12.5px;
+  font-size: var(--font-size-mid);
   color: var(--text-secondary);
 }
 .proj-empty__hint {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   line-height: 1.6;
   color: var(--text-tertiary);
 }
@@ -1038,7 +1038,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   background: transparent;
   color: var(--color-primary);
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   cursor: pointer;
 }
 .proj-empty__clear:hover { text-decoration: underline; }

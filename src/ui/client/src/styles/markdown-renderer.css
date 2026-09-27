@@ -15,7 +15,7 @@
 .wb-log-fullscreen__render .markdown-renderer {
   color: var(--text-primary);
   font-family: var(--font-sans, system-ui, sans-serif);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   line-height: 1.65;
 }
 
@@ -29,10 +29,10 @@
   color: var(--text-primary);
   letter-spacing: -0.01em;
 }
-.wb-log-pre .markdown-renderer h1 { font-size: 18px; padding-bottom: 6px; border-bottom: 1px solid var(--border-color); }
-.wb-log-pre .markdown-renderer h2 { font-size: 16px; }
-.wb-log-pre .markdown-renderer h3 { font-size: 14px; }
-.wb-log-pre .markdown-renderer h4 { font-size: 13px; color: var(--text-secondary); }
+.wb-log-pre .markdown-renderer h1 { font-size: var(--font-size-md); padding-bottom: 6px; border-bottom: 1px solid var(--border-color); }
+.wb-log-pre .markdown-renderer h2 { font-size: var(--font-size-md); }
+.wb-log-pre .markdown-renderer h3 { font-size: var(--font-size-base); }
+.wb-log-pre .markdown-renderer h4 { font-size: var(--font-size-mid); color: var(--text-secondary); }
 .wb-log-pre .markdown-renderer h1:first-child,
 .wb-log-pre .markdown-renderer h2:first-child { margin-top: 0; }
 
@@ -61,7 +61,7 @@
   font-size: 0.92em;
   background: color-mix(in srgb, var(--color-primary) 12%, transparent);
   color: var(--color-primary-dark, #c026d3);
-  border-radius: 3px;
+  border-radius: var(--radius-base);
   font-family: var(--font-mono, ui-monospace, monospace);
 }
 
@@ -95,9 +95,9 @@
   width: auto;
   border-collapse: collapse;
   margin: 8px 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   overflow: hidden;
   background: transparent;
   color: var(--text-primary);
@@ -145,16 +145,16 @@
  * 这里只覆写背景/边框让它跟工作台协调 */
 .wb-log-pre .code-block-container,
 .wb-log-fullscreen__render .code-block-container {
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   margin: 8px 0;
   border: 1px solid var(--border-color);
 }
 
 /* 全屏模式下字号略大 */
 .wb-log-fullscreen__render .markdown-renderer {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   line-height: 1.75;
 }
-.wb-log-fullscreen__render .markdown-renderer h1 { font-size: 22px; }
-.wb-log-fullscreen__render .markdown-renderer h2 { font-size: 19px; }
-.wb-log-fullscreen__render .markdown-renderer h3 { font-size: 16px; }
+.wb-log-fullscreen__render .markdown-renderer h1 { font-size: var(--font-size-2xl); }
+.wb-log-fullscreen__render .markdown-renderer h2 { font-size: var(--font-size-xl); }
+.wb-log-fullscreen__render .markdown-renderer h3 { font-size: var(--font-size-md); }

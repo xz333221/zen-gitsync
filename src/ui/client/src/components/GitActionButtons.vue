@@ -145,7 +145,7 @@ defineExpose({
 :deep(.el-button) {
   border-radius: var(--radius-md);
   font-weight: 500;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   padding: 6px 10px;
   font-size: var(--font-size-sm);
 

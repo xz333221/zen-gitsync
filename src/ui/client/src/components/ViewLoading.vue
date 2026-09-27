@@ -56,7 +56,7 @@ withDefaults(defineProps<Props>(), {
 }
 
 .view-loading__arc {
-  stroke: var(--color-primary, #409eff);
+  stroke: var(--color-primary, var(--color-primary));
   stroke-dasharray: 42 60;
   stroke-dashoffset: 0;
   transform-origin: 50% 50%;

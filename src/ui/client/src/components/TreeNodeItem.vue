@@ -189,17 +189,17 @@ function handleClick() {
   }
   
   &.is-selected {
-    background: #e6f7ff;
-    color: #1890ff;
-    border-left: 3px solid #1890ff;
+    background: var(--action-blue-soft);
+    color: var(--color-primary);
+    border-left: 3px solid var(--color-primary);
     
     &::before {
-      background: #1890ff;
+      background: var(--color-primary);
       width: 4px;
     }
     
     .node-icon {
-      color: #1890ff;
+      color: var(--color-primary);
     }
     
     // 深色模式优化
@@ -319,7 +319,7 @@ function handleClick() {
   min-width: 40px;
   
   .is-selected & {
-    color: #1890ff;
+    color: var(--color-primary);
     font-weight: var(--font-weight-semibold);
     
     // 深色模式优化
@@ -336,7 +336,7 @@ function handleClick() {
 .file-type-tag {
   font-size: var(--font-size-xs);
   padding: var(--spacing-xs) var(--spacing-base);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   background: var(--bg-panel);
   color: var(--text-tertiary);
   flex-shrink: 0;

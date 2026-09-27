@@ -763,7 +763,7 @@ function formatSize(bytes: number): string {
 }
 
 .mm-dir-empty {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   font-style: italic;
 }
@@ -773,7 +773,7 @@ function formatSize(bytes: number): string {
   align-items: center;
   gap: 4px;
   margin-left: 4px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
 }
 
@@ -787,7 +787,7 @@ function formatSize(bytes: number): string {
 
 .mm-status-dirty {
   color: var(--color-warning);
-  font-size: 14px;
+  font-size: var(--font-size-base);
   line-height: 1;
 }
 
@@ -819,7 +819,7 @@ function formatSize(bytes: number): string {
 }
 
 .mm-sidebar-title {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-secondary);
   letter-spacing: 0.5px;
@@ -837,7 +837,7 @@ function formatSize(bytes: number): string {
 .mm-sidebar-error {
   padding: 24px 12px;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
 }
 
@@ -857,7 +857,7 @@ function formatSize(bytes: number): string {
   padding: 6px;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast) ease;
 }
 
 .mm-group-header:hover {
@@ -870,10 +870,10 @@ function formatSize(bytes: number): string {
 }
 
 .mm-group-caret {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   flex-shrink: 0;
-  transition: transform 0.15s ease;
+  transition: transform var(--transition-fast) ease;
 }
 
 .mm-group-caret.collapsed {
@@ -896,7 +896,7 @@ function formatSize(bytes: number): string {
 }
 
 .mm-group-title {
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
@@ -909,14 +909,14 @@ function formatSize(bytes: number): string {
 }
 
 .mm-group-count {
-  font-size: 10.5px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   flex-shrink: 0;
 }
 
 /* 完整路径小字：同名目录也能分辨（hover 有 title 看全文） */
 .mm-group-path {
-  font-size: 10.5px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
@@ -933,7 +933,7 @@ function formatSize(bytes: number): string {
   justify-content: space-between;
   gap: 4px;
   padding: 8px 8px 8px 12px;
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   color: var(--color-danger);
 }
 
@@ -945,7 +945,7 @@ function formatSize(bytes: number): string {
   padding: 6px 8px;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast) ease;
   position: relative;
 }
 
@@ -972,7 +972,7 @@ function formatSize(bytes: number): string {
 }
 
 .mm-file-title {
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -980,7 +980,7 @@ function formatSize(bytes: number): string {
 }
 
 .mm-file-meta {
-  font-size: 10.5px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
@@ -1000,7 +1000,7 @@ function formatSize(bytes: number): string {
   padding-left: 8px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.15s ease, background 0.15s ease;
+  transition: opacity var(--transition-fast) ease, background var(--transition-fast) ease;
 }
 
 .mm-file-item:hover .mm-file-actions {
@@ -1008,10 +1008,10 @@ function formatSize(bytes: number): string {
   pointer-events: auto;
 }
 
-/* 遮罩上的 danger 图标压深一档：Element 的 #f56c6c 在浅色遮罩上只有 ~2.5:1，
-   小图标会看不清是"删除"；#dc2626 ≈ 4.2:1。深色主题下浅红反而更清楚，所以只改浅色主题。 */
+/* 遮罩上的 danger 图标压深一档：Element 的 var(--color-danger) 在浅色遮罩上只有 ~2.5:1，
+   小图标会看不清是"删除"；var(--git-status-locked) ≈ 4.2:1。深色主题下浅红反而更清楚，所以只改浅色主题。 */
 html:not(.dark) .mm-file-actions :deep(.el-button--danger) {
-  color: #dc2626;
+  color: var(--git-status-locked);
 }
 
 /* ── 右侧编辑区 ───────────────────────────────────────────────── */
@@ -1045,14 +1045,14 @@ html:not(.dark) .mm-file-actions :deep(.el-button--danger) {
 }
 
 .mm-editor-empty-title {
-  font-size: 16px;
+  font-size: var(--font-size-md);
   font-weight: 600;
   color: var(--text-secondary);
   margin: 8px 0 0;
 }
 
 .mm-editor-empty-hint {
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   color: var(--text-tertiary);
   margin: 0;
 }
@@ -1067,7 +1067,7 @@ html:not(.dark) .mm-file-actions :deep(.el-button--danger) {
      会导致右键菜单"通透",文字与底层内容重叠看不清。 */
   background: var(--bg-container);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   padding: 4px;
   min-width: 160px;
@@ -1082,12 +1082,12 @@ html:not(.dark) .mm-file-actions :deep(.el-button--danger) {
   padding: 6px 10px;
   background: none;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: var(--font-size-mid);
   color: var(--text-primary);
   text-align: left;
-  transition: background 0.1s;
+  transition: background var(--transition-fast);
 }
 
 .ctx-menu-item:hover {

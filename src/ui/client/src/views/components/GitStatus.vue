@@ -1905,8 +1905,8 @@ defineExpose({
   padding: 6px 10px;
   background: var(--tint-primary-08);
   border: 1px solid var(--tint-primary-22);
-  border-radius: 6px;
-  font-size: 11px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
   color: var(--color-primary);
   font-weight: 500;
   user-select: none;
@@ -2002,7 +2002,7 @@ defineExpose({
   gap: var(--spacing-xs);
   padding: var(--spacing-xs);
   background: var(--bg-panel);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
 }
 
 /* 文件列表容器 */
@@ -2170,7 +2170,7 @@ defineExpose({
   border-radius: var(--radius-lg);
   overflow: hidden;
   border: 1px solid var(--border-card);
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
 }
 
 .branch-status-info:hover {
@@ -2205,18 +2205,18 @@ defineExpose({
   width: 100%;
   border-radius: var(--radius-base);
   padding: var(--spacing-base);
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
 }
 
 .status-badge.el-tag--warning {
-  border-color: #ffd591;
-  color: #d46b08;
+  border-color: var(--action-amber-border);
+  color: var(--action-amber-deep);
 }
 
 .status-badge.el-tag--info {
-  background-color: #e6f7ff;
+  background-color: var(--action-blue-soft);
   border-color: #91d5ff;
-  color: #1890ff;
+  color: var(--color-primary);
 }
 
 .status-badge:hover {
@@ -2233,7 +2233,7 @@ defineExpose({
 
 /* 按钮悬停效果 */
 .el-button {
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
 }
 
 .el-button:not(:disabled):hover {
@@ -2297,15 +2297,15 @@ defineExpose({
   align-items: center;
   gap: var(--spacing-base);
   padding: var(--spacing-base);
-  border: 1px solid #ffd591;
+  border: 1px solid var(--action-amber-border);
   border-radius: var(--radius-md);
   margin-bottom: var(--spacing-base);
-  color: #d46b08;
+  color: var(--action-amber-deep);
   font-weight: 500;
 }
 
 .locked-files-header .info-icon {
-  color: #d46b08;
+  color: var(--action-amber-deep);
   cursor: help;
 }
 
@@ -2325,7 +2325,7 @@ defineExpose({
 }
 
 .description-icon {
-  color: #1890ff;
+  color: var(--color-primary);
   font-size: var(--font-size-md);
 }
 
@@ -2364,9 +2364,9 @@ defineExpose({
   align-items: center;
   justify-content: space-between;
   padding: var(--spacing-base);
-  border: 1px solid #ffd591;
+  border: 1px solid var(--action-amber-border);
   border-radius: var(--radius-md);
-  transition: all 0.2s ease;
+  transition: all var(--transition-base) ease;
 }
 
 /* 未配置远程仓库提示样式 */
@@ -2376,7 +2376,7 @@ defineExpose({
   border-radius: var(--radius-xl);
   padding: var(--spacing-xl);
   margin-bottom: var(--spacing-lg);
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
 }
 
 .no-remote-tip:hover {
@@ -2436,16 +2436,16 @@ html.dark .no-remote-tip:hover {
 
 /* 无上游分支提示样式 */
 .upstream-tip {
-  background: linear-gradient(135deg, rgba(64, 158, 255, 0.05) 0%, rgba(64, 158, 255, 0.02) 100%);
-  border: 1px solid rgba(64, 158, 255, 0.2);
+  background: linear-gradient(135deg, var(--tint-primary-06) 0%, var(--tint-primary-04) 100%);
+  border: 1px solid var(--tint-primary-18);
   border-radius: var(--radius-xl);
   padding: var(--spacing-xl);
   margin-bottom: var(--spacing-lg);
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
 }
 
 .upstream-tip:hover {
-  border-color: rgba(64, 158, 255, 0.3);
+  border-color: var(--tint-primary-30);
   box-shadow: var(--shadow-md);
 }
 
@@ -2488,12 +2488,12 @@ html.dark .no-remote-tip:hover {
 
 /* 深色主题适配 */
 html.dark .upstream-tip {
-  background: linear-gradient(135deg, rgba(64, 158, 255, 0.08) 0%, rgba(64, 158, 255, 0.03) 100%);
-  border-color: rgba(64, 158, 255, 0.25);
+  background: linear-gradient(135deg, var(--tint-primary-08) 0%, var(--tint-primary-04) 100%);
+  border-color: var(--tint-primary-22);
 }
 
 html.dark .upstream-tip:hover {
-  border-color: rgba(64, 158, 255, 0.35);
+  border-color: var(--tint-primary-35);
   box-shadow: var(--shadow-md);
 }
 
@@ -2566,11 +2566,11 @@ html.dark .upstream-tip:hover {
   align-items: center;
   justify-content: space-between;
   padding: var(--spacing-base);
-  background: linear-gradient(135deg, rgba(64, 158, 255, 0.1) 0%, rgba(64, 158, 255, 0.05) 100%);
-  border: 1px solid rgba(64, 158, 255, 0.3);
+  background: linear-gradient(135deg, var(--tint-primary-10) 0%, var(--tint-primary-06) 100%);
+  border: 1px solid var(--tint-primary-30);
   border-radius: var(--radius-lg);
   margin: var(--spacing-sm) 0;
-  animation: slideDown 0.3s ease;
+  animation: slideDown var(--transition-slow) ease;
 }
 
 @keyframes slideDown {
@@ -2612,8 +2612,8 @@ html.dark .upstream-tip:hover {
 }
 
 html.dark .selection-mode-banner {
-  background: linear-gradient(135deg, rgba(64, 158, 255, 0.15) 0%, rgba(64, 158, 255, 0.08) 100%);
-  border-color: rgba(64, 158, 255, 0.35);
+  background: linear-gradient(135deg, var(--tint-primary-16) 0%, var(--tint-primary-08) 100%);
+  border-color: var(--tint-primary-35);
 }
 
 /* Pull 错误弹窗样式 */
@@ -2628,26 +2628,26 @@ html.dark .selection-mode-banner {
   align-items: flex-start;
   gap: 10px;
   padding: 12px 14px;
-  border-radius: 8px;
-  font-size: 13px;
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-mid);
   line-height: 1.6;
 
   &.is-warning {
     background: rgba(250, 173, 20, 0.1);
     border: 1px solid rgba(250, 173, 20, 0.4);
-    color: #b45309;
+    color: var(--color-warning-dark);
   }
 
   &.is-error {
     background: rgba(245, 108, 108, 0.08);
     border: 1px solid rgba(245, 108, 108, 0.35);
-    color: #c0392b;
+    color: var(--action-coral);
   }
 }
 
 .pull-error-icon {
   margin-top: 2px;
-  font-size: 16px;
+  font-size: var(--font-size-md);
   flex-shrink: 0;
 }
 
@@ -2658,7 +2658,7 @@ html.dark .selection-mode-banner {
 }
 
 .pull-error-label {
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -2668,9 +2668,9 @@ html.dark .selection-mode-banner {
   padding: 12px 14px;
   background: rgba(0, 0, 0, 0.06);
   border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1.6;
   color: var(--text-primary);
   white-space: pre-wrap;
@@ -2687,7 +2687,7 @@ html.dark .pull-error-pre {
 html.dark .pull-error-type.is-warning {
   background: rgba(250, 173, 20, 0.12);
   border-color: rgba(250, 173, 20, 0.3);
-  color: #fbbf24;
+  color: var(--action-amber-bright);
 }
 
 html.dark .pull-error-type.is-error {
@@ -2751,7 +2751,7 @@ html.dark .pull-error-type.is-error {
   flex: 0 0 auto;
   font-size: var(--font-size-sm);
   font-weight: 500;
-  color: var(--color-warning, #d46b08);
+  color: var(--color-warning, var(--action-amber-deep));
 }
 
 .init-scope-footer {

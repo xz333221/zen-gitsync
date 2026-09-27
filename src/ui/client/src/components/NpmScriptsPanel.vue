@@ -406,7 +406,7 @@ onMounted(() => {
   height: 8px;
   cursor: ns-resize;
   z-index: 10;
-  transition: background 0.2s ease;
+  transition: background var(--transition-base) ease;
   /* OPT-4: 触摸命中区从 8px 提到 12px,WCAG 2.5.5 ≥ 24×24 不强求(分隔条特殊)
      但键盘 Tab 聚焦时仍能看到焦点环;这里加 padding 提命中区,视觉不变 */
   padding: 2px 0;
@@ -434,7 +434,7 @@ onMounted(() => {
   height: 3px;
   border-radius: var(--radius-xs);
   background: transparent;
-  transition: background 0.2s ease;
+  transition: background var(--transition-base) ease;
 }
 
 .resize-handle:hover::before {
@@ -456,7 +456,7 @@ onMounted(() => {
 
 .accordion-chevron {
   color: var(--text-secondary);
-  transition: transform 0.2s ease;
+  transition: transform var(--transition-base) ease;
   transform: rotate(90deg);
   flex-shrink: 0;
 }
@@ -491,11 +491,11 @@ onMounted(() => {
 }
 
 .package-count {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   padding: var(--spacing-xs) 6px;
   background: var(--bg-container);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-card);
 }
 
@@ -544,7 +544,7 @@ onMounted(() => {
 .packages-container {
   padding: 4px;
   overflow-y: auto;
-  transition: max-height 0.1s ease;
+  transition: max-height var(--transition-fast) ease;
 }
 
 .package-item {
@@ -552,7 +552,7 @@ onMounted(() => {
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   overflow: hidden;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base) ease;
 }
 
 .package-item:last-child {
@@ -565,7 +565,7 @@ onMounted(() => {
   padding: 5px 8px;
   background: var(--bg-input);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base) ease;
   gap: 6px;
 }
 
@@ -576,7 +576,7 @@ onMounted(() => {
 .expand-icon {
   
   color: var(--text-secondary);
-  transition: transform 0.2s ease;
+  transition: transform var(--transition-base) ease;
 }
 
 .expand-icon.expanded {
@@ -621,7 +621,7 @@ onMounted(() => {
   font-size: var(--font-size-md);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base) ease;
   margin-left: var(--spacing-base);
   flex-shrink: 0;
   opacity: 0;
@@ -646,8 +646,8 @@ onMounted(() => {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   padding: var(--spacing-xs) var(--spacing-base);
-  background: rgba(59, 130, 246, 0.1);
-  border-radius: 10px;
+  background: var(--tint-primary-10);
+  border-radius: var(--radius-md);
 }
 
 .scripts-list {
@@ -663,7 +663,7 @@ onMounted(() => {
   justify-content: space-between;
   padding: 4px 12px 4px 20px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base) ease;
   gap: var(--spacing-md);
   border-bottom: 1px solid var(--border-card);
 }
@@ -692,7 +692,7 @@ onMounted(() => {
 .play-icon {
   font-size: var(--font-size-md);
   color: var(--text-secondary);
-  transition: all 0.2s ease;
+  transition: all var(--transition-base) ease;
 }
 
 .script-name {
@@ -726,7 +726,7 @@ onMounted(() => {
 .packages-container::-webkit-scrollbar-thumb {
   background: var(--border-card);
   border-radius: var(--radius-base);
-  transition: background 0.2s ease;
+  transition: background var(--transition-base) ease;
 }
 
 .packages-container::-webkit-scrollbar-thumb:hover {
@@ -746,7 +746,7 @@ onMounted(() => {
 .scripts-list::-webkit-scrollbar-thumb {
   background: var(--border-card);
   border-radius: var(--radius-base);
-  transition: background 0.2s ease;
+  transition: background var(--transition-base) ease;
 }
 
 .scripts-list::-webkit-scrollbar-thumb:hover {

@@ -234,7 +234,7 @@ watch(() => props.filePath, () => {
   border-radius: var(--radius-base);
   cursor: pointer;
   transition: var(--transition-all);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
 }
 
 .image-preview-btn:hover {

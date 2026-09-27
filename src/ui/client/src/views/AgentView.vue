@@ -403,10 +403,10 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-family: inherit;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast) ease;
 
   &:hover {
     border-color: var(--color-primary);
@@ -432,7 +432,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
     border: none;
     background: transparent;
     color: var(--text-primary);
-    font-size: 13px;
+    font-size: var(--font-size-mid);
     font-family: inherit;
     outline: none;
     padding: 4px 0;
@@ -460,13 +460,13 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   color: var(--text-tertiary);
 
   .empty-text {
-    font-size: 14px;
+    font-size: var(--font-size-base);
     margin-top: 10px;
     color: var(--text-secondary);
   }
 
   .empty-hint {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     margin-top: 4px;
   }
 }
@@ -476,9 +476,9 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   align-items: flex-start;
   gap: 4px;
   padding: 8px 10px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: background var(--transition-fast) ease;
   position: relative;
 
   &:hover {
@@ -516,7 +516,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
 }
 
 .session-item-title {
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
@@ -529,7 +529,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 
   .meta-dot {
@@ -546,8 +546,8 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
 
   .meta-source {
     padding: 0 4px;
-    border-radius: 3px;
-    font-size: 10px;
+    border-radius: var(--radius-base);
+    font-size: var(--font-size-xs);
     font-weight: 600;
 
     &.cli {
@@ -561,7 +561,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   display: flex;
   gap: 2px;
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transition: opacity var(--transition-fast) ease;
   flex-shrink: 0;
 }
 
@@ -576,7 +576,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   color: var(--text-tertiary);
   cursor: pointer;
   border-radius: var(--radius-xs);
-  transition: all 0.12s ease;
+  transition: all var(--transition-fast) ease;
   padding: 0;
 
   &:hover {
@@ -596,7 +596,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   flex-shrink: 0;
   cursor: col-resize;
   background: transparent;
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast) ease;
 
   &:hover,
   &.active {
@@ -635,11 +635,11 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-family: inherit;
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  transition: color var(--transition-fast) ease, border-color var(--transition-fast) ease, background var(--transition-fast) ease;
+  border-radius: var(--radius-base) var(--radius-base) 0 0;
 
   &:hover { color: var(--text-secondary); background: var(--bg-hover); }
 
@@ -682,7 +682,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   justify-content: center;
   gap: 12px;
   color: var(--text-tertiary);
-  font-size: 14px;
+  font-size: var(--font-size-base);
 }
 
 /* ── 暗色主题适配 ───────────────────────────────── */

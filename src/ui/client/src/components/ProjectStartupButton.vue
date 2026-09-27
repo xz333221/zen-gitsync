@@ -46,7 +46,7 @@ function handleExecuteWorkflow(workflow: any) {
   <div>
     <IconButton
       :tooltip="t('@PSTART:项目启动项')"
-      hover-color="#409EFF"
+      hover-color="var(--color-primary)"
       @click="openDialog"
       custom-class="project-startup-btn"
     >
@@ -65,7 +65,7 @@ function handleExecuteWorkflow(workflow: any) {
 .project-startup-btn {
   &:hover {
     color: var(--color-primary);
-    background: rgba(64, 158, 255, 0.1);
+    background: var(--tint-primary-10);
   }
 }
 </style>

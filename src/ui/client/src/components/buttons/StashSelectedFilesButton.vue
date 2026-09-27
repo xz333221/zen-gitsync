@@ -264,8 +264,8 @@ function handleStashMessageKeydown(e: KeyboardEvent) {
   align-items: flex-start;
   gap: var(--spacing-base);
   padding: var(--spacing-base);
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  border: 1px solid #bae6fd;
+  background: linear-gradient(135deg, var(--action-sky-softer) 0%, var(--action-sky-soft) 100%);
+  border: 1px solid var(--action-sky-border);
   border-radius: var(--radius-xl);
   position: relative;
   overflow: hidden;
@@ -278,7 +278,7 @@ function handleStashMessageKeydown(e: KeyboardEvent) {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #0ea5e9 0%, #0284c7 100%);
+  background: linear-gradient(90deg, var(--action-sky) 0%, var(--action-sky-dark) 100%);
 }
 
 .stash-info-card .info-icon {
@@ -287,8 +287,8 @@ function handleStashMessageKeydown(e: KeyboardEvent) {
   justify-content: center;
   width: 40px;
   height: 40px;
-  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
-  border-radius: 10px;
+  background: linear-gradient(135deg, var(--action-sky) 0%, var(--action-sky-dark) 100%);
+  border-radius: var(--radius-md);
   color: white;
   font-size: var(--font-size-lg);
   flex-shrink: 0;
@@ -303,7 +303,7 @@ function handleStashMessageKeydown(e: KeyboardEvent) {
   margin: 0 0 6px 0;
   font-size: var(--font-size-md);
   font-weight: 600;
-  color: #0c4a6e;
+  color: var(--action-sky-deep);
   line-height: 1.2;
 }
 
@@ -333,7 +333,7 @@ function handleStashMessageKeydown(e: KeyboardEvent) {
   .el-textarea__inner {
     border-radius: var(--radius-lg);
     border: 2px solid var(--color-gray-200);
-    transition: all 0.3s ease;
+    transition: all var(--transition-slow) ease;
     line-height: 1.5;
     
     &:hover {
@@ -341,8 +341,8 @@ function handleStashMessageKeydown(e: KeyboardEvent) {
     }
     
     &:focus-visible {
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px var(--tint-primary-10);
     }
   }
 }
@@ -392,15 +392,15 @@ function handleStashMessageKeydown(e: KeyboardEvent) {
 }
 
 .locked-count {
-  color: #f59e0b;
+  color: var(--color-warning-light);
   font-weight: 600;
   margin-left: var(--spacing-xs);
 }
 
 .stash-preview {
   padding: var(--spacing-base);
-  background: linear-gradient(135deg, #fefce8 0%, #fef3c7 100%);
-  border: 1px solid #fbbf24;
+  background: linear-gradient(135deg, #fefce8 0%, var(--action-amber-soft) 100%);
+  border: 1px solid var(--action-amber-bright);
   border-radius: var(--radius-xl);
   position: relative;
 }
@@ -412,7 +412,7 @@ function handleStashMessageKeydown(e: KeyboardEvent) {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, var(--git-status-modified) 0%, #d97706 100%);
+  background: linear-gradient(90deg, var(--git-status-modified) 0%, var(--action-amber) 100%);
   border-radius: 12px 12px 0 0;
 }
 
@@ -421,12 +421,12 @@ function handleStashMessageKeydown(e: KeyboardEvent) {
   align-items: center;
   gap: var(--spacing-base);
   font-weight: 600;
-  color: #92400e;
+  color: var(--action-amber-darker);
   margin-bottom: var(--spacing-base);
 }
 
 .preview-title :deep(.el-icon) {
-  color: #d97706;
+  color: var(--action-amber);
   font-size: var(--font-size-md);
 }
 
@@ -452,7 +452,7 @@ function handleStashMessageKeydown(e: KeyboardEvent) {
 
 .file-preview-item {
   font-size: var(--font-size-sm);
-  color: #92400e;
+  color: var(--action-amber-darker);
   padding: var(--spacing-xs) 0;
   font-family: monospace;
   word-break: break-all;
@@ -460,7 +460,7 @@ function handleStashMessageKeydown(e: KeyboardEvent) {
 
 .more-files {
   font-size: var(--font-size-sm);
-  color: #d97706;
+  color: var(--action-amber);
   padding-top: var(--spacing-sm);
   font-weight: 500;
   text-align: center;
@@ -472,7 +472,7 @@ function handleStashMessageKeydown(e: KeyboardEvent) {
     .el-button {
       border-radius: var(--radius-lg);
       font-weight: 500;
-      transition: all 0.3s ease;
+      transition: all var(--transition-slow) ease;
       
       &:hover {
         transform: scale(1.02);

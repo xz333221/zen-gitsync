@@ -183,7 +183,7 @@ onBeforeUnmount(stopRelativeTimer)
 .banner-icon {
   color: var(--color-danger);
   flex-shrink: 0;
-  font-size: 18px;
+  font-size: var(--font-size-md);
 }
 
 .banner-text {
@@ -200,7 +200,7 @@ onBeforeUnmount(stopRelativeTimer)
 }
 
 .banner-detail {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -221,7 +221,7 @@ onBeforeUnmount(stopRelativeTimer)
   gap: 4px;
   height: 28px;
   padding: 0 10px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-primary);
@@ -249,7 +249,7 @@ onBeforeUnmount(stopRelativeTimer)
 }
 
 .banner-btn-icon {
-  font-size: 14px;
+  font-size: var(--font-size-base);
 }
 
 /* 减弱 motion —— 把 enter/leave 时长缩短为 1ms,视觉上无动画但状态机不卡死 */

@@ -16,8 +16,9 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { ElDialog, ElProgress, ElIcon } from 'element-plus';
+import { ElProgress, ElIcon } from 'element-plus';
 import { Close, Loading, CircleCheck, Download } from '@element-plus/icons-vue';
+import CommonDialog from '@components/CommonDialog.vue';
 import { useConfigStore } from '@stores/configStore';
 import { useGitStore } from '@stores/gitStore';
 import { describePushFailure } from '@/utils/pushFailure';
@@ -213,17 +214,18 @@ defineExpose({
 </script>
 
 <template>
-  <ElDialog
+  <CommonDialog
     v-model="visible"
     :title="statusText"
     width="650px"
+    type="flex"
     :close-on-click-modal="false"
     :close-on-press-escape="false"
     :show-close="status !== 'progress'"
     :append-to-body="true"
     :lock-scroll="false"
     destroy-on-close
-    :class="['push-progress-dialog', `status-${status}`]"
+    :custom-class="`push-progress-dialog status-${status}`"
   >
     <div class="push-progress-container">
       <!-- 拉取中提示 -->
@@ -324,7 +326,7 @@ defineExpose({
         </div>
       </div>
     </div>
-  </ElDialog>
+  </CommonDialog>
 </template>
 
 <style scoped lang="scss">
@@ -394,7 +396,7 @@ defineExpose({
 
 @keyframes loading-pulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(64, 158, 255, 0.15);
+    box-shadow: 0 0 0 0 var(--tint-primary-16);
   }
   50% {
     box-shadow: 0 0 0 6px rgba(64, 158, 255, 0);
@@ -463,7 +465,7 @@ defineExpose({
   align-items: center;
   gap: var(--spacing-lg);
   padding: var(--spacing-xl) var(--spacing-xl);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   border: 1px solid rgba(64, 158, 255, 0.18);
   background: rgba(64, 158, 255, 0.04);
   position: relative;
@@ -483,7 +485,7 @@ defineExpose({
       rgba(64, 158, 255, 0.4) 70%,
       transparent 100%
     );
-    box-shadow: 0 0 10px rgba(64, 158, 255, 0.5);
+    box-shadow: 0 0 10px var(--tint-primary-50);
     animation: border-light-run 2.5s linear infinite;
   }
 }
@@ -500,7 +502,7 @@ defineExpose({
   animation: pulling-rotate 1.4s linear infinite;
 
   .pulling-spinner-track {
-    stroke: rgba(64, 158, 255, 0.15);
+    stroke: var(--tint-primary-16);
   }
 
   .pulling-spinner-arc {
@@ -525,7 +527,7 @@ defineExpose({
 }
 
 .pulling-sub {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: rgba(255, 255, 255, 0.35);
 }
 
@@ -544,15 +546,15 @@ defineExpose({
   grid-template-columns: repeat(2, 1fr);
   gap: var(--spacing-md);
   padding: var(--spacing-md);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.05);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
   
   &.is-loading {
-    border-color: rgba(64, 158, 255, 0.15);
+    border-color: var(--tint-primary-16);
     
     &::before {
       content: '';
@@ -568,7 +570,7 @@ defineExpose({
         rgba(64, 158, 255, 0.4) 70%,
         transparent 100%
       );
-      box-shadow: 0 0 10px rgba(64, 158, 255, 0.5);
+      box-shadow: 0 0 10px var(--tint-primary-50);
       animation: border-light-run 4s linear infinite;
     }
   }
@@ -591,12 +593,12 @@ defineExpose({
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   
   &.active {
-    background: rgba(64, 158, 255, 0.05);
-    border-color: rgba(64, 158, 255, 0.15);
+    background: var(--tint-primary-06);
+    border-color: var(--tint-primary-16);
     transform: scale(1.01);
   }
   
@@ -627,7 +629,7 @@ defineExpose({
   flex-shrink: 0;
   
   font-weight: 600;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   
   .icon-finish {
     color: var(--color-success);
@@ -698,7 +700,7 @@ defineExpose({
   
   :deep(.el-progress-bar__inner) {
     background: linear-gradient(90deg, var(--color-primary), var(--color-primary-light));
-    transition: all 0.3s ease;
+    transition: all var(--transition-slow) ease;
   }
   
   .finished & :deep(.el-progress-bar__inner) {
@@ -735,12 +737,12 @@ defineExpose({
 
 .error-content {
   color: #c45656;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   line-height: 1.6;
   word-break: break-word;
   background: rgba(0, 0, 0, 0.03);
   padding: var(--spacing-sm);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
 }
 
 .error-suggestion {
@@ -771,7 +773,7 @@ defineExpose({
   border-radius: var(--radius-lg);
   padding: 10px var(--spacing-md);
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   line-height: 1.5;
   border: 1px solid rgba(255, 255, 255, 0.05);
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
@@ -782,12 +784,12 @@ defineExpose({
   
   &::-webkit-scrollbar-track {
     background: rgba(0, 0, 0, 0.1);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-base);
   }
   
   &::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.2);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-base);
     
     &:hover {
       background: rgba(255, 255, 255, 0.3);
@@ -802,7 +804,7 @@ defineExpose({
   overflow: hidden;
   text-overflow: ellipsis;
   opacity: 0.9;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-base) ease;
   
   &:hover {
     opacity: 1;

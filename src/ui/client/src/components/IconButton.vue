@@ -133,7 +133,7 @@ const handleClick = (event: MouseEvent) => {
   }
 
   &:focus-visible {
-    box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.3);
+    box-shadow: 0 0 0 2px var(--tint-primary-30);
     outline: 2px solid var(--color-primary);
     outline-offset: 2px;
   }
@@ -142,17 +142,17 @@ const handleClick = (event: MouseEvent) => {
   &--small {
     width: 28px;
     height: 28px;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     border-radius: var(--btn-radius-sm);
     
     :deep(.svg-icon) {
       width: 14px;
       height: 14px;
-      font-size: 14px;
+      font-size: var(--font-size-base);
     }
     
     :deep(.el-icon) {
-      font-size: 14px;
+      font-size: var(--font-size-base);
     }
     
     .icon-image {
@@ -164,17 +164,17 @@ const handleClick = (event: MouseEvent) => {
   &--medium {
     width: 38px;
     height: 38px;
-    font-size: 19px;
+    font-size: var(--font-size-xl);
     border-radius: var(--btn-radius);
     
     :deep(.svg-icon) {
       width: 19px;
       height: 19px;
-      font-size: 19px;
+      font-size: var(--font-size-xl);
     }
     
     :deep(.el-icon) {
-      font-size: 19px;
+      font-size: var(--font-size-xl);
     }
     
     .icon-image {
@@ -186,31 +186,31 @@ const handleClick = (event: MouseEvent) => {
   &--large {
     width: 44px;
     height: 44px;
-    font-size: 20px;
+    font-size: var(--font-size-xl);
     border-radius: var(--btn-radius);
     
     :deep(.svg-icon) {
-      width: 22px;
-      height: 22px;
-      font-size: 22px;
+      width: var(--icon-glyph-size-lg);
+      height: var(--icon-glyph-size-lg);
+      font-size: var(--icon-glyph-size-lg);
     }
     
     :deep(.el-icon) {
-      font-size: 22px;
+      font-size: var(--icon-glyph-size-lg);
     }
     
     .icon-image {
-      width: 22px;
-      height: 22px;
+      width: var(--icon-glyph-size-lg);
+      height: var(--icon-glyph-size-lg);
     }
   }
   
   // Hover 效果
   &:hover:not(.is-disabled) {
     color: v-bind(hoverColor);
-    background: rgba(64, 158, 255, 0.1);
+    background: var(--tint-primary-10);
     transform: scale(1.02);
-    box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
+    box-shadow: 0 2px 8px var(--tint-primary-16);
     
     :deep(.svg-icon) {
       color: v-bind(hoverColor);
@@ -220,14 +220,14 @@ const handleClick = (event: MouseEvent) => {
   // Active 效果
   &:active:not(.is-disabled) {
     transform: scale(0.98);
-    background: rgba(64, 158, 255, 0.15);
+    background: var(--tint-primary-16);
     box-shadow: none;
   }
 
   // 激活状态
   &.is-active {
     color: v-bind(hoverColor);
-    background: rgba(64, 158, 255, 0.12);
+    background: var(--tint-primary-12);
     
     :deep(.svg-icon) {
       color: v-bind(hoverColor);
@@ -235,7 +235,7 @@ const handleClick = (event: MouseEvent) => {
     
     &:hover {
       background: rgba(64, 158, 255, 0.18);
-      box-shadow: 0 2px 8px rgba(64, 158, 255, 0.2);
+      box-shadow: 0 2px 8px var(--tint-primary-18);
     }
   }
   

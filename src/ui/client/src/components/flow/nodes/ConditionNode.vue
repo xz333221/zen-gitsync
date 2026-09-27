@@ -54,7 +54,7 @@ const branches = computed(() => {
 
 .condition-empty {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 
 .condition-branches {
@@ -68,7 +68,7 @@ const branches = computed(() => {
   display: flex;
   gap: 8px;
   align-items: center;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   height: 18px;
   line-height: 18px;
 }

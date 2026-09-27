@@ -2880,10 +2880,10 @@ onActivated(() => {
 /* 命令控制台容器 */
 .command-console {
   background: var(--bg-console);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 0;
   box-shadow: var(--console-shadow);
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -3043,7 +3043,7 @@ onActivated(() => {
  .terminal-sessions-empty {
    padding: 10px 0;
    color: var(--text-console-muted);
-   font-size: 13px;
+   font-size: var(--font-size-mid);
  }
 
  .terminal-sessions-list {
@@ -3060,7 +3060,7 @@ onActivated(() => {
    padding: 10px 12px;
    background: var(--bg-console-subtle);
    border: 1px solid var(--border-console);
-   border-radius: 8px;
+   border-radius: var(--radius-lg);
  }
 
  .terminal-session-main {
@@ -3083,7 +3083,7 @@ onActivated(() => {
    flex-direction: column;
    align-items: flex-start;
    gap: 4px;
-   font-size: 12px;
+   font-size: var(--font-size-sm);
    color: var(--text-console-muted);
  }
 
@@ -3094,14 +3094,14 @@ onActivated(() => {
    overflow: hidden;
    text-overflow: ellipsis;
    width: 100%;
-   font-size: 12px;
+   font-size: var(--font-size-sm);
  }
 
   .terminal-session-pid {
     display: inline-flex;
     align-items: center;
     white-space: nowrap;
-    font-size: 11px;
+    font-size: var(--font-size-xs);
     font-weight: 600;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     /* 用控制台主题 muted 文字 + 半透明描边药丸,对比度高于原蓝底蓝字。
@@ -3155,15 +3155,15 @@ onActivated(() => {
   height: 36px;
   padding: var(--spacing-base);
   border-radius: var(--radius-md);
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   
   .el-icon {
     color: var(--text-tertiary);
-    transition: all 0.3s ease;
+    transition: all var(--transition-slow) ease;
   }
   
   &:hover {
-    background-color: rgba(64, 158, 255, 0.1);
+    background-color: var(--tint-primary-10);
     
     .el-icon {
       color: var(--color-primary);
@@ -3171,14 +3171,14 @@ onActivated(() => {
   }
   
   &.is-active {
-    background-color: rgba(64, 158, 255, 0.15);
+    background-color: var(--tint-primary-16);
     
     .el-icon {
       color: var(--color-primary);
     }
     
     &:hover {
-      background-color: rgba(64, 158, 255, 0.2);
+      background-color: var(--tint-primary-18);
     }
   }
 }
@@ -3203,7 +3203,7 @@ onActivated(() => {
 .project-startup-btn {
   &:hover {
     color: var(--color-primary);
-    background: rgba(64, 158, 255, 0.1);
+    background: var(--tint-primary-10);
   }
 }
 
@@ -3217,7 +3217,7 @@ onActivated(() => {
 .orchestrator-manager-btn {
   &:hover {
     color: var(--color-primary);
-    background: rgba(64, 158, 255, 0.1);
+    background: var(--tint-primary-10);
   }
 }
 
@@ -3225,15 +3225,15 @@ onActivated(() => {
   padding: var(--spacing-sm) var(--spacing-base);
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   
   &:hover {
     color: var(--color-primary);
-    background: rgba(64, 158, 255, 0.1);
+    background: var(--tint-primary-10);
   }
   
   .el-icon {
-    transition: transform 0.3s ease;
+    transition: transform var(--transition-slow) ease;
     font-size: var(--font-size-md);
   }
   
@@ -3245,7 +3245,7 @@ onActivated(() => {
 /* 内容区域过渡动画 */
 .console-content-slide-enter-active,
 .console-content-slide-leave-active {
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   overflow: hidden;
 }
 
@@ -3268,7 +3268,7 @@ onActivated(() => {
   padding: var(--spacing-xs) var(--spacing-sm);
   background: var(--bg-console-input);
   border: 1px solid var(--border-console-input);
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   
   &:focus-within {
     border-color: rgba(74, 222, 128, 0.4);
@@ -3289,7 +3289,7 @@ onActivated(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: help;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   
   /* &:hover {
     background: linear-gradient(135deg, rgba(103, 194, 58, 0.15), rgba(103, 194, 58, 0.08));
@@ -3324,7 +3324,7 @@ onActivated(() => {
   padding: var(--spacing-base) var(--spacing-xl);
   font-weight: 500;
   border-radius: var(--radius-md);
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   
   &:hover {
     transform: scale(1.02);
@@ -3351,7 +3351,7 @@ onActivated(() => {
   margin: var(--spacing-base) 0 0 0;
   border-radius: var(--radius-md);
   border: 1px solid rgba(103, 194, 58, 0.3);
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   
   &:focus-within {
     border-color: var(--color-success);
@@ -3407,7 +3407,7 @@ onActivated(() => {
   &::-webkit-scrollbar-thumb {
     background: var(--console-scrollbar);
     border-radius: var(--radius-base);
-    transition: background 0.3s ease;
+    transition: background var(--transition-slow) ease;
     
     &:hover {
       background: var(--console-scrollbar-hover);
@@ -3417,7 +3417,7 @@ onActivated(() => {
 
 .console-record {
   border-bottom: 1px solid var(--border-console-faint);
-  transition: background 0.2s ease;
+  transition: background var(--transition-base) ease;
   
   &:hover {
     background: var(--bg-console-soft);
@@ -3489,7 +3489,7 @@ onActivated(() => {
 }
 
 .cmd-dir-icon {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   margin-right: 2px;
   vertical-align: -2px;
 }
@@ -3514,15 +3514,15 @@ onActivated(() => {
   min-width: auto;
   color: var(--text-secondary);
   flex-shrink: 0;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   
   &:hover {
     color: var(--color-primary);
-    background: rgba(64, 158, 255, 0.1);
+    background: var(--tint-primary-10);
   }
   
   .el-icon {
-    transition: transform 0.3s ease;
+    transition: transform var(--transition-slow) ease;
     
   }
   
@@ -3538,7 +3538,7 @@ onActivated(() => {
 /* 输出内容滑动动画 */
 .output-slide-enter-active,
 .output-slide-leave-active {
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   overflow: hidden;
 }
 
@@ -3621,14 +3621,14 @@ pre.stderr {
   margin: var(--spacing-sm) var(--spacing-md);
   padding: var(--spacing-md) var(--spacing-lg);
   background: linear-gradient(135deg, 
-    rgba(64, 158, 255, 0.08) 0%, 
-    rgba(64, 158, 255, 0.02) 100%);
+    var(--tint-primary-08) 0%, 
+    var(--tint-primary-04) 100%);
   border: 2px solid var(--color-primary);
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   gap: var(--spacing-lg);
-  animation: slideDown 0.3s ease-out;
+  animation: slideDown var(--transition-slow) ease-out;
 }
 
 .waiting-content {
@@ -3639,7 +3639,7 @@ pre.stderr {
 }
 
 .waiting-icon {
-  font-size: 24px;
+  font-size: var(--font-size-2xl);
   color: var(--color-primary);
   flex-shrink: 0;
 }
@@ -3734,7 +3734,7 @@ pre.stderr {
   border-radius: var(--radius-md);
   min-width: 120px;
   max-width: 200px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
   position: relative;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
@@ -3770,14 +3770,14 @@ pre.stderr {
   &.step-current {
     border-color: var(--color-primary);
     border-width: 2px;
-    box-shadow: 0 2px 8px rgba(64, 158, 255, 0.2),
-                0 0 0 2px rgba(64, 158, 255, 0.12);
+    box-shadow: 0 2px 8px var(--tint-primary-18),
+                0 0 0 2px var(--tint-primary-12);
     
     // 命令类型
     &.step-type-command {
       background: linear-gradient(135deg, 
-        rgba(64, 158, 255, 0.15) 0%, 
-        rgba(64, 158, 255, 0.05) 100%);
+        var(--tint-primary-16) 0%, 
+        var(--tint-primary-06) 100%);
     }
     
     // 等待类型
@@ -3827,8 +3827,8 @@ pre.stderr {
       background: linear-gradient(135deg, var(--color-primary), #3a9eff);
       color: white;
       font-weight: 700;
-      box-shadow: 0 0 6px rgba(64, 158, 255, 0.35),
-                  0 0 0 2px rgba(64, 158, 255, 0.15);
+      box-shadow: 0 0 6px var(--tint-primary-35),
+                  0 0 0 2px var(--tint-primary-16);
       animation: pulse-ring 1.8s ease-in-out infinite;
       
       .step-type-icon {
@@ -3909,16 +3909,16 @@ pre.stderr {
   border-radius: 50%;
   background: var(--bg-panel);
   flex-shrink: 0;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   
   .step-type-icon {
-    font-size: 14px;
+    font-size: var(--font-size-base);
     color: var(--text-tertiary);
   }
   
   .step-icon-check {
-    font-size: 14px;
+    font-size: var(--font-size-base);
     color: white;
   }
 }
@@ -3943,16 +3943,16 @@ pre.stderr {
 }
 
 .step-type-tag {
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   padding: 2px 6px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   line-height: 1;
   text-transform: uppercase;
   letter-spacing: 0.3px;
   
   &.type-command {
-    background: rgba(64, 158, 255, 0.12);
+    background: var(--tint-primary-12);
     color: var(--color-primary);
   }
   
@@ -3974,34 +3974,34 @@ pre.stderr {
   margin-left: 6px;
   padding: 1px 5px;
   border-radius: 5px;
-  font-size: 9px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   line-height: 1;
-  color: #0ea5e9;
+  color: var(--action-sky);
   background: rgba(14, 165, 233, 0.12);
   border: 1px solid rgba(14, 165, 233, 0.25);
 }
 
 .step-terminal-icon {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
 }
 
 .step-name {
-  font-size: 12.5px;
+  font-size: var(--font-size-mid);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   line-height: 1.3;
 }
 
 .step-disabled-tag {
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   color: var(--text-disabled);
   background: var(--bg-panel);
   padding: 1px 4px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   align-self: flex-start;
 }
 
@@ -4011,7 +4011,7 @@ pre.stderr {
 
 .user-input-empty {
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   padding: 10px 0;
 }
 
@@ -4033,7 +4033,7 @@ pre.stderr {
 
 .user-input-label {
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   line-height: 1.2;
   word-break: break-all;
 }
@@ -4045,11 +4045,11 @@ pre.stderr {
 
 @keyframes pulse-ring {
   0%, 100% {
-    box-shadow: 0 0 6px rgba(64, 158, 255, 0.35),
-                0 0 0 2px rgba(64, 158, 255, 0.25);
+    box-shadow: 0 0 6px var(--tint-primary-35),
+                0 0 0 2px var(--tint-primary-22);
   }
   50% {
-    box-shadow: 0 0 8px rgba(64, 158, 255, 0.5),
+    box-shadow: 0 0 8px var(--tint-primary-50),
                 0 0 0 4px rgba(64, 158, 255, 0);
   }
 }

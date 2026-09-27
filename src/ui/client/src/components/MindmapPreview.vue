@@ -63,17 +63,17 @@ const data = computed(() => markdownToRichMindMap(props.content || '', '未命�
   align-items: center;
   gap: 12px;
   padding: 8px 14px;
-  background: var(--bg-panel, #f6f8fa);
-  font-size: 12px;
+  background: var(--bg-panel, var(--md-bg-subtle));
+  font-size: var(--font-size-sm);
 }
 .mindmap-preview-title {
   font-weight: 600;
-  color: var(--text-primary, #1f2328);
+  color: var(--text-primary, var(--md-text-strong));
   letter-spacing: 0.5px;
 }
 .mindmap-preview-hint {
-  color: var(--text-secondary, #656d76);
-  font-size: 11px;
+  color: var(--text-secondary, var(--md-text-muted));
+  font-size: var(--font-size-xs);
 }
 .mindmap-preview-canvas {
   flex: 1;

@@ -108,7 +108,7 @@ onBeforeUnmount(() => {
 // 为什么轮询而不是 fs.watch:
 //   - 后端 instanceRegistry 的 fs.watch 是给跨进程通信用的,不面向文件树
 //   - 前端 fs.watch 在沙箱/网络盘下不可靠,Socket.IO 推送需要后端再搭一套 watcher
-//   - 15s GET /api/browse_directory 在普通仓库 < 100ms,完全够用
+//   - 15s GET /api/browse_directory 在普通仓库 < var(--transition-fast),完全够用
 // 后端参考 src/ui/server/index.js:590 注释的"前端轮询(15s)兜底"约定
 const TREE_POLL_MS = 15000
 let treePollTimer: ReturnType<typeof setInterval> | null = null
@@ -1533,7 +1533,7 @@ function stopPreviewResize() {
 }
 
 .sidebar-title {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1577,13 +1577,13 @@ function stopPreviewResize() {
   min-width: 0;
   height: 26px;
   padding: 0 24px 0 26px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-primary);
   background: var(--bg-input, rgba(255, 255, 255, 0.04));
   border: 1px solid var(--border-color);
   border-radius: var(--radius-base);
   outline: none;
-  transition: border-color 0.12s, background 0.12s;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
 .sidebar-search-input::placeholder {
@@ -1595,7 +1595,7 @@ function stopPreviewResize() {
 }
 
 .sidebar-search-input:focus {
-  border-color: var(--accent-color, #3b82f6);
+  border-color: var(--accent-color, var(--color-primary));
   background: var(--bg-panel);
 }
 
@@ -1613,7 +1613,7 @@ function stopPreviewResize() {
   border-radius: 50%;
   cursor: pointer;
   color: var(--text-tertiary);
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .sidebar-search-clear:hover {
@@ -1623,9 +1623,9 @@ function stopPreviewResize() {
 
 /* 节点名搜索命中高亮(沿用主题色 + 柔和背景) */
 .tree-name-hit {
-  color: var(--accent-color, #f59e0b);
+  color: var(--accent-color, var(--color-warning-light));
   background: rgba(245, 158, 11, 0.15);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   padding: 0 1px;
 }
 
@@ -1642,12 +1642,12 @@ function stopPreviewResize() {
   gap: 4px;
   height: 24px;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   padding-right: 8px;
   user-select: none;
   color: var(--text-primary);
-  font-size: 13px;
-  transition: background 0.1s;
+  font-size: var(--font-size-mid);
+  transition: background var(--transition-fast);
   white-space: nowrap;
   overflow: hidden;
 }
@@ -1657,7 +1657,7 @@ function stopPreviewResize() {
 }
 
 .tree-node--active {
-  background: rgba(59, 130, 246, 0.12);
+  background: var(--tint-primary-12);
   color: var(--color-primary);
 }
 
@@ -1672,7 +1672,7 @@ function stopPreviewResize() {
   align-items: center;
   flex-shrink: 0;
   color: var(--text-tertiary);
-  transition: transform 0.15s;
+  transition: transform var(--transition-fast);
   width: 12px;
 }
 
@@ -1689,7 +1689,7 @@ function stopPreviewResize() {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   line-height: 1;
 }
 
@@ -1710,7 +1710,7 @@ function stopPreviewResize() {
   text-overflow: ellipsis;
   flex: 1;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
 }
 
 .tree-loading {
@@ -1725,7 +1725,7 @@ function stopPreviewResize() {
 }
 
 .tree-empty {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   text-align: center;
   padding: 24px 12px;
@@ -1759,7 +1759,7 @@ function stopPreviewResize() {
   cursor: col-resize;
   position: relative;
   background: transparent;
-  transition: background 0.15s;
+  transition: background var(--transition-fast);
   z-index: 2;
 }
 
@@ -1772,12 +1772,12 @@ function stopPreviewResize() {
   width: 2px;
   height: 32px;
   background: var(--color-gray-300);
-  border-radius: 2px;
-  transition: background 0.15s, height 0.15s;
+  border-radius: var(--radius-xs);
+  transition: background var(--transition-fast), height var(--transition-fast);
 }
 
 .editor-resizer:hover {
-  background: rgba(59, 130, 246, 0.06);
+  background: var(--tint-primary-06);
 }
 
 .editor-resizer:hover::after {
@@ -1814,10 +1814,10 @@ function stopPreviewResize() {
   padding: 0 12px;
   height: 34px;
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: var(--font-size-mid);
   color: var(--text-secondary);
   flex-shrink: 0;
-  transition: background 0.1s, color 0.1s;
+  transition: background var(--transition-fast), color var(--transition-fast);
   max-width: 200px;
   min-width: 80px;
   user-select: none;
@@ -1855,12 +1855,12 @@ function stopPreviewResize() {
   padding: 2px;
   cursor: pointer;
   color: var(--text-tertiary);
-  border-radius: 3px;
+  border-radius: var(--radius-base);
   display: flex;
   align-items: center;
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity 0.1s, background 0.1s;
+  transition: opacity var(--transition-fast), background var(--transition-fast);
 }
 
 .editor-tab:hover .tab-close,
@@ -1881,7 +1881,7 @@ function stopPreviewResize() {
   justify-content: center;
   gap: 10px;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   user-select: none;
 }
 
@@ -1890,7 +1890,7 @@ function stopPreviewResize() {
 }
 
 .editor-empty-hint {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   opacity: 0.6;
 }
 
@@ -1946,7 +1946,7 @@ function stopPreviewResize() {
   cursor: col-resize;
   position: relative;
   background: transparent;
-  transition: background 0.15s;
+  transition: background var(--transition-fast);
   z-index: 2;
   /* resizer 视觉上位于面板右边缘：让 monaco / 面板保持原 DOM 顺序，
      借助 flex order 把它推到 flex 容器的最右端 */
@@ -1963,12 +1963,12 @@ function stopPreviewResize() {
   width: 2px;
   height: 32px;
   background: var(--color-gray-300);
-  border-radius: 2px;
-  transition: background 0.15s, height 0.15s;
+  border-radius: var(--radius-xs);
+  transition: background var(--transition-fast), height var(--transition-fast);
 }
 
 .preview-resizer:hover {
-  background: rgba(59, 130, 246, 0.06);
+  background: var(--tint-primary-06);
 }
 
 .preview-resizer:hover::after {
@@ -1999,7 +1999,7 @@ function stopPreviewResize() {
 }
 
 .preview-title {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2008,11 +2008,11 @@ function stopPreviewResize() {
 }
 
 .preview-ext-badge {
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   padding: 1px 5px;
-  border-radius: 3px;
-  background: rgba(59, 130, 246, 0.15);
+  border-radius: var(--radius-base);
+  background: var(--tint-primary-16);
   color: var(--color-primary);
   letter-spacing: 0.04em;
 }
@@ -2030,7 +2030,7 @@ function stopPreviewResize() {
   border-radius: var(--radius-base);
   display: flex;
   align-items: center;
-  transition: color 0.1s, background 0.1s;
+  transition: color var(--transition-fast), background var(--transition-fast);
 }
 
 .preview-close-btn:hover {
@@ -2059,7 +2059,7 @@ function stopPreviewResize() {
   height: 100%;
   overflow: auto;
   background: var(--bg-container, #ffffff);
-  color: var(--text-primary, #1f2328);
+  color: var(--text-primary, var(--md-text-strong));
 }
 
 .preview-mindmap {
@@ -2097,7 +2097,7 @@ function stopPreviewResize() {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
 }
 
@@ -2116,9 +2116,9 @@ function stopPreviewResize() {
   background: none;
   cursor: pointer;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   white-space: nowrap;
-  transition: background 0.1s, color 0.1s;
+  transition: background var(--transition-fast), color var(--transition-fast);
   flex-shrink: 0;
 }
 
@@ -2129,7 +2129,7 @@ function stopPreviewResize() {
 
 .preview-toggle-btn.active {
   color: var(--color-primary);
-  background: rgba(59, 130, 246, 0.08);
+  background: var(--tint-primary-08);
 }
 
 /* ── sidebar header actions ─────────────────── */
@@ -2149,10 +2149,10 @@ function stopPreviewResize() {
   flex: 1;
   min-width: 0;
   height: 20px;
-  font-size: 12.5px;
+  font-size: var(--font-size-mid);
   background: var(--bg-container);
   border: 1px solid var(--color-primary);
-  border-radius: 3px;
+  border-radius: var(--radius-base);
   color: var(--text-primary);
   padding: 0 5px;
   outline: none;
@@ -2167,7 +2167,7 @@ function stopPreviewResize() {
      会导致右键菜单"通透",文字与底层内容重叠看不清。 */
   background: var(--bg-container);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   padding: 4px;
   min-width: 160px;
@@ -2188,12 +2188,12 @@ function stopPreviewResize() {
   padding: 6px 10px;
   background: none;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: var(--font-size-mid);
   color: var(--text-primary);
   text-align: left;
-  transition: background 0.1s;
+  transition: background var(--transition-fast);
 }
 
 .ctx-menu-item:hover {

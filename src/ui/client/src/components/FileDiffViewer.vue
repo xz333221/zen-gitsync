@@ -1979,7 +1979,7 @@ onMounted(() => {
   gap: var(--spacing-xs);
   padding: var(--spacing-xs);
   background: var(--bg-panel);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   border: 1px solid var(--border-card);
 }
 
@@ -2013,7 +2013,7 @@ onMounted(() => {
     .el-input__wrapper {
       background: var(--bg-input);
       border: 1px solid var(--border-input);
-      border-radius: var(--radius-sm);
+      border-radius: var(--radius-base);
       transition: var(--transition-all);
       
       &:hover {
@@ -2024,7 +2024,7 @@ onMounted(() => {
       &.is-focus {
         background: var(--bg-input);
         border-color: var(--color-primary);
-        box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.1);
+        box-shadow: 0 0 0 2px var(--tint-primary-10);
       }
     }
     
@@ -2061,7 +2061,7 @@ onMounted(() => {
   white-space: nowrap;
   background: var(--bg-icon);
   padding: var(--spacing-xs) var(--spacing-sm);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   border: 1px solid #d9d9d9;
   display: inline-flex;
   align-items: center;
@@ -2083,7 +2083,7 @@ onMounted(() => {
   align-items: center;
   gap: var(--spacing-xs);
   padding: var(--spacing-xs) var(--spacing-base);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   background: var(--bg-container);
   border: 1px solid var(--border-color);
   font-size: var(--font-size-sm);
@@ -2148,11 +2148,11 @@ onMounted(() => {
   }
   
   // &.active {
-  //   background: #e6f7ff;
-  //   color: #1890ff;
+  //   background: var(--action-blue-soft);
+  //   color: var(--color-primary);
     
   //   .file-icon {
-  //     color: #1890ff;
+  //     color: var(--color-primary);
   //   }
   // }
   
@@ -2273,7 +2273,7 @@ onMounted(() => {
   min-width: 40px;
   
   .active & {
-    color: #1890ff;
+    color: var(--color-primary);
     font-weight: var(--font-weight-semibold);
   }
 }
@@ -2300,7 +2300,7 @@ onMounted(() => {
   color: var(--text-tertiary);
   background: var(--bg-file-path);
   padding: 1px var(--spacing-sm);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   margin-left: var(--spacing-sm);
   box-sizing: border-box;
 }
@@ -2431,7 +2431,7 @@ onMounted(() => {
 
 .pane-subhint {
   padding: var(--spacing-xs) var(--spacing-md);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   background: var(--bg-container);
   flex-shrink: 0;
@@ -2450,7 +2450,7 @@ onMounted(() => {
 }
 
 .pane-hint {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
 }
 
@@ -2576,7 +2576,7 @@ onMounted(() => {
   background: var(--border-color-light, transparent);
   position: relative;
   user-select: none;
-  transition: background 0.1s;
+  transition: background var(--transition-fast);
 
   &::after {
     content: '';
@@ -2593,7 +2593,7 @@ onMounted(() => {
 
   &:hover,
   &:active {
-    background: var(--color-primary, #409eff);
+    background: var(--color-primary, var(--color-primary));
     opacity: 0.3;
   }
 }
@@ -2601,7 +2601,7 @@ onMounted(() => {
 /* 预览按钮激活态(预览面板打开时) */
 .modern-btn.btn-icon-24.active {
   color: var(--color-primary);
-  background: rgba(64, 158, 255, 0.1);
+  background: var(--tint-primary-10);
   border-color: var(--color-primary);
 }
 
@@ -2671,7 +2671,7 @@ onMounted(() => {
   .selected-file {
     max-width: 92px;
     padding-inline: 4px;
-    font-size: 10px;
+    font-size: var(--font-size-xs);
   }
 
   .diff-content {

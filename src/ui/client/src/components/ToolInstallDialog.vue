@@ -220,7 +220,7 @@ onBeforeUnmount(stopPolling)
   p {
     margin: 4px 0 0;
     color: var(--text-secondary);
-    font-size: 13px;
+    font-size: var(--font-size-mid);
   }
 }
 
@@ -230,7 +230,7 @@ onBeforeUnmount(stopPolling)
   width: 42px;
   height: 42px;
   flex: 0 0 42px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   color: var(--color-primary);
   background: color-mix(in srgb, var(--color-primary) 10%, transparent);
 
@@ -248,7 +248,7 @@ onBeforeUnmount(stopPolling)
   display: block;
   margin-bottom: 8px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   text-transform: uppercase;
 }
@@ -263,11 +263,11 @@ onBeforeUnmount(stopPolling)
     min-width: 0;
     padding: 9px 10px;
     overflow-x: auto;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background: var(--bg-container);
     color: var(--text-primary);
     font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     white-space: nowrap;
   }
 }
@@ -276,7 +276,7 @@ onBeforeUnmount(stopPolling)
 .tool-install__restart-hint {
   margin: 9px 0 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1.6;
 }
 
@@ -285,8 +285,8 @@ onBeforeUnmount(stopPolling)
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border-radius: 7px;
-  font-size: 13px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-mid);
 
   &.is-waiting { color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 8%, transparent); }
   &.is-success { color: var(--el-color-success); background: color-mix(in srgb, var(--el-color-success) 8%, transparent); }

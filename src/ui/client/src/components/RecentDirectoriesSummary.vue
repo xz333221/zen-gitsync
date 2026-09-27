@@ -388,7 +388,7 @@ const bodyText = computed(() => {
   background: var(--bg-subtle);
   /* 与列表根一致:截断 Element Plus 表单控件的行高继承(见 RecentDirectoriesList) */
   line-height: var(--line-height-relaxed);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   text-align: left;
 }
 /* 有 AI 解读时换成品牌色系:同一块地方,内容从"说明"升级成"解读" */
@@ -421,11 +421,11 @@ const bodyText = computed(() => {
   height: 22px;
   padding: 0;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   transition: color var(--transition-fast);
 }
 .dir-summary__refresh:hover:not(:disabled) {

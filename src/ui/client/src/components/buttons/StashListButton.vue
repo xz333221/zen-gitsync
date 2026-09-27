@@ -547,7 +547,7 @@ function handleOpenInEditor(filePath: string, _context: string) {
   align-items: center;
   margin-bottom: var(--spacing-base);
   padding: var(--spacing-base);
-  background: linear-gradient(135deg, var(--color-white) 0%, #f8f9fa 100%);
+  background: linear-gradient(135deg, var(--color-white) 0%, var(--color-gray-soft) 100%);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-component);
   box-shadow: var(--shadow-md);
@@ -592,7 +592,7 @@ function handleOpenInEditor(filePath: string, _context: string) {
   border-radius: var(--radius-lg);
   padding: var(--spacing-xs) var(--spacing-base);
   font-weight: 500;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   
   &:hover {
     transform: scale(1.02);
@@ -627,7 +627,7 @@ function handleOpenInEditor(filePath: string, _context: string) {
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-component);
   box-shadow: var(--shadow-md);
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   overflow: hidden;
   
   &:hover {
@@ -736,7 +736,7 @@ function handleOpenInEditor(filePath: string, _context: string) {
 .action-btn {
   border-radius: var(--radius-md);
   font-weight: 500;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   min-width: 60px;
   padding: 6px var(--spacing-md);
   font-size: var(--font-size-sm);
@@ -809,7 +809,7 @@ function handleOpenInEditor(filePath: string, _context: string) {
   background-color: var(--border-component);
   color: var(--color-text);
   padding: var(--spacing-xs) 6px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   border: 1px solid var(--border-component);
 }
 

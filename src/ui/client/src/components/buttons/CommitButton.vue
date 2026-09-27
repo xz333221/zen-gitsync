@@ -159,7 +159,7 @@ async function handleClick() {
   }
 
   &.from-form {
-    font-size: 13px;
+    font-size: var(--font-size-mid);
     height: 32px;
   }
 
@@ -167,7 +167,7 @@ async function handleClick() {
      显式锁定 min-width 让过渡更平滑 */
   &.is-committing {
     min-width: 96px;
-    transition: min-width 0.2s var(--ease-custom);
+    transition: min-width var(--transition-base) var(--ease-custom);
   }
 }
 </style>

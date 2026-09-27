@@ -290,11 +290,11 @@ onMounted(() => {
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   color: var(--text-tertiary);
   opacity: 0.7;
   text-decoration: none;
-  transition: color 0.18s ease, opacity 0.18s ease, background 0.18s ease;
+  transition: color var(--transition-base) ease, opacity var(--transition-base) ease, background var(--transition-base) ease;
 
   &:hover {
     opacity: 1;
@@ -311,12 +311,12 @@ onMounted(() => {
 
 .version-link {
   font-family: monospace;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   text-decoration: none;
   padding: 2px 6px;
-  border-radius: 3px;
-  transition: color 0.2s, background-color 0.2s;
+  border-radius: var(--radius-base);
+  transition: color var(--transition-base), background-color var(--transition-base);
 
   &:hover {
     color: var(--color-primary);
@@ -339,11 +339,11 @@ onMounted(() => {
   border-radius: 11px;
   cursor: pointer;
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   line-height: 1;
   color: #fff;
-  background: linear-gradient(135deg, var(--color-primary) 0%, #3a8ee6 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
   box-shadow: var(--shadow-sm);
   transition:
     transform var(--transition-fast) var(--ease-custom),
@@ -386,10 +386,10 @@ onMounted(() => {
 
 .upgrade-btn__version {
   font-family: monospace;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 500;
   padding: 1px 5px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.22);
   line-height: 1.2;
 }

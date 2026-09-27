@@ -1,4 +1,4 @@
-﻿<!--
+<!--
   ~ Copyright 2026 xz333221
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
@@ -1271,23 +1271,25 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
          它自成一个层叠上下文：留在这里面的弹窗 z-index 再高，也只是跟"同一个上下文里的兄弟"比，
          永远压不过挂在 body 下的 L2 编辑器弹窗（它 escape 了 1001 那层）。
          现象就是点了「执行日志」没反应 —— 其实弹窗开了，只是被编辑器整个盖住。 -->
-    <el-dialog
+    <CommonDialog
       v-model="logsDialogVisible"
       :title="$t('@WORKBENCH:执行日志')"
       width="1080px"
       :close-on-click-modal="false"
       top="6vh"
-      class="wb-logs-dialog"
+      type="flex"
+      custom-class="wb-logs-dialog"
       append-to-body
     >
       <ExecutionLogManager />
-    </el-dialog>
+    </CommonDialog>
 
     <!-- 提示词编辑对话框：同「执行日志」，从编辑器里打开，必须 append-to-body 才压得住编辑器弹窗 -->
-    <el-dialog
+    <CommonDialog
       v-model="promptDialog.visible"
       :title="promptDialog.editing ? $t('@WORKBENCH:编辑提示词') : $t('@WORKBENCH:新建提示词')"
       width="640px"
+      type="flex"
       append-to-body
     >
       <el-form label-position="top">
@@ -1343,13 +1345,14 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
         <el-button @click="promptDialog.visible = false">{{ $t('@WORKBENCH:取消') }}</el-button>
         <el-button type="primary" @click="savePrompt">{{ $t('@WORKBENCH:保存') }}</el-button>
       </template>
-    </el-dialog>
+    </CommonDialog>
 
     <!-- 生成指令编辑对话框 -->
-    <el-dialog
+    <CommonDialog
       v-model="instructionDialog.visible"
       :title="$t('@WORKBENCH:编辑生成指令')"
       width="720px"
+      type="flex"
       append-to-body
     >
       <el-form label-position="top">
@@ -1366,7 +1369,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
         <el-button @click="instructionDialog.visible = false">{{ $t('@WORKBENCH:取消') }}</el-button>
         <el-button type="primary" :loading="instructionDialog.saving" @click="saveInstruction">{{ $t('@WORKBENCH:保存') }}</el-button>
       </template>
-    </el-dialog>
+    </CommonDialog>
 
   </div>
 </template>
@@ -1412,7 +1415,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 22px;
   padding: 0 6px;
   border-radius: var(--radius-md);
@@ -1421,9 +1424,9 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 }
 .wb-back-btn:hover { color: var(--color-primary); }
 .wb-back-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
-.wb-back-btn__icon { font-size: 13px; }
+.wb-back-btn__icon { font-size: var(--font-size-mid); }
 .wb-editor-bar__project {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
@@ -1433,7 +1436,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 }
 .wb-editor-bar__hint {
   margin-left: auto;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   flex-shrink: 0;
 }
@@ -1444,10 +1447,10 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10.5px;
+  font-size: var(--font-size-xs);
   line-height: 16px;
   padding: 0 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   color: var(--color-warning);
   background: color-mix(in srgb, var(--color-warning) 12%, transparent);
   font-variant-numeric: tabular-nums;
@@ -1457,7 +1460,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 
 /* 任务描述折叠：默认收起，点击 summary 展开。 */
 .wb-task-desc {
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-subtle);
   padding: 0;
   margin: 0;
@@ -1473,7 +1476,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   align-items: center;
   gap: 12px;
   padding: 8px 12px 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
 }
 .wb-task-desc[open] {
@@ -1489,16 +1492,16 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
      全部紧贴父容器左右内边线,跟下面 textarea 的 0 margin 对齐,
      整体视觉更紧凑、不再有"两边挤压"的不对齐感。 */
   padding: 8px 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   user-select: none;
 }
 .wb-task-desc__summary::-webkit-details-marker { display: none; }
 .wb-task-desc__summary:hover { background: var(--bg-container-hover); }
 .wb-task-desc__caret {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
-  transition: transform 0.15s;
+  transition: transform var(--transition-fast);
 }
 .wb-task-desc__label {
   font-weight: 500;
@@ -1509,7 +1512,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   color: var(--color-primary);
   font-weight: 600;
 }
@@ -1520,7 +1523,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   min-width: 18px;
   height: 16px;
   padding: 0 5px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--tint-primary-14);
   color: var(--color-primary);
   font-variant-numeric: tabular-nums;
@@ -1617,13 +1620,13 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   align-items: center;
   height: 18px;
   padding: 0 6px;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: 0.4px;
   color: var(--text-tertiary);
   background: var(--bg-subtle);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
@@ -1635,7 +1638,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 }
 .wb-section__title {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-secondary);
   letter-spacing: 0.2px;
@@ -1648,12 +1651,12 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   color: var(--text-tertiary);
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   flex-shrink: 0;
   transition: background var(--transition-fast) var(--ease-custom),
               color var(--transition-fast) var(--ease-custom);
@@ -1672,10 +1675,10 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   height: 32px;
   padding: 0 12px;
   border: 1px dashed var(--tint-primary-35, color-mix(in srgb, var(--color-primary) 35%, transparent));
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 4%, transparent) 0%, color-mix(in srgb, var(--color-primary) 2%, transparent) 100%);
   color: var(--color-primary);
-  font-size: 12.5px;
+  font-size: var(--font-size-mid);
   font-weight: 600;
   letter-spacing: 0.05px;
   cursor: pointer;
@@ -1686,7 +1689,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
     transform var(--transition-fast) var(--ease-custom);
 }
 .wb-new-btn__icon {
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   flex-shrink: 0;
   transition: transform var(--transition-fast) var(--ease-custom);
 }
@@ -1731,7 +1734,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   /* 紧凑单行：上下 padding 从 9px → 7px，左右 10 → 10 不变 */
   padding: 7px 10px;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: transparent;
   cursor: pointer;
   transition:
@@ -1772,7 +1775,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   top: 5px;
   bottom: 5px;
   width: 3px;
-  border-radius: 3px;
+  border-radius: var(--radius-base);
   background: linear-gradient(180deg, var(--color-primary) 0%, color-mix(in srgb, var(--color-primary) 70%, #fff) 100%);
   box-shadow:
     0 0 8px color-mix(in srgb, var(--color-primary) 50%, transparent),
@@ -1815,7 +1818,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 /* 任务标题：与 WorkbenchSidebar.vue 保持一致 —
    略小于 section header，作为分组下的内容项。 */
 .wb-task-item__title {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-secondary);
   white-space: nowrap;
@@ -1828,7 +1831,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   line-height: 1;
 }
@@ -1846,10 +1849,10 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   align-items: center;
   height: 15px;
   padding: 0 5px;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--color-warning, #f59e0b) 14%, transparent);
-  color: color-mix(in srgb, var(--color-warning, #f59e0b) 80%, var(--text-primary));
-  font-size: 10px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-warning, var(--color-warning-light)) 14%, transparent);
+  color: color-mix(in srgb, var(--color-warning, var(--color-warning-light)) 80%, var(--text-primary));
+  font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: 0.2px;
   white-space: nowrap;
@@ -1860,7 +1863,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 /* 其他项目的任务卡片整体降饱和度，与当前项目任务视觉区分 */
 .wb-task-item.is-other-project { opacity: 0.78; }
 .wb-task-item.is-other-project:hover { opacity: 1; }
-.wb-task-item__meta-icon { font-size: 11px; opacity: 0.85; }
+.wb-task-item__meta-icon { font-size: var(--font-size-xs); opacity: 0.85; }
 .wb-task-item__num {
   /* 数字小徽标：基础样式由 .wb-pill 提供（圆角胶囊 + tnum），
      这里仅覆盖：去掉 min-width/padding 让数字紧凑显示 */
@@ -1875,12 +1878,12 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   background: var(--tint-primary-14);
 }
 .wb-task-item__meta-item--running .wb-task-item__num {
-  color: color-mix(in srgb, var(--color-warning, #f59e0b) 85%, var(--text-primary));
-  background: color-mix(in srgb, var(--color-warning, #f59e0b) 18%, transparent);
+  color: color-mix(in srgb, var(--color-warning, var(--color-warning-light)) 85%, var(--text-primary));
+  background: color-mix(in srgb, var(--color-warning, var(--color-warning-light)) 18%, transparent);
   font-weight: 600;
 }
 .wb-task-item.is-running .wb-task-item__meta-icon {
-  color: color-mix(in srgb, var(--color-warning, #f59e0b) 80%, var(--text-primary));
+  color: color-mix(in srgb, var(--color-warning, var(--color-warning-light)) 80%, var(--text-primary));
   animation: wb-task-running-icon 1.4s ease-in-out infinite;
 }
 @keyframes wb-task-running-icon {
@@ -1895,12 +1898,12 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   color: var(--text-tertiary);
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   flex-shrink: 0;
   opacity: 0;
   transform: translateX(-2px);
@@ -1919,7 +1922,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   opacity: 1;
 }
 .wb-task-item__del,
-.wb-prompt-item__del { font-size: 13px; }
+.wb-prompt-item__del { font-size: var(--font-size-mid); }
 
 /* ── 提示词列表 ─────────────────────────────────────── */
 .wb-prompt-item {
@@ -1928,7 +1931,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   gap: 8px;
   padding: 7px 8px;
   border-radius: var(--radius-md);
-  font-size: var(--font-size-125);
+  font-size: var(--font-size-mid);
   color: var(--text-primary);
   transition: background var(--transition-fast) var(--ease-custom);
   position: relative;
@@ -1940,13 +1943,13 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-prompt-item__icon {
   width: 22px;
   height: 22px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   background: var(--tint-primary-08);
   color: var(--color-primary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   flex-shrink: 0;
 }
 .wb-prompt-item__name {
@@ -1966,7 +1969,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   max-width: 96px;
   padding: 1px 6px;
   border-radius: var(--radius-xs);
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   line-height: 16px;
   letter-spacing: 0.1px;
   background: var(--tint-primary-08);
@@ -1992,7 +1995,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   flex-shrink: 0;
   opacity: 0;
   transition: opacity var(--transition-fast) var(--ease-custom),
@@ -2031,7 +2034,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   align-items: center;
   justify-content: center;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: var(--font-size-mid);
 }
 
 /* ── 执行主体：左右两列布局 ── */
@@ -2097,7 +2100,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
   background: var(--bg-container);
   color: var(--text-tertiary);
@@ -2108,7 +2111,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
     background var(--transition-fast) var(--ease-custom),
     border-color var(--transition-fast) var(--ease-custom),
     color var(--transition-fast) var(--ease-custom),
-    transform 0.1s var(--ease-custom);
+    transform var(--transition-fast) var(--ease-custom);
 }
 .wb-copy-btn:hover:not(:disabled) {
   background: var(--tint-primary-12);
@@ -2123,21 +2126,21 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-copy-btn.is-flash {
   background: var(--tint-success-14, color-mix(in srgb, var(--color-success) 14%, transparent));
   border-color: var(--tint-success-35, color-mix(in srgb, var(--color-success) 35%, transparent));
-  color: var(--color-success-dark, #047857);
+  color: var(--color-success-dark, var(--color-success-dark));
 }
-.wb-copy-btn__icon { font-size: 13px; line-height: 1; }
+.wb-copy-btn__icon { font-size: var(--font-size-mid); line-height: 1; }
 .wb-copy-btn__icon--check {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 800;
 }
 /* 描述折叠行内的紧凑变体:小一号,跟文字行视觉重量齐平 */
 .wb-copy-btn--inline {
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   margin-left: 2px;
 }
-.wb-copy-btn--inline .wb-copy-btn__icon { font-size: 11px; }
+.wb-copy-btn--inline .wb-copy-btn__icon { font-size: var(--font-size-xs); }
 @media (prefers-reduced-motion: reduce) {
 }
 @keyframes wb-ai-sparkle-pulse {
@@ -2154,11 +2157,11 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   gap: 6px;
   height: 32px;
   padding: 0 12px;
-  border: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 32%, transparent);
-  background: color-mix(in srgb, var(--color-warning, #f59e0b) 8%, transparent);
-  color: color-mix(in srgb, var(--color-warning, #f59e0b) 75%, var(--text-primary));
+  border: 1px solid color-mix(in srgb, var(--color-warning, var(--color-warning-light)) 32%, transparent);
+  background: color-mix(in srgb, var(--color-warning, var(--color-warning-light)) 8%, transparent);
+  color: color-mix(in srgb, var(--color-warning, var(--color-warning-light)) 75%, var(--text-primary));
   border-radius: var(--radius-md);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   white-space: nowrap;
   flex-shrink: 0;
@@ -2171,21 +2174,21 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   margin-left: 6px;
   padding-left: 8px;
   border-left: 1px solid rgba(255, 255, 255, 0.35);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 400;
   opacity: 0.85;
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
-.wb-executor-split__hint-icon { font-size: 12px; }
+.wb-executor-split__hint-icon { font-size: var(--font-size-sm); }
 .wb-executor-item {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   min-width: 132px;
 }
-.wb-executor-item__icon { font-size: 14px; flex: none; }
+.wb-executor-item__icon { font-size: var(--font-size-base); flex: none; }
 .wb-executor-item__name {
   flex: 1;
 }
@@ -2193,10 +2196,10 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   color: var(--el-color-primary);
 }
 .wb-executor-item__missing {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary, var(--el-text-color-secondary));
 }
-.wb-no-claude-hint__icon { font-size: 14px; opacity: 0.9; }
+.wb-no-claude-hint__icon { font-size: var(--font-size-base); opacity: 0.9; }
 .wb-no-claude-hint__text { letter-spacing: -0.05px; }
 .wb-no-claude-hint__link {
   color: var(--color-primary);
@@ -2218,12 +2221,12 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   background: var(--bg-container);
   color: var(--text-secondary);
   border-radius: var(--radius-md);
-  font-size: 12.5px;
+  font-size: var(--font-size-mid);
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 .wb-logs-inline-btn:hover {
   background: var(--tint-primary-12);
@@ -2237,7 +2240,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   background: var(--bg-container);
 }
 .wb-logs-inline-btn--danger:hover {
-  color: var(--color-danger, #ef4444);
+  color: var(--color-danger, var(--color-danger-light));
   border-color: var(--tint-danger-50);
   background: var(--tint-danger-06);
 }
@@ -2245,7 +2248,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   outline: 2px solid var(--color-primary);
   outline-offset: 1px;
 }
-.wb-logs-inline-btn__icon { font-size: 14px; }
+.wb-logs-inline-btn__icon { font-size: var(--font-size-base); }
 
 /* 「执行日志」弹窗的 max-height / body 滚动限制已放在文件末尾的非 scoped <style> 块里，
    这里不再重复。原因：el-dialog 用 teleport 渲染到 body 下，scoped 选择器（包括 :deep()）
@@ -2282,7 +2285,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-input {
   height: 36px;
   padding: 0 12px;
-  font-size: var(--font-size-135);
+  font-size: var(--font-size-base);
   line-height: 1.2;
   letter-spacing: -0.05px;
 }
@@ -2303,7 +2306,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   /* 极简化：去掉 box-shadow inset，更低视觉重量 */
   height: 36px;
   flex: 1;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 600;
   letter-spacing: -0.4px;
   padding: 0 12px;
@@ -2329,7 +2332,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-select {
   height: 36px;
   padding: 0 32px 0 12px;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-weight: 500;
   min-width: 168px;
   cursor: pointer;
@@ -2356,7 +2359,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-textarea {
   display: block;
   padding: 10px 14px;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   line-height: 1.55;
   letter-spacing: -0.05px;
   resize: vertical;
@@ -2385,7 +2388,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 }
 .wb-textarea--focus-expand:focus {
   max-height: 500px;
-  transition: max-height 0.2s var(--ease-custom);
+  transition: max-height var(--transition-base) var(--ease-custom);
 }
 
 /* 自适应高度 textarea:禁掉手动 resize,高度由 autoGrowTextarea() 写入。
@@ -2397,7 +2400,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   overflow-y: hidden;
   /* line-height 1.55 配合 13px 字号 → 行高 ~20px,
      52px 起手约 2 行可写空间,足够 placeholder 完整显示。 */
-  transition: height 0.12s var(--ease-custom);
+  transition: height var(--transition-fast) var(--ease-custom);
 }
 
 .wb-split__sub-header {
@@ -2409,7 +2412,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 }
 .wb-split__sub-header h4 {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -2426,13 +2429,13 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 }
 .wb-simple__header h4 {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: -0.05px;
 }
 .wb-simple__hint {
-  font-size: var(--font-size-115);
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
 }
 
@@ -2466,7 +2469,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   display: none;
 }
 .wb-simple__meta {
-  font-size: var(--font-size-115);
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   letter-spacing: -0.05px;
   overflow: hidden;
@@ -2486,11 +2489,11 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-simple__stop {
   margin-left: auto;
   padding: 2px 10px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   border: 1px solid var(--color-danger-bright);
   background: transparent;
   color: var(--color-danger-bright);
-  font-size: var(--font-size-115);
+  font-size: var(--font-size-sm);
   font-weight: 600;
   cursor: pointer;
   transition:
@@ -2524,7 +2527,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 }
 .wb-simple__override-summary::-webkit-details-marker { display: none; }
 .wb-simple__override-caret {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   transition: transform var(--transition-fast) var(--ease-custom);
 }
@@ -2536,10 +2539,10 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   color: var(--text-primary);
 }
 .wb-simple__override-tag {
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   padding: 1px 6px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--tint-primary-12, color-mix(in srgb, var(--color-primary) 12%, transparent));
   color: var(--color-primary);
   letter-spacing: 0.2px;
@@ -2578,8 +2581,8 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-simple-chat :deep(.acu-bubble-main) {
   max-width: 100%;
 }
-.wb-simple-chat :deep(.acu-bubble) { font-size: 12px; }
-.wb-simple-chat :deep(.acu-bubble-name) { font-size: 10px; }
+.wb-simple-chat :deep(.acu-bubble) { font-size: var(--font-size-sm); }
+.wb-simple-chat :deep(.acu-bubble-name) { font-size: var(--font-size-xs); }
 .wb-simple-chat__footer {
   flex-shrink: 0;
   padding: 0 4px 4px;
@@ -2594,7 +2597,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   flex-shrink: 0;
 }
 .wb-form-item__label {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-secondary);
   letter-spacing: -0.05px;
@@ -2669,7 +2672,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-sub-expand-enter-active,
 .wb-sub-expand-leave-active {
   transition:
-    grid-template-rows var(--transition-base, 220ms) var(--ease-custom),
+    grid-template-rows var(--transition-base, var(--transition-base)) var(--ease-custom),
     opacity var(--transition-fast) var(--ease-custom);
   overflow: hidden;
 }
@@ -2708,12 +2711,12 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   gap: 6px;
   padding: 8px 6px 4px;
   margin-top: 4px;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   transition: background var(--transition-fast) var(--ease-custom),
               color var(--transition-fast) var(--ease-custom);
 }
@@ -2742,12 +2745,12 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   background: color-mix(in srgb, var(--color-primary) 8%, var(--bg-subtle));
 }
 .wb-task-group__caret {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   flex-shrink: 0;
   opacity: 0.75;
   transition: transform var(--transition-fast) var(--ease-custom);
 }
-.wb-task-group__icon { font-size: 14px; flex-shrink: 0; opacity: 0.8; }
+.wb-task-group__icon { font-size: var(--font-size-base); flex-shrink: 0; opacity: 0.8; }
 .wb-task-group__name {
   flex: 1;
   min-width: 0;
@@ -2771,10 +2774,10 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   gap: 5px;
   height: 24px;
   padding: 0 10px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: 0.1px;
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border-color-medium);
   background: var(--bg-container);
   color: var(--text-tertiary);
@@ -2793,7 +2796,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   background: currentColor;
   opacity: 0.85;
 }
-.wb-meta-save__check { font-size: 12px; line-height: 1; }
+.wb-meta-save__check { font-size: var(--font-size-sm); line-height: 1; }
 .wb-meta-save__bang {
   display: inline-flex;
   align-items: center;
@@ -2801,7 +2804,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  font-size: 9px;
+  font-size: var(--font-size-xs);
   font-weight: 800;
   background: currentColor;
   color: #fff;
@@ -2816,12 +2819,12 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   animation: wb-meta-pulse 1.2s ease-in-out infinite;
 }
 .wb-meta-save.is-saved {
-  color: var(--color-success-dark, #047857);
+  color: var(--color-success-dark, var(--color-success-dark));
   border-color: var(--tint-success-35);
   background: var(--tint-success-08);
 }
 .wb-meta-save.is-dirty {
-  color: var(--color-warning-dark, #b45309);
+  color: var(--color-warning-dark, var(--color-warning-dark));
   border-color: var(--tint-warning-45);
   background: var(--tint-warning-06);
 }

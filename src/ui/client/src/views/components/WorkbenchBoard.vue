@@ -796,14 +796,14 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
 .board__brand-text { min-width: 0; }
 .board__title {
   margin: 0;
-  font-size: 13.5px;
+  font-size: var(--font-size-base);
   font-weight: 500;
   color: var(--text-primary);
   line-height: 1.3;
 }
 .board__subtitle {
   margin: 0;
-  font-size: 10.5px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   line-height: 1.3;
 }
@@ -820,11 +820,11 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }
 .board__stat-value {
-  font-size: 12.5px;
+  font-size: var(--font-size-mid);
   font-weight: 500;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
@@ -848,9 +848,9 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   transition: color var(--transition-fast) var(--ease-custom);
 }
 .board__icon-btn:hover { color: var(--color-primary); }
@@ -951,14 +951,14 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
 }
 .board__project-name {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
   flex-shrink: 0;
 }
 .board__project-path {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
@@ -967,7 +967,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
 }
 .board__project-meta {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }

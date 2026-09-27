@@ -368,13 +368,13 @@ function onWindowMouseUp(_e: MouseEvent) {
   align-items: center;
   height: 18px;
   padding: 0 6px;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: 0.4px;
   color: var(--text-tertiary);
   background: var(--bg-subtle);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
@@ -386,7 +386,7 @@ function onWindowMouseUp(_e: MouseEvent) {
 }
 .wb-section__title {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-secondary);
   letter-spacing: 0.2px;
@@ -399,12 +399,12 @@ function onWindowMouseUp(_e: MouseEvent) {
   color: var(--text-tertiary);
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   flex-shrink: 0;
   transition: background var(--transition-fast) var(--ease-custom), color var(--transition-fast) var(--ease-custom);
 }
@@ -420,10 +420,10 @@ function onWindowMouseUp(_e: MouseEvent) {
   height: 32px;
   padding: 0 12px;
   border: 1px dashed var(--tint-primary-35, color-mix(in srgb, var(--color-primary) 35%, transparent));
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 4%, transparent) 0%, color-mix(in srgb, var(--color-primary) 2%, transparent) 100%);
   color: var(--color-primary);
-  font-size: 12.5px;
+  font-size: var(--font-size-mid);
   font-weight: 600;
   letter-spacing: 0.05px;
   cursor: pointer;
@@ -433,7 +433,7 @@ function onWindowMouseUp(_e: MouseEvent) {
     border-color var(--transition-fast) var(--ease-custom),
     transform var(--transition-fast) var(--ease-custom);
 }
-.wb-new-btn__icon { font-size: 13px; flex-shrink: 0; transition: transform var(--transition-fast) var(--ease-custom); }
+.wb-new-btn__icon { font-size: var(--font-size-mid); flex-shrink: 0; transition: transform var(--transition-fast) var(--ease-custom); }
 .wb-new-btn__shortcut { display: none; }
 .wb-new-btn:hover {
   background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 10%, transparent) 0%, color-mix(in srgb, var(--color-primary) 6%, transparent) 100%);
@@ -449,7 +449,7 @@ function onWindowMouseUp(_e: MouseEvent) {
 .wb-task-list.is-grouped .wb-task-item { margin-left: 14px; }
 .wb-task-item {
   position: relative; display: flex; align-items: center; gap: 8px;
-  padding: 7px 10px; border: none; border-radius: 10px; background: transparent;
+  padding: 7px 10px; border: none; border-radius: var(--radius-md); background: transparent;
   cursor: pointer;
   transition:
     background var(--transition-fast) var(--ease-custom),
@@ -465,7 +465,7 @@ function onWindowMouseUp(_e: MouseEvent) {
 .wb-task-item.active { background: color-mix(in srgb, var(--color-primary) 10%, var(--bg-container)); border-color: transparent; box-shadow: 0 1px 3px color-mix(in srgb, var(--color-primary) 12%, transparent), 0 0 0 1px color-mix(in srgb, var(--color-primary) 18%, transparent); }
 .wb-task-item.active::after {
   content: ''; position: absolute; left: -1px; top: 5px; bottom: 5px;
-  width: 3px; border-radius: 3px; background: linear-gradient(180deg, var(--color-primary) 0%, color-mix(in srgb, var(--color-primary) 70%, #fff) 100%);
+  width: 3px; border-radius: var(--radius-base); background: linear-gradient(180deg, var(--color-primary) 0%, color-mix(in srgb, var(--color-primary) 70%, #fff) 100%);
   box-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 50%, transparent), 0 1px 3px color-mix(in srgb, var(--color-primary) 25%, transparent);
 }
 .wb-task-item.active .wb-task-item__title { color: var(--color-primary); }
@@ -486,7 +486,7 @@ function onWindowMouseUp(_e: MouseEvent) {
    用 secondary 颜色 + medium 字重让位给项目名(13px/600/secondary)。
    选中态由 .wb-task-item.active 切到 primary 蓝。 */
 .wb-task-item__title {
-  font-size: 12px; font-weight: 500; color: var(--text-secondary);
+  font-size: var(--font-size-sm); font-weight: 500; color: var(--text-secondary);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   letter-spacing: -0.05px; line-height: 1.3;
 }
@@ -509,7 +509,7 @@ function onWindowMouseUp(_e: MouseEvent) {
   right: 8px;
   height: 2px;
   background: var(--color-primary);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   box-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 50%, transparent);
   pointer-events: none;
 }
@@ -523,7 +523,7 @@ function onWindowMouseUp(_e: MouseEvent) {
 .wb-task-item__action-group {
   position: absolute; right: 6px; top: 50%;
   display: inline-flex; align-items: center; gap: 2px;
-  padding: 1px 1px 1px 14px; border-radius: 8px;
+  padding: 1px 1px 1px 14px; border-radius: var(--radius-lg);
   background: linear-gradient(to right, transparent 0%, var(--bg-container-hover) 40%);
   opacity: 0; transform: translateY(-50%) translateX(-2px);
   pointer-events: none;
@@ -539,12 +539,12 @@ function onWindowMouseUp(_e: MouseEvent) {
   background: linear-gradient(to right, transparent 0%, color-mix(in srgb, var(--color-primary) 10%, var(--bg-container)) 40%);
 }
 .wb-task-item.is-running .wb-task-item__action-group {
-  background: linear-gradient(to right, transparent 0%, color-mix(in srgb, var(--color-warning, #f59e0b) 8%, var(--bg-panel)) 40%);
+  background: linear-gradient(to right, transparent 0%, color-mix(in srgb, var(--color-warning, var(--color-warning-light)) 8%, var(--bg-panel)) 40%);
 }
 .wb-task-item__copy {
   border: none; background: transparent; color: var(--text-tertiary); width: 22px; height: 22px;
-  border-radius: 6px; display: inline-flex; align-items: center; justify-content: center;
-  cursor: pointer; font-size: 12px; flex-shrink: 0;
+  border-radius: var(--radius-md); display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: var(--font-size-sm); flex-shrink: 0;
   transition: background var(--transition-fast) var(--ease-custom), color var(--transition-fast) var(--ease-custom), transform var(--transition-fast) var(--ease-custom);
 }
 .wb-task-item__copy:hover { background: color-mix(in srgb, var(--color-primary) 12%, transparent); color: var(--color-primary); }
@@ -552,28 +552,28 @@ function onWindowMouseUp(_e: MouseEvent) {
 .wb-task-item__copy:active { transform: scale(0.9); }
 .wb-task-item__del {
   border: none; background: transparent; color: var(--text-tertiary); width: 22px; height: 22px;
-  border-radius: 6px; display: inline-flex; align-items: center; justify-content: center;
-  cursor: pointer; font-size: 12px; flex-shrink: 0;
+  border-radius: var(--radius-md); display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: var(--font-size-sm); flex-shrink: 0;
   transition: background var(--transition-fast) var(--ease-custom), color var(--transition-fast) var(--ease-custom), transform var(--transition-fast) var(--ease-custom);
 }
 .wb-task-item__del:hover { background: color-mix(in srgb, var(--color-danger) 14%, transparent); color: var(--color-danger); }
 .wb-task-item__del:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-outline-offset); opacity: 1; }
-.wb-task-item__del, .wb-prompt-item__del, .wb-sub-item__del { font-size: 13px; }
+.wb-task-item__del, .wb-prompt-item__del, .wb-sub-item__del { font-size: var(--font-size-mid); }
 .wb-prompt-item {
   display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: var(--radius-md);
-  font-size: var(--font-size-125); color: var(--text-primary);
+  font-size: var(--font-size-mid); color: var(--text-primary);
   transition: background var(--transition-fast) var(--ease-custom); position: relative;
 }
 .wb-prompt-item:hover { background: var(--bg-container-hover); }
 .wb-prompt-item:hover .wb-prompt-item__del { opacity: 1; }
-.wb-prompt-item__icon { width: 22px; height: 22px; border-radius: var(--radius-sm); background: var(--tint-primary-08); color: var(--color-primary); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+.wb-prompt-item__icon { width: 22px; height: 22px; border-radius: var(--radius-base); background: var(--tint-primary-08); color: var(--color-primary); display: inline-flex; align-items: center; justify-content: center; font-size: var(--font-size-sm); flex-shrink: 0; }
 .wb-prompt-item__name { flex: 1; min-width: 0; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary); font-weight: 500; letter-spacing: -0.05px; }
-.wb-prompt-item__tag { flex-shrink: 0; max-width: 96px; padding: 1px 6px; border-radius: var(--radius-xs); font-size: 10px; line-height: 16px; letter-spacing: 0.1px; background: var(--tint-primary-08); color: var(--color-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wb-prompt-item__tag { flex-shrink: 0; max-width: 96px; padding: 1px 6px; border-radius: var(--radius-xs); font-size: var(--font-size-xs); line-height: 16px; letter-spacing: 0.1px; background: var(--tint-primary-08); color: var(--color-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wb-prompt-item__tag--project { background: var(--bg-subtle); color: var(--text-secondary); border: 1px solid var(--border-color-light); }
 .wb-prompt-item__del {
   border: none; background: transparent; color: var(--text-tertiary); width: 20px; height: 20px;
   border-radius: var(--radius-xs); display: inline-flex; align-items: center; justify-content: center;
-  cursor: pointer; font-size: 12px; flex-shrink: 0; opacity: 0;
+  cursor: pointer; font-size: var(--font-size-sm); flex-shrink: 0; opacity: 0;
   transition: opacity var(--transition-fast) var(--ease-custom), background var(--transition-fast) var(--ease-custom), color var(--transition-fast) var(--ease-custom);
 }
 .wb-prompt-item__del:hover { background: color-mix(in srgb, var(--color-danger) 14%, transparent); color: var(--color-danger); }
@@ -592,25 +592,25 @@ function onWindowMouseUp(_e: MouseEvent) {
 }
 .wb-empty--compact { padding: 10px 12px; flex-direction: row; justify-content: center; gap: 0; background: var(--bg-subtle); border-style: solid; }
 .wb-empty--compact::before { display: none; }
-.wb-empty__art { width: 52px; height: 52px; border-radius: 14px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--tint-primary-12) 0%, var(--tint-primary-08) 100%); color: var(--color-primary); font-size: 24px; margin-bottom: 4px; box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 10%, transparent); position: relative; z-index: 1; }
-.wb-empty__title { font-size: 15px; font-weight: 600; letter-spacing: var(--letter-spacing-heading, -0.25px); color: var(--text-secondary); line-height: 1.45; position: relative; z-index: 1; }
-.wb-empty--rich .wb-empty__hint { font-size: 12px; line-height: 1.6; color: var(--text-tertiary); max-width: 280px; position: relative; z-index: 1; }
+.wb-empty__art { width: 52px; height: 52px; border-radius: var(--radius-xl); display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--tint-primary-12) 0%, var(--tint-primary-08) 100%); color: var(--color-primary); font-size: var(--font-size-2xl); margin-bottom: 4px; box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 10%, transparent); position: relative; z-index: 1; }
+.wb-empty__title { font-size: var(--font-size-base); font-weight: 600; letter-spacing: var(--letter-spacing-heading, -0.25px); color: var(--text-secondary); line-height: 1.45; position: relative; z-index: 1; }
+.wb-empty--rich .wb-empty__hint { font-size: var(--font-size-sm); line-height: 1.6; color: var(--text-tertiary); max-width: 280px; position: relative; z-index: 1; }
 .wb-empty__cta { display: flex; align-items: center; gap: 14px; margin-top: 8px; flex-wrap: wrap; justify-content: center; position: relative; z-index: 1; }
-.wb-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 5px; border-radius: 8px; font-size: 10px; font-weight: 600; color: var(--text-tertiary); background: var(--bg-subtle); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.wb-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 5px; border-radius: var(--radius-lg); font-size: var(--font-size-xs); font-weight: 600; color: var(--text-tertiary); background: var(--bg-subtle); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .wb-section__count { background: var(--tint-primary-12); color: var(--color-primary); }
 /* 分组头：作为 section header，比组内任务标题(.wb-task-item__title 12px/500/secondary)
    字号更大、字重更重,承担"这是什么项目"的语义。
    当前项目用 .is-current 切到 primary 蓝。 */
 .wb-task-group__head {
   display: flex; align-items: center; gap: 6px; padding: 5px 6px; margin-bottom: 2px;
-  border-radius: 6px; cursor: pointer; user-select: none; font-size: 13px; font-weight: 600;
+  border-radius: var(--radius-md); cursor: pointer; user-select: none; font-size: var(--font-size-mid); font-weight: 600;
   color: var(--text-secondary); transition: background var(--transition-fast) var(--ease-custom),
     color var(--transition-fast) var(--ease-custom);
 }
 .wb-task-group__head:hover { background: var(--bg-container-hover); color: var(--text-primary); }
 .wb-task-group__head.is-current { color: var(--color-primary); font-weight: 600; }
-.wb-task-group__caret { font-size: 12px; flex-shrink: 0; transition: transform 0.15s; }
-.wb-task-group__icon { font-size: 14px; flex-shrink: 0; opacity: 0.7; }
+.wb-task-group__caret { font-size: var(--font-size-sm); flex-shrink: 0; transition: transform var(--transition-fast); }
+.wb-task-group__icon { font-size: var(--font-size-base); flex-shrink: 0; opacity: 0.7; }
 .wb-task-group__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wb-task-group__count { min-width: 14px; height: 14px; padding: 0 4px; font-size: 9px; background: var(--bg-subtle); }
+.wb-task-group__count { min-width: 14px; height: 14px; padding: 0 4px; font-size: var(--font-size-xs); background: var(--bg-subtle); }
 </style>

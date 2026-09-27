@@ -146,7 +146,7 @@ const emit = defineEmits<{
   top: 8px;
   right: 10px;
   z-index: 12;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1;
   padding: 4px 6px;
   border-radius: 999px;
@@ -157,9 +157,9 @@ const emit = defineEmits<{
 }
 
 .flow-node-status.status-running {
-  border-color: rgba(64, 158, 255, 0.45);
+  border-color: var(--tint-primary-45);
   color: var(--color-primary);
-  background: rgba(64, 158, 255, 0.08);
+  background: var(--tint-primary-08);
 }
 
 .flow-node-status.status-success {
@@ -177,15 +177,15 @@ const emit = defineEmits<{
 .node-type-condition {
   min-width: 220px;
   max-width: 320px;
-  border-color: #f59e0b;
+  border-color: var(--color-warning-light);
 
   &.is-selected {
-    border-color: #d97706;
+    border-color: var(--action-amber);
     box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2), var(--shadow-lg);
   }
 
   .flow-node-handle {
-    background: #f59e0b !important;
+    background: var(--color-warning-light) !important;
   }
 }
 
@@ -196,7 +196,7 @@ const emit = defineEmits<{
   margin-bottom: 0;
 
   .flow-node-icon {
-    font-size: 18px;
+    font-size: var(--font-size-md);
     line-height: 1;
   }
 
@@ -209,7 +209,7 @@ const emit = defineEmits<{
 }
 
 .node-body {
-  font-size: 13px;
+  font-size: var(--font-size-mid);
   color: var(--text-primary);
   margin-top: var(--spacing-base);
 }
@@ -239,7 +239,7 @@ const emit = defineEmits<{
 .node-type-command {
   min-width: 220px;
   max-width: 320px;
-  border-color: #06b6d4;
+  border-color: var(--action-teal);
 
   &.is-selected {
     border-color: #0891b2;
@@ -247,7 +247,7 @@ const emit = defineEmits<{
   }
 
   .flow-node-handle {
-    background: #06b6d4 !important;
+    background: var(--action-teal) !important;
   }
 }
 
@@ -357,7 +357,7 @@ const emit = defineEmits<{
   z-index: 20;
   opacity: 0;
   pointer-events: none;
-  font-size: 18px;
+  font-size: var(--font-size-md);
 }
 
 .flow-node-wrapper:hover .flow-node-delete-btn,

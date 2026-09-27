@@ -634,7 +634,7 @@ watch(visible, (v) => {
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-panel);
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
@@ -686,7 +686,7 @@ watch(visible, (v) => {
      水平 padding 用负 margin 抵消,让文字与区块标题左对齐、hover 底色略外扩。 */
   padding: var(--spacing-base) var(--spacing-sm);
   margin: 0 calc(-1 * var(--spacing-sm));
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast) ease;
 
   & + & {
     border-top: 1px solid var(--border-color);

@@ -238,7 +238,7 @@ defineExpose({ openConfigEditor })
     </CommonDialog>
 
     <!-- 配置文件格式警告弹窗 -->
-    <el-dialog
+    <CommonDialog
       v-model="configWarningVisible"
       :title="$t('@76872:配置文件格式提示')"
       width="500px"
@@ -259,7 +259,7 @@ defineExpose({ openConfigEditor })
           <el-button type="primary" @click="handleConfigWarningAction('continue')">{{ $t('@76872:继续编辑') }}</el-button>
         </span>
       </template>
-    </el-dialog>
+    </CommonDialog>
   </div>
 </template>
 
@@ -274,9 +274,9 @@ defineExpose({ openConfigEditor })
   justify-content: space-between;
   align-items: center;
   padding: var(--spacing-md);
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  background: linear-gradient(135deg, var(--action-sky-softer) 0%, var(--action-sky-soft) 100%);
   border-radius: var(--radius-lg);
-  border: 1px solid #bae6fd;
+  border: 1px solid var(--action-sky-border);
 }
 
 .editor-info {
@@ -286,14 +286,14 @@ defineExpose({ openConfigEditor })
 }
 
 .info-icon {
-  color: #0ea5e9;
+  color: var(--action-sky);
   font-size: var(--font-size-lg);
 }
 
 .info-text {
   
   font-weight: 500;
-  color: #0c4a6e;
+  color: var(--action-sky-deep);
 }
 
 // JSON编辑器
@@ -302,10 +302,10 @@ defineExpose({ openConfigEditor })
   border-radius: var(--radius-lg);
   overflow: hidden;
   border: 2px solid var(--color-gray-200);
-  transition: border-color 0.3s ease;
+  transition: border-color var(--transition-slow) ease;
 
   &:focus-within {
-    border-color: #3b82f6;
+    border-color: var(--color-primary);
   }
 }
 
@@ -348,7 +348,7 @@ defineExpose({ openConfigEditor })
   
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   border: 1px solid transparent;
 
   &:disabled {
@@ -367,9 +367,9 @@ defineExpose({ openConfigEditor })
   }
 
   &.system-config-btn {
-    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-    color: #92400e;
-    border-color: #fbbf24;
+    background: linear-gradient(135deg, var(--action-amber-soft) 0%, #fde68a 100%);
+    color: var(--action-amber-darker);
+    border-color: var(--action-amber-bright);
 
     &:hover {
       background: linear-gradient(135deg, #fde68a 0%, #fcd34d 100%);
@@ -378,11 +378,11 @@ defineExpose({ openConfigEditor })
 }
 
 .dialog-confirm-btn {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
   color: white;
 
   &:hover:not(:disabled) {
-    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    background: linear-gradient(135deg, var(--color-primary-dark) 0%, #1d4ed8 100%);
     transform: scale(1.02);
     box-shadow: var(--shadow-md);
   }

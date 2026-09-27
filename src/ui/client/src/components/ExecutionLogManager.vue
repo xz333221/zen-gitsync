@@ -424,7 +424,7 @@ onMounted(() => {
   min-width: 0;
 }
 .exec-logs__stats {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
@@ -444,7 +444,7 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 .exec-logs__config-label {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -454,7 +454,7 @@ onMounted(() => {
   gap: 8px;
 }
 .exec-logs__config-name {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
 }
 .exec-logs__filter {
@@ -465,7 +465,7 @@ onMounted(() => {
 }
 .exec-logs__filter-spacer { flex: 1; }
 .exec-logs__batch-meta {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
@@ -502,13 +502,13 @@ onMounted(() => {
   opacity: 0.5;
 }
 .exec-logs__empty-title {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 600;
   color: var(--text-secondary);
   margin-bottom: 4px;
 }
 .exec-logs__empty-hint {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   max-width: 400px;
 }
 .exec-logs__pager {
@@ -526,7 +526,7 @@ onMounted(() => {
   background: var(--bg-container);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md, 6px);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 .exec-card:hover {
   border-color: var(--color-primary);
@@ -544,14 +544,14 @@ onMounted(() => {
 .exec-card__status {
   display: inline-block;
   padding: 1px 8px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   border: 1px solid currentColor;
   border-radius: 999px;
   flex-shrink: 0;
 }
 .exec-card__title {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
@@ -565,7 +565,7 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   flex-wrap: wrap;
   flex-shrink: 0;
@@ -579,28 +579,28 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: var(--font-size-md);
   line-height: 1;
   color: var(--text-tertiary);
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.15s, color 0.15s;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 .exec-card__del:hover {
   background: var(--tint-danger-14);
-  color: var(--color-danger-bright, #ef4444);
+  color: var(--color-danger-bright, var(--color-danger-light));
 }
 .exec-card__error {
   margin: 0;
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--color-danger-dark, #b91c1c);
   background: var(--tint-danger-06);
-  border-left: 2px solid var(--color-danger-bright, #ef4444);
-  border-radius: 3px;
+  border-left: 2px solid var(--color-danger-bright, var(--color-danger-light));
+  border-radius: var(--radius-base);
   font-family: var(--font-mono, ui-monospace, monospace);
   white-space: pre-wrap;
   word-break: break-word;

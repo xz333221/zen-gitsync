@@ -84,7 +84,7 @@ async function resetToRemote() {
     icon-class="git-reset"
     :tooltip="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : $t('@76872:重置到远程')"
     size="medium"
-    hover-color="#f56c6c"
+    hover-color="var(--color-danger)"
     :disabled="!gitStore.hasUpstream || gitStore.hasConflictedFiles || gitStore.isResetting"
     @click="resetToRemote"
   />

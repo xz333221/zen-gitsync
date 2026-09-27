@@ -83,8 +83,8 @@ const commandInfo = computed(() => {
     align-items: center;
     gap: 2px;
     padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 11px;
+    border-radius: var(--radius-xl);
+    font-size: var(--font-size-xs);
     font-weight: 500;
     
     &.terminal {
@@ -92,24 +92,24 @@ const commandInfo = computed(() => {
       color: white;
       
       .el-icon {
-        font-size: 12px;
+        font-size: var(--font-size-sm);
       }
     }
   }
   
   .node-warning {
     color: var(--color-error);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     margin-top: 4px;
   }
   
   .command-details {
     margin-top: 8px;
-    font-size: 11px;
+    font-size: var(--font-size-xs);
     
     .command-code {
       background: rgba(0, 0, 0, 0.05);
-      border-radius: 4px;
+      border-radius: var(--radius-base);
       padding: 4px 6px;
       margin-bottom: 4px;
       max-width: 100%;
@@ -117,7 +117,7 @@ const commandInfo = computed(() => {
       
       code {
         font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-        font-size: 10px;
+        font-size: var(--font-size-xs);
         color: var(--text-secondary);
         word-break: break-all;
         white-space: pre-wrap;
@@ -137,12 +137,12 @@ const commandInfo = computed(() => {
       color: var(--text-tertiary);
       
       .el-icon {
-        font-size: 12px;
+        font-size: var(--font-size-sm);
         flex-shrink: 0;
       }
       
       span {
-        font-size: 10px;
+        font-size: var(--font-size-xs);
         word-break: break-all;
         overflow: hidden;
         text-overflow: ellipsis;

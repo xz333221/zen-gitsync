@@ -109,7 +109,7 @@ const versionInfo = computed(() => {
     align-items: center;
     padding: 2px 10px;
     border-radius: 999px;
-    font-size: 11px;
+    font-size: var(--font-size-xs);
     font-weight: 500;
     background: rgba(104, 189, 255, 0.15);
     color: var(--color-info);
@@ -135,13 +135,13 @@ const versionInfo = computed(() => {
   }
 
   .info-label {
-    font-size: 11px;
+    font-size: var(--font-size-xs);
     color: var(--text-secondary);
     line-height: 1.2;
   }
 
   .info-value {
-    font-size: 11px;
+    font-size: var(--font-size-xs);
     color: var(--text-title);
     line-height: 1.2;
     white-space: nowrap;
@@ -151,7 +151,7 @@ const versionInfo = computed(() => {
   
   .node-warning {
     color: var(--color-error);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     margin-top: 4px;
   }
 }

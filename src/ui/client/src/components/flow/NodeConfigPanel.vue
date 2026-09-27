@@ -1692,7 +1692,7 @@ function saveConfig() {
   
   &.selected {
     border-color: var(--color-primary);
-    background: rgba(64, 158, 255, 0.12);
+    background: var(--tint-primary-12);
     
     .command-name {
       color: var(--color-primary);
@@ -1741,7 +1741,7 @@ function saveConfig() {
       
       .el-icon {
         color: var(--color-warning);
-        font-size: 14px;
+        font-size: var(--font-size-base);
       }
       
       span {
@@ -1752,7 +1752,7 @@ function saveConfig() {
   
   .check-icon {
     color: var(--color-primary);
-    font-size: 22px;
+    font-size: var(--font-size-2xl);
     flex-shrink: 0;
   }
 }
@@ -1810,8 +1810,8 @@ function saveConfig() {
   height: 20px;
   padding: 0 8px;
   border-radius: 999px;
-  font-size: 12px;
-  color: #fbbf24;
+  font-size: var(--font-size-sm);
+  color: var(--action-amber-bright);
   background: rgba(245, 158, 11, 0.12);
   border: 1px solid rgba(245, 158, 11, 0.25);
   flex-shrink: 0;
@@ -1906,17 +1906,17 @@ function saveConfig() {
 }
 
 .field-label {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   margin-bottom: 6px;
 }
 
 .branch-default-tip {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   padding: var(--spacing-sm);
   border-radius: var(--radius-md);
-  background: rgba(64, 158, 255, 0.08);
+  background: var(--tint-primary-08);
   border: 1px solid rgba(64, 158, 255, 0.18);
 }
 
@@ -1940,9 +1940,9 @@ function saveConfig() {
   gap: var(--spacing-base);
   padding: var(--spacing-md);
   margin-top: var(--spacing-base);
-  background: rgba(64, 158, 255, 0.08);
+  background: var(--tint-primary-08);
   border-radius: var(--radius-md);
-  border: 1px solid rgba(64, 158, 255, 0.2);
+  border: 1px solid var(--tint-primary-18);
   font-size: var(--font-size-sm);
   color: var(--color-primary);
   
@@ -1963,7 +1963,7 @@ function saveConfig() {
   }
   
   .node-id {
-    font-size: 11px;
+    font-size: var(--font-size-xs);
     color: var(--text-tertiary);
     font-family: var(--font-mono);
   }

@@ -550,7 +550,7 @@ function handleClose() {
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   background: var(--bg-container);
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
 
   &:hover {
     border-color: var(--color-primary);
@@ -608,7 +608,7 @@ function handleClose() {
   flex-shrink: 0;
   opacity: 0;
   overflow: hidden;
-  transition: opacity 0.3s ease;
+  transition: opacity var(--transition-slow) ease;
 }
 
 .script-item-actions .el-button {
@@ -643,7 +643,7 @@ function handleClose() {
 .script-items::-webkit-scrollbar-thumb {
   background: var(--border-card);
   border-radius: var(--radius-base);
-  transition: background 0.2s ease;
+  transition: background var(--transition-base) ease;
 }
 
 .script-items::-webkit-scrollbar-thumb:hover {

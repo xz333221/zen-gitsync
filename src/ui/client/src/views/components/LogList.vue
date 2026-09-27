@@ -1649,7 +1649,7 @@ function toggleFullscreen() {
 }
 
 :deep(.el-table__row) {
-  transition: all 0.2s ease;
+  transition: all var(--transition-base) ease;
   cursor: pointer;
 }
 
@@ -1668,8 +1668,8 @@ function toggleFullscreen() {
 
 .branch-tag {
   margin-right: 0;
-  border-radius: var(--radius-sm);
-  transition: all 0.2s ease;
+  border-radius: var(--radius-base);
+  transition: all var(--transition-base) ease;
   font-size: var(--font-size-xs);
   padding: 0 var(--spacing-sm);
   height: 14px;
@@ -1721,15 +1721,15 @@ function toggleFullscreen() {
   color: var(--commit-hash-fg);
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-weight: 500;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   padding: 2px 5px;
   background-color: var(--commit-hash-bg);
-  transition: all 0.2s ease;
+  transition: all var(--transition-base) ease;
   /* 按钮重置:保持 span 视觉 */
   border: none;
   font-size: inherit;
   line-height: inherit;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   letter-spacing: 0.2px;
   user-select: none;
   display: inline-block;
@@ -1860,12 +1860,12 @@ function toggleFullscreen() {
   gap: 4px;
   background: transparent;
   border: 1px solid var(--border-card);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   padding: 2px 8px;
   font-size: var(--font-size-xs);
   color: var(--color-primary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base);
 }
 
 .info-message-toggle:hover {
@@ -1874,7 +1874,7 @@ function toggleFullscreen() {
 }
 
 .info-message-toggle-icon {
-  transition: transform 0.2s;
+  transition: transform var(--transition-base);
   display: inline-block;
 }
 
@@ -1926,7 +1926,7 @@ function toggleFullscreen() {
   margin-bottom: var(--spacing-base);
   border-radius: var(--radius-lg);
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   width: 100%;
   position: sticky;
   top: 36px; /* 紧贴log-header下方 */
@@ -1993,7 +1993,7 @@ function toggleFullscreen() {
 .filter-action-button {
   padding: var(--spacing-xs) var(--spacing-md);
   border-radius: var(--radius-md);
-  transition: all 0.3s;
+  transition: all var(--transition-slow);
   min-width: 60px;
   font-weight: 500;
 }
@@ -2063,7 +2063,7 @@ function toggleFullscreen() {
 
 .copy-message-btn {
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-base) ease;
   padding: var(--spacing-sm);
   min-width: auto;
   height: auto;
@@ -2080,7 +2080,7 @@ function toggleFullscreen() {
 .copy-hash-btn {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
-  transition: color 0.2s;
+  transition: color var(--transition-base);
 }
 
 .copy-hash-btn:hover {
@@ -2117,7 +2117,7 @@ function toggleFullscreen() {
   padding: 6px 0;
   z-index: 3000;
   min-width: 200px;
-  animation: fadeIn 0.15s ease-out;
+  animation: fadeIn var(--transition-fast) ease-out;
 }
 
 @keyframes fadeIn {
@@ -2135,7 +2135,7 @@ function toggleFullscreen() {
   padding: 10px var(--spacing-lg);
   cursor: pointer;
   list-style: none; /* 改用 ul/li 后去掉列表 marker */
-  transition: background-color 0.12s;
+  transition: background-color var(--transition-fast);
 }
 
 .context-menu-item:focus-visible {
@@ -2147,7 +2147,7 @@ function toggleFullscreen() {
 .context-menu-item {
   display: flex;
   align-items: center;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base) ease;
   color: var(--text-secondary);
 }
 
@@ -2222,7 +2222,7 @@ function toggleFullscreen() {
   padding: 6px 0;
   z-index: 3000;
   min-width: 200px;
-  animation: fadeIn 0.15s ease-out;
+  animation: fadeIn var(--transition-fast) ease-out;
 }
 
 /* 全屏模式下的右键菜单需要更高的z-index */

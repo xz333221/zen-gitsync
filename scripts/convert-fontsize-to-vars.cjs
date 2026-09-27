@@ -30,29 +30,47 @@ const path = require('path');
 const args = process.argv.slice(2);
 const isDryRun = args.includes('--dry-run');
 
-// 字体大小映射表（基于 variables.scss）
+// 字体大小映射表（基于 variables.scss 的 7 档标准刻度：11/12/13/14/16/20/24）
 const FONT_SIZE_MAP = {
+  // 9 ~ 11 → xs(11)
+  '9px': 'var(--font-size-xs)',
   '10px': 'var(--font-size-xs)',
+  '10.5px': 'var(--font-size-xs)',
+  '11px': 'var(--font-size-xs)',
+  // 11.5 ~ 12 → sm(12)
+  '11.5px': 'var(--font-size-sm)',
   '12px': 'var(--font-size-sm)',
-  '13px': 'var(--font-size-sm)', // 13px 映射到 sm (12px)
+  // 12.5 ~ 13 → mid(13)
+  '12.5px': 'var(--font-size-mid)',
+  '13px': 'var(--font-size-mid)',
+  // 13.5 ~ 15 → base(14)
+  '13.5px': 'var(--font-size-base)',
   '14px': 'var(--font-size-base)',
-  '15px': 'var(--font-size-base)', // 15px 映射到 base (14px)
+  '15px': 'var(--font-size-base)',
+  // 16 ~ 18 → md(16)
   '16px': 'var(--font-size-md)',
-  '18px': 'var(--font-size-lg)',
+  '17px': 'var(--font-size-md)',
+  '18px': 'var(--font-size-md)',
+  // 19 ~ 20 → xl(20)
+  '19px': 'var(--font-size-xl)',
   '20px': 'var(--font-size-xl)',
+  // 21 ~ 24 → 2xl(24)
   '22px': 'var(--font-size-2xl)',
-  '24px': 'var(--font-size-3xl)',
-  
+  '24px': 'var(--font-size-2xl)',
+
   // rem 单位映射
   '0.625rem': 'var(--font-size-xs)',    // 10px
   '0.75rem': 'var(--font-size-sm)',     // 12px
   '0.875rem': 'var(--font-size-base)',  // 14px
   '1rem': 'var(--font-size-md)',        // 16px
-  '1.125rem': 'var(--font-size-lg)',    // 18px
+  '1.125rem': 'var(--font-size-md)',    // 18px
   '1.25rem': 'var(--font-size-xl)',     // 20px
   '1.375rem': 'var(--font-size-2xl)',   // 22px
-  '1.5rem': 'var(--font-size-3xl)',     // 24px
+  '1.5rem': 'var(--font-size-2xl)',     // 24px
 };
+
+// 需要跳过的目录（public 是构建产物目录，不能改）
+const SKIP_DIRS = ['node_modules', '.git', 'dist', 'public'];
 
 // 需要处理的文件扩展名
 const TARGET_EXTENSIONS = ['.vue', '.scss', '.css'];
@@ -82,7 +100,7 @@ function scanDirectory(dir, fileList = []) {
     const stat = fs.statSync(filePath);
     
     if (stat.isDirectory()) {
-      if (file !== 'node_modules' && file !== '.git' && file !== 'dist') {
+      if (!SKIP_DIRS.includes(file)) {
         scanDirectory(filePath, fileList);
       }
     } else {
@@ -103,9 +121,9 @@ function processFileContent(content, filePath) {
   let modified = false;
   let newContent = content;
   
-  // 匹配 font-size 属性
+  // 匹配 font-size 属性（前置断言排除引号包裹的 JS 字符串键值，避免改坏 canvas 类库配置）
   // 支持 px 和 rem 单位
-  const fontSizeRegex = /(\bfont-size\s*:\s*)(\d+(?:\.\d+)?(?:px|rem))\b/g;
+  const fontSizeRegex = /(?<!['"\w-])(\bfont-size\s*:\s*)(\d+(?:\.\d+)?(?:px|rem))\b/g;
   
   newContent = newContent.replace(fontSizeRegex, (match, prefix, value) => {
     const mappedVar = FONT_SIZE_MAP[value];

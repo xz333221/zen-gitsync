@@ -174,13 +174,13 @@ async function handleClick() {
   }
 
   &.from-form {
-    font-size: 13px;
+    font-size: var(--font-size-mid);
     height: 32px;
   }
 
   // 选择模式下有可暂存勾选文件时，凸显"将只暂存勾选项"
   &.is-selective {
-    box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.35);
+    box-shadow: 0 0 0 2px var(--tint-primary-35);
   }
 }
 </style>

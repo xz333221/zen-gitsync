@@ -18,9 +18,9 @@
 import { test, expect } from '@playwright/test'
 
 const VIEW_BUTTONS = [
-  // Git 视图的 pane class 是 "view-pane grid-layout"(App.vue:679),不带 git-pane
-  // —— 其他 6 个 pane 都带 -pane 后缀
-  { label: 'Git',        pane: '.view-pane.grid-layout' },
+  // Git 视图根节点的 class 是 "view-pane git-pane"(网格布局已下移到 .git-pane__body
+  // 里的 .grid-layout,不再挂在 pane 根上);其他 6 个 pane 同构,都带 -pane 后缀
+  { label: 'Git',        pane: '.view-pane.git-pane' },
   { label: '控制台',     pane: '.console-pane' },
   { label: '文件空间',   pane: '.editor-pane' },
   // 源码地图:入口已由 ActivityBar 的 SHOW_SOURCE_MAP 关闭,恢复时把下面这行加回来
@@ -51,8 +51,8 @@ test.describe('App smoke', () => {
   })
 
   test('4. default view is git-pane, Git button is active', async ({ page }) => {
-    // .view-pane.grid-layout 是 git 视图的根(App.vue:679)
-    await expect(page.locator('.view-pane.grid-layout').first()).toBeVisible()
+    // .view-pane.git-pane 是 git 视图的根节点
+    await expect(page.locator('.view-pane.git-pane').first()).toBeVisible()
     // aria-label 前缀匹配:ActivityBar 按钮可能带状态后缀(如 "Git · 3 个未提交文件")
     const gitBtn = page.locator('.activity-bar button[aria-label^="Git"]').first()
     await expect(gitBtn).toHaveClass(/active/)

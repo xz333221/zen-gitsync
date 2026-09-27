@@ -108,7 +108,7 @@ async function discardSelectedChanges() {
         ? $t('@76872:清除所选 {count} 个文件', { count: selectedCount })
         : $t('@76872:清除所有本地更改')"
       :size="props.size"
-      hover-color="#f56c6c"
+      hover-color="var(--color-danger)"
       :disabled="gitStore.isResetting"
       @click="isSelectiveMode ? discardSelectedChanges() : discardAllChanges()"
     >

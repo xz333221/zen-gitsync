@@ -260,7 +260,7 @@ async function handleDropdownCommand(command: string) {
   }
   
   &.from-form {
-    font-size: 13px;
+    font-size: var(--font-size-mid);
     height: 32px;
   }
 }
@@ -279,7 +279,7 @@ async function handleDropdownCommand(command: string) {
   }
 
   :deep(.el-icon) {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
   }
 }
 </style>

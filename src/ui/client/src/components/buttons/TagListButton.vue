@@ -428,7 +428,7 @@ function formatDate(dateString: string): string {
 /* 标签列表弹窗样式 */
 :deep(.tag-list-dialog) {
   .common-dialog__header {
-    background: #22c55e;
+    background: var(--action-green);
     color: white;
     padding: var(--spacing-xl) var(--spacing-2xl);
     border-radius: 8px 8px 0 0;
@@ -458,7 +458,7 @@ function formatDate(dateString: string): string {
   align-items: center;
   margin-bottom: var(--spacing-base);
   padding: var(--spacing-base);
-  background: linear-gradient(135deg, var(--color-white) 0%, #f8f9fa 100%);
+  background: linear-gradient(135deg, var(--color-white) 0%, var(--color-gray-soft) 100%);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-component);
   box-shadow: var(--shadow-md);
@@ -475,7 +475,7 @@ function formatDate(dateString: string): string {
   align-items: center;
   gap: var(--spacing-base);
   padding: var(--spacing-xs) var(--spacing-base);
-  background: #22c55e;
+  background: var(--action-green);
   border-radius: var(--radius-lg);
   color: white;
 }
@@ -504,7 +504,7 @@ function formatDate(dateString: string): string {
   border-radius: var(--radius-lg);
   padding: var(--spacing-xs) var(--spacing-base);
   font-weight: 500;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   
   &:hover {
     transform: scale(1.02);
@@ -539,12 +539,12 @@ function formatDate(dateString: string): string {
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-component);
   box-shadow: var(--shadow-md);
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   overflow: hidden;
   
   &:hover {
     transform: scale(1.02);
-    border-color: #22c55e;
+    border-color: var(--action-green);
   }
   
   &:active {
@@ -552,7 +552,7 @@ function formatDate(dateString: string): string {
   }
   
   &:focus-visible {
-    outline: 2px solid #22c55e;
+    outline: 2px solid var(--action-green);
     outline-offset: 2px;
   }
 }
@@ -587,7 +587,7 @@ function formatDate(dateString: string): string {
 
 .badge-icon {
   
-  color: #22c55e;
+  color: var(--action-green);
 }
 
 .tag-name-text {
@@ -630,7 +630,7 @@ function formatDate(dateString: string): string {
   padding: 6px var(--spacing-base);
   background: var(--bg-panel);
   border-radius: var(--radius-md);
-  border-left: 3px solid #22c55e;
+  border-left: 3px solid var(--action-green);
 }
 
 /* 标签列表右侧按钮：默认隐藏，hover时显示 */
@@ -648,7 +648,7 @@ function formatDate(dateString: string): string {
 .action-btn {
   border-radius: var(--radius-md);
   font-weight: 500;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) ease;
   min-width: 60px;
   padding: 6px var(--spacing-md);
   font-size: var(--font-size-sm);
@@ -662,7 +662,7 @@ function formatDate(dateString: string): string {
   }
   
   &:focus-visible {
-    outline: 2px solid #22c55e;
+    outline: 2px solid var(--action-green);
     outline-offset: 2px;
   }
 }
