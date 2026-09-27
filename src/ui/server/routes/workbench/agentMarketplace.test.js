@@ -91,6 +91,38 @@ test('catalog: 只查内置来源时完全离线,并保留按来源分组的形�
   }
 });
 
+test('catalog: 内置来源也按关键词过滤(skill / MCP 都不例外)', async () => {
+  const { call } = harness();
+
+  const all = await call('GET /api/agent/marketplace/catalog', {
+    query: { type: 'skill', sources: 'builtin', cwd: sandboxProject },
+  });
+  const unfiltered = all.payload.groups[0].items.length;
+
+  const { payload } = await call('GET /api/agent/marketplace/catalog', {
+    query: { type: 'skill', sources: 'builtin', cwd: sandboxProject, q: 'pdf' },
+  });
+  const [group] = payload.groups;
+  assert.equal(group.status, 'ok');
+  assert.ok(group.items.length > 0, 'pdf 是内置条目,不该被过滤掉');
+  assert.ok(group.items.length < unfiltered, '关键词必须真的收窄结果');
+  assert.equal(group.items.some(item => item.name === 'docx'), false, '关键词 pdf 不该命中 docx');
+  for (const item of group.items) {
+    assert.match(`${item.name} ${item.description}`, /pdf/i, `${item.name} 与关键词无关`);
+  }
+
+  const { payload: mcp } = await call('GET /api/agent/marketplace/catalog', {
+    query: { type: 'mcp', sources: 'builtin', cwd: sandboxProject, q: 'memory' },
+  });
+  assert.deepEqual(mcp.groups[0].items.map(item => item.name), ['Memory']);
+
+  // 清空关键词必须回到全量,否则用户删掉搜索词后会看到一片空
+  const { payload: cleared } = await call('GET /api/agent/marketplace/catalog', {
+    query: { type: 'mcp', sources: 'builtin', cwd: sandboxProject, q: '' },
+  });
+  assert.ok(cleared.groups[0].items.length > 1, '空关键词应返回全部内置 MCP');
+});
+
 test('catalog: 未指定来源时返回全部来源,每个来源是独立的一组', async () => {
   const { call } = harness();
   const { payload } = await call('GET /api/agent/marketplace/catalog', {

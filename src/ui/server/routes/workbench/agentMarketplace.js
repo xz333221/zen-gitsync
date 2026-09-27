@@ -225,6 +225,15 @@ function isSafeSubpath(value) {
   return SAFE_SUBPATH.test(String(value || ''));
 }
 
+// 本地关键词匹配:与 awesomeSkills 同一套语义(小写子串)。
+// 静态来源(builtin / Anthropic 官方仓库)也必须过这一关 ——
+// 它们不走目录站的 query 参数,漏掉过滤就等于搜索框对这两组完全失效。
+function matchesQuery(query, ...fields) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return true;
+  return fields.join(' ').toLowerCase().includes(q);
+}
+
 function resolveProjectPath(value, fallback) {
   const raw = String(value || fallback || '').trim();
   if (!raw) throw new HttpError(400, '项目路径不能为空');
@@ -292,15 +301,17 @@ async function cached(key, loader) {
 // ── provider: Skill ───────────────────────────────────────────
 
 // builtin:纯静态,不联网
-function builtinSkills() {
-  return BUILTIN_SKILLS.map(item => ({ ...item, type: 'skill' }));
+function builtinSkills(query) {
+  return BUILTIN_SKILLS
+    .filter(item => matchesQuery(query, item.name, item.description, ...(item.tags || [])))
+    .map(item => ({ ...item, type: 'skill' }));
 }
 
 // Anthropic 官方仓库:用 GitHub contents API 列出 skills/ 下的目录。
 // 这是所有 skill 的"源头",目录结构稳定(path = skills/<name>)。
 // contents API 不返回描述,所以用内置表里的描述补上(两边都以目录名为键),
 // 补不到的条目在前端只显示名字,不会假装有描述。
-async function officialSkills() {
+async function officialSkills(query) {
   const data = await fetchJson('https://api.github.com/repos/anthropics/skills/contents/skills', { headers: githubHeaders() });
   if (!Array.isArray(data)) throw new Error('GitHub 返回结构异常');
   const described = new Map(ANTHROPIC_SKILLS);
@@ -315,7 +326,8 @@ async function officialSkills() {
       subpath: `skills/${entry.name}`,
       upstream: entry.html_url,
       tags: ['official'],
-    }));
+    }))
+    .filter(item => matchesQuery(query, item.name, item.description));
 }
 
 // SkillsMP:第三方 skill 目录站,给的是 owner/repo + 仓库内路径,可直接安装。
@@ -467,8 +479,10 @@ function normalizeNpmSearch(data, type) {
 
 // ── provider: MCP ─────────────────────────────────────────────
 
-function builtinMcps() {
-  return BUILTIN_MCPS.map(item => ({ ...item, type: 'mcp', command: 'npx' }));
+function builtinMcps(query) {
+  return BUILTIN_MCPS
+    .filter(item => matchesQuery(query, item.name, item.description, item.package, ...(item.tags || [])))
+    .map(item => ({ ...item, type: 'mcp', command: 'npx' }));
 }
 
 // MCP 官方注册表:canonical 数据源,直接给出 npm identifier 与所需环境变量,
@@ -562,15 +576,15 @@ async function npmMcps(query) {
 
 const PROVIDERS = {
   skill: {
-    builtin: () => builtinSkills(),
-    official: () => officialSkills(),
+    builtin: ({ query }) => builtinSkills(query),
+    official: ({ query }) => officialSkills(query),
     skillsmp: ({ query }) => skillsmpSkills(query),
     awesome: ({ query }) => awesomeSkills(query),
     github: ({ query }) => (query ? githubSkills(query) : Promise.resolve([])),
     npm: ({ query }) => npmSkills(query),
   },
   mcp: {
-    builtin: () => builtinMcps(),
+    builtin: ({ query }) => builtinMcps(query),
     registry: ({ query }) => registryMcps(query),
     smithery: ({ query }) => smitheryMcps(query),
     npm: ({ query }) => npmMcps(query),
