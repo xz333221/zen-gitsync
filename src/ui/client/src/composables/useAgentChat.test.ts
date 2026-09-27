@@ -272,6 +272,24 @@ describe('useAgentChat parallel sessions', () => {
     chatStreams[0].close()
     await sendPromise
   })
+
+  // 文件空间对话：把"当前打开的文档"随请求带给服务端（服务端只在请求副本里注入上下文）
+  test('sendMessage 的 openFilePath 选项会进请求体', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const sendPromise = chat.sendMessage('这个文件是干嘛的', [], { openFilePath: 'src/ui/client/src/App.vue' })
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    chatStreams[0].send({ type: 'done', content: '好' })
+    chatStreams[0].close()
+    await sendPromise
+
+    const call = vi.mocked(globalThis.fetch).mock.calls.find(([url]) => url === '/api/agent/chat')
+    expect(call).toBeTruthy()
+    expect(JSON.parse(String((call![1] as RequestInit).body)).openFilePath).toBe('src/ui/client/src/App.vue')
+  })
 })
 
 // 历史回放：一次 AI 回合（工具循环多轮）在服务端是多条 assistant + tool 记录，

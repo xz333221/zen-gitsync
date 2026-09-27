@@ -482,7 +482,7 @@ export function useAgentChat() {
   }
 
   // ── 发送消息（SSE 流式，按会话隔离，可后台并行） ────────
-  async function sendMessage(text: string, files: SelectedFile[] = []) {
+  async function sendMessage(text: string, files: SelectedFile[] = [], options: { openFilePath?: string } = {}) {
     // 组件库允许选任意文件，但多模态消息只支持图片；非图片提示后忽略
     const imageFiles = files.filter(f => f?.file?.type?.startsWith('image/'))
     if (imageFiles.length < files.length) {
@@ -564,7 +564,9 @@ export function useAgentChat() {
           userMessage: text,
           // 新建会话时服务端用它确定项目归属(已有会话沿用其落盘 cwd)
           cwd: configStore.currentDirectory || '',
-          ...(images.length > 0 ? { images } : {})
+          ...(images.length > 0 ? { images } : {}),
+          // 文件空间对话：把"当前打开的文档"带给服务端（请求级注入上下文，不落会话历史）
+          ...(options.openFilePath ? { openFilePath: options.openFilePath } : {})
         }),
         signal: myController.signal
       })

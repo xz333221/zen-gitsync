@@ -24,12 +24,13 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import { $t } from '@/lang/static'
-import { ElMessageBox, ElTooltip, ElIcon } from 'element-plus'
-import { Plus, Search, Delete, Edit, ChatLineRound, Loading, ChatDotRound, Goods, Connection } from '@element-plus/icons-vue'
-import { ChatContainer } from 'zen-ai-chat-ui'
+import { ElIcon } from 'element-plus'
+import { Loading, ChatDotRound, Goods, Connection } from '@element-plus/icons-vue'
+import { ChatContainer, ConversationList } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { useConfigStore } from '@/stores/configStore'
 import { useAgentChat } from '@/composables/useAgentChat'
+import { buildConversationItems, agentConversationLabels, agentQuestionLabels, AGENT_ASSISTANT_NAME } from '@/utils/agentConversations'
 import MarketplacePanel from '@/components/MarketplacePanel.vue'
 
 const configStore = useConfigStore()
@@ -76,16 +77,9 @@ const chatTheme = computed<'light' | 'dark'>(() => {
   return 'light'
 })
 
-// ── 搜索 ──────────────────────────────────────────────────
-const searchQuery = ref('')
-const filteredSessions = computed(() => {
-  if (!searchQuery.value.trim()) return sessions.value
-  const q = searchQuery.value.toLowerCase()
-  return sessions.value.filter(s =>
-    (s.title || '').toLowerCase().includes(q) ||
-    (s.model || '').toLowerCase().includes(q)
-  )
-})
+// ── 会话列表数据（喂给组件库的 ConversationList，映射逻辑与文件空间面板共用） ──
+const conversationItems = computed(() => buildConversationItems(sessions.value, isSessionGenerating))
+const conversationLabels = agentConversationLabels()
 
 // ── 预设问题 ──────────────────────────────────────────────
 const presetQuestions = computed(() => [
@@ -110,12 +104,8 @@ async function onSelectPreset(q: any) {
   scrollToBottom()
 }
 
-// 提问面板文案（面板 UI 在 zen-ai-chat-ui 里，这里只负责翻译）
-const questionLabels = computed(() => ({
-  title: $t('@AGENT:等待你的回答'),
-  placeholder: $t('@AGENT:输入回答'),
-  submit: $t('@AGENT:提交回答'),
-}))
+// ── 提问面板文案（面板 UI 在 zen-ai-chat-ui 里，这里只负责翻译；与文件空间面板共用映射） ──
+const questionLabels = agentQuestionLabels()
 
 // ── ChatContainer ref ────────────────────────────────────
 const chatContainerRef = ref<InstanceType<typeof ChatContainer> | null>(null)
@@ -138,53 +128,6 @@ function selectSession(sessionId: string) {
 // ── 新建会话 ──────────────────────────────────────────────
 function handleNewSession() {
   newSession()
-}
-
-// ── 删除会话 ──────────────────────────────────────────────
-function handleDelete(sessionId: string, e: Event) {
-  e.stopPropagation()
-  deleteSession(sessionId)
-}
-
-// ── 重命名会话 ────────────────────────────────────────────
-async function handleRename(sessionId: string, currentTitle: string, e: Event) {
-  e.stopPropagation()
-  try {
-    const { value } = await ElMessageBox.prompt($t('@AGENT:请输入新的会话标题'), $t('@AGENT:重命名会话'), {
-      inputValue: currentTitle,
-      inputPattern: /.+/,
-      inputErrorMessage: $t('@AGENT:标题不能为空')
-    })
-    if (value && value !== currentTitle) {
-      await renameSession(sessionId, value)
-    }
-  } catch {
-    // 用户取消
-  }
-}
-
-// ── 格式化时间 ────────────────────────────────────────────
-function formatDate(iso: string): string {
-  if (!iso) return ''
-  try {
-    const d = new Date(iso)
-    if (Number.isNaN(d.getTime())) return iso
-    const now = new Date()
-    const diff = now.getTime() - d.getTime()
-    const pad = (n: number) => String(n).padStart(2, '0')
-    // 同一天只显示时间
-    if (d.toDateString() === now.toDateString()) {
-      return `${pad(d.getHours())}:${pad(d.getMinutes())}`
-    }
-    // 7 天内显示 "N天前"
-    if (diff < 7 * 24 * 60 * 60 * 1000) {
-      const days = Math.floor(diff / (24 * 60 * 60 * 1000))
-      return days === 0 ? $t('@AGENT:今天') : `${days}${$t('@AGENT:天前')}`
-    }
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-  } catch {
-    return iso
-  }
 }
 
 // ── 侧边栏宽度拖拽 ────────────────────────────────────────
@@ -235,72 +178,19 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
     <!-- ═══ 左侧：会话列表（只在「对话」Tab 显示）═══ -->
     <template v-if="activeTab === 'chat'">
       <aside class="agent-sidebar" :style="{ width: sidebarWidth + 'px' }">
-      <!-- 顶部操作栏 -->
-      <div class="sidebar-header">
-        <button class="new-session-btn" @click="handleNewSession">
-          <el-icon><Plus /></el-icon>
-          <span>{{ $t('@AGENT:新建会话') }}</span>
-        </button>
-      </div>
-
-      <!-- 搜索框 -->
-      <div class="sidebar-search">
-        <el-icon class="search-icon"><Search /></el-icon>
-        <input
-          v-model="searchQuery"
-          :placeholder="$t('@AGENT:搜索会话...')"
-          class="search-input"
-          type="text"
-        />
-      </div>
-
-      <!-- 会话列表 -->
-      <div class="session-list" v-loading="sessionsLoading">
-        <div v-if="filteredSessions.length === 0 && !sessionsLoading" class="empty-state">
-          <el-icon :size="28" color="var(--text-tertiary)"><ChatLineRound /></el-icon>
-          <div class="empty-text">{{ searchQuery ? $t('@AGENT:未找到匹配的会话') : $t('@AGENT:暂无会话') }}</div>
-          <div v-if="!searchQuery" class="empty-hint">{{ $t('@AGENT:点击上方按钮开始对话') }}</div>
-        </div>
-
-        <div
-          v-for="s in filteredSessions"
-          :key="s.sessionId"
-          class="session-item"
-          :class="{ active: currentSessionId === s.sessionId }"
-          @click="selectSession(s.sessionId)"
-        >
-          <div class="session-item-main">
-            <div class="session-item-title">{{ s.title || $t('@AGENT:无标题') }}</div>
-            <div class="session-item-meta">
-              <template v-if="s.isGenerating || isSessionGenerating(s.sessionId)">
-                <span class="meta-generating">
-                  <el-icon class="is-loading"><Loading /></el-icon>
-                  {{ $t('@AGENT:正在生成中...') }}
-                </span>
-              </template>
-              <template v-else>
-                <span class="meta-time">{{ formatDate(s.updatedAt) }}</span>
-                <span class="meta-dot">·</span>
-                <span class="meta-count">{{ s.messageCount }} {{ $t('@AGENT:条') }}</span>
-              </template>
-              <span v-if="s.source === 'cli'" class="meta-source cli">CLI</span>
-            </div>
-          </div>
-          <div class="session-item-actions" @click.stop>
-            <el-tooltip :content="$t('@AGENT:重命名')" placement="top" :show-after="500">
-              <button class="item-action-btn" @click="handleRename(s.sessionId, s.title, $event)">
-                <el-icon><Edit /></el-icon>
-              </button>
-            </el-tooltip>
-            <el-tooltip :content="$t('@AGENT:删除')" placement="top" :show-after="500">
-              <button class="item-action-btn danger" @click="handleDelete(s.sessionId, $event)">
-                <el-icon><Delete /></el-icon>
-              </button>
-            </el-tooltip>
-          </div>
-        </div>
-      </div>
-    </aside>
+      <!-- 会话列表：UI 与交互都在组件库的 ConversationList 里 -->
+      <ConversationList
+        class="agent-conversations"
+        :items="conversationItems"
+        :active-id="currentSessionId"
+        :loading="sessionsLoading"
+        :labels="conversationLabels"
+        @select="selectSession"
+        @new="handleNewSession"
+        @rename="renameSession"
+        @delete="deleteSession"
+      />
+      </aside>
 
     <!-- 拖拽分隔条 -->
     <div
@@ -345,7 +235,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
         :preset-questions="presetQuestions"
         :welcome-title="$t('@AGENT:智能体助手')"
         :welcome-description="$t('@AGENT:我可以帮你阅读代码、执行命令、修改文件。选择下方话题或直接输入你的问题。')"
-        :assistant-name="'g ai'"
+        :assistant-name="AGENT_ASSISTANT_NAME"
         :theme="chatTheme"
         :disabled="isStreaming"
         :generating="isStreaming"
@@ -387,207 +277,11 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   overflow: hidden;
 }
 
-.sidebar-header {
-  padding: 10px 12px;
-  flex-shrink: 0;
-}
-
-.new-session-btn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border: 1px dashed var(--border-color);
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--font-size-mid);
-  font-family: inherit;
-  cursor: pointer;
-  transition: var(--transition-ui-fast);
-
-  &:hover {
-    border-color: var(--color-primary);
-    color: var(--color-primary);
-    background: color-mix(in srgb, var(--color-primary) 6%, transparent);
-  }
-}
-
-.sidebar-search {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 12px 8px;
-  flex-shrink: 0;
-
-  .search-icon {
-    color: var(--text-tertiary);
-    flex-shrink: 0;
-  }
-
-  .search-input {
-    flex: 1;
-    border: none;
-    background: transparent;
-    color: var(--text-primary);
-    font-size: var(--font-size-mid);
-    font-family: inherit;
-    outline: none;
-    padding: 4px 0;
-
-    &::placeholder {
-      color: var(--text-tertiary);
-    }
-  }
-}
-
-.session-list {
+/* 会话列表用组件库的 ConversationList（搜索/新建/重命名/删除都在组件里） */
+.agent-conversations {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  padding: 0 6px 8px;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 16px;
-  text-align: center;
-  color: var(--text-tertiary);
-
-  .empty-text {
-    font-size: var(--font-size-base);
-    margin-top: 10px;
-    color: var(--text-secondary);
-  }
-
-  .empty-hint {
-    font-size: var(--font-size-sm);
-    margin-top: 4px;
-  }
-}
-
-.session-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 4px;
-  padding: 8px 10px;
-  border-radius: var(--radius-base);
-  cursor: pointer;
-  transition: background var(--transition-fast) ease;
-  position: relative;
-
-  &:hover {
-    background: var(--bg-hover);
-
-    .session-item-actions {
-      opacity: 1;
-    }
-  }
-
-  &.active {
-    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-
-    .session-item-title {
-      color: var(--color-primary);
-    }
-
-    &::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 3px;
-      height: 20px;
-      background: var(--color-primary);
-      border-radius: 0 2px 2px 0;
-    }
-  }
-}
-
-.session-item-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.session-item-title {
-  font-size: var(--font-size-mid);
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-bottom: 2px;
-}
-
-.session-item-meta {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-
-  .meta-dot {
-    opacity: 0.5;
-  }
-
-  /* 流式进行中的会话：用"正在生成中..."替换掉时间 + 条数 */
-  .meta-generating {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    color: var(--color-primary);
-  }
-
-  .meta-source {
-    padding: 0 4px;
-    border-radius: var(--radius-base);
-    font-size: var(--font-size-xs);
-    font-weight: 600;
-
-    &.cli {
-      background: color-mix(in srgb, var(--color-warning) 20%, transparent);
-      color: var(--color-warning);
-    }
-  }
-}
-
-.session-item-actions {
-  display: flex;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity var(--transition-fast) ease;
-  flex-shrink: 0;
-}
-
-.item-action-btn {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  border-radius: var(--radius-xs);
-  transition: var(--transition-ui-fast);
-  padding: 0;
-
-  &:hover {
-    background: var(--bg-hover);
-    color: var(--text-secondary);
-  }
-
-  &.danger:hover {
-    color: var(--color-danger);
-    background: color-mix(in srgb, var(--color-danger) 10%, transparent);
-  }
+  padding: 10px 6px 8px 12px;
 }
 
 /* ── 拖拽分隔条 ─────────────────────────────────── */

@@ -26,6 +26,7 @@ import ImagePreview from '@/components/ImagePreview.vue'
 import OfficePreview from '@/components/OfficePreview.vue'
 import MarkdownPreview from '@/components/MarkdownPreview.vue'
 import MindmapPreview from '@/components/MindmapPreview.vue'
+import EditorAgentPanel from '@/components/EditorAgentPanel.vue'
 import SvgIcon from '@/components/SvgIcon/index.vue'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import { PREVIEW_IFRAME_SANDBOX, injectHtmlPreviewShims } from '@/utils/previewSandbox'
@@ -997,6 +998,10 @@ const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'bmp'])
 const showPreview = ref(false)
 // 思维导图模式:整篇 markdown 渲染为一张大导图。与 showPreview 互斥。
 const showMindmap = ref(false)
+// g ai 对话面板。与预览/思维导图三选一（互斥）
+const showAgentChat = ref(false)
+// 面板首次打开后常驻（v-show 保状态）：流式的流与折叠状态不会因为切走一次就丢
+const agentOpened = ref(false)
 // 0 = 默认占满右半边（flex: 1 1 0%），用户拖动 resizer 后会写入实际像素值
 const previewWidth = ref(0)
 
@@ -1029,15 +1034,31 @@ watch(activeTabPath, () => {
 
 function togglePreview() {
   if (!isPreviewable.value) return
-  // 互斥:打开 HTML 预览时关掉思维导图
-  if (!showPreview.value) showMindmap.value = false
+  // 互斥:打开 HTML 预览时关掉思维导图 / g ai 对话
+  if (!showPreview.value) {
+    showMindmap.value = false
+    showAgentChat.value = false
+  }
   showPreview.value = !showPreview.value
 }
 
 function toggleMindmap() {
   if (!isMindmapable.value) return
-  if (!showMindmap.value) showPreview.value = false
+  if (!showMindmap.value) {
+    showPreview.value = false
+    showAgentChat.value = false
+  }
   showMindmap.value = !showMindmap.value
+}
+
+/** g ai 对话：与预览 / 思维导图互斥；首次打开后组件常驻 */
+function toggleAgentChat() {
+  if (!showAgentChat.value) {
+    showPreview.value = false
+    showMindmap.value = false
+  }
+  showAgentChat.value = !showAgentChat.value
+  agentOpened.value = true
 }
 
 // 生成 iframe srcdoc（md / html / htm / svg）
@@ -1340,6 +1361,19 @@ function stopPreviewResize() {
           </svg>
           <span>{{ $t('@EDITOR:思维导图') }}</span>
         </button>
+      <!-- g ai 对话：文件空间右侧的智能体面板（与预览/思维导图互斥） -->
+        <button
+          class="preview-toggle-btn agent-toggle-btn"
+          :class="{ active: showAgentChat }"
+          :title="showAgentChat ? $t('@EDITOR:关闭 g ai 对话') : $t('@EDITOR:打开 g ai 对话')"
+          @click="toggleAgentChat"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/>
+            <path d="M18 16.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/>
+          </svg>
+          <span>{{ $t('@EDITOR:g ai 对话') }}</span>
+        </button>
       </div>
 
       <!-- 无文件打开时的提示 -->
@@ -1374,9 +1408,19 @@ function stopPreviewResize() {
         </div>
         <!-- 预览分隔条（在面板右侧，拉动调整面板宽度） -->
         <div
-          v-if="(showPreview || showMindmap) && tabs.length > 0"
+          v-if="(showPreview || showMindmap || showAgentChat) && tabs.length > 0"
           class="preview-resizer"
           @mousedown="startPreviewResize"
+        />
+        <!-- g ai 对话面板：v-if 懒挂载 + v-show 保状态（切到预览再切回来，进行中的流还在） -->
+        <EditorAgentPanel
+          v-if="agentOpened"
+          v-show="showAgentChat && tabs.length > 0"
+          :active="showAgentChat && tabs.length > 0"
+          :active-file-path="activeTabPath"
+          :active-file-name="activeTabRef?.name ?? ''"
+          :style="{ flexBasis: previewWidth + 'px' }"
+          @close="showAgentChat = false"
         />
         <!-- 预览面板 -->
         <div

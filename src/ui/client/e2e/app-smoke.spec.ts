@@ -81,4 +81,22 @@ test.describe('App smoke', () => {
       await expect(page.locator(pane)).toBeVisible()
     })
   }
+
+  test('9. 文件空间: g ai 对话面板可打开,并显示当前文档 chip', async ({ page }) => {
+    await page.locator('.activity-bar button[aria-label^="文件空间"]').first().click()
+    await expect(page.locator('.editor-pane')).toBeVisible()
+
+    // 面板只在"有打开的文件"时可见，先点左树里的第一个文件
+    const firstFile = page.locator('.tree-node--file').first()
+    await expect(firstFile).toBeVisible({ timeout: 30_000 })
+    await firstFile.click()
+
+    // Tab 栏右侧的第三个 toggle：g ai 对话
+    const toggle = page.locator('.agent-toggle-btn')
+    await expect(toggle).toBeVisible()
+    await toggle.click()
+    await expect(toggle).toHaveClass(/active/)
+    await expect(page.locator('.editor-agent-panel')).toBeVisible()
+    await expect(page.locator('.agent-context-chip')).toBeVisible()
+  })
 })

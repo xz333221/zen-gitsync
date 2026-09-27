@@ -251,7 +251,7 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 //     (由 agentRoutes 注入:最近目录/tasks.json/看板统计只有 GUI 侧拿得到)
 //
 // 返回: { aborted: boolean }
-export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, signal, send, onChild, askUser, listProjects }) {
+export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, signal, send, onChild, askUser, listProjects }) {
   const ctx = { cwd, locale, onChild, askUser, listProjects };
 
   // 确保 session.messages 存在
@@ -283,6 +283,8 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
     // 摘录成一条梗概 → 旧图片降级 → provider 兼容消毒。
     // 只作用于副本,session.messages 保持完整(与 CLI 的磁盘口径一致)。
     const messages = prepareRequestMessages(session.messages, { locale });
+    // 文件空间对话：把"当前打开的文档"注进请求副本（不落 session.messages，下一轮不会重复累积）
+    injectOpenFileContext(messages, { cwd, openFilePath, locale });
 
     let result;
     try {
@@ -410,6 +412,29 @@ function summarizeArgs(name, args) {
   } catch {
     return '';
   }
+}
+
+// ── 请求级上下文注入（文件空间对话） ────────────────────────
+// 把"用户当前打开的文件"追加到**请求副本**的 system 消息末尾：
+// 只影响这一次请求，session.messages 与磁盘历史保持原样，下一轮也不会重复累积。
+export function injectOpenFileContext(messages, { cwd, openFilePath, locale }) {
+  if (!openFilePath || !Array.isArray(messages)) return;
+  const root = cwd || process.cwd();
+  // 归一化成"相对项目根目录"的斜杠路径；项目外（或等于根目录）直接忽略
+  let rel = '';
+  try {
+    rel = path.relative(root, path.resolve(root, openFilePath));
+  } catch {
+    return;
+  }
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return;
+  const file = rel.split(path.sep).join('/');
+  const note = String(locale || '').startsWith('en')
+    ? `\n\n# Current context\nThe file the user currently has open in the editor is \`${file}\` (relative to the project root). When the user says "this file" / "the current file" / "here", that is what they mean; read it with your tools before assuming its content.`
+    : `\n\n# 当前上下文\n用户此刻在文件空间打开的文件是 \`${file}\`（相对项目根目录）。用户说"这个文件/当前文件"时默认指它；请先用工具读取内容，不要臆测。`;
+  const sys = messages.find(m => m && m.role === 'system' && typeof m.content === 'string');
+  if (sys) sys.content += note;
+  else messages.unshift({ role: 'system', content: note.trim() });
 }
 
 export { buildWebSystemPrompt };

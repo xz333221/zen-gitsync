@@ -51,6 +51,9 @@ function sessionBelongsTo(sessionCwd, projectCwd) {
 // matching response. The entry is removed on every completion or disconnect.
 const pendingAgentQuestions = new Map();
 
+/** 正在进行中的会话 id 集合：同一会话同一时刻只允许一个生成中的轮次 */
+const activeSessionTurns = new Set();
+
 function interactionKey(sessionId, interactionId) {
   return `${String(sessionId)}:${String(interactionId)}`;
 }
@@ -191,6 +194,9 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
       return res.status(400).json({ success: false, error: '消息内容不能为空' });
     }
 
+    // 文件空间对话：客户端把"当前打开的文档"带上来，服务端只在请求副本里注入上下文（不落库）
+    const openFilePath = String(req.body?.openFilePath || '').trim().slice(0, 512);
+
     // SSE 头
     res.set({
       'Content-Type': 'text/event-stream',
@@ -206,6 +212,15 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
     const abortController = new AbortController();
     let finished = false;
     let activeChild = null;
+
+    // 同一会话同一时刻只允许一个进行中的生成：跨视图（对话 Tab / 文件空间面板）
+    // 或前端连点都靠这道闸挡住，否则两个流各自的会话快照会互相覆盖。
+    if (sessionIdInput && activeSessionTurns.has(sessionIdInput)) {
+      send({ type: 'error', error: '该会话正在生成中，请等它结束后再发送' });
+      finished = true;
+      return res.end();
+    }
+    let activeSessionKey = null;
 
     // 客户端断开
     if (req.socket) {
@@ -264,6 +279,10 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
         isNew = true;
       }
 
+      // 本轮占用该会话（finally 里释放）
+      activeSessionKey = session.sessionId;
+      activeSessionTurns.add(activeSessionKey);
+
       // 获取模型配置
       let model;
       try {
@@ -304,6 +323,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
         images,
         cwd,
         locale,
+        openFilePath,
         signal: abortController.signal,
         send,
         onChild: (child) => { activeChild = child; },
@@ -337,6 +357,8 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
       send({ type: 'error', error: '智能体对话失败: ' + (err?.message || String(err)) });
       finished = true;
       res.end();
+    } finally {
+      if (activeSessionKey) activeSessionTurns.delete(activeSessionKey);
     }
   });
 }
