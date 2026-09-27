@@ -98,5 +98,15 @@ test.describe('App smoke', () => {
     await expect(toggle).toHaveClass(/active/)
     await expect(page.locator('.editor-agent-panel')).toBeVisible()
     await expect(page.locator('.agent-context-chip')).toBeVisible()
+
+    // 光"可见"不够：组件库的样式表要真的生效，否则面板是裸的（2026-09-27 用户实测报过）。
+    // 本用例是全新 context、直接进文件空间，从未加载 AgentView / WorkbenchView / JobLogDetails
+    // 那三个引了 zen-ai-chat-ui/style.css 的懒加载 chunk —— 正好是漏引样式时的现场。
+    // .acu-chat 的 flex-direction: column 来自库样式表，浏览器默认是 row。
+    const chatDir = await page.locator('.editor-agent-panel .acu-chat')
+      .evaluate(el => getComputedStyle(el).flexDirection)
+    expect(chatDir).toBe('column')
+    // 会话列表同理：库的 ConversationList 根节点（样式表没加载也能"可见"，配套上面那条断言）
+    await expect(page.locator('.editor-agent-panel .acu-conv').first()).toBeVisible()
   })
 })
