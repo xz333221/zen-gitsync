@@ -45,7 +45,8 @@ npm run e2e:report
   - `app-smoke.spec.ts` — 应用冒烟(启动/导航/默认视图)
   - `selective-stage.spec.ts` — 选择性暂存
   - `directory-selector.spec.ts` — 目录选择器/Ctrl+点击新标签
-  - `workbench-sidebar.spec.ts` — 工作台侧边栏(任务行单行展示/描述兜底/空任务不落盘/分组收起)
+  - `dialog-system.spec.ts` — 弹窗系统
+  - `remote-management.spec.ts` — 远程仓库管理
   - `drawer-*.spec.ts` — Git 抽屉样式截图
 
 ## 写新测试前必读(踩坑记录)
@@ -61,6 +62,7 @@ npm run e2e:report
    超过后新 context 会间歇性卡死:不输出、不超时。裸 Playwright 脚本复现卡在
    `browser.close()`,是 chromium 资源释放问题,不是测试逻辑问题。
    排查这类卡死可以写裸脚本逐步打印耗时,一次定位。
+   (2026-09-27 实测:全套 48 例连跑正常,该卡死比过去少见;仍建议**同一页面别连点多次提交**。)
 4. **服务端日志已默认丢弃**(`stdout: 'ignore'`):后端每次 git 操作都打印大表格,
    管道缓冲区灌满会把后端憋死,表现为用例整体卡住。要看日志时加
    `E2E_SHOW_SERVER_LOG=1`(代价是又可能触发卡死,仅调试用)。
@@ -74,7 +76,27 @@ npm run e2e:report
 7. **`page.route` 的 glob `*` 不跨 `/`**。拦 `DELETE /api/workbench/tasks/<id>`
    这类带路径段的请求要用正则 `/\/api\/workbench\/tasks(?:$|[/?])/`,
    否则删除请求打穿到真实后端,而本地乐观更新的列表看起来"也对",
-   断言会变成永不失败的死断言。参考 `workbench-sidebar.spec.ts`。
+   断言会变成永不失败的死断言。
+8. **只 stub HTTP 不足以接管数据时,先确认页面的权威数据源**。应用有多条数据通道
+   (HTTP 轮询、socket.io、SSE `/api/workbench/events`);只 stub 其中一路时,
+   另一路会把状态刷回真实值。判断"stub 到底有没有生效"要看请求是否被命中
+   (`page.route` 里计数),而不是看断言结果。
+9. **断言 UI 改版后的选择器要核对当前 DOM**。工作台的 `.wb-sidebar` /
+   `.wb-task-item*` / `.wb-task-group__head` 已随 board 布局改版从 DOM 消失
+   (旧的 `workbench-sidebar.spec.ts` 即因此失效并删除)。`.workbench-pane`、
+   `.editor-pane` 这类**外壳**是 App.vue 里的 `v-show` 容器,断言它 visible
+   并不能证明异步视图真的渲染成功 —— 要断言视图内部的类名。
+10. **复用已在跑的 dev server 时,首跑可能有一次"假失败"**。`playwright.config.ts`
+   里是 `reuseExistingServer: !CI`,会直接挂到你手动起的 5544/5545 上。若此前
+   `node_modules` 里的依赖变过(升级/换包),Vite 会在测试中途才重新预构建并触发
+   整页 reload,把**排在后面**的用例的异步 chunk 打断(症状:页面卡在
+   ViewLoading 的"加载中...")。**重跑一遍即过**,不要去改代码。
+11. **产物目录会被沙箱的批量删除护栏拦住**。Playwright 每次跑都会清
+   `test-results/`(>50 个文件时触发 `SAFE_DELETE_BULK_CONFIRM_REQUIRED`,
+   且当前环境没有放行开关)→ 用 `--output=<临时目录>` 跑:
+   ```bash
+   node node_modules/@playwright/test/cli.js test --output=/tmp/pw-out
+   ```
 
 ## 写新测试
 
