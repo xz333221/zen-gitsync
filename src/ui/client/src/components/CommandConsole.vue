@@ -3703,7 +3703,7 @@ pre.stderr {
   gap: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-md);
   overflow-x: auto;
-  scrollbar-width: thin;
+  /* 宽度由全局统一控制（当前隐藏）；配色保留，恢复时可复用 */
   scrollbar-color: var(--border-card) transparent;
   
   &::-webkit-scrollbar {

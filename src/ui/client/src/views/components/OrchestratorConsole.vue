@@ -674,7 +674,7 @@ const gitSummary = computed(() => {
   width: var(--wb-right-w, 300px);
   flex-shrink: 0;
   min-height: 0;
-  border-left: 1px solid var(--border-color);
+  border-left: 1px solid var(--border-color-light);
   background: var(--bg-panel);
   /* 折叠/展开的收放动画。拖动分隔条时由工作台在 .board__cols 上挂 is-resizing
      把过渡关掉 —— 否则宽度会慢半拍地追鼠标，拖起来像拽橡皮筋。
@@ -716,9 +716,10 @@ const gitSummary = computed(() => {
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--color-success);
+  box-shadow: var(--dot-glow-success);
   animation: oc-pulse 1.6s ease-in-out infinite;
 }
-.oc__rail-live.is-off { background: var(--color-warning); animation: none; }
+.oc__rail-live.is-off { background: var(--color-warning); box-shadow: var(--dot-glow-warning); animation: none; }
 /* writing-mode 竖排：标题横着放不进 32px */
 .oc__rail-text {
   writing-mode: vertical-rl;
@@ -732,7 +733,7 @@ const gitSummary = computed(() => {
   align-items: center;
   gap: 6px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color-light);
   flex-shrink: 0;
 }
 .oc__live {
@@ -741,9 +742,10 @@ const gitSummary = computed(() => {
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--color-success);
+  box-shadow: var(--dot-glow-success);
   animation: oc-pulse 1.6s ease-in-out infinite;
 }
-.oc__live.is-off { background: var(--color-warning); animation: none; }
+.oc__live.is-off { background: var(--color-warning); box-shadow: var(--dot-glow-warning); animation: none; }
 @keyframes oc-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.45; transform: scale(1.35); }
@@ -798,6 +800,7 @@ const gitSummary = computed(() => {
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
   background: var(--bg-subtle);
+  background-image: var(--gradient-accent-soft);
   flex-shrink: 0;
 }
 .oc__state.is-paused { color: var(--color-warning); }
@@ -831,8 +834,8 @@ const gitSummary = computed(() => {
 }
 .oc-row {
   padding: 6px 8px;
-  margin-bottom: 4px;
-  border-radius: var(--radius-md);
+  margin-bottom: 6px;
+  border-radius: var(--radius-lg);
   background: var(--bg-subtle);
 }
 .oc-row--user { background: color-mix(in srgb, var(--color-primary) 9%, transparent); }
@@ -885,7 +888,7 @@ const gitSummary = computed(() => {
 
 .oc__git {
   padding: 8px 12px 10px;
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-color-light);
   flex-shrink: 0;
 }
 .oc__git-name {
@@ -913,7 +916,7 @@ const gitSummary = computed(() => {
 
 .oc__compose {
   padding: 8px 12px 10px;
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-color-light);
   flex-shrink: 0;
 }
 .oc__input {
@@ -930,13 +933,17 @@ const gitSummary = computed(() => {
   line-height: 1.5;
   font-family: inherit;
   color: var(--text-primary);
-  background: var(--bg-subtle);
+  background: var(--input-bg);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   outline: none;
-  transition: border-color var(--transition-fast) var(--ease-custom);
+  transition: border-color var(--transition-fast) var(--ease-custom),
+              box-shadow var(--transition-fast) var(--ease-custom);
 }
-.oc__input:focus { border-color: var(--color-primary); }
+.oc__input:focus {
+  border-color: var(--input-border-focus);
+  box-shadow: var(--input-shadow-focus);
+}
 .oc__input::placeholder { color: var(--text-tertiary); }
 .oc__compose-foot {
   display: flex;
@@ -988,7 +995,7 @@ const gitSummary = computed(() => {
   height: 22px;
   padding: 0 8px;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-base);
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
@@ -1022,15 +1029,20 @@ const gitSummary = computed(() => {
   gap: 4px;
   border: none;
   border-radius: var(--radius-md);
-  background: var(--color-primary);
+  background: var(--gradient-accent);
+  box-shadow: var(--btn-shadow);
   color: #fff;
   font-size: var(--font-size-sm);
   line-height: 24px;
   padding: 0 12px;
   cursor: pointer;
-  transition: opacity var(--transition-fast) var(--ease-custom);
+  transition: box-shadow var(--transition-fast) var(--ease-custom),
+              opacity var(--transition-fast) var(--ease-custom);
 }
-.oc__send:hover:not(:disabled) { opacity: 0.88; }
+.oc__send:hover:not(:disabled) {
+  background: var(--gradient-accent-hover);
+  box-shadow: var(--btn-shadow-hover);
+}
 .oc__send:disabled { opacity: 0.45; cursor: default; }
 .oc__send:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 .oc__send-icon { font-size: var(--font-size-sm); }

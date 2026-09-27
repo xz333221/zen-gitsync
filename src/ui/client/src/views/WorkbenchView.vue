@@ -1405,8 +1405,9 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   padding: 0 12px;
   height: 34px;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color-light);
   background: var(--bg-panel);
+  background-image: var(--gradient-accent-soft);
 }
 .wb-back-btn {
   display: inline-flex;
@@ -2581,7 +2582,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-simple-chat :deep(.acu-bubble-main) {
   max-width: 100%;
 }
-.wb-simple-chat :deep(.acu-bubble) { font-size: var(--font-size-sm); }
+.wb-simple-chat :deep(.acu-bubble) { font-size: var(--font-size-sm); border-radius: var(--radius-lg); }
 .wb-simple-chat :deep(.acu-bubble-name) { font-size: var(--font-size-xs); }
 .wb-simple-chat__footer {
   flex-shrink: 0;

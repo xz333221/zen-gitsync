@@ -114,6 +114,14 @@ html[data-theme="dark"] {
   --wb-card-shadow-hover: 0 1px 2px rgba(0, 0, 0, 0.32);
   --wb-card-inset-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 
+  /* 表面层级 / 卡片阴影 / 毛玻璃 / 进度条渐变 暗色覆写
+     （--gradient-accent-soft、--dot-glow-* 随 tint/color-mix 自适应，无需覆盖） */
+  --surface-elevated: #202636;
+  --shadow-card-rest: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-card-lift: 0 10px 28px rgba(0, 0, 0, 0.45);
+  --glass-bg: rgba(28, 33, 48, 0.82);
+  --gradient-progress: linear-gradient(90deg, var(--color-primary) 0%, #93c5fd 100%);
+
   /* Header / Footer 毛玻璃背景 */
   --bg-header: var(--bg-header-dark);
   --bg-footer: var(--bg-footer-dark);

@@ -1071,7 +1071,7 @@ body {
   right: 0;
   height: 32px;
   z-index: 1002;
-  background: var(--bg-component);
+  background: var(--bg-footer);
   border-top: 1px solid var(--border-color-light);
   display: flex;
   align-items: center;
@@ -1450,11 +1450,12 @@ h1 {
   height: 42px;
   padding: 0 8px;
   box-sizing: border-box;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-base);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-md);
   background: var(--bg-subtle);
   transition: border-color var(--transition-base) var(--ease-custom),
-              background var(--transition-base) var(--ease-custom);
+              background var(--transition-base) var(--ease-custom),
+              box-shadow var(--transition-base) var(--ease-custom);
   cursor: default;
   flex-shrink: 0;
 }
@@ -1462,6 +1463,7 @@ h1 {
 .header-monitor:hover {
   border-color: var(--color-primary);
   background: var(--tint-primary-10);
+  box-shadow: var(--focus-ring-soft);
 }
 
 .header-monitor__content {

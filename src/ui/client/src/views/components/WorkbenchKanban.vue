@@ -290,8 +290,8 @@ function hasError(t: BoardTask): boolean {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding: 2px;
-  border-radius: var(--radius-md);
+  padding: 3px;
+  border-radius: var(--radius-lg);
   background: var(--bg-subtle);
   flex-shrink: 0;
 }
@@ -308,7 +308,8 @@ function hasError(t: BoardTask): boolean {
 }
 .kb__view-btn:hover { color: var(--text-primary); }
 .kb__view-btn.is-active {
-  background: var(--bg-panel);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-card-rest);
   color: var(--color-primary);
   font-weight: 500;
 }
@@ -349,7 +350,11 @@ function hasError(t: BoardTask): boolean {
   outline: none;
   transition: border-color var(--transition-fast) var(--ease-custom), width var(--transition-base) var(--ease-custom);
 }
-.kb__search-input:focus { border-color: var(--color-primary); width: 216px; }
+.kb__search-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring-soft);
+  width: 216px;
+}
 .kb__search-input::placeholder { color: var(--text-tertiary); }
 
 /* ── 看板列 ─────────────────────────────────────────── */
@@ -374,6 +379,7 @@ function hasError(t: BoardTask): boolean {
   gap: 6px;
   padding: 9px 10px 7px;
   flex-shrink: 0;
+  border-bottom: 1px solid var(--border-color-light);
 }
 .kb-col__dot {
   width: 6px;
@@ -382,8 +388,8 @@ function hasError(t: BoardTask): boolean {
   flex-shrink: 0;
   background: var(--text-tertiary);
 }
-.kb-col--doing .kb-col__dot { background: var(--color-warning); animation: kb-pulse 1.4s ease-in-out infinite; }
-.kb-col--done .kb-col__dot { background: var(--color-success); }
+.kb-col--doing .kb-col__dot { background: var(--color-warning); box-shadow: var(--dot-glow-warning); animation: kb-pulse 1.4s ease-in-out infinite; }
+.kb-col--done .kb-col__dot { background: var(--color-success); box-shadow: var(--dot-glow-success); }
 @keyframes kb-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.45; transform: scale(1.35); }
@@ -392,6 +398,7 @@ function hasError(t: BoardTask): boolean {
   margin: 0;
   font-size: var(--font-size-sm);
   font-weight: 500;
+  letter-spacing: var(--letter-spacing-wide);
   color: var(--text-secondary);
   flex: 1;
   min-width: 0;
@@ -410,20 +417,35 @@ function hasError(t: BoardTask): boolean {
   min-height: 0;
 }
 
-/* ── 卡片：扁平行，圆角克制在 6px，没有左侧色条 ── */
+/* ── 卡片：浮起表面 + 静息阴影，hover 抬升 ── */
 .kb-card {
   position: relative;
   padding: 8px 10px;
   margin-bottom: 6px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--bg-panel);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-lg);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-card-rest);
   cursor: pointer;
-  transition: border-color var(--transition-fast) var(--ease-custom), background var(--transition-fast) var(--ease-custom);
+  transition: border-color var(--transition-fast) var(--ease-custom),
+              background var(--transition-fast) var(--ease-custom),
+              box-shadow var(--transition-fast) var(--ease-custom),
+              transform var(--transition-fast) var(--ease-custom);
 }
-.kb-card:hover { border-color: var(--border-card-hover); background: var(--bg-container-hover); }
-.kb-card.is-running { border-color: color-mix(in srgb, var(--color-warning) 45%, var(--border-color)); }
-.kb-card.has-error { border-color: color-mix(in srgb, var(--color-danger) 40%, var(--border-color)); }
+.kb-card:hover {
+  border-color: var(--border-card-hover);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-card-lift);
+  transform: translateY(-1px);
+}
+.kb-card.is-running {
+  border-color: color-mix(in srgb, var(--color-warning) 45%, var(--border-color));
+  background: color-mix(in srgb, var(--color-warning) 4%, var(--surface-elevated));
+}
+.kb-card.has-error {
+  border-color: color-mix(in srgb, var(--color-danger) 40%, var(--border-color));
+  background: color-mix(in srgb, var(--color-danger) 4%, var(--surface-elevated));
+}
 
 .kb-card__row1 {
   display: flex;
@@ -439,6 +461,7 @@ function hasError(t: BoardTask): boolean {
   height: 6px;
   border-radius: 50%;
   background: var(--color-warning);
+  box-shadow: var(--dot-glow-warning);
   flex-shrink: 0;
   animation: kb-pulse 1.4s ease-in-out infinite;
 }
@@ -517,17 +540,21 @@ function hasError(t: BoardTask): boolean {
   cursor: pointer;
   transition: color var(--transition-fast) var(--ease-custom);
 }
-.kb-card__btn:hover { color: var(--color-primary); }
+.kb-card__btn:hover { color: var(--color-primary); background: var(--bg-subtle-hover); }
 .kb-card__btn--danger { font-size: var(--font-size-base); padding: 0 4px; }
 .kb-card__btn--danger:hover { color: var(--color-danger-light); }
 .kb-card__btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
 .kb-col__empty {
   padding: 18px 8px;
+  margin: 0 2px;
   text-align: center;
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   list-style: none;
+  border: 1px dashed var(--border-color-light);
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
 }
 .kb-col__empty-btn {
   border: 1px dashed var(--border-color-medium);
@@ -561,7 +588,9 @@ function hasError(t: BoardTask): boolean {
   font-size: var(--font-size-xs);
   font-weight: 500;
   color: var(--text-tertiary);
-  background: var(--bg-subtle);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
   border-bottom: 1px solid var(--border-color);
   white-space: nowrap;
 }

@@ -145,7 +145,7 @@ const rows = computed(() => props.running.map(r => ({
 
 .agent-item {
   padding: 7px 8px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--color-warning) 7%, transparent);
   margin-bottom: 4px;
 }
@@ -161,10 +161,12 @@ const rows = computed(() => props.running.map(r => ({
   height: 6px;
   border-radius: 50%;
   background: var(--color-warning);
+  box-shadow: var(--dot-glow-warning);
   animation: agent-pulse 1.4s ease-in-out infinite;
 }
 .agent-item__dot.is-pending {
   background: var(--text-tertiary);
+  box-shadow: none;
   animation: none;
 }
 @keyframes agent-pulse {

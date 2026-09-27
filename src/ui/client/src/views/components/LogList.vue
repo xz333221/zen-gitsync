@@ -1913,10 +1913,9 @@ function toggleFullscreen() {
   background-color: transparent;
 }
 
-/* Firefox滚动条样式 */
+/* Firefox滚动条配色（宽度由全局统一控制，当前隐藏不显示） */
 .diff-content,
 .files-list {
-  scrollbar-width: thin;
   scrollbar-color: rgba(144, 147, 153, 0.3) transparent;
 }
 

@@ -650,8 +650,31 @@
   --wb-card-bg-active: var(--tint-primary-08);
   --wb-card-radius: var(--radius-lg);
   --wb-card-radius-md: var(--radius-md);
-  --wb-card-shadow-hover: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --wb-card-shadow-hover: var(--shadow-card-lift);
   --wb-card-inset-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.015);
+
+  /* 表面层级：canvas 退后 / 卡片浮起，形成三栏纵深 */
+  --surface-canvas: var(--bg-page);
+  --surface-elevated: #ffffff;
+
+  /* 卡片阴影：静息 / 悬浮抬升（冷蓝着色） */
+  --shadow-card-rest: 0 1px 2px rgba(30, 58, 95, 0.05);
+  --shadow-card-lift: 0 2px 4px rgba(30, 58, 95, 0.05), 0 10px 24px -6px rgba(30, 58, 95, 0.12);
+
+  /* 毛玻璃（仅叠在滚动内容上的条带使用） */
+  --glass-filter: blur(14px) saturate(160%);
+  --glass-bg: rgba(255, 255, 255, 0.78);
+
+  /* 渐变点缀 */
+  --gradient-accent: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  --gradient-accent-hover: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-primary) 100%);
+  --gradient-accent-soft: linear-gradient(180deg, var(--tint-primary-04) 0%, transparent 100%);
+  --gradient-progress: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+
+  /* 状态点微光（color-mix 自适应双主题） */
+  --dot-glow-success: 0 0 6px 1px color-mix(in srgb, var(--color-success) 45%, transparent);
+  --dot-glow-warning: 0 0 6px 1px color-mix(in srgb, var(--color-warning) 45%, transparent);
+  --dot-glow-danger: 0 0 6px 1px color-mix(in srgb, var(--color-danger) 45%, transparent);
 
   /* badge / pill 通用基线（Workbench 列表项、附件计数等复用） */
   --badge-bg: var(--bg-subtle);

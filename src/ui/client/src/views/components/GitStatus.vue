@@ -2011,7 +2011,7 @@ defineExpose({
   flex: 1;
   width: 100%;
   box-sizing: border-box;
-  scrollbar-width: thin;
+  /* 宽度由全局统一控制（当前隐藏）；配色保留，恢复时可复用 */
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 

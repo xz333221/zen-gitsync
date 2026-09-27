@@ -20,20 +20,31 @@
 }
 
 /* =======================================================
-   全局滚动条默认样式（适用于所有滚动容器）
-   使用 variables.scss 中的 --scrollbar-* 变量
+   全局滚动条：统一隐藏显示（滚动能力保留，只是看不见条）
+
+   两句各管一条渲染通路，缺一不可：
+   · scrollbar-width: none —— 标准属性（Chromium 121+ / Firefox）。
+     ⚠️ 必须写在 `*` 上：实测 Chromium 不会把根元素上的 scrollbar-width
+     传给内部滚动容器（.proj__list 等算出来仍是 auto），逐个元素命中才藏得住。
+     也**不要**顺手写 scrollbar-color —— 那会让 Chromium 切到标准滚动条渲染、
+     反过来忽略下面 ::-webkit-scrollbar 整条规则。
+   · ::-webkit-scrollbar 的 display: none —— WebKit/Chromium 伪元素通路，
+     给不支持 scrollbar-width 的版本兜底。
+   想恢复"细滚动条"外观：把 scrollbar-width 改回 thin、去掉 display: none
+   即可，下面的 thumb / track 配色定义保持原样、直接复用。
    ======================================================= */
-html,
-body {
-  /* Firefox */
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+* {
+  /* !important：要压过第三方样式里写死的 thin
+     （zen-ai-chat-ui 藏在 @supports not selector(::-webkit-scrollbar) 块里、
+     Element Plus 的 .el-splitter-panel 直接声明），否则会漏出几条 */
+  scrollbar-width: none !important;
 }
 
 /* WebKit 浏览器（Chrome/Edge/Safari） */
 *::-webkit-scrollbar {
-  width: var(--scrollbar-width);
-  height: var(--scrollbar-width);
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 *::-webkit-scrollbar-thumb {
@@ -243,8 +254,7 @@ select option {
 /* Scrollbar styles for diff areas */
 .diff-formatted,
 .diff-content {
-  // Firefox
-  scrollbar-width: thin;
+  // Firefox：宽度由全局统一控制（当前隐藏），这里只定制配色
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 
   // Webkit
@@ -333,10 +343,10 @@ select option {
 
 .app-header {
   background: var(--bg-header);
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
   color: var(--text-primary);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid var(--border-color-light);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
   transition: var(--transition-all);
   display: flex;
@@ -348,10 +358,10 @@ select option {
 /* Footer 样式 */
 .app-footer {
   background: var(--bg-footer);
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
   color: var(--text-primary);
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  border-top: 1px solid var(--border-color-light);
   box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.03);
   transition: var(--transition-all);
   display: flex;

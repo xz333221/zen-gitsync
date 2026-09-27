@@ -771,8 +771,9 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   padding: 0 14px;
   height: 52px;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color-light);
   background: var(--bg-panel);
+  background-image: var(--gradient-accent-soft);
 }
 .board__brand {
   display: flex;
@@ -786,9 +787,10 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--color-success);
+  box-shadow: var(--dot-glow-success);
   animation: board-pulse 1.6s ease-in-out infinite;
 }
-.board__live.is-off { background: var(--color-warning); animation: none; }
+.board__live.is-off { background: var(--color-warning); box-shadow: var(--dot-glow-warning); animation: none; }
 @keyframes board-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(1.4); }
@@ -797,7 +799,8 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
 .board__title {
   margin: 0;
   font-size: var(--font-size-base);
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: var(--letter-spacing-heading);
   color: var(--text-primary);
   line-height: 1.3;
 }
@@ -826,7 +829,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
 .board__stat-value {
   font-size: var(--font-size-mid);
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
 .board__stat-value.is-live { color: var(--color-warning); }
@@ -848,12 +851,13 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-base);
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-size: var(--font-size-base);
-  transition: color var(--transition-fast) var(--ease-custom);
+  transition: color var(--transition-fast) var(--ease-custom),
+              background var(--transition-fast) var(--ease-custom);
 }
-.board__icon-btn:hover { color: var(--color-primary); }
+.board__icon-btn:hover { color: var(--color-primary); background: var(--bg-subtle-hover); }
 .board__icon-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
 /* 点击捕获层默认不占位，只在窄屏 + 抽屉打开时 display:block（规则在下面的媒体查询里）。 */
@@ -933,6 +937,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+  background: var(--surface-canvas);
 }
 .board__main-head {
   display: flex;

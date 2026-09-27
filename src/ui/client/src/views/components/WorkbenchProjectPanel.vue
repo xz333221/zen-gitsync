@@ -636,7 +636,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   background: var(--bg-subtle);
   transition: border-color var(--transition-fast) var(--ease-custom);
 }
-.proj__search:focus-within { border-color: var(--color-primary); }
+.proj__search:focus-within { border-color: var(--color-primary); box-shadow: var(--focus-ring-soft); }
 .proj__search-icon {
   font-size: var(--font-size-sm);
   color: var(--text-tertiary);
@@ -706,13 +706,17 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   /* hover 操作按钮的定位锚点 */
   position: relative;
   padding: 7px 8px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: background var(--transition-fast) var(--ease-custom);
+  transition: background var(--transition-fast) var(--ease-custom),
+              box-shadow var(--transition-fast) var(--ease-custom);
   outline: none;
 }
 .proj-item:hover { background: var(--bg-container-hover); }
-.proj-item.is-active { background: color-mix(in srgb, var(--color-primary) 10%, transparent); }
+.proj-item.is-active {
+  background: linear-gradient(90deg, var(--tint-primary-10), var(--tint-primary-04));
+  box-shadow: inset 0 0 0 1px var(--tint-primary-14);
+}
 .proj-item:focus-visible { outline: var(--focus-outline); outline-offset: -1px; }
 .proj-item.is-running { background: color-mix(in srgb, var(--color-warning) 7%, transparent); }
 
@@ -720,7 +724,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 .proj-item--all {
   margin-bottom: 4px;
   border-bottom: 1px solid var(--border-color);
-  border-radius: 6px 6px 0 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 .proj-item__num {
   flex-shrink: 0;
@@ -787,6 +791,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   height: 6px;
   border-radius: 50%;
   background: var(--color-warning);
+  box-shadow: var(--dot-glow-warning);
   animation: proj-pulse 1.4s ease-in-out infinite;
 }
 @keyframes proj-pulse {
@@ -977,8 +982,8 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   flex-shrink: 0;
   font-size: var(--font-size-xs);
   line-height: 14px;
-  padding: 0 4px;
-  border-radius: var(--radius-base);
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
   font-variant-numeric: tabular-nums;
 }
 .proj-chip--ahead { color: var(--color-primary); background: var(--tint-primary-12); }
@@ -995,16 +1000,16 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 .proj-item__bar {
   flex: 1;
   min-width: 0;
-  height: 3px;
-  border-radius: var(--radius-xs);
+  height: 4px;
+  border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   overflow: hidden;
 }
 .proj-item__bar-fill {
   display: block;
   height: 100%;
-  border-radius: var(--radius-xs);
-  background: var(--color-primary);
+  border-radius: var(--radius-pill);
+  background: var(--gradient-progress);
   transition: width var(--transition-base) var(--ease-custom);
 }
 .proj-item__progress-text {
@@ -1016,8 +1021,11 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 
 .proj-empty {
   padding: 20px 12px;
+  margin: 0 6px;
   text-align: center;
   list-style: none;
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
 }
 .proj-empty__title {
   margin: 0 0 4px;
