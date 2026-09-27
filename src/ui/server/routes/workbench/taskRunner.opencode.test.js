@@ -54,12 +54,14 @@ function makeSink() {
 }
 
 test('normalizeTaskExecutor：白名单 + 大小写 + 非法回落', () => {
-  assert.deepEqual(TASK_EXECUTORS, ['claude', 'opencode']);
+  assert.deepEqual(TASK_EXECUTORS, ['claude', 'opencode', 'codex']);
   assert.equal(normalizeTaskExecutor('opencode'), 'opencode');
+  assert.equal(normalizeTaskExecutor('codex'), 'codex');
   // 大小写不敏感（存储前统一小写）
   assert.equal(normalizeTaskExecutor('OpenCode'), 'opencode');
   assert.equal(normalizeTaskExecutor('opencode '), 'opencode');
-  assert.equal(normalizeTaskExecutor('codex'), 'claude');
+  assert.equal(normalizeTaskExecutor('Codex '), 'codex');
+  assert.equal(normalizeTaskExecutor('gpt'), 'claude');
   assert.equal(normalizeTaskExecutor(undefined), 'claude');
   assert.equal(normalizeTaskExecutor(null), 'claude');
 });

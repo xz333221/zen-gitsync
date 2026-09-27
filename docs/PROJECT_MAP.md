@@ -234,7 +234,7 @@ zen-gitsync/                                    [根: 配置文件 + 顶层脚�
 │           ├── routes/            # 47 个路由文件(含 git/ 和 workbench/ 子目录)
 │           │   ├── workbench.js        # 主入口 → workbench/ 子目录
 │           │   ├── workbench/          # 工作台子系统(20 个子模块)
-│           │   │   ├── index.js (1383 行) / taskRunner.js (791 行, claude + opencode 双执行器) / jobStore.js
+│           │   │   ├── index.js (1383 行) / taskRunner.js (claude / opencode / codex 三执行器) / jobStore.js
 │           │   │   ├── agentRoutes.js / agentChat.js / agentSessionStore.js / agentMarketplace.js
 │           │   │   ├── orchestratorStore.js / projectRegistry.js / targetResolver.js / projectTool.js
 │           │   │   ├── instructionStore.js / promptParts.js / envContext.js
@@ -440,7 +440,7 @@ zen-gitsync/                                    [根: 配置文件 + 顶层脚�
 2. `views/components/WorkbenchKanban.vue` (看板 / 表格) + `OrchestratorConsole.vue` (主 Agent 派发)
 3. `views/WorkbenchView.vue` (任务编辑器浮层：任务字段 / 附件 / 执行日志 / 续聊)
 4. `views/components/WorkbenchSidebar.vue` / `WorkbenchProjectPanel.vue`
-5. `routes/workbench/index.js` + `taskRunner.js` (后端执行引擎，claude / opencode 双执行器)
+5. `routes/workbench/index.js` + `taskRunner.js` (后端执行引擎，claude / opencode / codex 三执行器)
 
 ### 改可视化流程编排 (Flow)
 1. `components/flow/FlowOrchestrationWorkspace.vue` (画布，节点类型注册)

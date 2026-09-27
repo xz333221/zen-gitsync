@@ -73,9 +73,9 @@ function normalizeAiMaxToolIterations(value) {
   return int;
 }
 
-// 工作台任务执行器白名单。'claude' 是历史默认；'opencode' 为可选执行器
-// （opencode run --format json，模型跟随 opencode 自身配置）。
-export const TASK_EXECUTORS = ['claude', 'opencode'];
+// 工作台任务执行器白名单。'claude' 是历史默认；'opencode' / 'codex' 为可选执行器
+// （opencode run --format json / codex exec --json，模型都跟随各自 CLI 的配置）。
+export const TASK_EXECUTORS = ['claude', 'opencode', 'codex'];
 
 /**
  * 规范化任务执行器。非法值返回 null（交给调用方取默认），不抛错 ——
@@ -143,7 +143,7 @@ const defaultConfig = {
   // 触顶后本轮被强制结束,用户必须再发一条消息才能接着跑,体感像被截断。
   // 想调小/调大改这个值即可(GUI: 设置 → AI 模型配置)。
   aiMaxToolIterations: 200,
-  // 工作台任务执行器（claude | opencode）。全局配置，跨项目共享。
+  // 工作台任务执行器（claude | opencode | codex）。全局配置，跨项目共享。
   // 决定「执行任务 / 执行子任务 / 从此处开始 / 简单任务续聊」这条链路
   // 默认 spawn 哪个本地 CLI；执行入口可以按次覆盖（见 workbench 执行路由）。
   taskExecutor: 'claude',

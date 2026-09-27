@@ -2,6 +2,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { $t } from '@/lang/static'
 import type { Ref, ComputedRef } from 'vue'
 import type { Task, Job } from '@/types/workbench'
+import type { TaskExecutorId } from '@/utils/taskExecutor'
 import type { SelectedFile } from 'zen-ai-chat-ui'
 
 /**
@@ -19,8 +20,8 @@ export function useWorkbenchExecution(
     clearJobsByTask: (taskId: string) => Promise<number>
     persistTask: (showSuccess: boolean) => Promise<boolean>
     uploadAttachment: (target: any, file: File) => Promise<void>
-    /** 本次执行用哪个本地 CLI（claude | opencode）。工作台执行按钮旁的临时选择 */
-    getExecutor: () => 'claude' | 'opencode'
+    /** 本次执行用哪个本地 CLI（claude | opencode | codex）。工作台执行按钮旁的临时选择 */
+    getExecutor: () => TaskExecutorId
   }
 ) {
   // 所有执行请求统一带上 executor；不传时后端回落到配置里的全局默认。

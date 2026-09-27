@@ -1,4 +1,4 @@
-﻿﻿<!--
+﻿<!--
   ~ Copyright 2026 xz333221
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,7 +41,7 @@ import type { Task, Prompt } from '@/types/workbench'
 import { useWorkbenchAttachments, ALLOWED_EXT_HINT, MAX_ATTACHMENT_BYTES } from '@/composables/useWorkbenchAttachments'
 import { useWorkbenchSimpleConversation } from '@/composables/useWorkbenchSimpleConversation'
 import { useWorkbenchExecution } from '@/composables/useWorkbenchExecution'
-import { TASK_EXECUTOR_OPTIONS, getSelectedTaskExecutor, setSelectedTaskExecutor, type TaskExecutorId } from '@/utils/taskExecutor'
+import { TASK_EXECUTOR_OPTIONS, getSelectedTaskExecutor, setSelectedTaskExecutor, taskExecutorName, type TaskExecutorId } from '@/utils/taskExecutor'
 import TaskExecutorIcon from '@components/TaskExecutorIcon.vue'
 import { useWorkbenchData } from '@/composables/useWorkbenchData'
 import WorkbenchSidebar from '@/views/components/WorkbenchSidebar.vue'
@@ -906,7 +906,7 @@ const {
   }
 )
 
-// ── 任务执行器（claude | opencode）─────────────────────────────────────
+// ── 任务执行器（claude | opencode | codex）────────────────────────────
 // 默认值来自设置里的 taskExecutor（configStore），执行按钮旁可以临时切，
 // 临时选择记 localStorage（见 utils/taskExecutor.ts 的口径注释）。
 const selectedTaskExecutor = ref<TaskExecutorId>(getSelectedTaskExecutor())
@@ -914,9 +914,12 @@ const selectedTaskExecutor = ref<TaskExecutorId>(getSelectedTaskExecutor())
 // 本地装了哪些执行器；至少要有一个才能执行任务
 const executorAvailability = computed(() => ({
   claude: toolsStore.claudeAvailable,
-  opencode: toolsStore.opencodeAvailable
+  opencode: toolsStore.opencodeAvailable,
+  codex: toolsStore.codexAvailable
 }))
-const hasAnyExecutor = computed(() => executorAvailability.value.claude || executorAvailability.value.opencode)
+const hasAnyExecutor = computed(() =>
+  TASK_EXECUTOR_OPTIONS.some(o => executorAvailability.value[o.id])
+)
 
 // 工具检测结果变化后纠偏：临时选的执行器被卸载时回落到另一个可用的，避免
 // 点执行才发现后端 spawn ENOENT。
@@ -933,13 +936,13 @@ function pickExecutor(id: TaskExecutorId) {
 }
 
 function executorLabel(id: TaskExecutorId): string {
-  return TASK_EXECUTOR_OPTIONS.find(o => o.id === id)?.name || id
+  return taskExecutorName(id)
 }
 
 // 任务连续对话流的助手名/头像：跟随最近一轮 job 实际用的执行器。
-// 头像与名字同源（agentForExecutor），claude → Claude 品牌图，opencode → OpenCode 品牌图。
+// 头像与名字同源（agentAvatar 的 avatarForExecutor），claude → Claude 品牌图，依此类推。
 const lastSimpleJob = computed(() => simpleAllJobsFor(selectedTask.value).slice(-1)[0])
-const simpleAssistantLabel = computed(() => lastSimpleJob.value?.agent === 'opencode' ? 'OpenCode' : 'Claude')
+const simpleAssistantLabel = computed(() => taskExecutorName(lastSimpleJob.value?.agent))
 const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.value?.agent))
 </script>
 

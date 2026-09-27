@@ -18,6 +18,7 @@ import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { SupportLocale } from '@/locales'
 import { setLocale } from '@/locales'
+import { isTaskExecutorId, type TaskExecutorId } from '@/utils/taskExecutor'
 import { useLocaleStore } from './localeStore'
 
 // AI 模型配置
@@ -193,9 +194,9 @@ export const useConfigStore = defineStore('config', () => {
   const models = ref<ModelInfo[]>([])
   // AI 智能体单轮最大工具调用次数（全局配置，CLI `g ai` 与 Web 智能体共用）
   const aiMaxToolIterations = ref(200)
-  // 工作台任务执行器默认值（全局配置）：claude | opencode。
+  // 工作台任务执行器默认值（全局配置）：claude | opencode | codex。
   // 执行按钮旁的临时切换不存这里——那一份在 utils/taskExecutor.ts 的 localStorage 里。
-  const taskExecutor = ref<'claude' | 'opencode'>('claude')
+  const taskExecutor = ref<TaskExecutorId>('claude')
   // 任务执行结束时是否提示（全局配置）。默认关：浏览器通知属于"会被打扰"的能力，
   // 得用户主动开（开启那一刻顺带申请通知权限，见 GitGlobalSettingsDialog）。
   const notifyOnTaskDone = ref(false)
@@ -448,8 +449,8 @@ export const useConfigStore = defineStore('config', () => {
       if (Number.isFinite(Number(configData.aiMaxToolIterations)) && Number(configData.aiMaxToolIterations) > 0) {
         aiMaxToolIterations.value = Math.floor(Number(configData.aiMaxToolIterations))
       }
-      // 加载工作台任务执行器默认值（后端已规范化为 claude | opencode）
-      if (configData.taskExecutor === 'claude' || configData.taskExecutor === 'opencode') {
+      // 加载工作台任务执行器默认值（后端已规范化为 claude | opencode | codex）
+      if (isTaskExecutorId(configData.taskExecutor)) {
         taskExecutor.value = configData.taskExecutor
       }
       // 任务执行结束提示开关（缺省 false —— 老配置里没有这个字段）
@@ -1386,7 +1387,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 保存通用设置
-  async function saveGeneralSettings(settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: 'claude' | 'opencode', notifyOnTaskDone?: boolean }) {
+  async function saveGeneralSettings(settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: TaskExecutorId, notifyOnTaskDone?: boolean }) {
     try {
       const response = await fetch('/api/config/save-general-settings', {
         method: 'POST',
@@ -1409,7 +1410,7 @@ export const useConfigStore = defineStore('config', () => {
           const localeStore = useLocaleStore()
           localeStore.currentLocale = settings.locale
         }
-        if (settings.taskExecutor === 'claude' || settings.taskExecutor === 'opencode') {
+        if (isTaskExecutorId(settings.taskExecutor)) {
           taskExecutor.value = settings.taskExecutor
         }
         if (typeof settings.notifyOnTaskDone === 'boolean') {

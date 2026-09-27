@@ -15,13 +15,15 @@
 // 任务执行引擎：spawn 本地 agent CLI 跑子任务，流式收集输出，更新 job 状态。
 // 拆分自原 routes/workbench.js 1108-1564 行。
 //
-// 支持两种执行器（executor）：
+// 支持三种执行器（executor）：
 //   - claude   —— claude -p --output-format stream-json（默认，历史行为）
 //   - opencode —— opencode run --format json --auto（sst/opencode CLI，跟随其自身默认模型）
+//   - codex    —— codex exec --json（OpenAI Codex CLI，跟随其自身配置；2026-09-27 加入）
 //
 // 核心 API：
 //   - launchClaudeInNewWindow(cwd, prompt, resumeSessionId)  spawn claude，返回 {pid, child}
 //   - launchOpencodeRun(cwd, prompt, resumeSessionId)        spawn opencode，返回 {pid, child}
+//   - launchCodexExec(cwd, prompt, resumeSessionId)          spawn codex，返回 {pid, child}
 //   - normalizeTaskExecutor(value)                           非法值回落 'claude'
 //   - runSingleSubtask(task, sub, repoPath, branch, opts)    跑一次任务（sub 是运行载体，见下）
 //   - waitProcessExit(pid)                                   polling 等进程退出
@@ -185,10 +187,11 @@ function attachPromptStdin(child, promptText, resolve, reject) {
 }
 
 // ── 执行器（executor） ──────────────────────────────────────────────────
-// 工作台任务默认由 claude CLI 执行；opencode 作为可选执行器（2026-09-20）。
-// 两者都用「stdin 喂 prompt + stdout 结构化 JSON 事件流」的同构形态，
-// 差异只在协议：claude 是 stream-json，opencode 是 --format json 的事件 NDJSON。
-export const TASK_EXECUTORS = ['claude', 'opencode'];
+// 工作台任务默认由 claude CLI 执行；opencode（2026-09-20）、codex（2026-09-27）
+// 作为可选执行器。三者都用「stdin 喂 prompt + stdout 结构化 JSON 事件流」的同构形态，
+// 差异只在协议：claude 是 stream-json，opencode 是 --format json 的事件 NDJSON，
+// codex 是 exec --json 的 thread/item 事件 NDJSON。
+export const TASK_EXECUTORS = ['claude', 'opencode', 'codex'];
 
 /** 非法/缺省的 executor 一律回落 'claude'（历史行为的兼容兜底）。
  *  body.executor 来自网络，做一次 trim + 小写归一，与 config.js 同名函数同语义。 */
@@ -263,6 +266,95 @@ export function launchOpencodeRun(cwd, promptText, resumeSessionId) {
         detached: true,
         stdio: ['pipe', 'pipe', 'pipe'],
         env: buildOpencodeEnv()
+      });
+    }
+    attachPromptStdin(child, promptText, resolve, reject);
+  });
+}
+
+// ── codex 执行器（2026-09-27 加入） ──────────────────────────────────────
+// codex exec 是非交互模式，形态与另两个执行器同构（stdin 喂 prompt + stdout NDJSON）：
+//
+//   codex exec [resume <thread_id>] --json --skip-git-repo-check
+//     --dangerously-bypass-approvals-and-sandbox -      （`-` = prompt 从 stdin 读）
+//
+//   - --json      输出 JSONL 事件流（thread.started / item.* / turn.*）
+//   - --dangerously-bypass-approvals-and-sandbox
+//                 免批准 + 免沙箱，对应 claude 的 bypassPermissions、opencode 的 --auto。
+//                 工作台任务全程无人应答批准提示，不跳过的话一遇审批就卡死
+//   - --skip-git-repo-check
+//                 工作台允许在非 git 目录建任务，不跳过的话 codex 直接拒绝启动
+//   - 不传 -m / -s：模型与沙箱跟随 codex 自身配置（同 opencode 的口径）
+//   - 续聊：codex exec resume <thread_id>，thread_id 来自 thread.started 事件
+
+/**
+ * Windows 下把 codex 解析成可直接 spawn 的 exe。
+ *
+ * npm 全局安装的 codex 是 .cmd shim（Node 23+ 拒绝 spawn .cmd，EINVAL），shim 指向
+ * `node bin/codex.js`；而 bin/codex.js 自己也只是一层壳，真正干活的原生二进制在平台
+ * 子包里：node_modules/@openai/codex/node_modules/@openai/codex-win32-<arch>/vendor/
+ * <triple>/bin/codex.exe（与 bin/codex.js 的查找口径一致，另留一份无平台子包的兜底路径）。
+ *
+ * 为什么不直接 spawn(process.execPath, [bin/codex.js, ...])：那层壳会再 spawn 一次原生
+ * 二进制，取消任务时 kill 到的只是壳进程，原生 codex 会变孤儿继续改文件。
+ */
+function resolveCodexExe() {
+  try {
+    const lines = execFileSync('where', ['codex'], { encoding: 'utf8', windowsHide: true })
+      .split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    // 独立安装（scoop / 手动下载 / 包管理器直装）优先：PATH 上直接就是原生 exe
+    const directExe = lines.find(s => /\.exe$/i.test(s));
+    if (directExe && fs.existsSync(directExe)) return directExe;
+    const cmdShim = lines.find(s => /\.cmd$/i.test(s));
+    if (cmdShim) {
+      const prefix = path.dirname(cmdShim);
+      const triple = process.arch === 'arm64' ? 'aarch64-pc-windows-msvc' : 'x86_64-pc-windows-msvc';
+      const archTag = process.arch === 'arm64' ? 'arm64' : 'x64';
+      const candidates = [
+        path.join(prefix, 'node_modules', '@openai', 'codex', 'node_modules', '@openai',
+          `codex-win32-${archTag}`, 'vendor', triple, 'bin', 'codex.exe'),
+        path.join(prefix, 'node_modules', '@openai', 'codex', 'vendor', triple, 'bin', 'codex.exe'),
+      ];
+      for (const exe of candidates) {
+        if (fs.existsSync(exe)) return exe;
+      }
+    }
+  } catch { /* fallback */ }
+  // 兜底交给 PATH：装在非 npm 全局目录时通常有 codex.exe
+  return 'codex.exe';
+}
+
+/**
+ * codex 子进程环境。
+ * RUST_LOG=error：codex 默认把 tracing 的 INFO 日志写 stderr，而 stderr 里非 JSON 行
+ * 会被当正文贴进输出面板（实测一次执行能刷出上百行）；压到 error 档即可清干净，
+ * 真正的报错走 stdout 的 JSON 事件流（error / turn.failed），信息不丢。
+ */
+function buildCodexEnv() {
+  return { ...process.env, LANG: 'zh_CN.UTF-8', RUST_LOG: 'error' };
+}
+
+/** spawn codex exec 跑一个 prompt，返回 { pid, child }（参数口径见上方注释）。 */
+export function launchCodexExec(cwd, promptText, resumeSessionId) {
+  return new Promise((resolve, reject) => {
+    const flags = ['--json', '--skip-git-repo-check', '--dangerously-bypass-approvals-and-sandbox'];
+    const args = resumeSessionId
+      ? ['exec', 'resume', ...flags, String(resumeSessionId), '-']
+      : ['exec', ...flags, '-'];
+    let child;
+    if (process.platform === 'win32') {
+      child = spawn(resolveCodexExe(), args, {
+        cwd,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: false,
+        env: buildCodexEnv()
+      });
+    } else {
+      child = spawn('codex', args, {
+        cwd,
+        detached: true,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: buildCodexEnv()
       });
     }
     attachPromptStdin(child, promptText, resolve, reject);
@@ -586,6 +678,156 @@ export function createOpencodeEventHandler(job, appendOutput, appendThinking, to
 }
 
 /**
+ * codex `exec --json` 事件处理器。
+ *
+ * 事件形态（codex-cli 0.157.x；schema 源：openai/codex codex-rs/exec/src/exec_events.rs）：
+ *   { type:'thread.started', thread_id }            会话续接标识（exec resume <id>）
+ *   { type:'turn.started' } / { type:'turn.completed', usage }
+ *   { type:'turn.failed', error:{ message } }       本轮终态失败（进程退出码可能仍是 0）
+ *   { type:'item.started'|'item.updated'|'item.completed', item:{ id, type, ... } }
+ *   { type:'error', message }                       重试等非终止信息（真失败走 turn.failed）
+ *
+ * item.type（snake_case）分派：
+ *   agent_message      正文 → output（按 item.id 做累积/增量去重，两种推送语义都兼容）
+ *   reasoning          思考 → thinking
+ *   command_execution  命令 → 工具调用（command 作参数摘要，aggregated_output 作结果）
+ *   file_change        改动文件清单 → 工具调用
+ *   mcp_tool_call      MCP 工具 → 工具调用（server.tool 作名字）
+ *   web_search         搜索 → 工具调用
+ *   error              非致命告警（配置项被忽略 / 模型元信息缺失等）→ 贴进 output，不判失败
+ *   其余（todo_list / collab_tool_call / 未来新增）忽略 —— 事件枚举是 non_exhaustive，
+ *   未知类型不能影响正文收集与终态判定。
+ * （导出仅为回归测试可见：taskRunner.codex.test.js）
+ */
+export function createCodexEventHandler(job, appendOutput, appendThinking, toolCalls) {
+  const tracker = toolCalls || createToolCallTracker(job);
+  const seenTextItems = new Map(); // item.id -> 已落地的累计文本
+
+  const appendItemText = (item, isThinking) => {
+    const text = typeof item?.text === 'string' ? item.text : '';
+    if (!text) return;
+    const id = typeof item?.id === 'string' ? item.id : '';
+    const prev = id ? seenTextItems.get(id) : undefined;
+    let delta = text;
+    if (prev !== undefined) {
+      delta = text.startsWith(prev) ? text.slice(prev.length) : text;
+    }
+    if (!delta) return;
+    if (id) seenTextItems.set(id, prev !== undefined ? prev + delta : text);
+    if (isThinking) appendThinking(delta);
+    else appendOutput(delta);
+  };
+
+  // codex 的 status: in_progress | completed | failed | declined（snake_case）
+  const mapItemStatus = (raw) => {
+    const s = typeof raw === 'string' ? raw.toLowerCase() : '';
+    if (s === 'completed') return 'done';
+    if (s === 'failed' || s === 'declined') return 'error';
+    return 'running';
+  };
+
+  const changesText = (changes) => (Array.isArray(changes) ? changes : [])
+    .map(c => (c && c.path ? `${c.kind || 'update'} ${c.path}` : ''))
+    .filter(Boolean)
+    .join('\n');
+
+  const handleItem = (item) => {
+    if (!item || typeof item !== 'object') return;
+    switch (item.type) {
+      case 'agent_message':
+        appendItemText(item, false);
+        return;
+      case 'reasoning':
+        appendItemText(item, true);
+        return;
+      case 'error':
+        // 非致命告警：原样贴出来让用户看得见，但不置 agentError —— 那会把告警变成任务失败
+        if (item.message) appendOutput(`\n> [codex] ${item.message}\n`);
+        return;
+      case 'command_execution': {
+        const status = mapItemStatus(item.status);
+        tracker.record({
+          id: item.id,
+          name: 'command_execution',
+          input: { command: item.command },
+          status,
+          output: status === 'running' ? undefined : item.aggregated_output,
+          error: status === 'error' ? `命令未成功完成（exit_code=${item.exit_code ?? 'null'}）` : ''
+        });
+        return;
+      }
+      case 'file_change': {
+        const status = mapItemStatus(item.status);
+        tracker.record({
+          id: item.id,
+          name: 'file_change',
+          input: { changes: item.changes },
+          status,
+          output: status === 'running' ? undefined : changesText(item.changes),
+          error: status === 'error' ? '文件改动未应用' : ''
+        });
+        return;
+      }
+      case 'mcp_tool_call': {
+        const status = mapItemStatus(item.status);
+        tracker.record({
+          id: item.id,
+          name: item.server && item.tool ? `${item.server}.${item.tool}` : (item.tool || 'mcp_tool_call'),
+          input: item.arguments,
+          // result.content 是 MCP 的内容块数组（与 claude 的 tool_result 同形态），
+          // 直接喂给 extractToolText 能压成文本；没有 content 时整包 JSON 兜底
+          status,
+          output: status === 'running' ? undefined : (item.result?.content ?? item.result),
+          error: item.error?.message || (status === 'error' ? 'MCP 工具调用失败' : '')
+        });
+        return;
+      }
+      case 'web_search': {
+        const status = mapItemStatus(item.status);
+        tracker.record({
+          id: item.id,
+          name: 'web_search',
+          input: { query: item.query },
+          status,
+          output: status === 'running' ? undefined : item.results
+        });
+        return;
+      }
+      default:
+        return;
+    }
+  };
+
+  return (evt) => {
+    if (!evt || typeof evt !== 'object') return;
+    // thread_id 是 codex 的会话续接标识（exec resume <id>）。复用 claudeSessionId 字段：
+    // 前端与续接路由都认它，换执行器只是取值来源不同。
+    if (evt.type === 'thread.started') {
+      if (typeof evt.thread_id === 'string' && evt.thread_id && job.claudeSessionId !== evt.thread_id) {
+        job.claudeSessionId = evt.thread_id;
+        publish('job:update', job);
+      }
+      return;
+    }
+    if (evt.type === 'item.started' || evt.type === 'item.updated' || evt.type === 'item.completed') {
+      handleItem(evt.item);
+      return;
+    }
+    if (evt.type === 'turn.failed') {
+      const msg = evt.error?.message
+        || (evt.error?.additional_details ? String(evt.error.additional_details) : '')
+        || 'codex 执行出错';
+      if (!job.agentError) job.agentError = msg;
+      return;
+    }
+    if (evt.type === 'error') {
+      // 非终止信息（如 "Reconnecting... 1/5" 重试提示）：贴进 output，终态仍由 turn.* 决定
+      if (evt.message) appendOutput(`\n> [codex] ${evt.message}\n`);
+    }
+  };
+}
+
+/**
  * 执行一次任务。任务一次只跑一个进程，本函数是唯一的执行入口
  * （首次执行、手动重跑、续聊都走它）。
  *
@@ -595,10 +837,11 @@ export function createOpencodeEventHandler(job, appendOutput, appendThinking, to
  * @param {string} branch       分支名（可空）
  * @param {object} [options]
  * @param {string|null} [options.resumeSessionId]
- *        续接历史会话:claude 走 --resume <id>，opencode 走 --session <id>。
- *        id 来自上一轮 stream 事件捕获的会话标识(两者都记在 job.claudeSessionId)。
+ *        续接历史会话:claude 走 --resume <id>，opencode 走 --session <id>，
+ *        codex 走 exec resume <thread_id>。
+ *        id 来自上一轮 stream 事件捕获的会话标识(三者都记在 job.claudeSessionId)。
  * @param {string} [options.executor]
- *        执行器 'claude' | 'opencode'。缺省回落 'claude'；路由层负责把
+ *        执行器 'claude' | 'opencode' | 'codex'。缺省回落 'claude'；路由层负责把
  *        "body 指定 > 配置默认"先解析好再传进来。
  * @returns {Promise<'done'|'cancelled'|'error'>} 本次运行的终态
  */
@@ -677,7 +920,11 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
   let toolTracker = null;
 
   try {
-    const launcher = executor === 'opencode' ? launchOpencodeRun : launchClaudeInNewWindow;
+    const launcher = executor === 'opencode'
+      ? launchOpencodeRun
+      : executor === 'codex'
+        ? launchCodexExec
+        : launchClaudeInNewWindow;
     const { pid, child } = await launcher(repoPath || process.cwd(), prompt, resumeSessionId);
     job.pid = pid;
     // 保存 child 引用，供 cancel 接口调用 kill
@@ -729,7 +976,9 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
 
     const handleEvent = executor === 'opencode'
       ? createOpencodeEventHandler(job, appendOutput, appendThinking, toolTracker)
-      : createClaudeEventHandler(job, appendOutput, appendThinking, toolTracker);
+      : executor === 'codex'
+        ? createCodexEventHandler(job, appendOutput, appendThinking, toolTracker)
+        : createClaudeEventHandler(job, appendOutput, appendThinking, toolTracker);
 
     const handleLine = (line, channel) => {
       const trimmed = line.trim();

@@ -39,6 +39,7 @@ import type {
   RunningAgent,
   Task,
 } from '@/types/workbench'
+import type { TaskExecutorId } from '@/utils/taskExecutor'
 
 export interface DispatchPayload {
   text: string
@@ -48,8 +49,8 @@ export interface DispatchPayload {
   attachments?: Attachment[]
   /** false = 本次派发不附加默认提示词（默认附加） */
   useDefaultPrompt?: boolean
-  /** 本次派发建的任务用哪个本地 CLI 执行（claude | opencode）。缺省走服务端配置默认 */
-  executor?: 'claude' | 'opencode'
+  /** 本次派发建的任务用哪个本地 CLI 执行（claude | opencode | codex）。缺省走服务端配置默认 */
+  executor?: TaskExecutorId
 }
 
 export function useOrchestrator() {

@@ -429,11 +429,13 @@ async function runTask(t: BoardTask) {
   const toolsStore = useToolsStore()
   const avail: Record<TaskExecutorId, boolean> = {
     claude: toolsStore.claudeAvailable,
-    opencode: toolsStore.opencodeAvailable
+    opencode: toolsStore.opencodeAvailable,
+    codex: toolsStore.codexAvailable
   }
   let executor = getSelectedTaskExecutor()
   if (!avail[executor]) {
-    executor = executor === 'claude' ? 'opencode' : 'claude'
+    // 选中的没装：回落到任一可用的执行器；都缺就不换，交给后端报 spawn 失败
+    executor = (Object.keys(avail) as TaskExecutorId[]).find(id => avail[id]) || executor
   }
   const url = `/api/workbench/tasks/${encodeURIComponent(t.id)}/run`
   const res = await fetch(url, {
@@ -492,7 +494,7 @@ const defaultProjectPath = computed(
 async function onDispatch(payload: {
   text: string; autoRun: boolean; attachments: Attachment[]
   projectPath: string; useDefaultPrompt: boolean
-  executor: 'claude' | 'opencode'
+  executor: TaskExecutorId
 }) {
   const result = await dispatch({
     text: payload.text,

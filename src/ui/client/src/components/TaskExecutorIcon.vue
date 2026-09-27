@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 任务执行器的品牌图标：claude / opencode 各一张彩色 SVG。
+// 任务执行器的品牌图标：claude / opencode / codex 各一张彩色 SVG。
 // 统一收口成组件的原因：执行按钮下拉、派发控制台、设置弹窗三处都要用，
 // 图标路径和尺寸口径只写一遍，以后加执行器也只改这里。
 //
@@ -8,6 +8,7 @@
 import { computed } from 'vue'
 import claudeIcon from '@/assets/icons/svg/claudecode-color.svg'
 import opencodeIcon from '@/assets/icons/svg/opencode.svg'
+import codexIcon from '@/assets/icons/svg/codex.svg'
 import type { TaskExecutorId } from '@/utils/taskExecutor'
 
 const props = defineProps<{ executor: TaskExecutorId }>()
@@ -15,6 +16,7 @@ const props = defineProps<{ executor: TaskExecutorId }>()
 const ICONS: Record<TaskExecutorId, string> = {
   claude: claudeIcon,
   opencode: opencodeIcon,
+  codex: codexIcon,
 }
 
 const src = computed(() => ICONS[props.executor])

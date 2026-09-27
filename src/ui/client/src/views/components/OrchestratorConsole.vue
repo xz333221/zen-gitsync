@@ -40,7 +40,7 @@ import type {
 import { clockFromIso, relativeTimeFromIso } from '@/utils/relativeTime'
 import AttachmentZone from '@/components/AttachmentZone.vue'
 import { useWorkbenchAttachments, type AttachmentTarget } from '@/composables/useWorkbenchAttachments'
-import { TASK_EXECUTOR_OPTIONS, getSelectedTaskExecutor, setSelectedTaskExecutor, type TaskExecutorId } from '@/utils/taskExecutor'
+import { TASK_EXECUTOR_OPTIONS, getSelectedTaskExecutor, setSelectedTaskExecutor, taskExecutorName, type TaskExecutorId } from '@/utils/taskExecutor'
 import { useToolsStore } from '@/stores/toolsStore'
 
 const props = defineProps<{
@@ -98,13 +98,14 @@ const autoRun = ref(true)
  */
 const useDefaultPrompt = ref(true)
 
-// ── 执行器（claude | opencode）─────────────────────────────────────────
+// ── 执行器（claude | opencode | codex）─────────────────────────────────
 // 与工作台执行按钮共用同一份临时选择（localStorage），两边切了互相跟手；
 // 选中的执行器没装时回落到另一个可用的（与看板卡片「执行」同一套兜底）。
 const toolsStore = useToolsStore()
 const executorAvailability = computed(() => ({
   claude: toolsStore.claudeAvailable,
   opencode: toolsStore.opencodeAvailable,
+  codex: toolsStore.codexAvailable,
 }))
 const selectedExecutor = ref<TaskExecutorId>(getSelectedTaskExecutor())
 function onExecutorChange() {
@@ -118,7 +119,7 @@ function onExecutorChange() {
   if (fallback) selectedExecutor.value = fallback
 }
 function executorName(id: TaskExecutorId): string {
-  return TASK_EXECUTOR_OPTIONS.find(o => o.id === id)?.name || id
+  return taskExecutorName(id)
 }
 function onExecutorPick(id: TaskExecutorId) {
   // disabled 项 el-dropdown 根本不会发 command，这里只做兜底

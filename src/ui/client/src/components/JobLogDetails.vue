@@ -126,6 +126,7 @@ import { ElMessage } from 'element-plus'
 import { ChatContainer, MarkdownRenderer, type ChatMessage, type MessageStatus } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { avatarForExecutor } from '@/utils/agentAvatar'
+import { taskExecutorName } from '@/utils/taskExecutor'
 import { buildJobToolCalls } from '@/utils/jobToolCalls'
 import { $t } from '@/lang/static'
 import type { Job, JobStatus } from '@/types/workbench'
@@ -241,7 +242,7 @@ const finishedStatusLabel = computed(() => {
 // 流式状态由 message.status 驱动,不再需要自定义 typewriter。
 // 助手名跟随 job 实际用的执行器（job.agent，老 job 无此字段视为 claude）。
 // 产品名,中英文一致,无需走 i18n
-const assistantLabel = computed(() => (props.job?.agent === 'opencode' ? 'OpenCode' : 'Claude'))
+const assistantLabel = computed(() => taskExecutorName(props.job?.agent))
 // 头像与名字同源,一并跟随执行器
 const assistantAvatar = computed(() => avatarForExecutor(props.job?.agent))
 

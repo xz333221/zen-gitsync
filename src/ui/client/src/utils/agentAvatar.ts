@@ -14,8 +14,8 @@
 //
 // 工作台对话的助手头像。
 //
-// 这条链路（任务连续对话 / 执行日志详情）的执行者有 claude / opencode 两种
-// （taskRunner 双执行器，job.agent 记录本轮实际用的是谁），头像按 job.agent 切换，
+// 这条链路（任务连续对话 / 执行日志详情）的执行者有 claude / opencode / codex 三种
+// （taskRunner 三执行器，job.agent 记录本轮实际用的是谁），头像按 job.agent 切换，
 // 都用 zen-ai-chat-ui 内置品牌头像（0.1.0-beta.8 起提供 13 个，见 dist/avatars）。
 //
 // resolveAvatar 的语义是「透传」：命中内置键名返回内联 data URL（运行时零网络请求），
@@ -31,8 +31,12 @@ import { resolveAvatar } from 'zen-ai-chat-ui'
 export const CLAUDE_AVATAR = resolveAvatar('claude')
 /** OpenCode 品牌头像（内联 data URL）。 */
 export const OPENCODE_AVATAR = resolveAvatar('opencode')
+/** Codex（OpenAI）品牌头像（内联 data URL）。 */
+export const CODEX_AVATAR = resolveAvatar('codex')
 
-/** 按执行器 id 取头像；未知执行器回落 Claude（与标签口径一致）。 */
+/** 按执行器 id 取头像；未知/缺省（老 job 没有 agent 字段）回落 Claude（与标签口径一致）。 */
 export function avatarForExecutor(agent?: string | null): string {
-  return agent === 'opencode' ? OPENCODE_AVATAR : CLAUDE_AVATAR
+  if (agent === 'opencode') return OPENCODE_AVATAR
+  if (agent === 'codex') return CODEX_AVATAR
+  return CLAUDE_AVATAR
 }
