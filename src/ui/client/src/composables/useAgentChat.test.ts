@@ -195,6 +195,45 @@ describe('useAgentChat parallel sessions', () => {
     chatStreams[0].close()
     await sendPromise
   })
+
+  // 提问面板：ask_user 带 multiple 时，提交给服务端的 answer 是数组
+  // （多选序列化成 JSON 数组字符串、拼进 tool 结果是服务端的事）
+  test('ask_user 多选：提交数组给 /api/agent/respond', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const sendPromise = chat.sendMessage('问我几个问题')
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    chatStreams[0].send({
+      type: 'ask_user',
+      interactionId: 'q1',
+      question: '要改哪几个文件？',
+      options: ['A.ts', 'B.ts', 'C.ts'],
+      allowFreeText: true,
+      multiple: true
+    })
+    await flush()
+
+    expect(chat.pendingQuestion.value?.multiple).toBe(true)
+    expect(chat.pendingQuestion.value?.options).toEqual(['A.ts', 'B.ts', 'C.ts'])
+
+    await chat.answerQuestion(['A.ts', 'C.ts'])
+    expect(chat.pendingQuestion.value).toBeNull()
+
+    const call = vi.mocked(globalThis.fetch).mock.calls.find(([url]) => url === '/api/agent/respond')
+    expect(call).toBeTruthy()
+    expect(JSON.parse(String((call![1] as RequestInit).body))).toEqual({
+      sessionId: 'A',
+      interactionId: 'q1',
+      answer: ['A.ts', 'C.ts']
+    })
+
+    chatStreams[0].send({ type: 'done', content: '好' })
+    chatStreams[0].close()
+    await sendPromise
+  })
 })
 
 // 历史回放：一次 AI 回合（工具循环多轮）在服务端是多条 assistant + tool 记录，

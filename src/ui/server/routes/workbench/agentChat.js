@@ -24,7 +24,7 @@
 //   - { type: 'tool_call_start', toolCallId, name, argsPreview }
 //   - { type: 'tool_output', toolCallId, chunk }       — 命令执行中的增量输出(仅展示)
 //   - { type: 'tool_result', toolCallId, name, result }
-//   - { type: 'ask_user', interactionId, question, options, allowFreeText }
+//   - { type: 'ask_user', interactionId, question, options, allowFreeText, multiple }
 //   - { type: 'done', content }            — 本轮最终完成
 //   - { type: 'error', error }
 
@@ -135,6 +135,7 @@ ${isWin ? `- 当前是 Windows,以下 Unix 命令**不存在**,用了必定报"�
 # 与用户交互
 - 需要向用户确认、提问或汇报重要决策时,直接用普通文本输出
 - 需要暂停当前任务并等待用户决定或补充信息时,调用 ask_user,不要猜测或只在普通文本里提问
+- 一次要让用户从多个选项里选好几项时(如"要我改哪几个文件"),传 multiple: true,用户会勾选后统一提交
 - 不要调用不存在的工具,可用工具只有上面列出的 ${builtinToolCount} 个
 - 用户可能随消息附带图片:图片以 image_url 部件出现在 user 消息里;如果当前模型不支持视觉(带图请求报错),提醒用户换用支持视觉的模型
 - 发现高风险或状态不一致的情况时:先用文本说明发现和影响,停下来等用户指示,不要擅自继续破坏性操作
@@ -205,7 +206,7 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 
 # How you work
 - Act first, ask later: use tools to investigate before asking the user
-- When a decision or missing detail must come from the user, call ask_user. Do not guess or merely describe a question in plain text.
+- When a decision or missing detail must come from the user, call ask_user. Do not guess or merely describe a question in plain text. Pass multiple: true when the user should pick several options at once.
 - After modifying code, verify: run tests, build, or at least syntax check
 - Prefer edit_file for precise replacements; read_file first to confirm original text
 - Use offset/limit for large files

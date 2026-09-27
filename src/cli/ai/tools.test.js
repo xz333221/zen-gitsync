@@ -30,6 +30,7 @@ test('ask_user schema and arguments support options plus free text', async () =>
   assert.deepEqual(definition.function.parameters.required, ['question'])
   assert.ok(definition.function.parameters.properties.options)
   assert.ok(definition.function.parameters.properties.allow_free_text)
+  assert.ok(definition.function.parameters.properties.multiple)
 
   let received
   const result = await executeTool('ask_user', {
@@ -48,7 +49,17 @@ test('ask_user schema and arguments support options plus free text', async () =>
     question: 'Which path should I take?',
     options: ['Fast', '42'],
     allowFreeText: false,
+    multiple: false,
   })
+})
+
+test('ask_user 把 multiple 透传给交互回调,没有选项时强制单选', async () => {
+  const seen = []
+  const askUser = async value => { seen.push(value); return 'x' }
+  await executeTool('ask_user', { question: '选几个?', options: ['A', 'B'], multiple: true }, { ...ctx, askUser })
+  await executeTool('ask_user', { question: '随便说', multiple: true }, { ...ctx, askUser })
+  assert.equal(seen[0].multiple, true)
+  assert.equal(seen[1].multiple, false, '没有选项时多选无意义')
 })
 
 test('ask_user returns a useful error when no interactive callback exists', async () => {

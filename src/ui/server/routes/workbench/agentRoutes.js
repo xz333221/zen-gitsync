@@ -55,7 +55,7 @@ function interactionKey(sessionId, interactionId) {
   return `${String(sessionId)}:${String(interactionId)}`;
 }
 
-export function waitForAgentAnswer({ sessionId, interactionId, question, options, allowFreeText, send, signal }) {
+export function waitForAgentAnswer({ sessionId, interactionId, question, options, allowFreeText, multiple, send, signal }) {
   const key = interactionKey(sessionId, interactionId);
   return new Promise((resolve) => {
     let settled = false;
@@ -75,10 +75,11 @@ export function waitForAgentAnswer({ sessionId, interactionId, question, options
       question,
       options,
       allowFreeText,
+      multiple: multiple === true,
       settle,
     });
     signal?.addEventListener?.('abort', onAbort, { once: true });
-    send({ type: 'ask_user', interactionId, question, options, allowFreeText });
+    send({ type: 'ask_user', interactionId, question, options, allowFreeText, multiple: multiple === true });
     if (signal?.aborted) onAbort();
   });
 }
@@ -88,12 +89,17 @@ export function submitAgentAnswer({ sessionId, interactionId, answer }) {
   const pending = pendingAgentQuestions.get(key);
   if (!pending) return { ok: false, status: 404, error: 'No pending question for this session.' };
 
-  const value = String(answer || '').trim();
-  if (!value) return { ok: false, status: 400, error: 'Answer cannot be empty.' };
-  if (!pending.allowFreeText && pending.options.length > 0 && !pending.options.includes(value)) {
-    return { ok: false, status: 400, error: 'Choose one of the listed options.' };
+  // 单选发字符串、多选发数组；这里统一归一成"非空的字符串列表"
+  const values = (Array.isArray(answer) ? answer : [answer])
+    .map((v) => String(v ?? '').trim())
+    .filter(Boolean);
+  if (!values.length) return { ok: false, status: 400, error: 'Answer cannot be empty.' };
+  if (!pending.allowFreeText && pending.options.length > 0) {
+    const unknown = values.filter((v) => !pending.options.includes(v));
+    if (unknown.length) return { ok: false, status: 400, error: 'Choose one of the listed options.' };
   }
-  pending.settle(value);
+  // 多选回给模型的是 JSON 数组字符串（单选/自由输入保持原样字符串）
+  pending.settle(pending.multiple ? JSON.stringify(values) : values[0]);
   return { ok: true };
 }
 
@@ -307,6 +313,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
           question: args.question,
           options: Array.isArray(args.options) ? args.options : [],
           allowFreeText: args.allowFreeText !== false,
+          multiple: args.multiple === true,
           send,
           signal: abortController.signal,
         }),

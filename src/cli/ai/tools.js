@@ -211,6 +211,10 @@ export const TOOL_DEFINITIONS = [
             type: 'boolean',
             description: 'Whether the user may type an answer that is not one of the listed options. Defaults to true.',
           },
+          multiple: {
+            type: 'boolean',
+            description: 'Allow selecting several options at once. Only meaningful when options are provided. Defaults to false.',
+          },
         },
         required: ['question'],
       },
@@ -613,7 +617,9 @@ async function toolAskUser(args, ctx) {
     ? args.options.map(option => String(option || '').trim()).filter(Boolean).slice(0, 20)
     : []
   const allowFreeText = options.length === 0 || args.allow_free_text !== false
-  return ctx.askUser({ question, options, allowFreeText })
+  // 多选只在真的给了选项时才有意义
+  const multiple = args.multiple === true && options.length > 0
+  return ctx.askUser({ question, options, allowFreeText, multiple })
 }
 
 // ──────────────────────────────────────────────

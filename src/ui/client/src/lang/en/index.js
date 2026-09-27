@@ -2569,7 +2569,6 @@ export default {
   '@AGENT:我可以帮你阅读代码、执行命令、修改文件。选择下方话题或直接输入你的问题。': 'I can help you read code, run commands, and modify files. Choose a topic below or type your question.',
   '@AGENT:正在生成中...': 'Generating...',
   '@AGENT:输入消息，Enter 发送': 'Type a message, press Enter to send',
-  '@AGENT:停止生成': 'Stop generating',
   '@AGENT:等待你的回答': 'Waiting for your answer',
   '@AGENT:输入回答': 'Type an answer',
   '@AGENT:提交回答': 'Submit answer',

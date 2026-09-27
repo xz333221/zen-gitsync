@@ -35,6 +35,8 @@ export interface PendingAgentQuestion {
   question: string
   options: string[]
   allowFreeText: boolean
+  /** 多选：勾选后提交；单选点选项即提交 */
+  multiple: boolean
 }
 
 // 后端 session 完整数据
@@ -695,6 +697,7 @@ export function useAgentChat() {
                 question: String(evt.question || ''),
                 options: Array.isArray(evt.options) ? evt.options.map((v: unknown) => String(v)) : [],
                 allowFreeText: evt.allowFreeText !== false,
+                multiple: evt.multiple === true,
               }
               break
 
@@ -758,12 +761,14 @@ export function useAgentChat() {
     }
   }
 
-  async function answerQuestion(answer: string) {
+  async function answerQuestion(answers: string[]) {
     const run = activeRun.value
     const pending = run?.pendingQuestion
     const sessionId = run?.sessionId
-    const value = String(answer || '').trim()
-    if (!run || !pending || !sessionId || !value || run.answeringQuestion) return false
+    const values = (Array.isArray(answers) ? answers : [answers])
+      .map(v => String(v ?? '').trim())
+      .filter(Boolean)
+    if (!run || !pending || !sessionId || !values.length || run.answeringQuestion) return false
     run.answeringQuestion = true
     try {
       const res = await fetch('/api/agent/respond', {
@@ -772,7 +777,8 @@ export function useAgentChat() {
         body: JSON.stringify({
           sessionId,
           interactionId: pending.interactionId,
-          answer: value,
+          // 单选发字符串、多选发数组；序列化成 JSON 数组字符串回喂模型是服务端的事
+          answer: pending.multiple ? values : values[0],
         }),
       }).then(r => r.json())
       if (!res.success) throw new Error(res.error || $t('@AGENT:回答提交失败'))

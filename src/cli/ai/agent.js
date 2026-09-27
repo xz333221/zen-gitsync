@@ -849,9 +849,11 @@ export async function runAiAgent(argv = []) {
 
   // ask_user pauses the tool loop inside the same readline session. The REPL
   // line handler is bypassed while this small wizard owns the input line.
-  state.ctx.askUser = ({ question, options = [], allowFreeText = true }) => {
+  state.ctx.askUser = ({ question, options = [], allowFreeText = true, multiple = false }) => {
     const zh = !String(state.locale || '').startsWith('en')
     const safeOptions = Array.isArray(options) ? options.filter(Boolean).slice(0, 20) : []
+    // 多选只在真的给了选项时才有意义（与 tools.js 的归一化口径一致）
+    const multi = multiple === true && safeOptions.length > 0
     state.inWizard = true
     if (safeOptions.length > 0) {
       console.log(chalk.cyan(`\n${question}`))
@@ -906,11 +908,31 @@ export async function runAiAgent(argv = []) {
 
       const promptAnswer = () => {
         const hint = safeOptions.length > 0
-          ? (allowFreeText ? (zh ? '请输入序号或直接输入回答' : 'Choose a number or type an answer') : (zh ? '请输入序号' : 'Choose a number'))
+          ? (multi
+              ? (zh ? '请输入序号(逗号分隔可多选)' : 'Choose numbers, comma-separated for multiple')
+              : allowFreeText ? (zh ? '请输入序号或直接输入回答' : 'Choose a number or type an answer') : (zh ? '请输入序号' : 'Choose a number'))
           : (zh ? '请输入回答' : 'Type your answer')
         rl.question(`${hint}: `, { signal: questionController.signal }, answer => {
           if (settled) return
           const trimmed = String(answer || '').trim()
+          if (multi) {
+            // 逗号分隔的序号 → 选项列表(JSON 数组字符串回给模型,与 Web 端口径一致);
+            // 整行不是合法序号串时,允许自由输入的话就把它当作唯一一项
+            const parts = trimmed.split(/[,，]/).map(part => part.trim()).filter(Boolean)
+            const indexes = parts.map(part => Number.parseInt(part, 10))
+            const allIndexes = parts.length > 0 && indexes.every((n, i) => Number.isInteger(n) && String(n) === parts[i] && n >= 1 && n <= safeOptions.length)
+            if (allIndexes) {
+              finish(JSON.stringify(indexes.map(n => safeOptions[n - 1])))
+              return
+            }
+            if (allowFreeText && trimmed) {
+              finish(JSON.stringify([trimmed]))
+              return
+            }
+            console.log(chalk.yellow(zh ? `请输入 1-${safeOptions.length} 之间的序号,多个用逗号分隔` : `Enter numbers from 1 to ${safeOptions.length}, comma-separated`))
+            promptAnswer()
+            return
+          }
           if (safeOptions.length > 0) {
             const index = Number.parseInt(trimmed, 10)
             if (Number.isInteger(index) && index >= 1 && index <= safeOptions.length) {

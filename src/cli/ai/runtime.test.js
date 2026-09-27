@@ -154,7 +154,7 @@ test('ask_user pauses a turn until the answer arrives, then continues the model 
   })
 
   await new Promise(resolve => setImmediate(resolve))
-  assert.deepEqual(asked, { question: 'Which option?', options: ['A', 'B'], allowFreeText: false })
+  assert.deepEqual(asked, { question: 'Which option?', options: ['A', 'B'], allowFreeText: false, multiple: false })
   assert.equal(round, 1)
   resolveAnswer('B')
 

@@ -25,7 +25,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessageBox, ElTooltip, ElIcon } from 'element-plus'
-import { Plus, Search, Delete, Edit, ChatLineRound, Loading, Check, ChatDotRound, Goods, Connection } from '@element-plus/icons-vue'
+import { Plus, Search, Delete, Edit, ChatLineRound, Loading, ChatDotRound, Goods, Connection } from '@element-plus/icons-vue'
 import { ChatContainer } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { useConfigStore } from '@/stores/configStore'
@@ -110,12 +110,12 @@ async function onSelectPreset(q: any) {
   scrollToBottom()
 }
 
-const pendingAnswer = ref('')
-
-async function submitPendingAnswer(answer = pendingAnswer.value) {
-  const submitted = await answerQuestion(answer)
-  if (submitted) pendingAnswer.value = ''
-}
+// 提问面板文案（面板 UI 在 zen-ai-chat-ui 里，这里只负责翻译）
+const questionLabels = computed(() => ({
+  title: $t('@AGENT:等待你的回答'),
+  placeholder: $t('@AGENT:输入回答'),
+  submit: $t('@AGENT:提交回答'),
+}))
 
 // ── ChatContainer ref ────────────────────────────────────
 const chatContainerRef = ref<InstanceType<typeof ChatContainer> | null>(null)
@@ -348,62 +348,18 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
         :assistant-name="'g ai'"
         :theme="chatTheme"
         :disabled="isStreaming"
+        :generating="isStreaming"
         :upload-config="{ accept: 'image/*' }"
         :placeholder="isStreaming ? $t('@AGENT:正在生成中...') : $t('@AGENT:输入消息，Enter 发送')"
+        :question="pendingQuestion"
+        :question-submitting="answeringQuestion"
+        :question-labels="questionLabels"
         @send="onSend"
         @select="onSelectPreset"
+        @stop="stop"
+        @answer="answerQuestion"
       >
       </ChatContainer>
-
-      <transition name="fade">
-        <section v-if="pendingQuestion" class="ask-user-panel" aria-live="polite">
-          <div class="ask-user-title">
-            <el-icon><ChatLineRound /></el-icon>
-            <span>{{ $t('@AGENT:等待你的回答') }}</span>
-          </div>
-          <div class="ask-user-question">{{ pendingQuestion.question }}</div>
-          <div v-if="pendingQuestion.options.length" class="ask-user-options">
-            <button
-              v-for="option in pendingQuestion.options"
-              :key="option"
-              type="button"
-              class="ask-user-option"
-              :disabled="answeringQuestion"
-              @click="submitPendingAnswer(option)"
-            >
-              <el-icon><Check /></el-icon>
-              <span>{{ option }}</span>
-            </button>
-          </div>
-          <form
-            v-if="pendingQuestion.allowFreeText || pendingQuestion.options.length === 0"
-            class="ask-user-form"
-            @submit.prevent="submitPendingAnswer()"
-          >
-            <input
-              v-model="pendingAnswer"
-              type="text"
-              :disabled="answeringQuestion"
-              :placeholder="$t('@AGENT:输入回答')"
-              :aria-label="$t('@AGENT:输入回答')"
-            />
-            <button type="submit" :disabled="answeringQuestion || !pendingAnswer.trim()">
-              <el-icon><Check /></el-icon>
-              <span>{{ $t('@AGENT:提交回答') }}</span>
-            </button>
-          </form>
-        </section>
-      </transition>
-
-      <!-- 停止按钮浮层 -->
-      <transition name="fade">
-        <div v-if="isStreaming" class="stop-button-bar">
-          <button class="stop-button" @click="stop">
-            <el-icon><Loading class="is-loading" /></el-icon>
-            <span>{{ $t('@AGENT:停止生成') }}</span>
-          </button>
-        </div>
-      </transition>
         </div>
 
         <!-- ── Skill 广场 / MCP 广场 ── -->
@@ -727,138 +683,6 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   gap: 12px;
   color: var(--text-tertiary);
   font-size: 14px;
-}
-
-/* ── 停止按钮 ───────────────────────────────────── */
-.ask-user-panel {
-  position: absolute;
-  left: 16px;
-  right: 16px;
-  bottom: 132px;
-  z-index: 9;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px;
-  border: 1px solid var(--color-primary);
-  border-radius: var(--radius-md);
-  background: var(--bg-container);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
-}
-
-.ask-user-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--color-primary);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.ask-user-question {
-  color: var(--text-primary);
-  font-size: 14px;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.ask-user-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.ask-user-option,
-.ask-user-form button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  min-height: 32px;
-  padding: 5px 10px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
-
-  &:hover:not(:disabled) {
-    border-color: var(--color-primary);
-    color: var(--color-primary);
-    background: color-mix(in srgb, var(--color-primary) 8%, var(--bg-hover));
-  }
-
-  &:disabled {
-    cursor: wait;
-    opacity: 0.6;
-  }
-}
-
-.ask-user-form {
-  display: flex;
-  gap: 8px;
-
-  input {
-    min-width: 0;
-    flex: 1;
-    height: 32px;
-    padding: 5px 9px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    background: var(--bg-input);
-    color: var(--text-primary);
-    font: inherit;
-    font-size: 13px;
-    outline: none;
-
-    &:focus {
-      border-color: var(--color-primary);
-    }
-  }
-}
-
-.stop-button-bar {
-  position: absolute;
-  bottom: 80px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
-}
-
-.stop-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 16px;
-  border: 1px solid var(--color-danger);
-  border-radius: 20px;
-  background: var(--bg-container);
-  color: var(--color-danger);
-  font-size: 13px;
-  font-family: inherit;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-  transition: all 0.15s ease;
-
-  &:hover {
-    background: var(--color-danger);
-    color: #fff;
-  }
-}
-
-/* ── 过渡动画 ───────────────────────────────────── */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
 }
 
 /* ── 暗色主题适配 ───────────────────────────────── */
