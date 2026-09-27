@@ -25,6 +25,7 @@ import path from 'node:path';
 import { asyncRoute, HttpError } from '../../utils/asyncRoute.js';
 import { agentSessionStore } from './agentSessionStore.js';
 import { runAgentTurn } from './agentChat.js';
+import { saveAgentAttachments, MAX_ATTACHMENTS } from '../../utils/agentAttachments.js';
 import { registerAgentMarketplaceRoutes } from './agentMarketplace.js';
 import { createProjectListProvider } from './projectTool.js';
 import { nowIso } from './shared.js';
@@ -190,7 +191,13 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
       .filter(u => typeof u === 'string' && /^data:image\/[\w.+-]+;base64,/.test(u))
       .slice(0, 10);
 
-    if (!userMessage && images.length === 0) {
+    // 非图片附件：前端只传文件名 + 字节，服务端落盘到数据目录，只把**绝对路径**交给模型。
+    // 内容不进消息体（省 token，模型自己用 read/grep 按需取），校验见 utils/agentAttachments.js。
+    const rawAttachments = (Array.isArray(req.body?.attachments) ? req.body.attachments : [])
+      .slice(0, MAX_ATTACHMENTS)
+      .map(a => ({ name: a?.name, dataUrl: a?.dataUrl }));
+
+    if (!userMessage && images.length === 0 && rawAttachments.length === 0) {
       return res.status(400).json({ success: false, error: '消息内容不能为空' });
     }
 
@@ -283,6 +290,15 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
       activeSessionKey = session.sessionId;
       activeSessionTurns.add(activeSessionKey);
 
+      // 附件落盘（拿到绝对路径后再把路径交给模型）。落盘失败不该拖垮整轮对话：
+      // 拿不到路径最多是模型看不到附件，用户仍能正常对话。
+      const attachments = await saveAgentAttachments(rawAttachments, {
+        onSkip: (info) => console.warn('[agent] 附件被忽略:', info.name, info.reason)
+      }).catch((err) => {
+        console.warn('[agent] 附件落盘失败:', err?.message || err);
+        return [];
+      });
+
       // 获取模型配置
       let model;
       try {
@@ -324,6 +340,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
         cwd,
         locale,
         openFilePath,
+        attachments,
         signal: abortController.signal,
         send,
         onChild: (child) => { activeChild = child; },

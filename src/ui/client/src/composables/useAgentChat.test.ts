@@ -20,6 +20,7 @@
 
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { ElMessage } from 'element-plus'
 import { useConfigStore } from '@/stores/configStore'
 import { convertSessionToMessages, useAgentChat } from './useAgentChat'
 
@@ -49,6 +50,20 @@ const json = (body: unknown) =>
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
 
+// jsdom 的 FileReader 回调时机不可靠（附件要先转 dataURL 才发请求，早了就会读不到流），
+// 这里换成确定性的假实现：内容不重要，只要 result 是合法的 dataURL 即可。
+class FakeFileReader {
+  result: string | null = null
+  error: unknown = null
+  onload: (() => void) | null = null
+  onerror: (() => void) | null = null
+  readAsDataURL(file: Blob) {
+    const type = (file as unknown as { type?: string }).type || 'application/octet-stream'
+    this.result = `data:${type};base64,eA==` // 'x' 的 base64
+    Promise.resolve().then(() => this.onload?.())
+  }
+}
+
 function sessionMeta(sessionId: string, title: string) {
   return {
     sessionId,
@@ -71,6 +86,7 @@ describe('useAgentChat parallel sessions', () => {
     setActivePinia(createPinia())
     const store = useConfigStore()
     store.setCurrentDirectory('C:/proj')
+    vi.stubGlobal('FileReader', FakeFileReader)
 
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (url.startsWith('/api/agent/sessions?')) {
@@ -289,6 +305,77 @@ describe('useAgentChat parallel sessions', () => {
     const call = vi.mocked(globalThis.fetch).mock.calls.find(([url]) => url === '/api/agent/chat')
     expect(call).toBeTruthy()
     expect(JSON.parse(String((call![1] as RequestInit).body)).openFilePath).toBe('src/ui/client/src/App.vue')
+  })
+
+  // ── 附件：图片走多模态，非图片走"落盘 + 只给路径" ──────────────
+  // 口径见 useAgentChat 顶部注释与 server/utils/agentAttachments.js：
+  // images[] 里是 dataURL（模型直接看），attachments[] 里是 { name, dataUrl }（服务端落盘后
+  // 只把绝对路径写进请求副本的 system 提示），两者可以同轮共存。
+  const pickedFile = (name: string, type: string, id = name) =>
+    ({ id, file: new File(['x'], name, { type }) }) as any
+
+  test('图片进 images[]、非图片进 attachments[]，两者同轮共存', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const sendPromise = chat.sendMessage('看下这两个', [
+      pickedFile('shot.png', 'image/png'),
+      pickedFile('错误日志.log', 'text/plain')
+    ])
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    chatStreams[0].send({ type: 'done', content: '好' })
+    chatStreams[0].close()
+    await sendPromise
+
+    const call = vi.mocked(globalThis.fetch).mock.calls.find(([url]) => url === '/api/agent/chat')
+    const body = JSON.parse(String((call![1] as RequestInit).body))
+    expect(body.images).toHaveLength(1)
+    expect(body.images[0]).toMatch(/^data:image\/png;base64,/)
+    expect(body.attachments).toHaveLength(1)
+    expect(body.attachments[0].name).toBe('错误日志.log')
+    expect(body.attachments[0].dataUrl).toMatch(/^data:/)
+  })
+
+  test('只有附件、没有文字也能发出', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const sendPromise = chat.sendMessage('', [pickedFile('a.md', 'text/markdown')])
+    await flush()
+    // 纯附件消息不该被"内容不能为空"挡下
+    expect(chatStreams).toHaveLength(1)
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    chatStreams[0].send({ type: 'done', content: '好' })
+    chatStreams[0].close()
+    await sendPromise
+
+    const call = vi.mocked(globalThis.fetch).mock.calls.find(([url]) => url === '/api/agent/chat')
+    expect(JSON.parse(String((call![1] as RequestInit).body)).attachments).toHaveLength(1)
+  })
+
+  test('超过单文件上限的附件被忽略并提示，其余照常发送', async () => {
+    const warn = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({} as any))
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const oversize = { id: 'big', file: { name: 'big.bin', type: 'application/octet-stream', size: 11 * 1024 * 1024 } } as any
+    const sendPromise = chat.sendMessage('看下', [oversize, pickedFile('small.log', 'text/plain')])
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    chatStreams[0].send({ type: 'done', content: '好' })
+    chatStreams[0].close()
+    await sendPromise
+
+    const call = vi.mocked(globalThis.fetch).mock.calls.find(([url]) => url === '/api/agent/chat')
+    const body = JSON.parse(String((call![1] as RequestInit).body))
+    expect(body.attachments.map((a: any) => a.name)).toEqual(['small.log'])
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0][0])).toContain('big.bin')
+    warn.mockRestore()
   })
 })
 

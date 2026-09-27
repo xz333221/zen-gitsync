@@ -2596,7 +2596,7 @@ export default {
   '@AGENT:未知错误': 'Unknown error',
   '@AGENT:已停止': 'Stopped',
   '@AGENT:对话失败': 'Chat failed',
-  '@AGENT:仅支持发送图片，非图片文件已忽略': 'Only images are supported; non-image files were ignored',
+  '@AGENT:以下附件超过大小或数量上限，已忽略：': 'These attachments exceed the size or count limit and were ignored: ',
   '@AGENT:今天': 'Today',
   '@AGENT:天前': 'days ago',
   '@AGENT:无标题': '(Untitled)',

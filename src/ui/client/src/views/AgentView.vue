@@ -29,7 +29,7 @@ import { Loading, ChatDotRound, Goods, Connection } from '@element-plus/icons-vu
 import { ChatContainer, ConversationList } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { useConfigStore } from '@/stores/configStore'
-import { useAgentChat } from '@/composables/useAgentChat'
+import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
 import { buildConversationItems, agentConversationLabels, agentQuestionLabels, AGENT_ASSISTANT_NAME } from '@/utils/agentConversations'
 import MarketplacePanel from '@/components/MarketplacePanel.vue'
 
@@ -239,7 +239,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
         :theme="chatTheme"
         :disabled="isStreaming"
         :generating="isStreaming"
-        :upload-config="{ accept: 'image/*' }"
+        :upload-config="{ accept: AGENT_UPLOAD_ACCEPT }"
         :placeholder="isStreaming ? $t('@AGENT:正在生成中...') : $t('@AGENT:输入消息，Enter 发送')"
         :question="pendingQuestion"
         :question-submitting="answeringQuestion"

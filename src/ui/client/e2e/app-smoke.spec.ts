@@ -109,4 +109,46 @@ test.describe('App smoke', () => {
     // 会话列表同理：库的 ConversationList 根节点（样式表没加载也能"可见"，配套上面那条断言）
     await expect(page.locator('.editor-agent-panel .acu-conv').first()).toBeVisible()
   })
+
+  // 附件：图片走多模态（images[] dataURL），非图片走"服务端落盘 + 只把路径给模型"（attachments[]）。
+  // 这条用例同时守两件事：① accept 被放开后非图片真能选进来并变成 chip；
+  // ② 请求体里两类附件各归各位（前端只过滤"能不能发"，落盘与注入由服务端负责）。
+  test('10. 文件空间对话: 图片进 images[]、非图片进 attachments[]', async ({ page }) => {
+    const bodies: any[] = []
+    await page.route('/api/agent/chat', async route => {
+      bodies.push(route.request().postDataJSON())
+      // 直接收尾，别真去调模型
+      return route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: 'data: {"type":"done","content":"ok"}\n\n'
+      })
+    })
+
+    await page.locator('.activity-bar button[aria-label^="文件空间"]').first().click()
+    await expect(page.locator('.tree-node--file').first()).toBeVisible({ timeout: 30_000 })
+    await page.locator('.tree-node--file').first().click()
+    await page.locator('.agent-toggle-btn').click()
+    await expect(page.locator('.editor-agent-panel')).toBeVisible()
+
+    // 1x1 透明 PNG
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
+      'base64'
+    )
+    await page.locator('.editor-agent-panel input[type=file]').setInputFiles([
+      { name: 'a.log', mimeType: 'text/plain', buffer: Buffer.from('log line\n') },
+      { name: 'shot.png', mimeType: 'image/png', buffer: png }
+    ])
+    await expect(page.locator('.editor-agent-panel .acu-input-att')).toHaveCount(2)
+
+    await page.locator('.editor-agent-panel .acu-input-textarea').fill('看下这两个')
+    await page.locator('.editor-agent-panel .acu-input-send').click()
+
+    await expect.poll(() => bodies.length, { timeout: 15_000 }).toBe(1)
+    expect(bodies[0].attachments.map((a: any) => a.name)).toEqual(['a.log'])
+    expect(bodies[0].attachments[0].dataUrl).toMatch(/^data:text\/plain;base64,/)
+    expect(bodies[0].images).toHaveLength(1)
+    expect(bodies[0].images[0]).toMatch(/^data:image\/png;base64,/)
+  })
 })

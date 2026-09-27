@@ -14,6 +14,21 @@ import { extractThinkSegments } from 'zen-ai-chat-ui'
 import { $t } from '@/lang/static'
 import { useConfigStore } from '@/stores/configStore'
 
+// ── 附件口径 ──────────────────────────────────────────────
+// 图片走多模态（转 dataURL 随请求发给模型）；**非图片只在服务端落盘，把绝对路径写进
+// 请求副本的 system 提示**，模型需要时自己用 read / grep 读（见 server/utils/agentAttachments.js）。
+// 所以这里的 accept 不再是 'image/*' —— 图片之外的类型也能选。
+export const AGENT_UPLOAD_ACCEPT = [
+  'image/*',
+  '.pdf', '.txt', '.md', '.json', '.csv', '.log', '.yml', '.yaml', '.xml', '.toml', '.ini',
+  '.html', '.css', '.js', '.ts', '.tsx', '.vue', '.py', '.java', '.go', '.rs', '.sql', '.sh'
+].join(',')
+/** 单个附件上限（与 server/utils/agentAttachments.js 的 MAX_ATTACHMENT_BYTES 对齐） */
+export const MAX_AGENT_ATTACHMENT_BYTES = 10 * 1024 * 1024
+/** 单轮附件数量与合计上限（服务端另有同口径校验，这里是为了提前给出提示） */
+export const MAX_AGENT_ATTACHMENTS = 10
+export const MAX_AGENT_ATTACHMENT_TOTAL_BYTES = 20 * 1024 * 1024
+
 // ── 类型 ──────────────────────────────────────────────────
 interface SessionMeta {
   sessionId: string
@@ -483,23 +498,49 @@ export function useAgentChat() {
 
   // ── 发送消息（SSE 流式，按会话隔离，可后台并行） ────────
   async function sendMessage(text: string, files: SelectedFile[] = [], options: { openFilePath?: string } = {}) {
-    // 组件库允许选任意文件，但多模态消息只支持图片；非图片提示后忽略
+    // 图片 → 多模态 dataURL（模型直接"看"）；
+    // 非图片 → 字节交给服务端落盘，模型拿到的是**绝对路径**，需要时自己 read。
     const imageFiles = files.filter(f => f?.file?.type?.startsWith('image/'))
-    if (imageFiles.length < files.length) {
-      ElMessage.warning($t('@AGENT:仅支持发送图片，非图片文件已忽略'))
+    const otherFiles = files.filter(f => !f?.file?.type?.startsWith('image/'))
+
+    // 先按上限筛一遍：超限的当场告知，别让用户以为附件已经发出去了
+    const attachable: SelectedFile[] = []
+    let attachTotal = 0
+    for (const f of otherFiles) {
+      const size = f.file.size || 0
+      if (size > MAX_AGENT_ATTACHMENT_BYTES) continue
+      if (attachable.length >= MAX_AGENT_ATTACHMENTS) break
+      if (attachTotal + size > MAX_AGENT_ATTACHMENT_TOTAL_BYTES) break
+      attachTotal += size
+      attachable.push(f)
+    }
+    const skipped = otherFiles.filter(f => !attachable.includes(f))
+    if (skipped.length > 0) {
+      ElMessage.warning(
+        `${$t('@AGENT:以下附件超过大小或数量上限，已忽略：')}${skipped.map(f => f.file.name).join('、')}`
+      )
     }
 
     // 目标会话：已有会话用其 id；全新会话先用本地临时 key，等 meta 回来再迁移
     const runKey = currentSessionId.value || `${LOCAL_KEY_PREFIX}${Date.now()}-${++localKeySeed}`
     const run = ensureRun(runKey)
     // 只在"当前激活会话"层面拦截重复发送，不影响其它会话后台继续
-    if ((!text.trim() && imageFiles.length === 0) || run.isStreaming) return
+    if ((!text.trim() && imageFiles.length === 0 && attachable.length === 0) || run.isStreaming) return
 
     // 图片 File → base64 dataURL，随请求发给后端组装多模态 content
     const settled = await Promise.allSettled(imageFiles.map(f => fileToDataUrl(f.file)))
     const images = settled
       .map(r => (r.status === 'fulfilled' ? r.value : ''))
       .filter(u => u.startsWith('data:image/'))
+
+    // 非图片同样转 dataURL 上传，但服务端只拿它落盘，内容**不进消息体**（只把路径给模型）
+    const attachSettled = await Promise.allSettled(attachable.map(async f => ({
+      name: f.file.name || 'file',
+      dataUrl: await fileToDataUrl(f.file)
+    })))
+    const attachments = attachSettled
+      .map(r => (r.status === 'fulfilled' ? r.value : null))
+      .filter((a): a is { name: string; dataUrl: string } => !!a && typeof a.dataUrl === 'string' && a.dataUrl.startsWith('data:'))
 
     // 切到这条会话(新会话从 null 切到本地 key)，让乐观消息立刻可见
     currentSessionId.value = run.key
@@ -511,7 +552,7 @@ export function useAgentChat() {
     run.pendingQuestion = null
     run.answeringQuestion = false
 
-    // 乐观推入 user 消息（图片以附件缩略图展示）
+    // 乐观推入 user 消息（图片显示缩略图，非图片显示文件名 chip）
     const userMsg: ChatMessage = {
       id: uid(),
       role: 'user',
@@ -519,8 +560,9 @@ export function useAgentChat() {
       status: 'done',
       createdAt: Date.now()
     }
-    if (imageFiles.length > 0) {
-      userMsg.attachments = imageFiles.map(f => ({
+    const chips = [...imageFiles, ...attachable]
+    if (chips.length > 0) {
+      userMsg.attachments = chips.map(f => ({
         id: f.id,
         name: f.file.name || 'image',
         size: f.file.size || 0,
@@ -565,6 +607,8 @@ export function useAgentChat() {
           // 新建会话时服务端用它确定项目归属(已有会话沿用其落盘 cwd)
           cwd: configStore.currentDirectory || '',
           ...(images.length > 0 ? { images } : {}),
+          // 非图片附件：服务端落到数据目录后，只把绝对路径写进请求副本的 system 提示
+          ...(attachments.length > 0 ? { attachments } : {}),
           // 文件空间对话：把"当前打开的文档"带给服务端（请求级注入上下文，不落会话历史）
           ...(options.openFilePath ? { openFilePath: options.openFilePath } : {})
         }),

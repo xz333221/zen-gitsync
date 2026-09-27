@@ -62,7 +62,7 @@
         :disabled="isStreaming"
         :generating="isStreaming"
         :placeholder="isStreaming ? $t('@AGENT:正在生成中...') : $t('@AGENT:输入消息，Enter 发送')"
-        :upload-config="{ accept: 'image/*' }"
+        :upload-config="{ accept: AGENT_UPLOAD_ACCEPT }"
         :question="pendingQuestion"
         :question-submitting="answeringQuestion"
         :question-labels="questionLabels"
@@ -82,7 +82,7 @@ import { ChatContainer, ConversationList } from 'zen-ai-chat-ui'
 // 而 AgentView / WorkbenchView / JobLogDetails 都是懒加载的 —— 从文件空间直接打开本面板时
 // 那三个 chunk 一个都没加载过，漏了这行就是整块面板无样式裸奔（2026-09-27 用户实测报过）。
 import 'zen-ai-chat-ui/style.css'
-import { useAgentChat } from '@/composables/useAgentChat'
+import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import {
   buildConversationItems,

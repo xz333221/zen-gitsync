@@ -80,6 +80,9 @@ export const AI_MCP_FILE = path.join(DATA_DIR, 'ai', 'mcp.json');
 
 // ── 工作台 / 会话 / 缓存 ──────────────────────────────────────
 export const WORKBENCH_IMAGES_DIR = path.join(DATA_DIR, 'workbench-images');
+// 智能体对话的非图片附件:前端把字节传上来后落在这里,只把绝对路径给模型(见
+// src/ui/server/utils/agentAttachments.js)。按"一轮一个子目录"存放,避免同名覆盖。
+export const AGENT_ATTACHMENTS_DIR = path.join(DATA_DIR, 'agent-attachments');
 export const AGENT_SESSIONS_DIR = path.join(DATA_DIR, 'agent-sessions');
 export const SPLIT_SESSIONS_DIR = path.join(DATA_DIR, 'ai-split-sessions');
 export const AI_DIFF_SUMMARIES_DIR = path.join(DATA_DIR, 'ai-diff-summaries');

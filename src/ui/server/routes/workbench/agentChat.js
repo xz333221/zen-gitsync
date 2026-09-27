@@ -241,6 +241,9 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 //   - model: { baseURL, model, apiKey }
 //   - userMessage: 用户输入文本
 //   - images: base64 dataURL 数组(可选,多模态图片,随最新一条 user 消息发给模型)
+//   - openFilePath: 文件空间里当前打开的文档(可选,注入请求副本,不落库)
+//   - attachments: 非图片附件(可选) = [{ name, path }],path 是**服务端落盘后的绝对路径**,
+//     只把路径写进请求副本的 system 提示,内容由模型自己用工具读(见 utils/agentAttachments.js)
 //   - cwd: 工作目录
 //   - locale: 'zh' | 'en'
 //   - signal: AbortSignal (客户端断开时触发)
@@ -251,7 +254,7 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 //     (由 agentRoutes 注入:最近目录/tasks.json/看板统计只有 GUI 侧拿得到)
 //
 // 返回: { aborted: boolean }
-export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, signal, send, onChild, askUser, listProjects }) {
+export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, attachments = [], signal, send, onChild, askUser, listProjects }) {
   const ctx = { cwd, locale, onChild, askUser, listProjects };
 
   // 确保 session.messages 存在
@@ -283,8 +286,8 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
     // 摘录成一条梗概 → 旧图片降级 → provider 兼容消毒。
     // 只作用于副本,session.messages 保持完整(与 CLI 的磁盘口径一致)。
     const messages = prepareRequestMessages(session.messages, { locale });
-    // 文件空间对话：把"当前打开的文档"注进请求副本（不落 session.messages，下一轮不会重复累积）
-    injectOpenFileContext(messages, { cwd, openFilePath, locale });
+    // 请求级上下文：当前打开的文档 + 本轮附件路径（只改副本，不落 session.messages，下一轮不重复累积）
+    injectRequestContext(messages, { cwd, openFilePath, attachments, locale });
 
     let result;
     try {
@@ -414,24 +417,49 @@ function summarizeArgs(name, args) {
   }
 }
 
-// ── 请求级上下文注入（文件空间对话） ────────────────────────
-// 把"用户当前打开的文件"追加到**请求副本**的 system 消息末尾：
+// ── 请求级上下文注入（文件空间对话 / 本轮附件） ──────────────
+// 把"用户当前打开的文件"与"本轮附件的落盘路径"追加到**请求副本**的 system 消息末尾：
 // 只影响这一次请求，session.messages 与磁盘历史保持原样，下一轮也不会重复累积。
-export function injectOpenFileContext(messages, { cwd, openFilePath, locale }) {
-  if (!openFilePath || !Array.isArray(messages)) return;
-  const root = cwd || process.cwd();
-  // 归一化成"相对项目根目录"的斜杠路径；项目外（或等于根目录）直接忽略
-  let rel = '';
-  try {
-    rel = path.relative(root, path.resolve(root, openFilePath));
-  } catch {
-    return;
+//
+// 附件为什么只给路径、不给内容：见 utils/agentAttachments.js 的头注释 —— 非图片附件
+// 由服务端落盘，模型自己用 read / grep 按需取，比把几百 KB 文本内联进消息省得多。
+export function injectRequestContext(messages, { cwd, openFilePath, attachments = [], locale }) {
+  if (!Array.isArray(messages)) return;
+  const en = String(locale || '').startsWith('en');
+
+  const parts = [];
+
+  // ① 当前打开的文档（文件空间对话才有；项目外或等于根目录直接忽略）
+  if (openFilePath) {
+    const root = cwd || process.cwd();
+    let rel = '';
+    try {
+      rel = path.relative(root, path.resolve(root, openFilePath));
+    } catch {
+      rel = '';
+    }
+    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+      const file = rel.split(path.sep).join('/');
+      parts.push(en
+        ? `The file the user currently has open in the editor is \`${file}\` (relative to the project root). When the user says "this file" / "the current file" / "here", that is what they mean; read it with your tools before assuming its content.`
+        : `用户此刻在文件空间打开的文件是 \`${file}\`（相对项目根目录）。用户说"这个文件/当前文件"时默认指它；请先用工具读取内容，不要臆测。`);
+    }
   }
-  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return;
-  const file = rel.split(path.sep).join('/');
-  const note = String(locale || '').startsWith('en')
-    ? `\n\n# Current context\nThe file the user currently has open in the editor is \`${file}\` (relative to the project root). When the user says "this file" / "the current file" / "here", that is what they mean; read it with your tools before assuming its content.`
-    : `\n\n# 当前上下文\n用户此刻在文件空间打开的文件是 \`${file}\`（相对项目根目录）。用户说"这个文件/当前文件"时默认指它；请先用工具读取内容，不要臆测。`;
+
+  // ② 本轮附件：只给绝对路径，内容让模型自己去读
+  const files = (Array.isArray(attachments) ? attachments : [])
+    .filter(a => a && typeof a.path === 'string' && a.path)
+    .slice(0, 20);
+  if (files.length > 0) {
+    const lines = files.map(a => `- \`${a.path}\`${a.name && a.name !== path.basename(a.path) ? ` (${a.name})` : ''}`);
+    parts.push(en
+      ? `The user attached ${files.length} file(s) this turn; they were saved to these absolute paths:\n${lines.join('\n')}\nRead them with your tools when relevant (they are NOT inlined here). Do not guess their contents.`
+      : `用户本轮附带了 ${files.length} 个文件，已保存到以下绝对路径：\n${lines.join('\n')}\n需要时用工具读取（内容没有内联在这里），不要臆测。`);
+  }
+
+  if (parts.length === 0) return;
+
+  const note = `\n\n# ${en ? 'Current context' : '当前上下文'}\n${parts.join('\n\n')}`;
   const sys = messages.find(m => m && m.role === 'system' && typeof m.content === 'string');
   if (sys) sys.content += note;
   else messages.unshift({ role: 'system', content: note.trim() });
