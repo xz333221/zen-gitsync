@@ -31,7 +31,6 @@
 import path from 'path';
 import os from 'os';
 import { logger } from './shared.js';
-import { agentSessionStore } from './agentSessionStore.js';
 
 // 从 CLI 侧导入工具定义、执行器与 LLM 传输层（同一 monorepo，路径可达）
 import { TOOL_DEFINITIONS, executeTool } from '../../../../cli/ai/tools.js';
@@ -306,14 +305,6 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
       return { aborted: false };
     }
 
-    if (result.aborted) {
-      // 保存当前会话状态
-      session.updatedAt = new Date().toISOString();
-      await agentSessionStore.write(session.sessionId, session).catch(() => {});
-      send({ type: 'error', error: '已取消' });
-      return { aborted: true };
-    }
-
     const { content, toolCalls } = result;
 
     // 推理内容必须原样带回历史。DeepSeek 系 thinking 模式下带 tool_calls 的 assistant
@@ -321,6 +312,18 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
     // "The `reasoning_content` in the thinking mode must be passed back to the API"。
     // 口径与 CLI 侧 src/cli/ai/turn.js 的 assistant.reasoning_content 保持一致。
     const withReasoning = msg => (result.reasoning ? { ...msg, reasoning_content: result.reasoning } : msg);
+
+    if (result.aborted) {
+      // 用户点了"停止"：把已经流出来的部分正文补进历史，否则磁盘上这一轮只剩一条
+      // user 消息，重新打开会话时刚才生成的内容会整段丢失。
+      // 半截的 tool_calls 已被 transport 在中止时丢弃，这里只补正文，不会有悬空引用。
+      // 落盘由路由层统一负责（中止的轮次同样要写，见 agentRoutes.js）。
+      if (content) {
+        session.messages.push(withReasoning({ role: 'assistant', content }));
+      }
+      send({ type: 'error', error: '已取消' });
+      return { aborted: true };
+    }
 
     // 无工具调用：本轮结束
     if (toolCalls.length === 0) {

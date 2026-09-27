@@ -297,7 +297,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
       });
 
       // 运行 agent 循环
-      const { aborted } = await runAgentTurn({
+      await runAgentTurn({
         session,
         model,
         userMessage,
@@ -320,17 +320,13 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
         listProjects
       });
 
-      if (aborted) {
-        finished = true;
-        return res.end();
-      }
-
       // 更新标题(新会话从第一条 user 消息自动生成)
       if (isNew) {
         session.title = autoTitle(session.messages);
       }
 
-      // 持久化
+      // 持久化。中止(用户点"停止")的轮次同样要落盘 —— 磁盘上没有这条会话时，
+      // 前端停止后立刻刷新列表会把左栏这一条整个吞掉（表现为"一停止任务就没了"）。
       session.updatedAt = nowIso();
       await writeSession(session.sessionId, session);
       enforceRetention().catch(() => {});

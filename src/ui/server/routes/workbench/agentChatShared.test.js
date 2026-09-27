@@ -45,16 +45,18 @@ const longSession = () => {
 }
 
 // 跑一轮真实的 runAgentTurn,桩掉 globalThis.fetch —— 抓住发出去的请求体与产生的事件
-async function runWeb({ session, userMessage, respond, locale = 'zh-CN' }) {
+// (respond 收到 fetch 的 init,方便测试按 signal 模拟"读到一半被中止")
+async function runWeb({ session, userMessage, respond, locale = 'zh-CN', signal, onEvent }) {
   const { runAgentTurn } = await import('./agentChat.js')
   const events = []
   let sent
   const original = globalThis.fetch
-  globalThis.fetch = async (_url, init) => { sent = JSON.parse(init.body); return respond() }
+  globalThis.fetch = async (_url, init) => { sent = JSON.parse(init.body); return respond(init) }
   try {
     const result = await runAgentTurn({
       session, model, userMessage, locale, cwd: process.cwd(),
-      signal: new AbortController().signal, send: e => events.push(e),
+      signal: signal ?? new AbortController().signal,
+      send: e => { events.push(e); onEvent?.(e) },
     })
     return { sent, events, result }
   } finally {
@@ -132,6 +134,34 @@ test('流被截断（没有 finish_reason 也没有 [DONE]）时不执行半截�
   assert.match(error.error, /中断/)
   assert.equal(events.some(e => e.type === 'tool_call_start'), false, '被截断的调用不得开始执行')
   assert.equal(session.messages.some(m => m.role === 'tool'), false, '被截断的调用不得留下工具结果')
+})
+
+// 回归：用户点"停止"（中止正在跑的这一轮）时，已经流出来的正文必须留在会话记录里。
+// 之前中止分支只把当时的状态写盘、不回填正文，重新打开这条会话时刚才生成的内容整段消失。
+test('中止时已流出的正文要留在会话记录里', async () => {
+  const session = newSession('ag-sandbox-aborted', withSystem())
+  const controller = new AbortController()
+
+  // 吐一段正文后挂住（模拟"停在生成中"）；真 fetch 在 signal abort 时会打断 body 读取，
+  // 桩里照做才能真的走到中止分支
+  const hanging = init => new Response(new ReadableStream({
+    start(stream) {
+      const bytes = new TextEncoder()
+      stream.enqueue(bytes.encode(event({ choices: [{ delta: { content: '已经写了一半' } }] })))
+      init?.signal?.addEventListener('abort', () => stream.error(new DOMException('Aborted', 'AbortError')))
+    },
+  }), { status: 200, headers: { 'content-type': 'text/event-stream' } })
+
+  const { result } = await runWeb({
+    session, userMessage: '写一半就停', respond: hanging, signal: controller.signal,
+    // 正文事件到达 = 这段已经被读进来，此刻中止最贴近用户点"停止"的时机
+    onEvent: e => { if (e.type === 'content') controller.abort() },
+  })
+
+  assert.equal(result.aborted, true)
+  const last = session.messages[session.messages.length - 1]
+  assert.equal(last.role, 'assistant')
+  assert.equal(last.content, '已经写了一半')
 })
 
 test('400 且正文提到 tool/function 时提示换模型,而不是甩网关 JSON', async () => {
