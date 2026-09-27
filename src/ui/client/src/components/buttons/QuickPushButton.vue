@@ -269,9 +269,24 @@ function handleProgressComplete(_success: boolean) {
 <style scoped lang="scss">
 .one-push-button {
   height: 100%;
-  background: linear-gradient(135deg, var(--action-navy) 0%, #1e3a8a 100%) !important;
-  border: none !important;
-  color: white !important;
+  /* 二档动作：实心深蓝 + 白字。
+     浅底 + 深字那版被反馈「不如白字」—— 浅蓝底上白字实际只有约 1.2:1 不可读，
+     所以把底色做实（#2563eb，白字 5.2:1 过 AA），用「比一键提交更沉、更平」来分档：
+     一键提交是亮蓝渐变，这颗是纯色深蓝。 */
+  background: var(--color-primary-dark) !important;
+  border: 1px solid var(--color-primary-dark) !important;
+  color: #fff !important;
+  &:hover:not(.is-disabled) {
+    /* 略压暗一档，避免与 EP 默认 hover 底色打架 */
+    background: color-mix(in srgb, var(--color-primary-dark) 88%, #000) !important;
+    border-color: color-mix(in srgb, var(--color-primary-dark) 88%, #000) !important;
+  }
+  /* EP 把 label 包在 span 里，父级 color 不保证落到文字节点，显式声明 */
+  .one-push-icon,
+  .one-push-title,
+  .one-push-desc {
+    color: #fff;
+  }
   &.form {
     width: 100%;
     padding: 4px 12px;
@@ -297,7 +312,8 @@ function handleProgressComplete(_success: boolean) {
       }
       .one-push-desc {
         font-size: var(--font-size-xs);
-        opacity: 0.72;
+        /* 11px 小字在深蓝上要保住 4.5:1，透明度不能像浅底那样压到 0.72 */
+        opacity: 0.9;
         font-weight: 400;
         letter-spacing: 0.1px;
       }

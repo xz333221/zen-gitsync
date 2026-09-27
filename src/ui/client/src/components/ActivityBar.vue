@@ -277,9 +277,9 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   position: relative;
   /* 颜色 + 背景平滑过渡 */
   transition:
-    color var(--transition-base) cubic-bezier(0.4, 0, 0.2, 1),
-    background-color var(--transition-base) cubic-bezier(0.4, 0, 0.2, 1),
-    transform var(--transition-base) cubic-bezier(0.4, 0, 0.2, 1);
+    color var(--transition-base) var(--ease-standard),
+    background-color var(--transition-base) var(--ease-standard),
+    transform var(--transition-base) var(--ease-standard);
   outline: none;
 }
 
@@ -300,7 +300,9 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   background: color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 
-/* 左侧高亮指示条（VS Code 风格） */
+/* 左侧高亮指示条（VS Code 风格）
+   不加外发光：PRODUCT.md 明确「无装饰效果 / 不加重的阴影」，
+   选中态由品牌色 + 淡底已足够表达 */
 .activity-btn.active::before {
   content: '';
   position: absolute;
@@ -311,20 +313,19 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   background: var(--color-primary);
   border-radius: 0 2px 2px 0;
   transform: translateY(-50%) scaleY(1);
-  box-shadow: 0 0 8px 0 color-mix(in srgb, var(--color-primary) 55%, transparent);
   /* 从 0 高度展开，避免初次渲染跳动 */
-  animation: actbar-indicator-in var(--transition-base) cubic-bezier(0.4, 0, 0.2, 1);
+  animation: actbar-indicator-in var(--transition-base) var(--ease-standard);
   transform-origin: center;
 }
 
 /* active 态的图标轻微缩放，增强反馈 */
 .activity-btn.active svg {
   transform: scale(1.06);
-  transition: transform var(--transition-base) cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform var(--transition-base) var(--ease-standard);
 }
 
 .activity-btn svg {
-  transition: transform var(--transition-base) cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform var(--transition-base) var(--ease-standard);
 }
 
 /* 按下反馈 */
@@ -347,11 +348,13 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   font-weight: 600;
   line-height: 1;
   color: #fff;
-  background: var(--color-success, var(--action-emerald));
+  background: var(--color-success);
   border-radius: var(--radius-lg);
   box-shadow: 0 0 0 2px var(--bg-container);
   pointer-events: none;
-  animation: wb-badge-in var(--transition-base) cubic-bezier(0.34, 1.56, 0.64, 1), wb-badge-pulse 2s ease-in-out var(--transition-slow) infinite;
+  /* 只保留一次入场弹入。原先还挂了一条 2s 无限 pulse：
+     常驻动画会一直抢注意力，且四个徽标各闪各的更吵 —— 数值本身已是状态信号。 */
+  animation: wb-badge-in var(--transition-base) var(--ease-spring);
   z-index: 1;
 }
 
@@ -360,14 +363,13 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   60%  { transform: scale(1.18); opacity: 1; }
   100% { transform: scale(1);    opacity: 1; }
 }
-@keyframes wb-badge-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px var(--bg-container); }
-  50%      { box-shadow: 0 0 0 2px var(--bg-container), 0 0 6px 1px color-mix(in srgb, var(--color-success, var(--action-emerald)) 60%, transparent); }
-}
 
 /* ── 控制台终端会话数量徽标 ─────────────────────────────────────── */
 /* 几何与 wb/git/editor 徽标一致,颜色用青色(cyan)呼应终端主题,
-   与工作台绿色(running)、Git 品牌色(uncommitted)、编辑器橙色(dirty)区分。 */
+   与工作台绿色(running)、Git 品牌色(uncommitted)、编辑器橙色(dirty)区分。
+   注:原写法 var(--color-info, var(--action-teal)) 里 --color-info 是有定义的
+   (#909399 灰),fallback 永远不生效 —— 与注释里「青色呼应终端」的意图不符,
+   这里直接取 --action-teal。 */
 .console-sessions-badge {
   position: absolute;
   top: -2px;
@@ -382,17 +384,12 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   font-weight: 600;
   line-height: 1;
   color: #fff;
-  background: var(--color-info, var(--action-teal));
+  background: var(--action-teal);
   border-radius: var(--radius-lg);
   box-shadow: 0 0 0 2px var(--bg-container);
   pointer-events: none;
-  animation: wb-badge-in var(--transition-base) cubic-bezier(0.34, 1.56, 0.64, 1), console-badge-pulse 2s ease-in-out var(--transition-slow) infinite;
+  animation: wb-badge-in var(--transition-base) var(--ease-spring);
   z-index: 1;
-}
-
-@keyframes console-badge-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px var(--bg-container); }
-  50%      { box-shadow: 0 0 0 2px var(--bg-container), 0 0 6px 1px color-mix(in srgb, var(--color-info, var(--action-teal)) 60%, transparent); }
 }
 
 /* ── Git 未提交文件数量徽标 ─────────────────────────────────────── */
@@ -415,7 +412,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   box-shadow: 0 0 0 2px var(--bg-container);
   pointer-events: none;
   /* 数字变化时的入场动画 */
-  animation: git-badge-pop-in var(--transition-base) cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: git-badge-pop-in var(--transition-base) var(--ease-spring);
   z-index: 1;
 }
 
@@ -446,7 +443,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   border-radius: var(--radius-lg);
   box-shadow: 0 0 0 2px var(--bg-container);
   pointer-events: none;
-  animation: git-badge-pop-in var(--transition-base) cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: git-badge-pop-in var(--transition-base) var(--ease-spring);
   z-index: 1;
 }
 

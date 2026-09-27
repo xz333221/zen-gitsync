@@ -85,8 +85,17 @@ const tooltipText = computed(() => {
 })
 
 // 计算按钮样式
+// 「有本地提交待推送」是状态信号，但动作区已分三档（见 GitActionButtons.vue），
+// 推送属于三档描边按钮：这里给浅色底 + 成功色描边，而不是实心绿 ——
+// 实心绿会盖过唯一的主按钮「一键提交」，让层级重新变乱。
 const buttonStyle = computed(() => {
-  return canPush.value ? { backgroundColor: 'var(--color-success)', borderColor: 'var(--color-success)' } : {}
+  return canPush.value
+    ? {
+        backgroundColor: 'var(--tint-success-14)',
+        borderColor: 'var(--color-success)',
+        color: 'var(--text-primary)',
+      }
+    : {}
 })
 
 // 处理点击事件

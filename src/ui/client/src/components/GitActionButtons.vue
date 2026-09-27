@@ -192,6 +192,36 @@ defineExpose({
   }
 }
 
+/* ── 动作区三档层级 ────────────────────────────────────────────────
+   改前：5 个按钮全是实心色块（暂存/提交/推送 = 主色，一键提交/一键推送所有 =
+   两种深蓝渐变），主次不分，扫视时不知道从哪个开始。
+   改后：
+     一档 一键提交        —— 唯一实心主色（产品核心动作：一条命令完成提交）
+     二档 一键推送所有    —— 主色浅底 + 描边（见 QuickPushButton.vue）
+     三档 暂存 / 提交 / 推送 —— 中性描边，保留逐步显式控制
+   只改视觉权重，不动任何按钮的功能与位置。 */
+:deep(.left-actions .el-button) {
+  background: var(--bg-container);
+  border: 1px solid var(--border-color-medium);
+  color: var(--text-secondary);
+  box-shadow: none;
+}
+
+:deep(.left-actions .el-button:hover:not(.is-disabled)) {
+  background: var(--soft-btn-bg-hover);
+  border-color: var(--soft-btn-border-hover);
+  /* 悬停只换底面与描边，文字色不动：
+     主色正文在浅底上只有 ~3.3:1，切色会掉到 AA 以下 */
+}
+
+/* 三档按钮禁用时保持描边形态，避免退回实心主色块（.el-button--primary 的禁用规则） */
+:deep(.left-actions .el-button--primary.is-disabled) {
+  background-color: var(--bg-container) !important;
+  border-color: var(--border-color-medium) !important;
+  color: var(--text-disabled) !important;
+  opacity: 0.6 !important;
+}
+
 /* .form-bottom-actions:hover {
   box-shadow: var(--shadow-lg);
 } */

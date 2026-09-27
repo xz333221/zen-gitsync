@@ -3020,6 +3020,8 @@ onActivated(() => {
    gap: 6px;
    font-weight: 600;
    color: var(--text-console-secondary);
+   /* 面板被拖窄时「终端会话」会逐字折行成两行，标题必须单行 */
+   white-space: nowrap;
  }
 
  .terminal-sessions-count {

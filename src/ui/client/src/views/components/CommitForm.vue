@@ -979,21 +979,20 @@ git config --global user.email "your.email@example.com"</pre
 
   .el-input__wrapper {
     border-radius: var(--radius-lg);
-    background: var(--bg-container);
-    border: 2px solid var(--color-primary);
-    box-shadow: var(--shadow-sm);
-    transition: var(--transition-ui-slow);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    box-shadow: none;
+    transition: var(--transition-ui-fast);
     height: 40px; /* 统一高度，与其它输入保持一致 */
   }
 
   .el-input__wrapper:hover {
-    border-color: var(--color-primary-light);
-    box-shadow: var(--shadow-md);
+    border-color: var(--input-border-hover);
   }
 
   .el-input__wrapper.is-focus {
-    border-color: var(--color-primary);
-    box-shadow: var(--shadow-focus);
+    border-color: var(--input-border-focus);
+    box-shadow: var(--focus-ring);
   }
 
   .el-input__inner {
@@ -1009,24 +1008,26 @@ git config --global user.email "your.email@example.com"</pre
 }
 
 /* 提交类型选择框样式 */
+/* 三件套（类型 / 作用域 / 简短描述）统一中性描边 + 主色聚焦。
+   改前分别写死 danger 红 / success 绿 / primary 蓝，三种语义色并排却都不表达
+   真实状态 —— 红框会被读成「这里填错了」，而它只是提交类型选择器。 */
 :deep(.type-select) {
   .el-select__wrapper {
     border-radius: var(--radius-lg);
-    background: var(--bg-container);
-    border: 2px solid var(--color-danger);
-    box-shadow: var(--shadow-sm);
-    transition: var(--transition-ui-slow);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    box-shadow: none;
+    transition: var(--transition-ui-fast);
     height: 40px; /* 统一高度 */
   }
 
   .el-select__wrapper:hover {
-    border-color: var(--color-danger);
-    box-shadow: var(--shadow-md);
+    border-color: var(--input-border-hover);
   }
 
   .el-select__wrapper.is-focus {
-    border-color: var(--color-danger);
-    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18);
+    border-color: var(--input-border-focus);
+    box-shadow: var(--focus-ring);
   }
 
   .el-select__inner {
@@ -1046,21 +1047,20 @@ git config --global user.email "your.email@example.com"</pre
 
   .el-input__wrapper {
     border-radius: var(--radius-lg);
-    background: var(--bg-container);
-    border: 2px solid var(--color-success);
-    box-shadow: var(--shadow-sm);
-    transition: var(--transition-ui-slow);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    box-shadow: none;
+    transition: var(--transition-ui-fast);
     height: 40px; /* 统一高度 */
   }
 
   .el-input__wrapper:hover {
-    border-color: var(--color-success);
-    box-shadow: var(--shadow-md);
+    border-color: var(--input-border-hover);
   }
 
   .el-input__wrapper.is-focus {
-    border-color: var(--color-success);
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+    border-color: var(--input-border-focus);
+    box-shadow: var(--focus-ring);
   }
 
   .el-input__inner {
@@ -1080,22 +1080,21 @@ git config --global user.email "your.email@example.com"</pre
 
   .el-textarea__inner {
     border-radius: var(--radius-lg);
-    background: var(--bg-container);
-    border: 2px solid var(--color-warning);
-    box-shadow: var(--shadow-sm);
-    
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    box-shadow: none;
+
     font-weight: 500;
-    transition: var(--transition-ui-slow);
+    transition: var(--transition-ui-fast);
   }
 
   .el-textarea__inner:hover {
-    border-color: var(--color-warning);
-    box-shadow: var(--shadow-md);
+    border-color: var(--input-border-hover);
   }
 
   .el-textarea__inner:focus-visible {
-    border-color: var(--color-warning);
-    box-shadow: 0 0 0 3px rgba(230, 162, 60, 0.18);
+    border-color: var(--input-border-focus);
+    box-shadow: var(--focus-ring);
     outline: none;
   }
 
@@ -1122,7 +1121,7 @@ git config --global user.email "your.email@example.com"</pre
 .config-command {
   background-color: var(--bg-code-dark);
   color: #f8f8f2;
-  font-family: "Courier New", Courier, monospace;
+  font-family: var(--font-mono);
   padding: var(--spacing-base);
   border-radius: var(--radius-base);
   margin-top: var(--spacing-base);

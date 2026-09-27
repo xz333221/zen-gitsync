@@ -685,6 +685,15 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   font-size: var(--font-size-base);
 }
 
+/* ── 欢迎区预设卡片：把落单的第 5 张拉满整行 ────────────────
+   预设共 5 条（presetQuestions），而 zen-ai-chat-ui 的 .acu-welcome-grid
+   是 2 列网格 → 排成 2+2+1，末行右侧空一格，看起来像漏了一张卡。
+   让最后一张（奇数序号时）跨两列收尾，网格不再有空洞，也不用凑内容。
+   （选择器带 .acu-welcome-grid 是为了盖过库里的 [data-v-*] 作用域样式） */
+:deep(.acu-welcome-grid > .acu-preset-q:last-child:nth-child(odd)) {
+  grid-column: 1 / -1;
+}
+
 /* ── 暗色主题适配 ───────────────────────────────── */
 :global([data-theme='dark']) {
   .agent-sidebar {

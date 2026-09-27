@@ -103,7 +103,7 @@ withDefaults(defineProps<Props>(), {
   stroke-dasharray: 166;
   stroke-dashoffset: 166;
   fill: none;
-  animation: success-circle-animation 0.58s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: success-circle-animation 0.58s var(--ease-enter) forwards;
 }
 
 .success-check {
@@ -113,7 +113,7 @@ withDefaults(defineProps<Props>(), {
   stroke-linejoin: round;
   stroke-dasharray: 48;
   stroke-dashoffset: 48;
-  animation: success-check-animation 0.24s cubic-bezier(0.22, 1, 0.36, 1) 0.5s forwards;
+  animation: success-check-animation 0.24s var(--ease-enter) 0.5s forwards;
 }
 
 .success-text {

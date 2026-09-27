@@ -401,7 +401,7 @@ function handleStashMessageKeydown(e: KeyboardEvent) {
   right: 0;
   height: 3px;
   background: linear-gradient(90deg, var(--git-status-modified) 0%, var(--action-amber) 100%);
-  border-radius: 12px 12px 0 0;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
 }
 
 .preview-title {

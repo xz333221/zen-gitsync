@@ -1037,7 +1037,13 @@ function stopHResize() {
   </main>
 
   <footer class="main-footer app-footer">
-    <BranchSelector @branch-changed="handleBranchChanged" />
+    <div class="footer-left">
+      <BranchSelector @branch-changed="handleBranchChanged" />
+      <RemoteRepoCard />
+    </div>
+    <!-- 默认模型：三区栅格的中列，永远居中且不会和两侧文字重叠
+         （改前是绝对定位 left:50% + translateX(-50%)，远程地址较长时
+         会和它叠在一起，实测窄窗口下「zen-gitsync」与「默认模型」糊成一团） -->
     <button
       v-if="defaultModelName"
       type="button"
@@ -1048,8 +1054,9 @@ function stopHResize() {
       <span class="footer-model-hint__label">{{ $t('@F13B4:默认模型') }}</span>
       <span class="footer-model-hint__name">{{ defaultModelName }}</span>
     </button>
-    <RemoteRepoCard />
-    <AppVersionBadge />
+    <div class="footer-right">
+      <AppVersionBadge />
+    </div>
   </footer>
 
   <!-- 用户设置对话框 -->
@@ -1093,9 +1100,35 @@ body {
   z-index: 1002;
   background: var(--bg-footer);
   border-top: 1px solid var(--border-color-light);
+  /* 左 / 中 / 右 三区栅格：中列的「默认模型」永远居中，
+     两侧各自挤占剩余空间，不会互相重叠（改前中列是绝对定位，会和远程地址叠字） */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  column-gap: var(--spacing-md);
+  padding: 0 var(--spacing-md);
+}
+
+.footer-left,
+.footer-right {
   display: flex;
   align-items: center;
-  padding: 0 var(--spacing-md);
+  gap: var(--spacing-md);
+  min-width: 0;   /* 允许内部远程地址按自身 max-width 截断，而不是把中列顶出去 */
+}
+
+/* 子项也解除 min-width:auto：
+   flex/grid 的「自动最小尺寸」默认取 min-content，URL 这类长串会被算成整串宽度，
+   结果是左列不收缩、直接把居中的「默认模型」压住。显式 0 之后
+   RemoteRepoCard 自己的 max-width + ellipsis 才会生效。 */
+.footer-left > *,
+.footer-right > * {
+  min-width: 0;
+}
+
+.footer-right {
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
 }
 
 .config-broken-banner {
@@ -1486,7 +1519,9 @@ h1 {
   gap: var(--spacing-base);
 }
 
-/* header 右侧系统监控指示器（CPU/内存） */
+/* header 右侧系统监控指示器（CPU/内存）
+   不加边框容器：顶栏右侧已经有「实例切换器」和用户卡两个描边盒子，
+   再加第三个框会让整排变成一列方盒。这里退成纯读数，靠 tooltip 承载细节。 */
 .header-monitor {
   display: flex;
   align-items: center;
@@ -1494,20 +1529,16 @@ h1 {
   height: 42px;
   padding: 0 8px;
   box-sizing: border-box;
-  border: 1px solid var(--border-color-light);
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
-  background: var(--bg-subtle);
-  transition: border-color var(--transition-base) var(--ease-custom),
-              background var(--transition-base) var(--ease-custom),
-              box-shadow var(--transition-base) var(--ease-custom);
+  background: transparent;
+  transition: background var(--transition-base) var(--ease-custom);
   cursor: default;
   flex-shrink: 0;
 }
 
 .header-monitor:hover {
-  border-color: var(--color-primary);
-  background: var(--tint-primary-10);
-  box-shadow: var(--focus-ring-soft);
+  background: var(--bg-hover);
 }
 
 .header-monitor__content {
@@ -1639,7 +1670,7 @@ h1 {
 .user-unconfigured-primary-btn:hover {
   opacity: 0.92;
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.32);
+  box-shadow: var(--shadow-md);
 }
 
 .user-unconfigured-primary-btn:active {
@@ -1649,7 +1680,7 @@ h1 {
 
 .user-unconfigured-primary-btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.32);
+  box-shadow: var(--focus-ring);
 }
 
 .user-unconfigured-divider {
@@ -1891,17 +1922,12 @@ h1 {
 
 /* 非Git仓库初始化卡片相关样式已随原卡片整体移除 —— 中间空态改为 RecentDirectoriesList */
 
-.main-footer:hover {
-  background: var(--bg-component-hover);
-}
-
+/* 底栏本身不可点：整条 hover 变底色的旧样式会让 32px 状态栏在被划过时整条闪一下，
+   真正可交互的是里面的分支/模型/版本几个控件，各自有 hover 反馈 */
 .footer-model-hint {
   display: flex;
   align-items: center;
   gap: 5px;
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
   background: transparent;
   border: 1px solid transparent;
   padding: 3px 10px;
@@ -1914,7 +1940,7 @@ h1 {
     background-color var(--transition-base) var(--ease-custom),
     border-color var(--transition-base) var(--ease-custom),
     color var(--transition-base) var(--ease-custom),
-    transform var(--transition-base) var(--ease-custom);
+    transform var(--transition-fast) var(--ease-custom);
 }
 
 .footer-model-hint:hover {
@@ -1928,7 +1954,7 @@ h1 {
 }
 
 .footer-model-hint:active {
-  transform: translateX(-50%) scale(0.97);
+  transform: scale(0.97);
 }
 
 .footer-model-hint:focus-visible {
@@ -2031,7 +2057,6 @@ h1 {
 .vertical-resizer.active::after {
   width: 2px;
   background-color: var(--color-primary);
-  box-shadow: 0 0 6px var(--tint-primary-55);
 }
 
 /* 水平分隔条样式 */
@@ -2069,7 +2094,6 @@ h1 {
   height: 4px;
   width: 48px;
   border-radius: var(--radius-xs);
-  box-shadow: 0 0 10px var(--tint-primary-45);
 }
 
 
@@ -2124,29 +2148,27 @@ h1 {
   overflow-y: auto;
 }
 
-/* 主题切换快捷按钮：与实例切换器保持一致的图标卡片风格 */
+/* 主题切换快捷按钮：无边框图标按钮（悬停才浮出底面）
+   之前和实例切换器/用户卡一样带描边，顶栏右侧出现三个并排的方盒 */
 .theme-toggle-btn {
   flex-shrink: 0;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-component);
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: var(--radius-lg);
   padding: 0;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   box-shadow: none;
   transition:
     background-color var(--transition-base) var(--ease-custom),
     border-color var(--transition-base) var(--ease-custom),
     color var(--transition-base) var(--ease-custom),
-    transform var(--transition-base) var(--ease-custom),
-    box-shadow var(--transition-base) var(--ease-custom);
+    transform var(--transition-fast) var(--ease-custom);
 }
 
 .theme-toggle-btn:hover {
-  background: color-mix(in srgb, var(--color-primary) 7%, var(--bg-container));
-  border-color: var(--color-primary);
+  background: var(--bg-hover);
+  border-color: transparent;
   color: var(--text-primary);
-  transform: translateY(-0.5px);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 11%, transparent);
 }
 
 .theme-toggle-btn:active {
@@ -2155,12 +2177,12 @@ h1 {
 
 .theme-toggle-btn:focus-visible {
   outline: none;
-  border-color: var(--color-warning);
+  border-color: transparent;
   box-shadow: var(--focus-ring);
 }
 
 .theme-toggle-btn .btn-icon {
-  transition: transform var(--transition-slow) cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform var(--transition-slow) var(--ease-enter);
 }
 
 .theme-toggle-btn:hover .btn-icon {

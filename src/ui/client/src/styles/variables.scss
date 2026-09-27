@@ -165,6 +165,14 @@
   /* 组件悬浮背景 */
   --bg-component-hover: #e9ecef;
   --bg-component-hover-dark: rgba(255, 255, 255, 0.12);
+
+  /* 通用行 / 图标按钮的悬浮与按下背景
+     （列表行、工具栏图标等轻量命中区；强度低于 --bg-component-hover，
+     避免密集列表里 hover 一块明显色块） */
+  --bg-hover: rgba(0, 0, 0, 0.045);
+  --bg-hover-dark: rgba(255, 255, 255, 0.07);
+  --bg-active: rgba(0, 0, 0, 0.075);
+  --bg-active-dark: rgba(255, 255, 255, 0.11);
   
   /* 组件区域背景 */
   --bg-component-area: #f9f9f9;
@@ -366,6 +374,9 @@
   /* 占位符文字 */
   --text-placeholder: #c0c4cc;
   --text-placeholder-dark: #bac0c6; /* 再次提升：原 #9aa0a6 */
+
+  /* 禁用态文字（按钮 / 图标按钮不可用时；跟随 placeholder 档，深色自动跟随） */
+  --text-disabled: var(--text-placeholder);
 
   /* 全局文字颜色 - 根据主题自动调整 */
   --color-text: var(--text-primary);
@@ -752,7 +763,7 @@
   --icon-btn-size-sm: 20px;
   --icon-btn-size-md: 22px;
   --icon-btn-size-lg: 24px;
-  --icon-btn-radius: var(--radius-sm);
+  --icon-btn-radius: var(--radius-base);
   --icon-btn-color: var(--text-tertiary);
   --icon-btn-color-hover: var(--color-danger);
   --icon-btn-bg-hover: var(--tint-danger-14);

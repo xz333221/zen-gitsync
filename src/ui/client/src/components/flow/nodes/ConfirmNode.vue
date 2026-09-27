@@ -36,7 +36,7 @@ defineProps<{
   justify-content: center;
 
   .node-warning {
-    color: var(--color-error);
+    color: var(--color-danger);
     font-size: var(--font-size-sm);
     line-height: 1.2;
   }

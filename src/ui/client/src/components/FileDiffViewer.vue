@@ -2380,7 +2380,7 @@ onMounted(() => {
 /* 模式切换按钮 */
 .resolution-mode-switch {
   padding: var(--spacing-sm) var(--spacing-lg);
-  background: var(--bg-elevated);
+  background: var(--bg-container);
   display: flex;
   gap: var(--spacing-base);
   justify-content: center;
@@ -2467,7 +2467,7 @@ onMounted(() => {
 /* 保存解决方案按钮栏 */
 .save-resolution-bar {
   padding: var(--spacing-sm) var(--spacing-lg);
-  background: var(--bg-elevated);
+  background: var(--bg-container);
   display: flex;
   justify-content: center;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);

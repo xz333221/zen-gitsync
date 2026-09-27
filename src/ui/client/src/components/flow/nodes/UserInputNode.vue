@@ -75,7 +75,7 @@ const hasMore = computed(() => paramNames.value.length > 3)
   height: 100%;
 
   .node-warning {
-    color: var(--color-error);
+    color: var(--color-danger);
     font-size: var(--font-size-sm);
     line-height: 1.2;
   }

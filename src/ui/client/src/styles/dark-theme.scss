@@ -95,6 +95,10 @@ html[data-theme="dark"] {
   /* 面板和区域背景 */
   --bg-panel: var(--bg-panel-dark);
   --bg-panel-hover: var(--bg-panel-hover-dark);
+
+  /* 通用行 / 图标按钮的悬浮与按下背景 */
+  --bg-hover: var(--bg-hover-dark);
+  --bg-active: var(--bg-active-dark);
   
   /* 文件路径背景 */
   --bg-file-path: var(--bg-file-path-dark);

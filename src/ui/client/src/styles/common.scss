@@ -22,23 +22,33 @@
 /* =======================================================
    全局滚动条：统一细滚动条（可见滚动位置）
 
-   两句各管一条渲染通路，缺一不可：
-   · scrollbar-width: thin —— 标准属性（Chromium 121+ / Firefox）。
-     ⚠️ 必须写在 `*` 上：实测 Chromium 不会把根元素上的 scrollbar-width
-     传给内部滚动容器（.proj__list 等算出来仍是 auto），逐个元素命中才统一得了。
-     也**不要**顺手写 scrollbar-color —— 那会让 Chromium 切到标准滚动条渲染、
-     反过来忽略下面 ::-webkit-scrollbar 整条规则。
-   · ::-webkit-scrollbar 的宽高 —— WebKit/Chromium 伪元素通路，
-     给不支持 scrollbar-width 的版本兜底。
-   · thumb / track 配色见下方，滚动条宽度统一取 --scrollbar-width(6px)。
-   2026-09 之所以从"隐藏"改回"细条"：提交历史 / 执行日志 / 文件差异这些长列表
+   两条渲染通路各管一种引擎，别互相抢：
+   · ::-webkit-scrollbar（下方）—— Chromium/WebKit 走这条，
+     宽度统一取 --scrollbar-width(6px)，配色走 token（明暗主题都吃得到）。
+   · scrollbar-width: thin —— 只有 Firefox 这类**不支持 ::-webkit-scrollbar**
+     的引擎才写，所以用 @supports not selector(...) 圈起来，别外溢给 Chromium。
+
+   ⚠️ 千万别在 Chromium 命中的规则里写非 auto 的 scrollbar-width / scrollbar-color：
+   Chromium 一旦看到这类值，就整体切到原生滚动条渲染，并**整条忽略** ::-webkit-scrollbar
+   （实测：同一元素上 webkit 写的 20px，被 thin 变成 10px 原生条，配色一起失效）。
+   2026-09 的"滚动条残影"正是这么来的：`* { scrollbar-width: thin !important }`
+   不但静默废掉全站细条与 token 配色，还压过 Element Plus 的 scrollbar-width: none，
+   让 el-scrollbar 容器（el-table 表体 / el-select 下拉…）同时出现
+   "原生滚动条 + EP 假 thumb" 两条，hover 时假 thumb 一冒出来就像残影。
+
+   2026-09 从"隐藏"改回"细条"的理由仍然成立：提交历史 / 执行日志 / 文件差异这些长列表
    在隐藏滚动条时看不到滚动位置，长内容容易误以为已经到底。
    ======================================================= */
-* {
-  /* !important：要压过第三方样式里写死的 thin / auto
-     （zen-ai-chat-ui 藏在 @supports not selector(::-webkit-scrollbar) 块里、
-     Element Plus 的 .el-splitter-panel 直接声明），否则宽度不统一 */
-  scrollbar-width: thin !important;
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+  }
+
+  /* EP 默认把 el-scrollbar 的原生条藏掉（后面我们又关掉了它的假 thumb），
+     这里把原生条还回去，否则 Firefox 下 el-scrollbar 里一条滚动条都没有 */
+  .el-scrollbar__wrap.el-scrollbar__wrap--hidden-default {
+    scrollbar-width: thin;
+  }
 }
 
 /* WebKit 浏览器（Chrome/Edge/Safari） */
@@ -59,6 +69,27 @@
 
 *::-webkit-scrollbar-track {
   background: var(--scrollbar-track);
+}
+
+/* Element Plus 的 el-scrollbar 默认藏掉原生滚动条，只留一个 hover 才出现的假 thumb。
+   这里统一改成我们的 6px 细条（长列表始终看得见滚动位置），并关掉假 thumb —— 
+   两者叠在一起就是 hover 时那条"残影"。 */
+@supports selector(::-webkit-scrollbar) {
+  /* EP 写的 scrollbar-width: none 在 Chromium 里会把滚动条彻底关掉（标准属性优先，
+     连 ::-webkit-scrollbar 一起失效），改回默认值 auto 才画得出下面的细条 */
+  .el-scrollbar__wrap.el-scrollbar__wrap--hidden-default {
+    scrollbar-width: auto;
+  }
+}
+
+.el-scrollbar__wrap.el-scrollbar__wrap--hidden-default::-webkit-scrollbar {
+  display: block;
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
+}
+
+.el-scrollbar__bar {
+  display: none !important;
 }
 
 /* =======================================================
@@ -351,10 +382,9 @@ select option {
   border-bottom: 1px solid var(--border-color-light);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
   transition: var(--transition-all);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacing-base) var(--spacing-lg);
+  /* 布局不在这里定：.main-header / .main-footer 各自声明 grid 结构。
+     这两个文件的加载顺序是 App.vue → common.scss，同特异性下后者赢，
+     所以这里的 display:flex 会把 App.vue 的 grid-template-* 悄悄盖掉。 */
 }
 
 /* Footer 样式 */
@@ -366,9 +396,6 @@ select option {
   border-top: 1px solid var(--border-color-light);
   box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.03);
   transition: var(--transition-all);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 /* Card 样式 */

@@ -265,11 +265,11 @@ async function refreshCurrentBranch() {
   transition: background var(--transition-fast);
 
   &:hover {
-    background: var(--bg-hover, rgba(255,255,255,0.08));
+    background: var(--bg-hover);
   }
 
   &:active {
-    background: var(--bg-active, rgba(255,255,255,0.12));
+    background: var(--bg-active);
   }
 }
 
@@ -331,7 +331,7 @@ async function refreshCurrentBranch() {
   transition: background var(--transition-fast);
 
   &:hover {
-    background: var(--bg-hover, rgba(255,255,255,0.08));
+    background: var(--bg-hover);
   }
 
   &.is-active {
@@ -394,7 +394,7 @@ async function refreshCurrentBranch() {
   transition: background var(--transition-fast);
 
   &:hover {
-    background: var(--bg-hover, rgba(255,255,255,0.08));
+    background: var(--bg-hover);
   }
 }
 

@@ -431,7 +431,7 @@ function formatDate(dateString: string): string {
     background: var(--action-green);
     color: white;
     padding: var(--spacing-xl) var(--spacing-2xl);
-    border-radius: 8px 8px 0 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     margin: 0;
   }
   

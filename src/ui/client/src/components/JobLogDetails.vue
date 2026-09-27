@@ -363,7 +363,7 @@ function onReExecute() {
 .wb-log-details {
   margin-top: 6px;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-base);
   background: var(--bg-code);
   overflow: auto;
   display: flex;
@@ -447,7 +447,7 @@ function onReExecute() {
   color: var(--text-secondary);
   background: var(--bg-container);
   border: 1px solid var(--border-color-medium);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-base);
   cursor: pointer;
   user-select: none;
   flex-shrink: 0;
@@ -486,7 +486,7 @@ function onReExecute() {
   color: #6d28d9;
   background: color-mix(in srgb, var(--color-think) 10%, var(--bg-container));
   border: 1px solid color-mix(in srgb, var(--color-think) 30%, transparent);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-base);
   cursor: pointer;
   user-select: none;
   transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
@@ -517,7 +517,7 @@ function onReExecute() {
   min-height: 0;
   display: flex;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-base);
   background: var(--bg-code);
   overflow: hidden;
 }

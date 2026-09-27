@@ -2571,7 +2571,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   flex: 1 1 0%;
   min-height: 0;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-base);
   background: var(--bg-code);
   overflow: hidden;
   margin-top: 6px;

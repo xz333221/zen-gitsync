@@ -788,7 +788,7 @@ async function runCommand(cmd: any) {
   padding: 5px var(--spacing-md);
   cursor: pointer;
   transition: background var(--transition-fast) ease;
-  border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.04));
+  border-bottom: 1px solid var(--border-color-light);
   user-select: none;
 }
 
@@ -854,7 +854,7 @@ async function runCommand(cmd: any) {
 
 /* ── 定时提交区块 ── */
 .schedule-section {
-  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  border-top: 1px solid var(--border-color-light);
   background: var(--bg-input);
 }
 
@@ -969,7 +969,7 @@ async function runCommand(cmd: any) {
   gap: 2px;
   padding: 3px 2px 3px 6px;
   background: var(--bg-container);
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border-color-light);
   border-radius: var(--radius-xs);
 }
 

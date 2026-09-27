@@ -1595,7 +1595,7 @@ function stopPreviewResize() {
 }
 
 .sidebar-search-input:focus {
-  border-color: var(--accent-color, var(--color-primary));
+  border-color: var(--color-primary);
   background: var(--bg-panel);
 }
 
@@ -1623,7 +1623,7 @@ function stopPreviewResize() {
 
 /* 节点名搜索命中高亮(沿用主题色 + 柔和背景) */
 .tree-name-hit {
-  color: var(--accent-color, var(--color-warning-light));
+  color: var(--color-warning-light);
   background: rgba(245, 158, 11, 0.15);
   border-radius: var(--radius-xs);
   padding: 0 1px;

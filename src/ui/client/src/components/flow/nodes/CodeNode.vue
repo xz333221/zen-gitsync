@@ -48,7 +48,7 @@ const info = computed(() => {
 <style scoped lang="scss">
 .code-node-content {
   .node-warning {
-    color: var(--color-error);
+    color: var(--color-danger);
     font-size: var(--font-size-sm);
     margin-top: 4px;
   }

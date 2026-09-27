@@ -586,7 +586,7 @@ function onWindowMouseUp(_e: MouseEvent) {
 }
 .wb-prompt-item__del:hover { background: color-mix(in srgb, var(--color-danger) 14%, transparent); color: var(--color-danger); }
 .wb-prompt-item__del:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-outline-offset); opacity: 1; }
-.wb-empty { padding: 24px 14px 20px; text-align: center; color: var(--text-tertiary); display: flex; flex-direction: column; align-items: center; gap: 8px; border-radius: var(--radius-md); background: linear-gradient(135deg, var(--bg-subtle) 0%, color-mix(in srgb, var(--tint-primary-05) 50%, transparent) 100%); border: 1px dashed var(--border-color-light, color-mix(in srgb, var(--border-color) 60%, transparent)); position: relative; overflow: hidden; }
+.wb-empty { padding: 24px 14px 20px; text-align: center; color: var(--text-tertiary); display: flex; flex-direction: column; align-items: center; gap: 8px; border-radius: var(--radius-md); background: linear-gradient(135deg, var(--bg-subtle) 0%, color-mix(in srgb, var(--tint-primary-06) 50%, transparent) 100%); border: 1px dashed var(--border-color-light); position: relative; overflow: hidden; }
 .wb-empty::before {
   content: '';
   position: absolute;

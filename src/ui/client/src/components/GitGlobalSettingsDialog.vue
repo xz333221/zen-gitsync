@@ -208,8 +208,10 @@
                 </div>
               </div>
 
-              <!-- 命令控制台（跨整行的复合控件） -->
-              <div class="setting-row setting-row--full">
+              <!-- 命令控制台（跨整行的复合控件）：4 个开关 + 比例滑条，
+                   只在半格里会把 el-switch 的 active-text 压成竖排单字（实测），
+                   所以整行跨两列 + 内部两列网格。 -->
+              <div class="setting-row setting-row--full setting-row--span">
                 <label class="setting-label">{{ $t('@42BB9:命令控制台') }}</label>
                 <div class="console-sub-options">
                   <el-switch
@@ -1360,6 +1362,10 @@ async function openSystemConfigFile() {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--spacing-md) var(--spacing-xl);
+  /* 两列网格里单元格只有内容区的一半宽，标签列沿用 160px 会把控件区压到 ~150px：
+     实测下拉文案被截断、el-switch 的 active-text 被压成竖排单字。
+     网格内收窄标签列，把省出来的宽度还给控件；单列区域仍用 160px 节奏。 */
+  --setting-label-width: 118px;
 }
 
 .setting-row {
@@ -1416,9 +1422,15 @@ async function openSystemConfigFile() {
   grid-column: 1 / -1;
 }
 .console-sub-options {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
+  /* 3 个开关 + 比例滑条：两列网格，跨行后宽度够了就不必再竖着堆 4 层 */
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-sm) var(--spacing-xl);
+}
+/* 开关的 active-text 在窄容器里会被逐字折行（CJK min-content = 1 字宽），
+   这里显式禁止换行，保证「默认展开 / 使用终端执行 / 显示终端会话」单行显示 */
+:deep(.console-sub-options .el-switch__label) {
+  white-space: nowrap;
 }
 /* 顶栏工具图标：两列网格，每项 = 品牌图标 + 名称 + 右侧开关。
    整体从控件列起（标签列 + 间隙），左侧留白和其它设置项的内容对齐，不贴分区标题的左边 */

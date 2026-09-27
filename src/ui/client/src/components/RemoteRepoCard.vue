@@ -100,7 +100,7 @@ const gitStore = useGitStore()
   &:hover {
     opacity: 1;
     color: var(--color-primary);
-    background: var(--bg-hover, rgba(0, 0, 0, 0.06));
+    background: var(--bg-hover);
   }
 
   &--disabled {
@@ -121,8 +121,8 @@ const gitStore = useGitStore()
 }
 
 .repo-url {
-  color: #6c757d;
-  font-family: monospace;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
   max-width: 300px;
   overflow: hidden;
   text-overflow: ellipsis;

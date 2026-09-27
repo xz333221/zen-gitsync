@@ -299,7 +299,7 @@ onMounted(() => {
   &:hover {
     opacity: 1;
     color: var(--text-secondary);
-    background: var(--bg-hover, rgba(0, 0, 0, 0.06));
+    background: var(--bg-hover);
   }
 }
 .badge-icon-link--npm:hover {

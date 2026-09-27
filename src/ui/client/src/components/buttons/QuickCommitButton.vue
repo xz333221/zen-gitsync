@@ -177,9 +177,23 @@ defineExpose({
 <style scoped lang="scss">
 .one-commit-button {
   height: 100%;
-  background: linear-gradient(135deg, var(--color-primary-dark, var(--color-primary-dark)) 0%, #1d4ed8 100%) !important;
+  /* 一档动作：实心主色渐变（产品核心动作）。
+     渐变两端都不能比 --color-primary-dark 更亮 —— 白字在 #3b82f6 上只有 3.68:1，
+     不达 AA 4.5:1；这里用「中蓝 → 深蓝」，白字全程 ≥ 5.2:1 且天然比
+     二档的纯色平铺更重，主次一眼可分。 */
+  background: linear-gradient(
+    135deg,
+    var(--color-primary-dark) 0%,
+    color-mix(in srgb, var(--color-primary-dark) 78%, #000) 100%
+  ) !important;
   border: none !important;
   color: white !important;
+  /* EP 把 label 包在 span 里，父级 color 不保证落到文字节点，显式声明 */
+  .one-commit-icon,
+  .one-commit-title,
+  .one-commit-desc {
+    color: #fff;
+  }
   &.form {
     width: 100%;
     padding: 4px 12px;
@@ -205,7 +219,8 @@ defineExpose({
       }
       .one-commit-desc {
         font-size: var(--font-size-xs);
-        opacity: 0.72;
+        /* 11px 小字压在深蓝端要保住 4.5:1，0.72 会掉到约 3.9:1 */
+        opacity: 0.9;
         font-weight: 400;
         letter-spacing: 0.1px;
       }
