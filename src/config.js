@@ -166,6 +166,9 @@ const defaultConfig = {
       splitPercent: 25,                // 15-85
     },
     editorAutoSave: false,
+    // 文件空间的文件树是否定时静默刷新（捕获编辑器/外部工具产生的改动）。
+    // 关掉后只能手动点「刷新」按钮，适合大目录/网络盘（见 EditorView 的轮询注释）。
+    fileTreeAutoRefresh: true,
     // 顶栏工具图标（VSCode / Claude Code / Codex / …）中**隐藏**的那几个。
     // 白名单式的默认空数组：以后新增工具默认就固定显示，不需要回头改默认值。
     // 未勾选（= 落在本数组里）的工具连同未安装的一起收进顶栏右侧「更多」菜单。

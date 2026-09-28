@@ -354,6 +354,104 @@ export function registerFsRoutes({
     }
     }));
 
+  // 一次性取回"根目录 + 已展开子目录"的整棵可见子树，供前端静默刷新文件树。
+  //
+  // 为什么不复用 GET /api/browse_directory 逐目录并发请求：树展开得越深，请求数越多
+  // （多级展开会有十几个到几十个），一轮刷新要等最慢的那个；中途还会出现"部分目录
+  // 已刷新、部分没刷"的中间态。这里一次往返把已展开的部分整棵读回来，前端按 path
+  // 对账（内容没变就完全不碰 DOM），所以刷新是静默的。
+  //
+  // 请求体：{ path: 根目录绝对路径, expand?: string[] 已展开目录的绝对路径 }
+  // 响应：{ success, items: [...] }，只有 expand 里列出的目录才带 children
+  //       —— 展开态由前端提供，后端不猜，避免把整盘目录读爆。
+  const MAX_TREE_EXPAND_DIRS = 200;
+
+  app.post('/api/browse_directory_tree', express.json(), asyncRoute(async (req, res) => {
+    const rawRoot = req.body?.path;
+    if (typeof rawRoot !== 'string' || !rawRoot.trim()) {
+      res.status(400).json({ success: false, error: '缺少 path 参数' });
+      return;
+    }
+    const rootPath = path.resolve(rawRoot);
+
+    // 只接受根目录之下的路径：既挡越权（前端传个 C:\Windows 进来），
+    // 也顺手挡掉路径拼错。Windows 下比较要忽略大小写。
+    const normalize = (p) => (process.platform === 'win32' ? p.toLowerCase() : p);
+    const normRoot = normalize(rootPath);
+    const rootPrefix = normRoot.endsWith(path.sep) ? normRoot : normRoot + path.sep;
+    const expandSet = new Set();
+    const rawExpand = Array.isArray(req.body?.expand) ? req.body.expand : [];
+    for (const p of rawExpand.slice(0, MAX_TREE_EXPAND_DIRS)) {
+      if (typeof p !== 'string' || !p.trim()) continue;
+      const resolved = path.resolve(p);
+      const normResolved = normalize(resolved);
+      if (normResolved === normRoot || normResolved.startsWith(rootPrefix)) {
+        expandSet.add(resolved);
+      }
+    }
+
+    // 读一层目录，排序口径与 GET /api/browse_directory 保持一致（目录在前，各自按名排）。
+    async function readDirEntries(dirPath) {
+      const entries = await fs.readdir(dirPath, { withFileTypes: true });
+      const directories = [];
+      const files = [];
+      for (const item of entries) {
+        const fullPath = path.join(dirPath, item.name);
+        if (item.isDirectory()) {
+          directories.push({ name: item.name, path: fullPath, type: 'directory' });
+        } else if (item.isFile()) {
+          files.push({ name: item.name, path: fullPath, type: 'file' });
+        }
+      }
+      directories.sort((a, b) => a.name.localeCompare(b.name));
+      files.sort((a, b) => a.name.localeCompare(b.name));
+      return [...directories, ...files];
+    }
+
+    try {
+      // 根目录读不到就老实报错，让前端保留旧树 —— 不能返回空树，
+      // 否则一次瞬时 IO 失败会把用户已展开的整棵树清空。
+      const rootEntries = await readDirEntries(rootPath);
+      const contents = new Map([[rootPath, rootEntries]]);
+
+      // 逐层（BFS）并行读取：frontier 是"已经拿到内容、还要继续往下读"的目录。
+      let frontier = [rootPath];
+      while (frontier.length > 0) {
+        await Promise.all(frontier.map(async (dir) => {
+          try {
+            contents.set(dir, await readDirEntries(dir));
+          } catch {
+            // 单个子目录读失败（权限 / 刚被删掉）—— 退化成空目录，不让整次刷新失败。
+            // 轮询刷新是后台行为，不该因为一个坏目录把用户已展开的树整个清掉。
+            contents.set(dir, []);
+          }
+        }));
+        const next = [];
+        for (const dir of frontier) {
+          for (const item of contents.get(dir)) {
+            if (item.type === 'directory' && expandSet.has(item.path) && !contents.has(item.path)) {
+              next.push(item.path);
+            }
+          }
+        }
+        frontier = next;
+      }
+
+      const build = (dir) => contents.get(dir).map((item) => (
+        item.type === 'directory' && contents.has(item.path)
+          ? { ...item, children: build(item.path) }
+          : item
+      ));
+
+      res.json({ success: true, currentPath: rootPath, items: build(rootPath) });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        error: `无法读取目录 "${rootPath}": ${error.message}`
+      });
+    }
+    }));
+
   // 获取最近访问的目录列表
   app.get('/api/recent_directories', asyncRoute(async (req, res) => {
     try {

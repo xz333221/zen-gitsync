@@ -100,4 +100,19 @@ describe('RecentDirectoriesChat.vue', () => {
     wrapper.unmount()
     expect(agent.stop).toHaveBeenCalledTimes(1)
   })
+
+  test('RDC-04: 建议问题四条一组（问状态两条 + 承接动作两条），每条都有可点的文案', () => {
+    const wrapper = mountChat()
+    const qs = wrapper
+      .findComponent({ name: 'ChatContainer' })
+      .props('presetQuestions') as Array<Record<string, string>>
+
+    expect(qs.map(q => q.id)).toEqual(['priority', 'behind', 'pull-behind', 'uncommitted'])
+    // label 是卡片上的标题：缺了卡片就是一片空白，用户点了也不知道会问什么
+    for (const q of qs) {
+      expect(q.label).toBeTruthy()
+      expect(q.prompt).toBeTruthy()
+    }
+    wrapper.unmount()
+  })
 })

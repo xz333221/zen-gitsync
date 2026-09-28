@@ -62,7 +62,13 @@ const questionLabels = agentQuestionLabels()
 
 /**
  * 开场白里的建议问题。这块地方没有输入提示词可抄,用户第一次看到多半不知道该问什么 ——
- * 给两句"拿到这批状态之后最自然会问的",点一下就能跑起来。
+ * 给几句"拿到这批状态之后最自然会问的",点一下就能跑起来。
+ *
+ * 前两句是"问状态"(先处理哪个 / 谁落后了),后两句是**承接状态的动作**(落后就拉、
+ * 脏工作区就看看改了什么)——后两句正是看完解读之后最常用的处置,不写在这儿用户得自己
+ * 敲一遍"落后远端的有哪些"再补一句"都帮我 pull 下"。
+ * 库里的问题是两列网格,四条正好铺满两行 —— 这也是这块固定高的条能装下的上限
+ * (再添一条开场白就装不下了,得连下面 .dir-chat 的高度一起改)。
  */
 const presetQuestions = computed<PresetQuestion[]>(() => [
   {
@@ -74,6 +80,18 @@ const presetQuestions = computed<PresetQuestion[]>(() => [
     id: 'behind',
     label: $t('@13D1C:哪些项目落后远端？'),
     prompt: $t('@13D1C:哪些项目落后远端？分别落后多少个提交？'),
+  },
+  {
+    // 与上一条连着用:先看清谁落后,再一句"都拉一下"。工作区不干净时由模型自己判断
+    // 该不该先 stash(模型手上有 dirStatus,看得见未提交数),这里不替它预设策略。
+    id: 'pull-behind',
+    label: $t('@13D1C:落后远端的都帮我 pull 下代码'),
+    prompt: $t('@13D1C:落后远端的项目都帮我 pull 下代码，逐个执行并汇报结果。'),
+  },
+  {
+    id: 'uncommitted',
+    label: $t('@13D1C:看一下各项目未提交的都改了什么'),
+    prompt: $t('@13D1C:看一下各项目未提交的改动都改了什么，按项目列出来。'),
   },
 ])
 
@@ -125,7 +143,10 @@ onBeforeUnmount(() => {
    它会按内容长到天上去,把上面的目录列表整个挤出弹窗。 */
 .dir-chat {
   display: flex;
-  height: min(340px, 34vh);
+  /* 420 而不是 340:问题卡从两条变成四条,开场白整体高了一行多(~95px),固定高得跟着涨,
+     否则每次打开都能看见开场白被顶掉一截。上限仍受 42vh 约束 —— 窗口矮的时候宁可让开场白
+     自己滚(见下面 .acu-welcome),也不要把上面的目录列表整个挤走。 */
+  height: min(420px, 42vh);
   min-height: 200px;
   margin-top: var(--spacing-sm);
   border-top: 1px solid var(--border-color-light);
@@ -149,11 +170,20 @@ onBeforeUnmount(() => {
 
 /* ── 开场白瘦身 ──────────────────────────────────────────────────────────
    库里那套开场白是给整页对话设计的(56px 图标 + 大标题 + 描述 + 两列问题卡,
-   上下还各留 32px),塞进这 300px 高的条里会被裁掉一头。这里只砍尺寸、不砍内容:
-   标题、说明、两个可点的问题都留着 —— 它们正是"不知道能问什么"时的入口。
+   上下还各留 32px),塞进这块几百像素高的条里会被裁掉一头。这里只砍尺寸、不砍内容:
+   标题、说明、四条可点的问题都留着 —— 它们正是"不知道能问什么"时的入口。
    图标去掉是因为这块地方头上已经有「AI 项目状态解读」标题了,再顶一个头像纯属重复。 */
 .dir-chat :deep(.acu-welcome) {
   padding: var(--spacing-base);
+  /* 四条卡在矮窗口里(42vh 生效时)会高过这块条:让开场白自己滚,别让内容溢出到
+     下面的输入框上面。align-items 换成 flex-start 是必需的 —— 居中溢出时上半截
+     会被顶到滚不到的地方;居中的效果改由 inner 的 margin-block:auto 兜(有富余空间
+     时它照旧居中,没空间时自动退化成 0,也就是顶端对齐)。 */
+  align-items: flex-start;
+  overflow-y: auto;
+}
+.dir-chat :deep(.acu-welcome-inner) {
+  margin-block: auto;
 }
 .dir-chat :deep(.acu-welcome-logo) {
   display: none;
