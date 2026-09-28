@@ -92,6 +92,12 @@ const props = withDefaults(defineProps<{
   mode?: "open" | "pick";
   /** panel:带外框/标题/搜索的空态面板 | bare:裸列表,用于弹窗内嵌 */
   variant?: "panel" | "bare";
+  /**
+   * stack:卡片在上、底下的说明块在下(默认)
+   * split:卡片在左、AI 解读 + 追问区在右(给"切换工作目录"全屏弹窗)
+   * split 会把根节点从纵向 flex 翻成横向 flex —— 只在宽容器里用,窄栏会挤成两团。
+   */
+  layout?: "stack" | "split";
   /** missing:只允许移除已失效目录(避免误删还能打开的有效项目) | always:任意条目都可移除 */
   removable?: "missing" | "always";
   /** 挂载时自动拉取;弹窗场景传 false,由父组件在打开时调 reload() */
@@ -113,6 +119,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   mode: "open",
   variant: "panel",
+  layout: "stack",
   removable: "missing",
   autoLoad: true,
   refreshOnMount: false,
@@ -120,6 +127,9 @@ const props = withDefaults(defineProps<{
 });
 
 const emit = defineEmits<{ select: [path: string]; loaded: [count: number] }>();
+
+/** 左右分栏(卡片 | AI 栏):根节点翻成横向 flex,说明块落到右栏 */
+const isSplit = computed(() => props.layout === "split");
 
 const directories = ref<Array<{ path: string; exists: boolean }>>([]);
 const isLoading = ref(false);
@@ -485,7 +495,7 @@ defineExpose({ reload: load });
 </script>
 
 <template>
-  <div class="dir-list" :class="`dir-list--${variant}`">
+  <div class="dir-list" :class="[`dir-list--${variant}`, { 'dir-list--split': isSplit }]">
     <!-- 外壳:仅 panel 形态自带标题行 + 搜索框;bare 形态由调用方(弹窗表单 label)提供标题 -->
     <template v-if="variant === 'panel'">
       <div class="dir-list__head">
@@ -627,9 +637,10 @@ defineExpose({ reload: load });
          组件内部自己判断有没有模型、要不要等状态定稿,调用方只管把数据和 variant 递下去。 -->
     <RecentDirectoriesSummary
       v-if="allItems.length > 0"
+      class="dir-list__summary"
       :items="allItems"
       :ready="summaryReady"
-      :variant="variant"
+      :variant="isSplit ? 'split' : variant"
     />
   </div>
 </template>
@@ -682,6 +693,25 @@ defineExpose({ reload: load });
   min-height: 0;
   max-height: none;
   overflow-y: auto;
+}
+/* split:卡片在左、AI 栏在右(全屏"切换工作目录"弹窗专用)。
+   根节点由纵翻横,卡片占满剩下的宽度、内部滚动,AI 栏固定一档宽度。
+   max-height 在这里必须放开 —— bare 那条 74vh 是为"卡片在上"的旧布局设的,
+   横过来之后高度应由弹窗高度链决定,而不是再截一道。 */
+.dir-list--split {
+  flex-direction: row;
+  align-items: stretch;
+  gap: var(--spacing-xl);
+  max-height: none;
+}
+.dir-list--split .dir-list__items {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.dir-list--split .dir-list__summary {
+  flex: 0 0 auto;
+  width: clamp(360px, 38%, 560px);
+  min-width: 0;
 }
 .dir-list__head {
   display: flex;

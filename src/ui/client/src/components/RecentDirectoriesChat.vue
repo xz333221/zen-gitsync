@@ -40,6 +40,8 @@ const props = defineProps<{
   dirStatus: unknown[]
   /** 界面上那段自动解读的原文:用户说"那第二个呢"时指的就是它 */
   summary?: string
+  /** 撑满父级剩余高度(全屏弹窗右栏)。默认 false = 弹窗底部那一块固定高的条 */
+  fill?: boolean
 }>()
 
 const { theme } = useThemeObserver()
@@ -92,7 +94,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="dir-chat">
+  <div class="dir-chat" :class="{ 'dir-chat--fill': fill }">
     <ChatContainer
       :messages="messages"
       :assistant-name="AGENT_ASSISTANT_NAME"
@@ -134,6 +136,15 @@ onBeforeUnmount(() => {
 .dir-chat > :deep(.acu-chat) {
   flex: 1;
   min-width: 0;
+}
+
+/* fill:全屏弹窗右栏 —— 不再用固定高度,而是吃掉父级(解读块)剩下的全部高度。
+   父级是 flex column + min-height:0 链,这里 flex:1 + min-height:0 即可;
+   高度不确定时 ChatContainer 会长到天上,所以父级那条高度链必须完整。 */
+.dir-chat--fill {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
 }
 
 /* ── 开场白瘦身 ──────────────────────────────────────────────────────────

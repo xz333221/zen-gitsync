@@ -75,8 +75,8 @@ const props = withDefaults(defineProps<{
    * false 时只显示静态说明,不发请求。
    */
   ready?: boolean;
-  /** panel:最近项目面板(与卡片同一列) | bare:弹窗内嵌(更紧凑) */
-  variant?: "panel" | "bare";
+  /** panel:最近项目面板(与卡片同一列) | bare:弹窗内嵌(更紧凑) | split:全屏弹窗右栏(AI 独占一列) */
+  variant?: "panel" | "bare" | "split";
 }>(), {
   ready: false,
   variant: "panel",
@@ -339,11 +339,12 @@ const bodyText = computed(() => {
 });
 
 // ── 追问区(把 g ai 引到这块来)───────────────────────────────────────────
-// 只有**弹窗**(variant='bare')里才渲染:主面板那一列的高度预算全给了目录列表,
-// 再塞一块对话区会把列表压到只剩两三行(它本来就够挤了)。也不在没配模型时渲染 ——
-// 没有模型就没有 g ai 可问,与上面那段"没配模型只显示静态说明"是同一条口径。
+// 只在**弹窗**里才渲染(bare=原来的底部条,split=全屏右栏):主面板那一列的高度
+// 预算全给了目录列表,再塞一块对话区会把列表压到只剩两三行(它本来就够挤了)。
+// 也不在没配模型时渲染 —— 没有模型就没有 g ai 可问,与上面那段"没配模型只显示
+// 静态说明"是同一条口径。
 const showChat = computed(() =>
-  props.variant === "bare" && hasModel.value && props.items.length > 0
+  (props.variant === "bare" || props.variant === "split") && hasModel.value && props.items.length > 0
 );
 // 懒加载:最近项目面板挂在 App 首屏上,不能为它把整个 zen-ai-chat-ui 拖进主 chunk。
 // 这块对话只在弹窗打开时真的渲染,异步 chunk 到那时才拉。
@@ -404,6 +405,7 @@ const chatSummary = computed(() =>
       v-if="showChat"
       :dir-status="chatDirStatus"
       :summary="chatSummary"
+      :fill="variant === 'split'"
     />
   </section>
 </template>
@@ -431,6 +433,25 @@ const chatSummary = computed(() =>
 .dir-summary--bare {
   margin-top: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-base);
+}
+/* split:全屏"切换工作目录"弹窗的右栏。整块撑满右栏:标题与解读文字钉在顶部,
+   追问区吃掉剩下的高度(见 RecentDirectoriesChat 的 fill)。min-height:0 是必需的
+   —— 否则内部的对话区会把父级顶穿,滚不到底也收不住。 */
+.dir-summary--split {
+  margin-top: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.dir-summary--split .dir-summary__head,
+.dir-summary--split .dir-summary__error {
+  flex-shrink: 0;
+}
+/* 解读文字很长时自己滚,不抢对话区的高度(45% 是"够读一段、又给对话留出大半"的折中) */
+.dir-summary--split .dir-summary__text {
+  flex-shrink: 0;
+  max-height: 45%;
+  overflow-y: auto;
 }
 .dir-summary__head {
   display: flex;
