@@ -899,8 +899,8 @@ export default {
   '@42BB9:语言': 'Language',
   '@42BB9:界面语言': 'Interface Language',
   '@42BB9:通用设置已保存': 'General settings saved',
-  // Task finished notice (global toggle, off by default). Granting browser notification
-  // permission is triggered the moment the toggle is switched on.
+  // Task finished notice (global toggle, on by default). Browser notification permission
+  // is requested on the first in-page user gesture (see App.vue), and also when the toggle is switched on.
   '@42BB9:任务完成提示': 'Task finished notice',
   '@42BB9:任务执行结束时提醒我：页面在后台发系统通知，在前台弹应用内提示': 'Notify me when a task finishes: a system notification when the page is in the background, an in-app toast when it is focused',
   '@42BB9:浏览器已拒绝通知权限，只能在页面内提示（可在浏览器地址栏的站点设置里恢复）': 'The browser has denied notification permission, so only in-app toasts will show (restore it in the site settings of the address bar)',

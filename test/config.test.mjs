@@ -155,9 +155,12 @@ test('normalizeNotifyOnTaskDone: 非布尔值一律 null(调用方取默认/保�
   }
 })
 
-test('notifyOnTaskDone: 默认关闭', async () => {
+test('notifyOnTaskDone: 默认开启', async () => {
   const cfg = await configMod.default.loadConfig()
-  assert.equal(cfg.notifyOnTaskDone, false, '新装/未设置时应为关（不在用户没同意的情况下弹系统通知）')
+  // 2026-09-28: 默认关 → 开。这个功能只在"任务跑完时用户不在这个页面上"才有价值，
+  // 默认关等于没几个人知道它存在；系统通知的权限由前端在用户手势里申请，
+  // 用户拒绝后也只是退回应用内提示，不存在"默认开就静默骚扰"的问题。
+  assert.equal(cfg.notifyOnTaskDone, true, '新装/未设置时应为开')
 })
 
 test('notifyOnTaskDone: 存成顶层全局键，且能读回/能关掉', async () => {

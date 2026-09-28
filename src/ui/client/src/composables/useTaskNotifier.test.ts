@@ -209,7 +209,7 @@ describe('useTaskNotifier 订阅', () => {
 })
 
 describe('useTaskNotifier 提示决策', () => {
-  it('开关关着时跑完也不提示（默认关）', () => {
+  it('开关关着时跑完也不提示', () => {
     sys.useSystem = true
     const { es } = connect()
     es.frame('job:update', runningJob('j1'))

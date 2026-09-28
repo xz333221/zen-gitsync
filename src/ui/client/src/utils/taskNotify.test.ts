@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   notificationPermission,
   requestNotificationPermission,
+  gesturePermissionDecision,
   shouldUseSystemNotification,
   notifySystem,
 } from './taskNotify'
@@ -98,6 +99,24 @@ describe('requestNotificationPermission', () => {
     const a = installNotification('default')
     a.Fake.requestPermission = vi.fn(async () => { throw new Error('boom') })
     await expect(requestNotificationPermission()).resolves.toBe('default')
+  })
+})
+
+describe('gesturePermissionDecision', () => {
+  it('权限已定（granted / denied / unsupported）时不再申请', () => {
+    for (const p of ['granted', 'denied', 'unsupported'] as const) {
+      expect(gesturePermissionDecision({ loaded: true, enabled: true, permission: p })).toBe('skip')
+    }
+  })
+
+  it('配置没加载完时 wait：这次点击不作数，别拿"还没读到"的开关值当真', () => {
+    expect(gesturePermissionDecision({ loaded: false, enabled: true, permission: 'default' })).toBe('wait')
+    expect(gesturePermissionDecision({ loaded: false, enabled: false, permission: 'default' })).toBe('wait')
+  })
+
+  it('权限未定 + 配置已加载：开关开着才申请，关着就彻底不打扰', () => {
+    expect(gesturePermissionDecision({ loaded: true, enabled: true, permission: 'default' })).toBe('request')
+    expect(gesturePermissionDecision({ loaded: true, enabled: false, permission: 'default' })).toBe('skip')
   })
 })
 

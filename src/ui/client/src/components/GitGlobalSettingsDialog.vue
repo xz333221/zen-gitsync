@@ -687,7 +687,7 @@ const tempTheme = ref<'light' | 'dark' | 'auto'>('light')
 const tempLocale = ref<SupportLocale>('zh-CN')
 // 任务执行器（全局默认值；工作台执行按钮旁的临时切换不归这里管）
 const tempTaskExecutor = ref<TaskExecutorId>('claude')
-// 任务执行结束提示开关（全局，默认关）
+// 任务执行结束提示开关（全局，默认开）
 const tempNotifyOnTaskDone = ref(false)
 // 只读镜像，用来在开关下方如实展示"系统通知到底能不能发出去"：
 // 权限已拒 / 环境不支持时，光看开关是不知道的，用户会以为开了却没动静。
@@ -1050,7 +1050,8 @@ async function saveGeneralSettings() {
   return true
 }
 
-// 开关被拨到"开"的那一刻申请通知权限。
+// 开关被拨到"开"的那一刻申请通知权限（开关默认开，这条平时主要覆盖"关掉过又打开"；
+// 页面内首次点击时的自动申请在 App.vue 的 onUserGestureForNotifyPermission）。
 //
 // ⚠️ 必须挂在点击事件上，不能等任务跑完再补申请：浏览器只在**用户手势**里响应
 // requestPermission（Chrome 之后不再允许非手势调用弹窗），在 SSE 回调里调只会拿回

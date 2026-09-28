@@ -197,9 +197,10 @@ export const useConfigStore = defineStore('config', () => {
   // 工作台任务执行器默认值（全局配置）：claude | opencode | codex。
   // 执行按钮旁的临时切换不存这里——那一份在 utils/taskExecutor.ts 的 localStorage 里。
   const taskExecutor = ref<TaskExecutorId>('claude')
-  // 任务执行结束时是否提示（全局配置）。默认关：浏览器通知属于"会被打扰"的能力，
-  // 得用户主动开（开启那一刻顺带申请通知权限，见 GitGlobalSettingsDialog）。
-  const notifyOnTaskDone = ref(false)
+  // 任务执行结束时是否提示（全局配置）。默认开：这个功能只在"用户切到别的窗口"时才有意义，
+  // 默认关等于没几个人知道它存在。浏览器通知权限在页面内首次点击时自动申请一次（见 App.vue），
+  // 用户拒绝后系统通知发不出去，会退回应用内提示（见 useTaskNotifier）。
+  const notifyOnTaskDone = ref(true)
 
   // ============================================================
   // UI 状态（持久化到 ~/.zen-gitsync/config.json 的顶层 ui 字段）

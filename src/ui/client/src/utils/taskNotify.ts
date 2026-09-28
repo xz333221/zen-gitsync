@@ -50,6 +50,28 @@ export async function requestNotificationPermission(): Promise<NotifyPermission>
 }
 
 /**
+ * 「页面内首次点击时自动申请权限」这一步该怎么做。
+ *
+ * 为什么需要它：开关默认开启后，用户很可能一辈子不碰设置里那个开关，而浏览器只在
+ * 用户手势里弹授权询问 —— 不补这条，默认开也只是个摆设，后台任务跑完照样没系统通知。
+ *
+ * 三种结果：
+ *   request —— 开关开着、权限还没定（default）、配置也已加载 → 该申请了
+ *   wait    —— 配置还没加载完（此刻读到的开关值不可信，可能是"用户其实是关的"）
+ *              → 这次点击不作数、也别作废机会，等下一次点击再看
+ *   skip    —— 权限已定（granted / denied / unsupported）或开关关着 → 不再打扰
+ */
+export function gesturePermissionDecision(state: {
+  loaded: boolean
+  enabled: boolean
+  permission: NotifyPermission
+}): 'request' | 'wait' | 'skip' {
+  if (state.permission !== 'default') return 'skip'
+  if (!state.loaded) return 'wait'
+  return state.enabled ? 'request' : 'skip'
+}
+
+/**
  * 现在该用**系统通知**还是**应用内提示**？
  *
  * 页面在前台可见且持有焦点时，用户看得见应用内提示，再弹一个系统窗口纯属打扰；

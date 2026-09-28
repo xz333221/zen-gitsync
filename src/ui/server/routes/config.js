@@ -1007,7 +1007,7 @@ export function registerConfigRoutes({
         rawConfig.taskExecutor = normalizedExecutor
       }
 
-      // 任务执行结束提示开关（全局，默认关）。只接受布尔值，其它类型静默忽略，
+      // 任务执行结束提示开关（全局，默认开）。只接受布尔值，其它类型静默忽略，
       // 避免前端误传字符串 'false' 被当成真值落盘后永久打开。
       // ⚠️ 规范化函数对非法值返回的是 **null**（与 normalizeTaskExecutor 同语义），
       // 不是 undefined —— 判 `!== undefined` 会把非法值原样写进去变成 `null`。

@@ -72,6 +72,7 @@ import { useNetworkStatus } from '@/composables/useNetworkStatus'
 import { ALL_AI_CONTEXT_SECTIONS, refreshAiContext, refreshAiContextForView } from '@/composables/useAiContextSync'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import { useTaskNotifier } from '@/composables/useTaskNotifier'
+import { gesturePermissionDecision, notificationPermission, requestNotificationPermission } from '@/utils/taskNotify'
 
 const configInfo = ref('')
 // 添加组件实例类型
@@ -109,8 +110,28 @@ function stopHeaderMonitor() {
 
 // 任务执行结束提示：独立订阅一条 workbench SSE（不依赖是否打开工作台视图），
 // 只把「跑着 → 结束」的跃迁翻译成系统通知 / 应用内提示。
-// 开关在 设置 → 通用设置 → 任务完成提示（默认关），每次事件实时读取。
+// 开关在 设置 → 通用设置 → 任务完成提示（默认开），每次事件实时读取。
 const taskNotifier = useTaskNotifier()
+
+// 通知权限自动申请：开关默认开启后，用户很可能永远不碰设置里那个开关，
+// 而浏览器只在用户手势里弹授权询问 —— 所以挂到页面内第一次点击上，补一次申请。
+// 判定逻辑在 gesturePermissionDecision（配置没加载完的点击不作数，见那里的注释）；
+// 只申请一次，之后无论授权/拒绝都不再打扰。
+let notifyPermissionArmed = true
+function onUserGestureForNotifyPermission() {
+  if (!notifyPermissionArmed) return
+  const decision = gesturePermissionDecision({
+    loaded: configStore.isLoaded,
+    enabled: configStore.notifyOnTaskDone,
+    permission: notificationPermission(),
+  })
+  if (decision === 'wait') return
+  notifyPermissionArmed = false
+  if (decision === 'skip') return
+  // 结果不需要在这里弹提示：拒绝后系统通知自动退回应用内提示，
+  // 设置里也会如实显示"浏览器已拒绝通知权限"。
+  void requestNotificationPermission()
+}
 
 // 添加初始化完成状态
 const initCompleted = ref(false)
@@ -173,6 +194,9 @@ onMounted(async () => {
 
   // 启动任务结束提示的 SSE 订阅（同样全局常驻：任务跑完时用户多半不在工作台视图）
   taskNotifier.start()
+
+  // 通知权限：页面内第一次点击时自动申请一次（capture 兜住个别组件 stopPropagation 的点击）
+  window.addEventListener('pointerdown', onUserGestureForNotifyPermission, true)
 
   try {
     // 并行加载配置和目录信息
@@ -260,6 +284,9 @@ onBeforeUnmount(() => {
 
   // 断开任务结束提示的 SSE 订阅（停掉后不再自动重连）
   taskNotifier.stop()
+
+  // 摘掉首次点击申请通知权限的监听
+  window.removeEventListener('pointerdown', onUserGestureForNotifyPermission, true)
 
   // 主题 observer 由 useThemeObserver 自动清理
 

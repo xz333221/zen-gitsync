@@ -147,9 +147,12 @@ const defaultConfig = {
   // 决定「执行任务 / 执行子任务 / 从此处开始 / 简单任务续聊」这条链路
   // 默认 spawn 哪个本地 CLI；执行入口可以按次覆盖（见 workbench 执行路由）。
   taskExecutor: 'claude',
-  // 任务执行结束提示（全局，默认关）。开启后工作台任务从"跑着"变终态时，
+  // 任务执行结束提示（全局，默认开）。开启后工作台任务从"跑着"变终态时，
   // 页面在后台发浏览器系统通知、在前台发应用内提示条。见 useTaskNotifier。
-  notifyOnTaskDone: false,
+  // 2026-09-28: 默认关 → 开。这个功能的价值恰恰在"任务跑完时用户不在这个页面上"，
+  // 默认关等于大部分人永远不知道有它；浏览器通知权限在页面内首次点击时自动申请
+  // （见 App.vue 的 onUserGestureForNotifyPermission），所以默认开不会静默失效。
+  notifyOnTaskDone: true,
   // UI 状态（跨项目共享，存到顶层 ui 对象）
   // 之前散落在 localStorage，因随机端口启动而失效，迁到文件持久化
   ui: {
