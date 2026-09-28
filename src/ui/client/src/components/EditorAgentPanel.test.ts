@@ -1,11 +1,12 @@
-// EditorAgentPanel「恒两页」的回归测试。
+// EditorAgentPanel 版面的回归测试。
 //
-// 这块面板挂在文件空间里跟 Monaco 分宽度，**天生就窄**。原先的形态是
-// 「列表压在上面（38% 高）+ 对话在下面」—— 列表一展开就只剩两三行对话，
-// 现在恒定拆成两个整页：会话列表页 ↔ 对话页，头部按钮来回翻。
+// 这块面板挂在文件空间里跟 Monaco 分宽度：够宽就「左列表 + 右对话」并排 ——
+// 会话历史直接摆在旁边，不用先点按钮；不够宽折成两页（判据见 useNarrowPane）。
+// **两种形态都不堆叠**：「列表压在上面 + 对话在下面」会把对话挤到只剩两三行，
+// 这条底线由"并排 or 分页"保证，别哪天又冒出个堆叠分支。
 //
-// 这里不 mock useNarrowPane，因为面板已经不再依赖它 —— 如果哪天有人把
-// 宽度判断加回来，这些用例会立刻红（恒两页是**不依赖宽度**的语义）。
+// 输入框常驻底部（ChatContainer 传 show-input=false，输入框拆出来自己摆）：
+// 两种形态、两个页面都在，所以这里也要钉住"它没有跟着翻页消失/重建"。
 //
 // ⚠️ 可见性一律用 `shown()`（读 inline style）断言，**不要用 VueWrapper.isVisible()**：
 // v-show 的真身是 `style.display`，而 jsdom 的 getComputedStyle 对**动态切换过**的
@@ -26,6 +27,21 @@ const agent = vi.hoisted(() => ({
   isEngineLocked: null as any,
   pickEngine: null as any,
 }))
+
+// jsdom 里量不出宽度（ResizeObserver 是空实现），宽度判断只能由测试直接给定。
+// 默认 false（宽屏）：与 useNarrowPane 的约定一致 —— 量不到宽度时按宽屏处理。
+const pane = vi.hoisted(() => ({ narrow: null as any }))
+
+vi.mock('@/composables/useNarrowPane', async () => {
+  const { ref, computed } = await import('vue')
+  pane.narrow = ref(false)
+  return {
+    PANE_SPLIT_MIN_WIDTH: 680,
+    // width 必须 > 0：常驻输入框是 v-if="width > 0" 挂载的（等量到宽度再挂，
+    // 免得库的 ChatInput 在错误的列宽里量一次 scrollHeight 就再也纠不回来）
+    useNarrowPane: () => ({ width: computed(() => (pane.narrow.value ? 400 : 800)), narrow: pane.narrow }),
+  }
+})
 
 vi.mock('@/composables/useThemeObserver', async () => {
   const { ref } = await import('vue')
@@ -71,12 +87,21 @@ vi.mock('@/composables/useAgentChat', async () => {
 })
 
 vi.mock('zen-ai-chat-ui', () => ({
+  // 面板给 ChatContainer 传 show-input=false：输入框不在它里面了，
+  // 所以这个桩**不带** .acu-input-wrap —— 桩要和现实一个形状，否则
+  // "锚点插错地方"这类用例会被一个假的输入框容器骗过去。
   ChatContainer: {
-    // 带上 .acu-input-wrap：面板要把"当前文档"锚点插进这个容器里，
-    // 假组件没有它就等于把这条机制从单测里摘掉了。
     name: 'ChatContainer',
-    template: '<div class="stub-chat"><div class="acu-input-wrap"></div></div>',
+    props: ['showInput', 'placeholder', 'disabled', 'generating'],
+    template: '<div class="stub-chat"><div class="acu-chat-body"></div></div>',
     methods: { scrollToBottom() {} },
+  },
+  // 常驻的那条输入框。它的根节点就是库里的 .acu-input-wrap，
+  // "当前文档"卡片要作为锚点插进这里。
+  ChatInput: {
+    name: 'ChatInput',
+    props: ['placeholder', 'disabled', 'generating', 'uploadConfig'],
+    template: '<div class="acu-input-wrap"><textarea class="acu-input-textarea" /></div>',
   },
   ConversationList: {
     name: 'ConversationList',
@@ -88,60 +113,70 @@ vi.mock('zen-ai-chat-ui', () => ({
 import EditorAgentPanel from './EditorAgentPanel.vue'
 import AgentEngineSelector from './AgentEngineSelector.vue'
 
-// 读源码原文用（jsdom 里量不出宽度，只能从"有没有引入宽度判断"这个角度守）
-const PANEL_SRC = Object.values(
-  import.meta.glob('./EditorAgentPanel.vue', { query: '?raw', import: 'default', eager: true })
-)[0] as string
-
 // el-icon 必须 stub：面板头部的引擎下拉里有 <el-icon>，而 jsdom 下真实的 ElIcon
 // 会被 ElDropdown 的更新循环反复触发，报 "Maximum recursive updates"（与 AgentView.test
 // 同一个原因、同一条处置）。
 const EL_ICON_STUB = { 'el-icon': { template: '<i><slot /></i>' } }
 
-function mountPanel() {
+function mountPanel(narrow = false) {
+  pane.narrow.value = narrow
   return mountWithSetup(EditorAgentPanel, {
     props: { activeFilePath: 'src/a.md', activeFileName: 'a.md', active: true },
     global: { stubs: EL_ICON_STUB },
   })
 }
 
-/** 两个整页谁在台面上 —— v-show 的真相就是 inline style */
+/** 某一块是不是在台面上 —— v-show 的真相就是 inline style */
 function shown(w: VueWrapper<any>, sel: string): boolean {
   return (w.find(sel).element as HTMLElement).style.display !== 'none'
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
+  pane.narrow.value = false
   agent.currentEngine.value = 'gai'
   agent.pendingEngine.value = 'gai'
   agent.isEngineLocked.value = false
 })
 
-describe('EditorAgentPanel 恒两页', () => {
-  it('默认落在对话页：列表让位，头部是「g ai 对话」+ 列表按钮', async () => {
-    const w = mountPanel()
+describe('EditorAgentPanel 版面：够宽并排，不够宽分页', () => {
+  it('宽屏：会话历史直接摆在左边，和对话、输入框同屏', async () => {
+    const w = mountPanel(false)
+    await nextTick()
+
+    expect(shown(w, '.agent-panel-convs')).toBe(true)
+    expect(shown(w, '.agent-panel-chat')).toBe(true)
+    // 输入框常驻：宽屏也一样在
+    expect(shown(w, '.agent-panel-composer')).toBe(true)
+    expect(w.find('.agent-panel-title').text()).toBe('@EDITOR:g ai 对话')
+    // 两个翻页按钮都是"窄屏专属"，宽屏一个都不该有（列表就在旁边）
+    expect(w.find('.agent-panel-back-btn').exists()).toBe(false)
+    expect(w.find('.agent-panel-list-btn').exists()).toBe(false)
+  })
+
+  it('宽屏走 is-wide 版式类（两列 grid，输入框只落在对话那一列）', async () => {
+    const w = mountPanel(false)
+    await nextTick()
+    expect(w.find('.agent-panel-body').classes()).toContain('is-wide')
+
+    const narrowW = mountPanel(true)
+    await nextTick()
+    expect(narrowW.find('.agent-panel-body').classes()).not.toContain('is-wide')
+  })
+
+  it('窄屏：默认落在对话页，列表让位，头部有列表按钮', async () => {
+    const w = mountPanel(true)
     await nextTick()
 
     expect(shown(w, '.agent-panel-chat')).toBe(true)
     expect(shown(w, '.agent-panel-convs')).toBe(false)
     expect(w.find('.agent-panel-title').text()).toBe('@EDITOR:g ai 对话')
-    // 返回箭头是列表页才有的
     expect(w.find('.agent-panel-back-btn').exists()).toBe(false)
     expect(w.find('.agent-panel-list-btn').exists()).toBe(true)
   })
 
-  it('不再有 is-narrow：恒两页与面板宽度无关', async () => {
-    const w = mountPanel()
-    await nextTick()
-    expect(w.find('.editor-agent-panel').classes()).not.toContain('is-narrow')
-    // 源码里也不该再有宽度判断：这层"恒两页"的语义一旦被宽度分支取代，
-    // 宽面板又会退回到"列表压上面"，而 jsdom 量不出宽度、行为用例抓不到。
-    expect(PANEL_SRC).not.toContain('useNarrowPane')
-    expect(PANEL_SRC).not.toContain('is-narrow')
-  })
-
-  it('点头部按钮翻到会话列表页，头部让给「返回对话 + 会话列表」', async () => {
-    const w = mountPanel()
+  it('窄屏点头部按钮翻到会话列表页，头部让给「返回对话 + 会话列表」', async () => {
+    const w = mountPanel(true)
     await nextTick()
     await w.find('.agent-panel-list-btn').trigger('click')
 
@@ -153,8 +188,8 @@ describe('EditorAgentPanel 恒两页', () => {
     expect(w.find('.agent-panel-list-btn').exists()).toBe(false)
   })
 
-  it('列表页点 ← 返回对话 → 回到对话页', async () => {
-    const w = mountPanel()
+  it('窄屏列表页点 ← 返回对话 → 回到对话页', async () => {
+    const w = mountPanel(true)
     await nextTick()
     await w.find('.agent-panel-list-btn').trigger('click')
     await w.find('.agent-panel-back-btn').trigger('click')
@@ -164,44 +199,23 @@ describe('EditorAgentPanel 恒两页', () => {
     expect(w.find('.agent-panel-back-btn').exists()).toBe(false)
   })
 
-  it('列表页点会话 → 打开会话并翻回对话页', async () => {
-    const w = mountPanel()
+  it('变宽后回到对话页（并排时列表就在旁边，没必要停在列表页）', async () => {
+    const w = mountPanel(true)
     await nextTick()
     await w.find('.agent-panel-list-btn').trigger('click')
+    expect(shown(w, '.agent-panel-convs')).toBe(true)
 
-    w.findComponent({ name: 'ConversationList' }).vm.$emit('select', 's1')
+    pane.narrow.value = false
     await nextTick()
 
-    expect(agent.loadSession).toHaveBeenCalledWith('s1')
     expect(shown(w, '.agent-panel-chat')).toBe(true)
-    expect(shown(w, '.agent-panel-convs')).toBe(false)
-  })
-
-  it('列表页点新建 → 建完直接进对话页', async () => {
-    const w = mountPanel()
-    await nextTick()
-    await w.find('.agent-panel-list-btn').trigger('click')
-
-    w.findComponent({ name: 'ConversationList' }).vm.$emit('new')
-    await nextTick()
-
-    expect(agent.newSession).toHaveBeenCalled()
-    expect(shown(w, '.agent-panel-chat')).toBe(true)
-  })
-
-  it('列表是整页：带搜索框、行高正常（没理由再挤）', async () => {
-    const w = mountPanel()
-    await nextTick()
-    // :show-search 传的是字面量 true
-    expect(w.findComponent({ name: 'ConversationList' }).props('showSearch')).toBe(true)
-    // 不再传 compact → 组件默认 false = 正常行高
-    expect(w.findComponent({ name: 'ConversationList' }).props('compact')).toBeFalsy()
+    expect(shown(w, '.agent-panel-convs')).toBe(true)
   })
 
   it('面板重新打开时回到对话页（关掉时停在列表页也不该"点开就是列表"）', async () => {
     // 面板在 EditorView 里是「懒挂载 + v-show」，挂载状态会被复用 ——
     // 所以重开时必须主动把 page 拉回对话页。
-    const w = mountPanel()
+    const w = mountPanel(true)
     await nextTick()
     await w.find('.agent-panel-list-btn').trigger('click')
     expect(shown(w, '.agent-panel-convs')).toBe(true)
@@ -215,8 +229,77 @@ describe('EditorAgentPanel 恒两页', () => {
     expect(w.find('.agent-panel-back-btn').exists()).toBe(false)
   })
 
-  it('当前文档做成附件卡片：锚点插在库的输入框容器里，不在标题栏', async () => {
-    const w = mountPanel()
+  it('列表行高正常、带搜索框（并排那一列和整页都不挤）', async () => {
+    const w = mountPanel(false)
+    await nextTick()
+    // :show-search 传的是字面量 true
+    expect(w.findComponent({ name: 'ConversationList' }).props('showSearch')).toBe(true)
+    // 不传 compact → 组件默认 false = 正常行高
+    expect(w.findComponent({ name: 'ConversationList' }).props('compact')).toBeFalsy()
+  })
+})
+
+describe('EditorAgentPanel 常驻输入框', () => {
+  it('宽屏、窄屏对话页、窄屏列表页 —— 三处都在，且是同一个实例', async () => {
+    const w = mountPanel(true)
+    await nextTick()
+    // 窄屏对话页
+    expect(shown(w, '.agent-panel-composer')).toBe(true)
+    const afterMount = w.findComponent({ name: 'ChatInput' }).vm.$
+
+    // 翻到列表页：输入框不能跟着消失（列表页也要能直接开聊）
+    await w.find('.agent-panel-list-btn').trigger('click')
+    expect(shown(w, '.agent-panel-composer')).toBe(true)
+    // 同一个实例 —— v-show 保状态，草稿与待发附件在翻页时不会丢
+    expect(w.findComponent({ name: 'ChatInput' }).vm.$).toBe(afterMount)
+
+    // 变宽成并排：还在
+    pane.narrow.value = false
+    await nextTick()
+    expect(shown(w, '.agent-panel-composer')).toBe(true)
+    expect(w.findComponent({ name: 'ChatInput' }).vm.$).toBe(afterMount)
+  })
+
+  it('输入框归 ChatInput：placeholder / 禁用 / 生成中都传给它，不再传 ChatContainer', async () => {
+    const w = mountPanel(false)
+    await nextTick()
+
+    const input = w.findComponent({ name: 'ChatInput' })
+    expect(input.props('placeholder')).toBe('@AGENT:输入消息，Enter 发送')
+    expect(input.props('disabled')).toBe(false)
+    expect(input.props('generating')).toBe(false)
+
+    const chat = w.findComponent({ name: 'ChatContainer' })
+    expect(chat.props('showInput')).toBe(false)
+    // 这几个 prop 已经不归 ChatContainer 了（拆出去后它读都不读）
+    expect(chat.props('placeholder')).toBeUndefined()
+    expect(chat.props('disabled')).toBeUndefined()
+    expect(chat.props('generating')).toBeUndefined()
+  })
+
+  it('库里那条输入框得待在 .acu-root 里（盒模型重置的范围）', async () => {
+    const w = mountPanel(false)
+    await nextTick()
+    // ChatInput 根节点是 div，缺了 acu-root 会退回 content-box、横着溢出面板
+    expect(w.find('.agent-panel-composer').classes()).toContain('acu-root')
+    expect(w.find('.agent-panel-composer').attributes('data-theme')).toBe('light')
+  })
+
+  it('发送 / 停止由 ChatInput 抛出，面板照旧转给 useAgentChat', async () => {
+    const w = mountPanel(false)
+    await nextTick()
+
+    w.findComponent({ name: 'ChatInput' }).vm.$emit('send', { text: 'hi', files: [] })
+    await nextTick()
+    await nextTick()
+    expect(agent.sendMessage).toHaveBeenCalledTimes(1)
+    expect(agent.sendMessage.mock.calls[0][0]).toBe('hi')
+  })
+})
+
+describe('EditorAgentPanel 当前文档卡片', () => {
+  it('锚点插在库的输入框容器里（那条常驻 ChatInput），不在标题栏', async () => {
+    const w = mountPanel(false)
     await nextTick()
     await nextTick()
 
@@ -239,7 +322,7 @@ describe('EditorAgentPanel 恒两页', () => {
   })
 
   it('有真附件时锚点住进附件行，和附件并排（不是自己单开一行）', async () => {
-    const w = mountPanel()
+    const w = mountPanel(false)
     await nextTick()
     await nextTick()
 
@@ -268,7 +351,7 @@ describe('EditorAgentPanel 恒两页', () => {
   })
 
   it('卡片上有 ✕：点掉后卡片消失、锚点也摘干净（不留一行空白）', async () => {
-    const w = mountPanel()
+    const w = mountPanel(false)
     await nextTick()
     await nextTick()
 
@@ -286,14 +369,14 @@ describe('EditorAgentPanel 恒两页', () => {
   })
 
   it('点掉 ✕ 之后发消息就不带 openFilePath', async () => {
-    const w = mountPanel()
+    const w = mountPanel(false)
     await nextTick()
     await nextTick()
 
     await w.find('.agent-context-att-remove').trigger('click')
     await nextTick()
 
-    w.findComponent({ name: 'ChatContainer' }).vm.$emit('send', { text: 'hi', files: [] })
+    w.findComponent({ name: 'ChatInput' }).vm.$emit('send', { text: 'hi', files: [] })
     await nextTick()
     await nextTick()
 
@@ -302,11 +385,11 @@ describe('EditorAgentPanel 恒两页', () => {
   })
 
   it('没点 ✕ 时照旧把当前文档带上去', async () => {
-    const w = mountPanel()
+    const w = mountPanel(false)
     await nextTick()
     await nextTick()
 
-    w.findComponent({ name: 'ChatContainer' }).vm.$emit('send', { text: 'hi', files: [] })
+    w.findComponent({ name: 'ChatInput' }).vm.$emit('send', { text: 'hi', files: [] })
     await nextTick()
     await nextTick()
 
@@ -314,7 +397,7 @@ describe('EditorAgentPanel 恒两页', () => {
   })
 
   it('换了个打开的文档 → 之前的 ✕ 作废，新文档重新带上', async () => {
-    const w = mountPanel()
+    const w = mountPanel(false)
     await nextTick()
     await nextTick()
     await w.find('.agent-context-att-remove').trigger('click')
@@ -330,6 +413,7 @@ describe('EditorAgentPanel 恒两页', () => {
   })
 
   it('没有打开文档时不渲染卡片，也不留锚点占位', async () => {
+    pane.narrow.value = false
     const w = mountWithSetup(EditorAgentPanel, {
       props: { activeFilePath: null, activeFileName: '', active: true },
       global: { stubs: EL_ICON_STUB },
@@ -343,11 +427,11 @@ describe('EditorAgentPanel 恒两页', () => {
 })
 
 // ── 引擎切换（文件空间 g ai 面板）──────────────────────────────
-// 用户反馈「文件空间里的 g ai 没有执行器的切换」—— 这里钉住：对话页头部常驻、
-// 列表页不出现、选中的引擎传回 useAgentChat、会话锁死后置灰且显示会话自己的引擎。
+// 用户反馈「文件空间里的 g ai 没有执行器的切换」—— 这里钉住：宽屏与窄屏的对话页常驻、
+// 窄屏列表页不出现、选中的引擎传回 useAgentChat、会话锁死后置灰且显示会话自己的引擎。
 describe('EditorAgentPanel 引擎选择器', () => {
-  it('对话页头部常驻引擎选择器，默认 g ai、未锁定', async () => {
-    const w = mountPanel()
+  it('宽屏头部常驻引擎选择器，默认 g ai、未锁定', async () => {
+    const w = mountPanel(false)
     await nextTick()
 
     const sel = w.findComponent(AgentEngineSelector)
@@ -358,8 +442,8 @@ describe('EditorAgentPanel 引擎选择器', () => {
     expect(w.find('.agent-engine__name').text()).toBe('g ai')
   })
 
-  it('切到会话列表页不显示（列表页没有正在跑的对话）', async () => {
-    const w = mountPanel()
+  it('窄屏切到会话列表页就不显示（列表页没有正在跑的对话）', async () => {
+    const w = mountPanel(true)
     await nextTick()
     await w.find('.agent-panel-list-btn').trigger('click')
     await nextTick()
@@ -368,7 +452,7 @@ describe('EditorAgentPanel 引擎选择器', () => {
   })
 
   it('选中引擎 → 回传给 pickEngine', async () => {
-    const w = mountPanel()
+    const w = mountPanel(false)
     await nextTick()
 
     w.findComponent(AgentEngineSelector).vm.$emit('select', 'claude')
@@ -382,7 +466,7 @@ describe('EditorAgentPanel 引擎选择器', () => {
     agent.currentEngine.value = 'claude'
     // 故意让 pendingEngine 停在别的值：锁定时必须显示 currentEngine
     agent.pendingEngine.value = 'codex'
-    const w = mountPanel()
+    const w = mountPanel(false)
     await nextTick()
 
     const sel = w.findComponent(AgentEngineSelector)

@@ -1,16 +1,19 @@
 <template>
   <!--
     文件空间右侧的 g ai 对话面板。
-    - 恒为两个整页：「会话列表页 ↔ 对话页」，头部按钮来回翻（与「智能体」视图窄屏同一套心智模型）
-    - 复用的都是组件库的独立导出：ConversationList（列表）+ ChatContainer（对话），不需要改库
+    - 够宽（≥680px，判据同「智能体」视图）：左边一列会话历史 + 右边对话，历史**直接摆在那儿**，
+      不用先点按钮翻过去；不够宽就折成两页，头部按钮来回翻
+    - 输入框常驻底部：ChatContainer 传 show-input=false，输入框拆出来自己摆在面板最下方。
+      于是两种形态、两个页面都有输入框 —— 列表页也能直接开聊，翻页时草稿与附件都不丢
+    - 复用的都是组件库的独立导出：ConversationList（列表）+ ChatContainer（气泡区）+ ChatInput（输入框）
     - "当前打开的文档"通过请求级注入告知模型（sendMessage 的 openFilePath 选项）；
       它修饰的是**这一条消息的上下文**，所以做成附件卡片、搬进输入框内部（见 contextSlot）
     - 自己持有一个 useAgentChat 实例：runs/refs 与「对话」Tab 隔离，互不打断
   -->
-  <div class="editor-agent-panel">
+  <div ref="rootRef" class="editor-agent-panel">
     <div class="agent-panel-header">
-      <!-- 会话列表页：整条 header 让给「返回对话 + 标题」 -->
-      <template v-if="page === 'list'">
+      <!-- 窄屏的列表页：整条 header 让给「返回对话 + 标题」 -->
+      <template v-if="narrow && page === 'list'">
         <button
           class="agent-panel-icon-btn agent-panel-back-btn"
           :title="$t('@EDITOR:返回对话')"
@@ -30,16 +33,18 @@
 
       <div class="agent-panel-spacer" />
       <!-- 引擎切换：与「智能体」视图同一套（同一个 AgentEngineSelector）。
-           只在对话页出现；列表页没有正在跑的对话，摆这儿只会挤占标题。 -->
+           宽屏左边摆着历史，对话区一直在，所以常驻；窄屏只在对话页出现 ——
+           列表页没有正在跑的对话，摆这儿只会挤占标题。 -->
       <AgentEngineSelector
-        v-if="page === 'chat'"
+        v-if="!narrow || page === 'chat'"
         class="agent-panel-engine"
         :engine="displayEngine"
         :locked="isEngineLocked"
         @select="onEngineSelect"
       />
+      <!-- 会话列表按钮：只有"列表是独立一页"时才需要它（宽屏列表就在旁边） -->
       <button
-        v-if="page === 'chat'"
+        v-if="narrow && page === 'chat'"
         class="agent-panel-icon-btn agent-panel-list-btn"
         :title="$t('@EDITOR:会话列表')"
         :aria-label="$t('@EDITOR:会话列表')"
@@ -61,69 +66,94 @@
       </button>
     </div>
 
-    <!-- 会话列表页：整页独占（行高正常 + 带搜索框，整页的列表没理由再挤） -->
-    <div v-show="page === 'list'" class="agent-panel-convs">
-      <ConversationList
-        :show-search="true"
-        :items="conversationItems"
-        :active-id="currentSessionId"
-        :loading="sessionsLoading"
-        :labels="conversationLabels"
-        @select="onSelectSession"
-        @new="onNewSession"
-        @rename="renameSession"
-        @delete="deleteSession"
-      />
-    </div>
+    <div class="agent-panel-body" :class="{ 'is-wide': !narrow }">
+      <!-- 会话历史：宽屏是常驻左列（行高正常 + 带搜索框），窄屏是独享整页 -->
+      <div v-show="!narrow || page === 'list'" class="agent-panel-convs">
+        <ConversationList
+          :show-search="true"
+          :items="conversationItems"
+          :active-id="currentSessionId"
+          :loading="sessionsLoading"
+          :labels="conversationLabels"
+          @select="onSelectSession"
+          @new="onNewSession"
+          @rename="renameSession"
+          @delete="deleteSession"
+        />
+      </div>
 
-    <!-- 对话页 -->
-    <div v-show="page === 'chat'" ref="chatHostRef" class="agent-panel-chat">
-      <ChatContainer
-        ref="chatRef"
-        :messages="messages"
-        :assistant-name="AGENT_ASSISTANT_NAME"
-        :theme="chatTheme"
-        :disabled="isStreaming"
-        :generating="isStreaming"
-        :placeholder="isStreaming ? $t('@AGENT:正在生成中...') : $t('@AGENT:输入消息，Enter 发送')"
-        :upload-config="{ accept: AGENT_UPLOAD_ACCEPT }"
-        :question="pendingQuestion"
-        :question-submitting="answeringQuestion"
-        :question-labels="questionLabels"
-        @send="onSend"
-        @stop="stop"
-        @answer="answerQuestion"
-      />
+      <!-- 气泡区：输入框已经不在这里了（show-input=false），见下面常驻的那一条 -->
+      <div v-show="!narrow || page === 'chat'" ref="chatHostRef" class="agent-panel-chat">
+        <ChatContainer
+          ref="chatRef"
+          :show-input="false"
+          :messages="messages"
+          :assistant-name="AGENT_ASSISTANT_NAME"
+          :theme="chatTheme"
+          :question="pendingQuestion"
+          :question-submitting="answeringQuestion"
+          :question-labels="questionLabels"
+          @answer="answerQuestion"
+        />
+      </div>
 
       <!--
-        当前文档：**和添加的附件同处一行、同一副样子**。
-        组件库的 ChatContainer / ChatInput 没有任何插槽（dist 里 `slots` 出现 0 次），
-        没法声明式地往输入框里放东西，所以：
-          · 往 `.acu-input-wrap` 插一个锚点，再把卡片 Teleport 进去（节点仍是 Vue 渲染的）；
-          · **有附件行（.acu-input-attachments）时锚点住进它内部** —— 卡片因此成为那一行的
-            flex item，与附件并排、共用同一套 gap/wrap。只插在输入框最前面是不行的：
-            Vue 更新输入框时会用自己的锚点 `insertBefore`，把外来节点挤到后面去。
+        输入框常驻：两种形态、两个页面都在最下方（与演示页同一套做法）。
+        它被拆到 ChatContainer 外面，所以 acu-root 与 data-theme 得自己套上：
+        库把盒模型重置限定在 .acu-root 子树里，而 ChatInput 根节点是 div（不是 button），
+        少了它就会退回 content-box、横着溢出面板。
+
+        v-if="width > 0"：**等量到本面板的宽度再挂载输入框**。库的 ChatInput 只在
+        onMounted 里量一次 scrollHeight，量到的宽度不对就再也纠不回来 —— 实测首帧挂载时
+        容器还没宽度，占位文案被折成十几行，textarea 直接顶到 200px 上限并一直卡在那里。
+        宽度是 useNarrowPane 在 onMounted 里同步量到的，所以这里晚的只是一次重渲染。
       -->
-      <Teleport v-if="contextSlot" :to="contextSlot">
-        <div v-if="showContextCard" class="agent-context-att" :title="activeFilePath || ''">
-          <svg class="agent-context-att-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 3 14 8 19 8"/>
-          </svg>
-          <span class="agent-context-att-name">{{ activeFileName }}</span>
-          <button
-            type="button"
-            class="agent-context-att-remove"
-            :title="$t('@EDITOR:不引用当前文档')"
-            :aria-label="$t('@EDITOR:不引用当前文档')"
-            @click="contextDismissed = true"
-          >
-            <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      <div
+        v-if="width > 0"
+        ref="composerRef"
+        class="agent-panel-composer acu-root"
+        :data-theme="chatTheme"
+      >
+        <ChatInput
+          ref="inputRef"
+          :disabled="isStreaming"
+          :generating="isStreaming"
+          :placeholder="isStreaming ? $t('@AGENT:正在生成中...') : $t('@AGENT:输入消息，Enter 发送')"
+          :upload-config="{ accept: AGENT_UPLOAD_ACCEPT }"
+          @send="onSend"
+          @stop="stop"
+        />
+
+        <!--
+          当前文档：**和添加的附件同处一行、同一副样子**。
+          组件库的 ChatContainer / ChatInput 没有任何插槽（dist 里 `slots` 出现 0 次），
+          没法声明式地往输入框里放东西，所以：
+            · 往 `.acu-input-wrap` 插一个锚点，再把卡片 Teleport 进去（节点仍是 Vue 渲染的）；
+            · **有附件行（.acu-input-attachments）时锚点住进它内部** —— 卡片因此成为那一行的
+              flex item，与附件并排、共用同一套 gap/wrap。只插在输入框最前面是不行的：
+              Vue 更新输入框时会用自己的锚点 `insertBefore`，把外来节点挤到后面去。
+        -->
+        <Teleport v-if="contextSlot" :to="contextSlot">
+          <div v-if="showContextCard" class="agent-context-att" :title="activeFilePath || ''">
+            <svg class="agent-context-att-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 3 14 8 19 8"/>
             </svg>
-          </button>
-        </div>
-      </Teleport>
+            <span class="agent-context-att-name">{{ activeFileName }}</span>
+            <button
+              type="button"
+              class="agent-context-att-remove"
+              :title="$t('@EDITOR:不引用当前文档')"
+              :aria-label="$t('@EDITOR:不引用当前文档')"
+              @click="contextDismissed = true"
+            >
+              <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        </Teleport>
+      </div>
     </div>
   </div>
 </template>
@@ -131,13 +161,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
-import { ChatContainer, ConversationList } from 'zen-ai-chat-ui'
+import { ChatContainer, ChatInput, ConversationList } from 'zen-ai-chat-ui'
 // 组件库的样式表必须由**每个消费方自己引**：Vite 只会随各自的异步 chunk 按需注入，
 // 而 AgentView / WorkbenchView / JobLogDetails 都是懒加载的 —— 从文件空间直接打开本面板时
 // 那三个 chunk 一个都没加载过，漏了这行就是整块面板无样式裸奔（2026-09-27 用户实测报过）。
 import 'zen-ai-chat-ui/style.css'
 import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
 import { useThemeObserver } from '@/composables/useThemeObserver'
+import { useNarrowPane } from '@/composables/useNarrowPane'
 import type { AgentEngineId } from '@/utils/agentEngine'
 import {
   buildConversationItems,
@@ -201,12 +232,20 @@ const conversationLabels = agentConversationLabels()
 const questionLabels = agentQuestionLabels()
 
 const chatRef = ref<InstanceType<typeof ChatContainer> | null>(null)
+const inputRef = ref<InstanceType<typeof ChatInput> | null>(null)
 const chatHostRef = ref<HTMLElement | null>(null)
+const composerRef = ref<HTMLElement | null>(null)
 
-// ── 页面状态：恒两页，不用宽度判断 ────────────────────────────
-// 这块面板挂在编辑器里跟 Monaco 分空间，天生长得窄，而"列表压在上面 + 对话在下面"
-// 那种堆叠无论面板多宽都在抢对话的高度（列表一开就只剩几行对话）。所以不按宽度分支，
-// 恒定拆成两个整页 —— 与「智能体」视图窄屏同一套交互，用户在哪都是"点会话进对话"。
+// ── 版面：够宽就左列表右对话，不够宽折成两页 ──────────────────
+// 量的是这块面板自己的宽度（跟 Monaco 分空间、用户拖动分隔条都会变；视口宽度反映不了）。
+// 判据与「智能体」视图共用一份（useNarrowPane）：280 列表 + 400 对话 ≈ 680。
+//
+// 为什么不"列表压在上面 + 对话在下面"：那种堆叠无论面板多宽都在抢对话的高度，
+// 列表一开就只剩两三行对话。所以这里只有两种形态 —— 并排，或者分页，永不堆叠。
+const rootRef = ref<HTMLElement | null>(null)
+// width 也留着用：输入框要等量到宽度再挂载（见模板里的 v-if，原因写在那一行上面）
+const { width, narrow } = useNarrowPane(rootRef)
+/** 窄屏下的当前页。宽屏两栏并排时用不到它 */
 const page = ref<'list' | 'chat'>('chat')
 
 // ── 当前文档卡片：锚点插进库的输入框容器，和附件同处一行 ────────
@@ -236,7 +275,9 @@ function findAttachmentsHost(wrap: HTMLElement): HTMLElement | null {
  * 上一版就是因此在有附件时掉到了附件行的下面（用户截图）。住进容器内部才是稳的。
  */
 function syncContextSlot() {
-  const wrap = chatRef.value?.$el?.querySelector?.('.acu-input-wrap') as HTMLElement | null | undefined
+  // 输入框已经拆到 ChatContainer 外面自己摆了（见文件头），锚点要找那条常驻的 ChatInput：
+  // 它的根节点就是 .acu-input-wrap。再往 ChatContainer 里找只会找到 null。
+  const wrap = inputRef.value?.$el as HTMLElement | null | undefined
   if (!wrap) return
 
   const existing = wrap.querySelector('.agent-context-slot') as HTMLElement | null
@@ -292,10 +333,10 @@ watch(() => messages.value.length, () => {
   nextTick(() => scrollToBottom(false))
 })
 
-// ChatContainer 被 v-if 换掉（sessionLoading）会连同锚点一起销毁 → 回来时补插一个。
-// 用 MutationObserver 盯着宿主子树，比在各个 watch 里到处补一遍可靠。
+// 锚点住在那条常驻输入框里，盯着它：库在有/无附件时会动态增删附件行，
+// 锚点得跟着搬进搬出（比在各个 watch 里到处补一遍可靠）。
 function watchChatDom() {
-  const host = chatHostRef.value
+  const host = composerRef.value
   if (!host || typeof MutationObserver === 'undefined') return
   slotObserver?.disconnect()
   slotObserver = new MutationObserver(() => syncContextSlot())
@@ -318,9 +359,10 @@ watch(
   }
 )
 
-// 从列表页翻回对话页时补一次（v-show 只是隐藏，DOM 一般还在，但输入框可能刚重建）
-watch(page, (p) => {
-  if (p === 'chat') nextTick(syncContextSlot)
+// 变宽后回到对话页：两栏并排时列表已经摆在旁边，没必要再停在列表页 ——
+// 否则下次变窄会莫名其妙地「一进来就是列表」（与 AgentView 同一处置）。
+watch(narrow, (isNarrow) => {
+  if (!isNarrow) page.value = 'chat'
 })
 
 // 换了个打开的文档 → 之前点掉的 ✕ 作废，新的文档要重新带上下文
@@ -416,18 +458,60 @@ onBeforeUnmount(() => {
   }
 }
 
-/* 会话列表页：整页铺满 */
-.agent-panel-convs {
+/*
+  中间区用 grid 划三块：会话历史 / 气泡区 / 常驻输入框。
+  窄屏只有一列 —— 历史与气泡区都落在 stage 上，靠 page 决定谁可见；
+  宽屏两列两行 —— 历史整列贯通，右边上是气泡、右下是输入框，
+  输入框因此只落在对话那一列里，不会伸到历史列表底下。
+*/
+.agent-panel-body {
   flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'stage'
+    'composer';
+}
+
+.agent-panel-body.is-wide {
+  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-areas:
+    'list chat'
+    'list composer';
+}
+
+/* 会话历史：窄屏整页独占（行高正常 + 带搜索框），宽屏是左侧常驻一列 */
+.agent-panel-convs {
+  grid-area: stage;
   min-height: 0;
   padding: 8px 10px;
   overflow-y: auto;
 }
 
 .agent-panel-chat {
-  flex: 1;
+  grid-area: stage;
   min-height: 0;
   display: flex;
+}
+
+.agent-panel-body.is-wide .agent-panel-convs {
+  grid-area: list;
+}
+
+.agent-panel-body.is-wide .agent-panel-chat {
+  grid-area: chat;
+}
+
+/*
+  常驻输入框条：留白与渐变对齐库的 .acu-chat-footer，拆出来之后视觉上不该有差别。
+  两列版式下它住在 chat 那一格，所以不会横到会话历史下面去。
+*/
+.agent-panel-composer {
+  grid-area: composer;
+  padding: var(--acu-space-3) var(--acu-space-4) var(--acu-space-4);
+  background: linear-gradient(to top, var(--acu-bg) 70%, transparent);
 }
 
 /* ChatContainer 根节点（.acu-chat）吃满剩余空间 */
@@ -443,7 +527,7 @@ onBeforeUnmount(() => {
 
 /* 形态一：**没有真附件**。此时库不渲染 .acu-input-attachments，锚点自己当那一行 ——
    逐项复刻附件行的布局（flex + wrap + gap + 同样的内边距），视觉上无缝。 */
-.agent-panel-chat :deep(.acu-input-wrap) > .agent-context-slot {
+.agent-panel-composer :deep(.acu-input-wrap) > .agent-context-slot {
   display: flex;
   flex-wrap: wrap;
   gap: var(--acu-space-2, 8px);
@@ -452,7 +536,7 @@ onBeforeUnmount(() => {
 
 /* 形态二：**有真附件**。锚点住在 .acu-input-attachments 里，自己是那一行的一个 flex item ——
    于是和附件卡片并排、共用同一套 gap/wrap，也就是"跟加附件一样"。 */
-.agent-panel-chat :deep(.acu-input-attachments) > .agent-context-slot {
+.agent-panel-composer :deep(.acu-input-attachments) > .agent-context-slot {
   display: inline-flex;
 }
 
