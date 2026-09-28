@@ -69,6 +69,7 @@ import { useInstancesStore } from '@stores/instancesStore'
 import { useToolsStore } from '@stores/toolsStore'
 import { useMonitorStore } from '@stores/monitorStore'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
+import { ALL_AI_CONTEXT_SECTIONS, refreshAiContext, refreshAiContextForView } from '@/composables/useAiContextSync'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import { useTaskNotifier } from '@/composables/useTaskNotifier'
 
@@ -230,6 +231,15 @@ onMounted(async () => {
     initCompleted.value = true
     console.log($t('@F13B4:---------- 页面初始化完成 ----------'))
 
+    // g ai 上下文快照:首屏起来后全量刷一次。
+    // 服务端自己在 listening 后 2s 也预热过一遍（server/index.js），这里是补第二次，
+    // 覆盖"服务端一直没重启、只是刷新了页面"这种情况——那时服务端那份可能已经放了很久。
+    // 延后 1s 错开首屏这一堆并发请求（GitStatus / 工具检测 / 实例轮询）。
+    // 两次重复触发不会重复取数:同一板块的并发生成在服务端共享同一个 Promise。
+    setTimeout(() => {
+      refreshAiContext(ALL_AI_CONTEXT_SECTIONS)
+    }, 1000)
+
     // 无论是否是Git仓库，都应该加载布局比例
     // 使用短延时确保DOM已完全渲染
     setTimeout(() => {
@@ -315,6 +325,18 @@ watch(activeView, (view) => {
       gitStore.getBranchStatus()
     ]).catch(err => console.error('切换到Git视图刷新失败:', err))
   }
+})
+
+// 面板切换 → 让服务端把 g ai 上下文里对应的板块刷一遍。
+//
+// 放在 App.vue 而不是各子 View 里：七个面板的"我在看哪一块"只有这里看得全，
+// 而且 App.vue 是常驻的，子 View 是 v-if 懒挂载/KeepAlive——挂在子 View 的
+// onActivated 上会漏掉"首次挂载"和"从 Git 视图切回智能体"这两条路径。
+//
+// 不 await、不 loading、失败无感：它只影响模型看到的东西，与界面无关（见 composable 头注释）。
+// gitTab 与 activeView 一起 watch：Git 视图内的三个 Tab 对应的板块完全不同。
+watch([activeView, gitTab], ([view, tab]) => {
+  refreshAiContextForView(view, tab)
 })
 
 // 监听文件差异页"在编辑器中打开"事件 → 切到编辑器视图 + 把路径给 EditorView

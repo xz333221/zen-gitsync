@@ -4,7 +4,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import path from 'node:path'
-import { injectRequestContext } from './agentChat.js'
+import { injectRequestContext, buildWebSystemPrompt } from './agentChat.js'
 
 const ROOT = path.resolve('C:/proj')
 
@@ -103,4 +103,69 @@ test('injectRequestContext: 附件条数超过 20 时截断(防御性上限)', (
   injectRequestContext(messages, { cwd: ROOT, locale: 'zh', attachments: many })
   assert.match(messages[0].content, /用户本轮附带了 20 个文件/)
   assert.ok(!messages[0].content.includes('f24.txt'), '第 21 个之后不该出现')
+})
+
+// ── 工作区状态快照（七个板块） ────────────────────────────────
+// 这一段守的是两条容易静默出错的规则：
+//   1) 快照只进**请求副本**，绝不进那条会落盘的 system 消息 —— 否则它会永久停在
+//      会话创建那天（首轮之后不再重建），而且不报错、只是答案悄悄过期。
+//   2) 快照空 / 取不到时不留下空段、不影响其它上下文。
+
+const SNAPSHOT = '[工作区状态 · 由 zen-gitsync 服务端自动生成，不是用户输入的内容]\n\n- 当前项目 Git 状态 | git-current.md | 分支 main，工作区干净'
+
+test('injectRequestContext: 工作区快照注入请求副本，且排在其它上下文之前', () => {
+  const messages = [{ role: 'system', content: 'rules' }, { role: 'user', content: 'hi' }]
+  injectRequestContext(messages, { cwd: ROOT, openFilePath: 'src/a.md', locale: 'zh', workspaceBlock: SNAPSHOT })
+  const sys = messages[0].content
+  assert.match(sys, /^rules\n\n# 当前上下文/)
+  assert.ok(sys.includes('工作区状态'), '快照必须在')
+  assert.ok(sys.indexOf('工作区状态') < sys.indexOf('src/a.md'), '快照应排在"当前打开的文件"之前')
+  assert.equal(messages[1].content, 'hi', '其它消息不受影响')
+})
+
+test('注入路径不会污染会话记录：快照不进那条会落盘的 system 消息', () => {
+  // 首轮 push 进 session.messages 的 system 提示词（会落盘、之后不再重建）
+  const persistent = buildWebSystemPrompt({ cwd: ROOT, locale: 'zh' })
+  assert.ok(!persistent.includes('工作区状态'), '落库的 system 里不许有快照');
+  assert.ok(!persistent.includes('快照目录'), '落库的 system 里不许有快照路径');
+
+  // 每轮从完整会话记录重建副本 → 快照出现且只出现一次，不会跨轮累积
+  const session = [{ role: 'system', content: 'rules' }]
+  for (let i = 0; i < 3; i++) {
+    const copy = session.map(m => ({ ...m }))
+    injectRequestContext(copy, { cwd: ROOT, locale: 'zh', workspaceBlock: SNAPSHOT })
+    assert.equal((copy[0].content.match(/工作区状态/g) || []).length, 1)
+  }
+  assert.equal(session[0].content, 'rules', '原始会话记录保持干净')
+})
+
+test('injectRequestContext: 快照为空 / 只有空白时不注入、不留空段', () => {
+  const empty = [{ role: 'system', content: 'rules' }]
+  injectRequestContext(empty, { cwd: ROOT, locale: 'zh', workspaceBlock: '' })
+  assert.equal(empty[0].content, 'rules')
+
+  const blank = [{ role: 'system', content: 'rules' }]
+  injectRequestContext(blank, { cwd: ROOT, locale: 'zh', workspaceBlock: '   \n  ' })
+  assert.equal(blank[0].content, 'rules')
+
+  // 没传这个参数时（老调用点）行为与从前完全一致
+  const legacy = [{ role: 'system', content: 'rules' }]
+  injectRequestContext(legacy, { cwd: ROOT, locale: 'zh' })
+  assert.equal(legacy[0].content, 'rules')
+})
+
+test('injectRequestContext: 快照 + 文档 + 附件三者可以共存，共用一个标题段', () => {
+  const messages = [{ role: 'system', content: 'rules' }]
+  injectRequestContext(messages, {
+    cwd: ROOT,
+    locale: 'zh',
+    workspaceBlock: SNAPSHOT,
+    openFilePath: 'src/a.md',
+    attachments: [{ name: 'a.log', path: '/tmp/att/a.log' }]
+  })
+  const sys = messages[0].content
+  assert.equal((sys.match(/# 当前上下文/g) || []).length, 1, '只加一个标题段')
+  assert.ok(sys.includes('工作区状态'))
+  assert.ok(sys.includes('src/a.md'))
+  assert.ok(sys.includes('用户本轮附带了 1 个文件'))
 })

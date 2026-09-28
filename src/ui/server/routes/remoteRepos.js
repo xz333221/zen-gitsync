@@ -557,6 +557,58 @@ async function listRepos(provider, executable) {
   return { repos: all, error: null, truncated };
 }
 
+/**
+ * 完整探测一个平台的状态:装没装 → 登没登录 → 拉仓库列表。
+ *
+ * 抽成导出函数,让**两条链路共用同一份判断**:HTTP 路由(界面)与
+ * aiContext 的「GitHub / Gitee 仓库」快照(喂给模型)。这份判断里全是踩过的坑
+ * (gitee 未登录退出码仍是 0、CLI 可能不在 PATH、超时只回空列表不抛),抄成第二份
+ * 迟早分叉 —— 而分叉的表现是"界面说未登录、模型说你有 65 个仓库"。
+ *
+ * 永远不抛:四种状态(未装 / 未登录 / 已登录 / 拉取失败)都是**正常状态**,
+ * 由调用方决定怎么呈现。
+ *
+ * @param {'github'|'gitee'} provider
+ * @param {object} [impls] 只为测试留的注入口
+ * @returns {Promise<{installed:boolean, version:string|null, authenticated:boolean, user:string|null,
+ *                    repos:object[], truncated:boolean, error:string|null}>}
+ */
+export async function loadRemoteReposState(provider, {
+  resolveCliImpl = resolveCli,
+  detectCliImpl = detectCli,
+  listReposImpl = listRepos,
+} = {}) {
+  const cli = PROVIDERS[provider]?.cli || provider;
+
+  const resolved = await resolveCliImpl(provider);
+  if (!resolved) {
+    return { installed: false, version: null, authenticated: false, user: null, repos: [], truncated: false, error: null };
+  }
+
+  let detected;
+  try {
+    detected = await detectCliImpl(provider, resolved.executable, resolved.version);
+  } catch (error) {
+    logger.info(`[remote-repos] ${provider} 检测失败: ${error.message}`);
+    return {
+      installed: true,
+      version: resolved.version,
+      authenticated: false,
+      user: null,
+      repos: [],
+      truncated: false,
+      error: `检测 ${cli} 状态失败: ${error.message}`,
+    };
+  }
+
+  if (!detected.authenticated) {
+    return { ...detected, repos: [], truncated: false, error: null };
+  }
+
+  const { repos, error, truncated } = await listReposImpl(provider, resolved.executable);
+  return { ...detected, repos, truncated: !!truncated, error: error || null };
+}
+
 // ── 路由 ────────────────────────────────────────────────────────────────────
 
 /**
@@ -603,55 +655,12 @@ export function registerRemoteReposRoutes({
       installer: installer ? publicInstallerInfo({ [config.toolId]: installer })[config.toolId] : null,
     };
 
-    const resolved = await resolveCliImpl(provider);
-    if (!resolved) {
-      return res.json({
-        ...base,
-        installed: false,
-        version: null,
-        authenticated: false,
-        user: null,
-        repos: [],
-        truncated: false,
-        error: null,
-      });
-    }
-
-    let detected;
-    try {
-      detected = await detectCliImpl(provider, resolved.executable, resolved.version);
-    } catch (error) {
-      logger.info(`[remote-repos] ${provider} 检测失败: ${error.message}`);
-      return res.json({
-        ...base,
-        installed: true,
-        version: resolved.version,
-        authenticated: false,
-        user: null,
-        repos: [],
-        truncated: false,
-        error: `检测 ${config.cli} 状态失败: ${error.message}`,
-      });
-    }
-
-    if (!detected.authenticated) {
-      return res.json({
-        ...base,
-        ...detected,
-        repos: [],
-        truncated: false,
-        error: null,
-      });
-    }
-
-    const { repos, error, truncated } = await listReposImpl(provider, resolved.executable);
-    res.json({
-      ...base,
-      ...detected,
-      repos,
-      truncated: !!truncated,
-      error: error || null,
+    const state = await loadRemoteReposState(provider, {
+      resolveCliImpl,
+      detectCliImpl,
+      listReposImpl,
     });
+    res.json({ ...base, ...state });
   }));
 
   /**

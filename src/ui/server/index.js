@@ -53,6 +53,7 @@ import { registerInstancesRoutes } from './routes/instances.js';
 import { registerMonitorRoutes } from './routes/monitor.js';
 import { registerMindmapRoutes } from './routes/mindmap.js';
 import { registerAgentRoutes } from './routes/workbench/agentRoutes.js';
+import { createWorkspaceSnapshotter } from './routes/aiContext/wiring.js';
 import { createInstanceRegistry, getRegistryPath } from './utils/instanceRegistry.js';
 import { createSavePortToFile } from './utils/createSavePortToFile.js';
 import { createOriginGuard, createOriginCheckerFromEnv } from './middleware/originGuard.js';
@@ -424,12 +425,23 @@ async function startUIServer(noOpen = false, savePort = false) {
   // 资源管理器右键菜单(设置 → 通用设置 → 系统集成 的按钮,写 HKCU 注册表)
   registerExplorerContextMenuRoutes({ app });
 
+  // 工作区状态快照生成器：**整个进程只建这一个实例**，往下注入给两条链路 ——
+  //   · registerWorkbenchRoutes：多项目编排台派发任务时的「运行环境上下文」（读 tasks 板块）
+  //   · registerAgentRoutes    ：智能体页对话的注入块（读全部七个板块）
+  // 建两个实例就会各自缓存一份：TTL 不同步、刷新翻倍，还会出现"编排台看到的看板"
+  // 与"g ai 看到的看板"新旧不一致。所以先在这里建好，再注入下去。
+  const aiContextSnapshotter = createWorkspaceSnapshotter({
+    configManager,
+    getCurrentProjectPath: () => currentProjectPath,
+  });
+
   registerWorkbenchRoutes({
     app,
     getCurrentProjectPath: () => currentProjectPath,
     getProjectRoomId: () => projectRoomId,
     io,
-    configManager
+    configManager,
+    getAiContextSnapshotter: () => aiContextSnapshotter
   });
 
   // local-file-picker 中间件，提供 /api/fs/* 文件浏览路由
@@ -467,10 +479,12 @@ async function startUIServer(noOpen = false, savePort = false) {
   registerMindmapRoutes({ app });
 
   // 智能体：Web 端 AI 编码助手（含工具调用 + 会话持久化）
+  // 快照生成器在上面已经建好（要走同一个实例），这里注入进去复用。
   registerAgentRoutes({
     app,
     getCurrentProjectPath: () => currentProjectPath,
-    configManager
+    configManager,
+    snapshotter: aiContextSnapshotter
   });
 
   perfMark('全部 API 路由注册完成')
@@ -586,6 +600,18 @@ async function startUIServer(noOpen = false, savePort = false) {
     registerCurrentInstance().catch((e) => {
       console.warn(chalk.yellow(`[instanceRegistry] 启动注册流程失败: ${e?.message || e}`));
     });
+
+    // 预热「工作区状态快照」（g ai 的上下文）—— 这就是"g ui 刚启动"那个时机。
+    //
+    // 三个刻意的选择:
+    //   · 放在 listening 之后而不是注册路由时:那会儿服务还没真的可用,而且启动路径
+    //     上多几次 netstat / gh 子进程会拖慢开浏览器。
+    //   · 再延 2 秒:启动瞬间前端要并发拉一堆接口,别跟它们抢 IO 与网络。
+    //   · 不 await、失败只记日志:warm() 内部已经吞掉异常,预热失败不该影响服务可用性,
+    //     大不了用户第一次打开智能体页时快照是空的(那一轮注入块里仍有实时查询方法)。
+    setTimeout(() => {
+      aiContextSnapshotter?.warm?.();
+    }, 2000).unref?.();
   });
 
   // 尝试在可用端口上启动服务器（不等待；listen 事件会驱动后续逻辑）

@@ -120,6 +120,9 @@ async function listAgentSessionsMeta() {
         source: data.source || 'web',  // 'web' | 'cli'
         cwd: data.cwd || '',
         model: data.model || '',
+        // 引擎：老会话没有这个字段，一律视为内置 g ai（历史行为），
+        // 与 agentEngines.normalizeAgentEngine 的回落口径一致。
+        engine: data.engine || 'gai',
         createdAt: data.createdAt || '',
         updatedAt: data.updatedAt || '',
         messageCount: Array.isArray(data.messages) ? data.messages.length : 0,

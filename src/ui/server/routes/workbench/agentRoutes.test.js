@@ -14,6 +14,19 @@ delete process.env.HOMEPATH;
 
 const { registerAgentRoutes, waitForAgentAnswer } = await import('./agentRoutes.js');
 
+// 工作区状态快照的替身。真实实现会 spawn `gh` / `gitee` / PowerShell 并联网,
+// 单测里一律用空壳 —— 否则跑一次对话就在测试机上拉起一串子进程、还连一次网。
+// getBlock 回空串 = "这一轮不注入快照",与冷启动时的真实行为一致(见 aiContext/index.js
+// 的 getSnapshot:冷启动先回 null,后台再生成)。
+const STUB_SNAPSHOTTER = {
+  getBlock: async () => '',
+  warm: async () => null,
+  refreshAll: async () => null,
+  refreshSections: async () => ({ dir: '', persistedAt: null, sections: [] }),
+  getState: () => ({ dir: '', persistedAt: null, sections: [] }),
+  invalidate() {}
+};
+
 const event = data => `data: ${JSON.stringify(data)}\n\n`;
 
 // 轮询等待条件成立（SSE 是边跑边写出来的，没有可 await 的句柄）
@@ -24,6 +37,51 @@ async function waitUntil(check, timeoutMs = 2000) {
     await new Promise(resolve => setTimeout(resolve, 5));
   }
 }
+
+// 面板切换 → 定向刷新快照的端点。守两件事：
+//   ① sections 原样透传给生成器（前端按"我在看哪一块"决定刷哪几块）
+//   ② 不带 body / 不带 sections 时等于"全部"，不是"什么都不刷"
+test('ai-context 刷新端点:按板块定向刷新，并把各板块状态回给前端', async () => {
+  const calls = [];
+  let refreshHandler;
+  let stateHandler;
+  const FAKE_STATE = { dir: 'D:/snap', persistedAt: '2026-09-28 10:00:00', sections: [{ id: 'git', fresh: true }] };
+  const app = {
+    get(route, handler) { if (route === '/api/ai-context/state') stateHandler = handler; },
+    delete() {},
+    put() {},
+    post(route, handler) { if (route === '/api/ai-context/refresh') refreshHandler = handler; }
+  };
+  registerAgentRoutes({
+    app,
+    getCurrentProjectPath: () => path.resolve('active-project'),
+    configManager: null,
+    snapshotter: {
+      ...STUB_SNAPSHOTTER,
+      refreshSections: async (ids, opts) => { calls.push({ ids, opts }); return FAKE_STATE; },
+      getState: () => FAKE_STATE
+    }
+  });
+
+  let payload;
+  const res = { json(v) { payload = v; } };
+
+  await refreshHandler({ body: { sections: ['github'], force: true } }, res);
+  assert.deepEqual(calls[0].ids, ['github']);
+  assert.equal(calls[0].opts.force, true);
+  assert.equal(payload.success, true);
+  assert.equal(payload.dir, 'D:/snap');
+
+  // 不带 body：sections 为 undefined = 全部，force 默认 false（尊重各板块 TTL）
+  await refreshHandler({}, res);
+  assert.equal(calls[1].ids, undefined);
+  assert.equal(calls[1].opts.force, false);
+
+  // 只读状态的口：不触发任何取数
+  await stateHandler({}, res);
+  assert.equal(payload.dir, 'D:/snap');
+  assert.equal(calls.length, 2, 'GET /state 不该触发刷新');
+});
 
 test('agent respond resolves a pending ask_user question and validates answers', async () => {
   let respondHandler;
@@ -38,7 +96,8 @@ test('agent respond resolves a pending ask_user question and validates answers',
   registerAgentRoutes({
     app,
     getCurrentProjectPath: () => path.resolve('active-project'),
-    configManager: null
+    configManager: null,
+    snapshotter: STUB_SNAPSHOTTER
   });
 
   const sent = [];
@@ -87,7 +146,8 @@ test('agent respond: 多选提交逐项校验,回给模型的是 JSON 数组字�
   registerAgentRoutes({
     app,
     getCurrentProjectPath: () => path.resolve('active-project'),
-    configManager: null
+    configManager: null,
+    snapshotter: STUB_SNAPSHOTTER
   });
 
   const sent = [];
@@ -135,7 +195,8 @@ test('agent chat rejects a cwd that differs from the active server project', asy
   registerAgentRoutes({
     app,
     getCurrentProjectPath: () => activeCwd,
-    configManager: null
+    configManager: null,
+    snapshotter: STUB_SNAPSHOTTER
   });
 
   let output = '';
@@ -177,7 +238,8 @@ test('停止(客户端断开)后会话仍要落盘，并带上自动标题与已
       readRawConfigFile: async () => ({
         models: [{ model: 'test', name: 'T', baseURL: 'https://example.invalid/v1', apiKey: 'k', isDefault: true }]
       })
-    }
+    },
+    snapshotter: STUB_SNAPSHOTTER
   });
 
   // 模型流：吐一段正文后挂住（模拟"停在生成中"）。真 fetch 在 signal abort 时会打断

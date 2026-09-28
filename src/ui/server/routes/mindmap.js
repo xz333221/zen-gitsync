@@ -96,6 +96,41 @@ function isInside(childResolved, dirResolved) {
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)
 }
 
+/**
+ * 列出某个目录下的思维导图文件（按修改时间倒序）。
+ *
+ * 抽成导出函数是为了给 aiContext 的「思维导图」快照复用 —— 快照里数出来的文件
+ * 必须和界面列表是同一批、同一排序，所以两边共用这一份实现，不做第二遍 readdir。
+ * 校验 / 抛错（目录不存在、不是目录）仍留在路由层，这里只做"已知是个目录"之后的活。
+ */
+export async function listMindmapFiles(dir) {
+  const entries = await fs.readdir(dir, { withFileTypes: true })
+  const files = []
+  for (const e of entries) {
+    // 只收 .mindmap.json 文件，跳过目录/隐藏文件
+    if (!e.isFile()) continue
+    if (e.name.startsWith('.')) continue
+    if (!e.name.toLowerCase().endsWith(MINDMAP_EXT)) continue
+    const fullPath = path.join(dir, e.name)
+    try {
+      const st = await fs.stat(fullPath)
+      files.push({
+        name: e.name,
+        path: fullPath,
+        size: st.size,
+        mtime: st.mtimeMs,
+        // 展示用名（去掉扩展名）
+        title: e.name.slice(0, -MINDMAP_EXT.length)
+      })
+    } catch {
+      // stat 失败的条目跳过，不阻塞整个列表
+    }
+  }
+  // 按修改时间倒序（最新在上）
+  files.sort((a, b) => b.mtime - a.mtime)
+  return files
+}
+
 export function registerMindmapRoutes({ app }) {
   // ── 列出目录下的思维导图文件 ──────────────────────────────────────
   app.get(
@@ -113,30 +148,7 @@ export function registerMindmapRoutes({ app }) {
       }
       if (!stat.isDirectory()) throw new HttpError(400, '目标不是目录')
 
-      const entries = await fs.readdir(dir, { withFileTypes: true })
-      const files = []
-      for (const e of entries) {
-        // 只收 .mindmap.json 文件，跳过目录/隐藏文件
-        if (!e.isFile()) continue
-        if (e.name.startsWith('.')) continue
-        if (!e.name.toLowerCase().endsWith(MINDMAP_EXT)) continue
-        const fullPath = path.join(dir, e.name)
-        try {
-          const st = await fs.stat(fullPath)
-          files.push({
-            name: e.name,
-            path: fullPath,
-            size: st.size,
-            mtime: st.mtimeMs,
-            // 展示用名（去掉扩展名）
-            title: e.name.slice(0, -MINDMAP_EXT.length)
-          })
-        } catch {
-          // stat 失败的条目跳过，不阻塞整个列表
-        }
-      }
-      // 按修改时间倒序（最新在上）
-      files.sort((a, b) => b.mtime - a.mtime)
+      const files = await listMindmapFiles(dir)
       res.json({ success: true, dir, files })
     })
   )

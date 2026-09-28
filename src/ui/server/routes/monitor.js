@@ -46,7 +46,9 @@ function sampleCpu() {
   return { total, idle }
 }
 
-async function getCpuUsage(sampleDelayMs = 100) {
+// 导出给 aiContext 的「系统状态」快照复用 —— 快照里的 CPU/内存/磁盘/端口
+// 必须与监控页看到的是同一份实现,否则两处数字对不上,用户第一个就会问为什么。
+export async function getCpuUsage(sampleDelayMs = 100) {
   const a = sampleCpu()
   await new Promise((r) => setTimeout(r, sampleDelayMs))
   const b = sampleCpu()
@@ -122,7 +124,7 @@ async function getDiskUsageUnix() {
   ]
 }
 
-async function getDiskUsage() {
+export async function getDiskUsage() {
   const now = Date.now()
   if (_diskCache && now - _diskCacheTime < DISK_CACHE_TTL_MS) {
     return _diskCache
@@ -144,8 +146,46 @@ async function getDiskUsage() {
   return result
 }
 
+/**
+ * 系统概览的完整组装（CPU + 内存 + 磁盘 + 系统信息）。
+ *
+ * 抽成导出函数是为了让 aiContext 的「系统状态」快照复用同一份 —— 快照里的数字
+ * 必须和监控页一致，两处各拼一遍迟早一个改了另一个没改。
+ * 磁盘查询失败降级为 disks: null，不拖垮整个概览。
+ */
+export async function getSystemOverview() {
+  const cpu = await getCpuUsage(100)
+  const totalMem = os.totalmem()
+  const freeMem = os.freemem()
+  const usedMem = totalMem - freeMem
+  let disks = null
+  try {
+    disks = await getDiskUsage()
+  } catch (e) {
+    logger.warn(`[monitor] 获取磁盘占用失败: ${e?.message || e}`)
+  }
+  return {
+    cpu,
+    memory: {
+      total: totalMem,
+      free: freeMem,
+      used: usedMem,
+      usagePercent: totalMem > 0 ? (usedMem / totalMem) * 100 : 0
+    },
+    disks,
+    system: {
+      platform: process.platform,
+      arch: process.arch,
+      hostname: os.hostname(),
+      uptime: os.uptime(),
+      nodeVersion: process.version
+    },
+    timestamp: Date.now()
+  }
+}
+
 // ── 端口列表 ────────────────────────────────────────────────────────────
-async function listPorts({ all = false } = {}) {
+export async function listPorts({ all = false } = {}) {
   if (process.platform === 'win32') {
     return listPortsWindows({ all })
   }
@@ -372,38 +412,7 @@ export function registerMonitorRoutes({ app }) {
   app.get(
     '/api/monitor/system',
     asyncRoute(async (req, res) => {
-      const cpu = await getCpuUsage(100)
-      const totalMem = os.totalmem()
-      const freeMem = os.freemem()
-      const usedMem = totalMem - freeMem
-      // 磁盘查询失败不应拖垮整个概览接口，降级为 disks: null
-      let disks = null
-      try {
-        disks = await getDiskUsage()
-      } catch (e) {
-        logger.warn(`[monitor] 获取磁盘占用失败: ${e?.message || e}`)
-      }
-      res.json({
-        success: true,
-        data: {
-          cpu,
-          memory: {
-            total: totalMem,
-            free: freeMem,
-            used: usedMem,
-            usagePercent: totalMem > 0 ? (usedMem / totalMem) * 100 : 0
-          },
-          disks,
-          system: {
-            platform: process.platform,
-            arch: process.arch,
-            hostname: os.hostname(),
-            uptime: os.uptime(),
-            nodeVersion: process.version
-          },
-          timestamp: Date.now()
-        }
-      })
+      res.json({ success: true, data: await getSystemOverview() })
     })
   )
 

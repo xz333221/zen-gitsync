@@ -78,6 +78,16 @@ export const AI_SKILLS_DIR = path.join(DATA_DIR, 'ai', 'skills');
 // 与项目里的 <cwd>/.mcp.json 可以直接合并(项目级覆盖全局同名 server)。
 export const AI_MCP_FILE = path.join(DATA_DIR, 'ai', 'mcp.json');
 
+// ── 给 g ai 看的「工作区状态快照」 ────────────────────────────
+// 各板块状态(git / 远程仓库 / 自定义命令 / 工作台任务 / 系统 / 思维导图)由**服务端**
+// 汇总成一组 markdown 落在这里,再把摘要与文件路径注入模型上下文(实现见
+// src/ui/server/routes/aiContext/)。分开成多个文件而不是一个大 JSON,是为了让模型
+// 按需只读它要的那一块 —— 见 render.js 头注释。
+//
+// 为什么放 DATA_DIR 而不是项目里:这是**本机派生数据**,不该污染任何仓库、也不该进
+// 别人的 git 历史;同一台机器上多个 g ui 实例共用一份就够了。
+export const AI_CONTEXT_DIR = path.join(DATA_DIR, 'ai-context');
+
 // ── 工作台 / 会话 / 缓存 ──────────────────────────────────────
 export const WORKBENCH_IMAGES_DIR = path.join(DATA_DIR, 'workbench-images');
 // 智能体对话的非图片附件:前端把字节传上来后落在这里,只把绝对路径给模型(见

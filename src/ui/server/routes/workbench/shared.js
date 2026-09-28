@@ -49,6 +49,23 @@ export const DEFAULT_JOBS_CONFIG = { maxCount: 500, maxSizeMB: 256 };
 export const ORCHESTRATOR_FILE = path.join(DATA_DIR, 'orchestrator.json');
 export const MAX_ORCHESTRATOR_INSTRUCTIONS = 200;
 
+/**
+ * 「真相源文件」清单 —— 注入给模型、让它需要细节时自己去读全文的那几个文件。
+ *
+ * 为什么集中在这一处：有**两条**链路都要把这份清单报给模型 ——
+ *   · aiContext（智能体页对话，七个板块的注入块）
+ *   · envContext（多项目编排台派发任务时的运行环境块）
+ * 以前是各写各的（一个写三个文件名、另一个写四个），加一个可读文件就得改两处，
+ * 而漏改的那一处**不会报错**：模型只是永远不知道那个文件存在，于是回答"我看不到"。
+ * 现在路径只有这一份，标签/取舍仍由各视图自己决定（那是视图的职责，不是口径）。
+ */
+export const TRUTH_FILES = {
+  tasksFile: TASKS_FILE,
+  jobsFile: JOBS_FILE,
+  orchestratorFile: ORCHESTRATOR_FILE,
+  configFile: CONFIG_FILE,
+};
+
 // 派发默认提示词（全局 / 各项目级）**单条**长度上限。
 // 它不是"指令"，而是一条每次派发都会被拼进 prompt 的约束 —— 4000 字足够写下一整套
 // 规范，再长只会让每一次执行都白烧一遍 token。

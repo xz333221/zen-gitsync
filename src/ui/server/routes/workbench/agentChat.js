@@ -252,9 +252,11 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 //   - askUser: (args, meta) => Promise<string>  等待用户回答
 //   - listProjects: (args) => Promise<string>  list_projects 工具的数据源
 //     (由 agentRoutes 注入:最近目录/tasks.json/看板统计只有 GUI 侧拿得到)
+//   - getContextBlock: ({locale}) => Promise<string>  工作区状态快照的摘要块
+//     (由 agentRoutes 注入,实现在 routes/aiContext/:七个板块的摘要 + 落盘文件路径)
 //
 // 返回: { aborted: boolean }
-export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, attachments = [], signal, send, onChild, askUser, listProjects }) {
+export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, attachments = [], signal, send, onChild, askUser, listProjects, getContextBlock }) {
   const ctx = { cwd, locale, onChild, askUser, listProjects };
 
   // 确保 session.messages 存在
@@ -279,6 +281,19 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
       : userMessage
   });
 
+  // 工作区状态快照:整轮只取一次(TTL 在生成器内部,见 aiContext/index.js),
+  // 不放进循环 —— 否则每执行一次工具调用都要重拼一遍,而这轮对话里它不会变。
+  // 取不到就空着跳过:快照是**锦上添花**,不能因为它挂了就让用户这条消息发不出去。
+  let workspaceBlock = '';
+  if (typeof getContextBlock === 'function') {
+    try {
+      workspaceBlock = (await getContextBlock({ locale })) || '';
+    } catch (err) {
+      logger.warn(`[agentChat] 取工作区状态快照失败,本轮跳过注入: ${err?.message || err}`);
+      workspaceBlock = '';
+    }
+  }
+
   const maxIterations = await resolveMaxToolIterations();
 
   for (let iter = 0; iter < maxIterations; iter++) {
@@ -286,8 +301,9 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
     // 摘录成一条梗概 → 旧图片降级 → provider 兼容消毒。
     // 只作用于副本,session.messages 保持完整(与 CLI 的磁盘口径一致)。
     const messages = prepareRequestMessages(session.messages, { locale });
-    // 请求级上下文：当前打开的文档 + 本轮附件路径（只改副本，不落 session.messages，下一轮不重复累积）
-    injectRequestContext(messages, { cwd, openFilePath, attachments, locale });
+    // 请求级上下文：工作区状态快照 + 当前打开的文档 + 本轮附件路径
+    // （只改副本，不落 session.messages，下一轮不重复累积）
+    injectRequestContext(messages, { cwd, openFilePath, attachments, locale, workspaceBlock });
 
     let result;
     try {
@@ -417,17 +433,29 @@ function summarizeArgs(name, args) {
   }
 }
 
-// ── 请求级上下文注入（文件空间对话 / 本轮附件） ──────────────
-// 把"用户当前打开的文件"与"本轮附件的落盘路径"追加到**请求副本**的 system 消息末尾：
-// 只影响这一次请求，session.messages 与磁盘历史保持原样，下一轮也不会重复累积。
+// ── 请求级上下文注入（工作区状态 / 文件空间对话 / 本轮附件） ──────────────
+// 把"工作区各板块的状态摘要""用户当前打开的文件"与"本轮附件的落盘路径"追加到
+// **请求副本**的 system 消息末尾：只影响这一次请求，session.messages 与磁盘历史保持原样，
+// 下一轮也不会重复累积。
+//
+// ⚠️ 工作区快照**必须走这条副本路径，不能塞进 session.messages 里那条 system 消息**。
+// 那条只在首轮 push 一次（见上面 `session.messages.length === 0` 的判断）并会落盘，
+// 快照进去就等于永久停在"会话创建那天"——git 分支、任务进度全会是过期的，
+// 而且这种错不会报错、只会让模型理直气壮地给出错答案。有单测钉住这一点。
 //
 // 附件为什么只给路径、不给内容：见 utils/agentAttachments.js 的头注释 —— 非图片附件
 // 由服务端落盘，模型自己用 read / grep 按需取，比把几百 KB 文本内联进消息省得多。
-export function injectRequestContext(messages, { cwd, openFilePath, attachments = [], locale }) {
+// 快照块同理,只给摘要与目录路径,板块正文由模型按需读。
+export function injectRequestContext(messages, { cwd, openFilePath, attachments = [], locale, workspaceBlock = '' }) {
   if (!Array.isArray(messages)) return;
   const en = String(locale || '').startsWith('en');
 
   const parts = [];
+
+  // ⓪ 工作区状态快照（七个板块的摘要 + 落盘目录）。由 aiContext 生成，只在这个副本里。
+  if (typeof workspaceBlock === 'string' && workspaceBlock.trim()) {
+    parts.push(workspaceBlock.trim());
+  }
 
   // ① 当前打开的文档（文件空间对话才有；项目外或等于根目录直接忽略）
   if (openFilePath) {

@@ -25,10 +25,13 @@ import path from 'node:path';
 import { asyncRoute, HttpError } from '../../utils/asyncRoute.js';
 import { agentSessionStore } from './agentSessionStore.js';
 import { runAgentTurn } from './agentChat.js';
+import { runExternalTurn } from './runExternalTurn.js';
+import { normalizeAgentEngine, isExternalEngine, engineLabel } from './agentEngines.js';
 import { saveAgentAttachments, MAX_ATTACHMENTS } from '../../utils/agentAttachments.js';
 import { registerAgentMarketplaceRoutes } from './agentMarketplace.js';
 import { createProjectListProvider } from './projectTool.js';
-import { nowIso } from './shared.js';
+import { createWorkspaceSnapshotter } from '../aiContext/wiring.js';
+import { nowIso, logger } from './shared.js';
 
 const { genSessionId, autoTitle, read: readSession, write: writeSession, delete: deleteSession, listMeta: listSessionsMeta, enforceRetention, rename: renameSession } = agentSessionStore;
 
@@ -114,7 +117,7 @@ export function submitAgentAnswer({ sessionId, interactionId, answer }) {
  * @param {() => string} deps.getCurrentProjectPath
  * @param {Object} deps.configManager
  */
-export function registerAgentRoutes({ app, getCurrentProjectPath, configManager }) {
+export function registerAgentRoutes({ app, getCurrentProjectPath, configManager, snapshotter }) {
 
   registerAgentMarketplaceRoutes({ app, getCurrentProjectPath });
 
@@ -123,10 +126,61 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
   // 不给它加缓存:agent 一轮里最多问一两次,而"项目状态"本来就要现读才准。
   const listProjects = createProjectListProvider({ configManager, getCurrentProjectPath });
 
+  // 工作区状态快照（七个板块的摘要 + 落盘文件路径）。同样在这里建一次、复用 ——
+  // 它要读配置、tasks.json、执行记录、git 状态、监控与思维导图,这些依赖本层一并拿得最全。
+  //
+  // `snapshotter` 是个**只为测试留的注入口**(与 remoteRepos 的 *Impl 同一套做法):
+  // 生产不传,走真实实现;单测传一个空壳,免得跑一次对话就在测试机上 spawn `gh`
+  // 和 PowerShell、还去连一次网。默认值写成参数默认值,不传时才构造。
+  const workspaceSnapshotter = snapshotter || createWorkspaceSnapshotter({ configManager, getCurrentProjectPath });
+  const getContextBlock = ({ locale } = {}) => workspaceSnapshotter.getBlock({ locale });
+
   // ════════════════════════════════════════════════════════════════════════
   // §1. 会话列表
   // ════════════════════════════════════════════════════════════════════════
+  /**
+   * 预热工作区状态快照 —— 这是"初始加载"该做的事,但**不是**把七个界面板块都挂起来。
+   *
+   * 用户打开智能体页时前端会拉这个会话列表,此刻就顺手在后台把快照生成好;
+   * 等他打完字发出去,快照早已就绪,那一轮就能带上完整上下文。
+   * 刻意不 await:它要跑 gh/gitee/git/PowerShell,等它会让会话列表白屏几秒。
+   * 也刻意不放在 registerAgentRoutes 里:启动时预热会让"打开服务"这条路径凭空多几次
+   * 子进程与网络调用,而用户可能压根不会打开智能体页。
+   */
+  function warmSnapshotInBackground() {
+    try {
+      if (typeof workspaceSnapshotter?.warm === 'function') workspaceSnapshotter.warm().catch(() => {});
+    } catch (err) {
+      logger.warn(`[agentRoutes] 预热工作区快照失败: ${err?.message || err}`);
+    }
+  }
+
+  /**
+   * POST /api/ai-context/refresh   body: { sections?: string[], force?: boolean }
+   *
+   * 给前端"切到某个面板就更新对应板块"用的定向刷新口。**按板块**而不是全量:
+   * 七个板块的取数成本差两个数量级,切个 Git 面板没必要顺带联网拉一遍仓库列表。
+   *
+   * 前端一律 fire-and-forget 调它(不等响应) —— 一次全量要 6~7 秒,没有哪个 UI 该等它。
+   * 真正拖慢也不怕:force 仍受各板块自己的 forceTtlMs 地板限制,联网板块最多 60s 一次。
+   *
+   * 顺带把各板块状态回给调用方(采集时间/是否新鲜),排查"为什么模型看到的是旧的"时很好用。
+   */
+  app.post('/api/ai-context/refresh', asyncRoute(async (req, res) => {
+    const body = req.body || {};
+    const ids = Array.isArray(body.sections) ? body.sections.map(String) : undefined;
+    const force = body.force === true;
+    const state = await workspaceSnapshotter.refreshSections(ids, { force });
+    res.json({ success: true, ...state });
+  }));
+
+  /** GET 版本:只读回各板块状态,不触发任何取数(给未来做面板用) */
+  app.get('/api/ai-context/state', asyncRoute(async (_req, res) => {
+    res.json({ success: true, ...workspaceSnapshotter.getState() });
+  }));
+
   app.get('/api/agent/sessions', asyncRoute(async (req, res) => {
+    warmSnapshotInBackground();
     let sessions = await listSessionsMeta();
     // 按项目隔离:前端传当前项目路径时只返回该项目的会话
     const cwdFilter = String(req.query?.cwd || '').trim();
@@ -271,6 +325,25 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
           finished = true;
           return res.end();
         }
+        // 引擎在会话**建立时就锁死**，中途不许换。
+        // 为什么：三家 CLI 的续聊标识互不通用（claude --resume / opencode --session /
+        // codex exec resume），而且历史消息格式不同（我们存的是 OpenAI chat completions
+        // 形状，喂给 claude 没有意义）。允许中途切换的表现是"看起来切了，上下文却串了"——
+        // 与工作台 taskExecutor.ts 注释里那条"续哪个执行器由上一轮 job.agent 决定"同源。
+        const requestedEngine = req.body?.engine === undefined
+          ? null
+          : normalizeAgentEngine(req.body?.engine);
+        const sessionEngine = normalizeAgentEngine(session.engine);
+        if (requestedEngine && requestedEngine !== sessionEngine && Array.isArray(session.messages) && session.messages.length > 0) {
+          send({
+            type: 'error',
+            error: `该会话由 ${engineLabel(sessionEngine)} 运行，无法中途切换引擎。请新建会话再选 ${engineLabel(requestedEngine)}。`,
+            code: 'ENGINE_LOCKED'
+          });
+          finished = true;
+          return res.end();
+        }
+        session.engine = sessionEngine;
       } else {
         session = {
           version: 1,
@@ -279,6 +352,11 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
           source: 'web',
           cwd: currentProjectCwd,
           model: '',
+          // 引擎：gai（内置，默认）| claude | opencode | codex
+          engine: normalizeAgentEngine(req.body?.engine),
+          // 外部 CLI 自己的续聊标识（claude session_id / opencode sessionID /
+          // codex thread_id）。g ai 用不到，留着空串。
+          engineSessionId: '',
           createdAt: nowIso(),
           updatedAt: nowIso(),
           messages: []
@@ -299,26 +377,34 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
         return [];
       });
 
-      // 获取模型配置
-      let model;
-      try {
-        if (!configManager) throw new Error('configManager 不可用');
-        const rawConfig = await configManager.readRawConfigFile();
-        const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
-        model = models.find(m => m.isDefault) || models[0];
-      } catch (err) {
-        send({ type: 'error', error: '读取 AI 配置失败: ' + err.message });
-        finished = true;
-        return res.end();
+      // 获取模型配置。**只有内置 g ai 需要** —— 外部 CLI 用自己的模型与配置
+      // （claude/opencode/codex 各自的 CLI 配置；本机上 Codex 甚至是走本地代理跑
+      //  deepseek-v4.1-flash）。为外部引擎要求"先在设置里配模型"是错的：
+      // 明明能跑，却先被一道无关的校验拦住。
+      const useExternal = isExternalEngine(session.engine);
+      let model = null;
+      if (!useExternal) {
+        try {
+          if (!configManager) throw new Error('configManager 不可用');
+          const rawConfig = await configManager.readRawConfigFile();
+          const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
+          model = models.find(m => m.isDefault) || models[0];
+        } catch (err) {
+          send({ type: 'error', error: '读取 AI 配置失败: ' + err.message });
+          finished = true;
+          return res.end();
+        }
+        if (!model) {
+          send({ type: 'error', error: '未配置 AI 模型，请先在通用设置中添加模型' });
+          finished = true;
+          return res.end();
+        }
+        // 更新 session 的 model 信息
+        session.model = `${model.model || ''} (${model.name || ''})`;
+      } else {
+        // 外部引擎：不落具体模型名（它随 CLI 自己的配置变），只记引擎，便于列表里辨认
+        session.model = '';
       }
-      if (!model) {
-        send({ type: 'error', error: '未配置 AI 模型，请先在通用设置中添加模型' });
-        finished = true;
-        return res.end();
-      }
-
-      // 更新 session 的 model 信息
-      session.model = `${model.model || ''} (${model.name || ''})`;
 
       // 工作目录
       const cwd = session.cwd || (typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : process.cwd());
@@ -331,31 +417,65 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
         title: isNew ? autoTitle([{ role: 'user', content: userMessage }]) : session.title
       });
 
-      // 运行 agent 循环
-      await runAgentTurn({
-        session,
-        model,
-        userMessage,
-        images,
-        cwd,
-        locale,
-        openFilePath,
-        attachments,
-        signal: abortController.signal,
-        send,
-        onChild: (child) => { activeChild = child; },
-        askUser: (args, meta = {}) => waitForAgentAnswer({
-          sessionId: session.sessionId,
-          interactionId: meta.interactionId,
-          question: args.question,
-          options: Array.isArray(args.options) ? args.options : [],
-          allowFreeText: args.allowFreeText !== false,
-          multiple: args.multiple === true,
-          send,
+      if (useExternal) {
+        // 外部 CLI 引擎：CLI 自己跑循环，服务端只做 spawn + 事件翻译。
+        // 工作区状态块走 prompt 前缀（见 runExternalTurn 文件头：往项目里写
+        // AGENTS.md/CLAUDE.md 会弄脏用户工作区，且三家读取口径实测不一致）。
+        let promptPrefix = '';
+        if (typeof getContextBlock === 'function') {
+          try { promptPrefix = await getContextBlock({ locale }); } catch (err) { logger.warn(`[agent] 外部引擎状态块获取失败: ${err?.message || err}`); }
+        }
+        // 图片附件转成文件路径交给 CLI（它们收路径不收 base64）。走同一套落盘校验。
+        const imageAttachments = images.map((u, i) => ({ name: `pasted-${i + 1}.png`, dataUrl: u }));
+        const imageFiles = imageAttachments.length > 0
+          ? await saveAgentAttachments(imageAttachments, {
+            onSkip: (info) => console.warn('[agent] 图片附件被忽略:', info.name, info.reason)
+          }).catch((err) => {
+            console.warn('[agent] 图片附件落盘失败:', err?.message || err);
+            return [];
+          })
+          : [];
+        const filePaths = [...attachments.map(a => a.path), ...imageFiles.map(f => f.path)];
+
+        await runExternalTurn({
+          session,
+          engine: session.engine,
+          userMessage,
+          cwd,
+          promptPrefix,
+          filePaths,
           signal: abortController.signal,
-        }),
-        listProjects
-      });
+          send,
+          onChild: (child) => { activeChild = child; },
+        });
+      } else {
+        // 运行 agent 循环（内置 g ai：服务端跑 LLM + 工具）
+        await runAgentTurn({
+          session,
+          model,
+          userMessage,
+          images,
+          cwd,
+          locale,
+          openFilePath,
+          attachments,
+          signal: abortController.signal,
+          send,
+          onChild: (child) => { activeChild = child; },
+          askUser: (args, meta = {}) => waitForAgentAnswer({
+            sessionId: session.sessionId,
+            interactionId: meta.interactionId,
+            question: args.question,
+            options: Array.isArray(args.options) ? args.options : [],
+            allowFreeText: args.allowFreeText !== false,
+            multiple: args.multiple === true,
+            send,
+            signal: abortController.signal,
+          }),
+          listProjects,
+          getContextBlock
+        });
+      }
 
       // 更新标题(新会话从第一条 user 消息自动生成)
       if (isNew) {
@@ -378,4 +498,9 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
       if (activeSessionKey) activeSessionTurns.delete(activeSessionKey);
     }
   });
+
+  // 把生成器交出去:调用方(server/index.js)要在服务启动后预热一次快照,
+  // 覆盖"g ui 刚启动"这个时机。预热调用刻意留在**生产入口**而不是这里 ——
+  // 单测会调 registerAgentRoutes 四次,预热写在这里等于测试机上 spawn 四轮 gh。
+  return { snapshotter: workspaceSnapshotter };
 }
