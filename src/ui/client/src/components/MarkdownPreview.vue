@@ -16,12 +16,14 @@
 <script setup lang="ts">
 /**
  * Markdown 预览组件
- * - 解析 markdown → 拆分为 [html 片段 | mindmap 块] 列表
- * - 普通片段 v-html 渲染
+ * - 渲染交给 flowdash-md-preview（markdown-it + highlight.js），不再自带 marked
+ * - 解析结果拆分为 [html 片段 | mindmap 块] 列表，普通片段 v-html 渲染
  * - ```mindmap 围栏 → <MindMap> 组件渲染（来自 flow-mindmap）
+ * - 排版与配色统一由 flowdash-md-preview 的主题提供（见 utils/markdownTheme.ts，
+ *   全应用只注入一套），本组件不再自带排版样式，避免与主题打架
  */
 import { computed } from 'vue'
-import { marked } from 'marked'
+import { render as renderMarkdown } from 'flowdash-md-preview'
 import { MindMap, markdownToMindMap } from 'flow-mindmap'
 import 'flow-mindmap/style.css'
 
@@ -68,15 +70,16 @@ function sanitizeRenderedHtml(value: string): string {
 /**
  * 拆分 markdown:
  * 1. 抽出所有 ```mindmap 围栏块,记录 id 和内容
- * 2. 把围栏替换为占位符
- * 3. 走 marked → HTML
+ * 2. 把围栏替换为占位符(markdown-it 会把 \u0000 规范化成 U+FFFD,
+ *    所以占位符只能是不含 markdown 语法字符的纯 ASCII)
+ * 3. 走 flowdash-md-preview 的 render → HTML
  * 4. 沿占位符切分 HTML 字符串,得到 [html | mindmap | html | ...] 列表
  */
 const segments = computed<Segment[]>(() => {
   const src = props.content || ''
   const fences: { id: number; md: string }[] = []
-  const placeholderPrefix = '\x00MINDMAP_BLOCK_'
-  const placeholderSuffix = '\x00'
+  const placeholderPrefix = '@@FLOWDASH_MINDMAP_BLOCK_'
+  const placeholderSuffix = '@@'
 
   // 匹配 ```mindmap ... ``` 围栏;语言名忽略大小写、允许空白
   const fenceRe = /```[ \t]*mindmap[ \t]*\n([\s\S]*?)```/gi
@@ -86,19 +89,17 @@ const segments = computed<Segment[]>(() => {
     return `${placeholderPrefix}${id}${placeholderSuffix}`
   })
 
-  const renderer = new marked.Renderer()
-  if (!props.allowHtml) {
-    renderer.html = ({ text }: { text: string }) => text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-  }
-  const parsedHtml = marked.parse(replaced, { async: false, renderer }) as string
+  // className: false → 不套外层 <div class="md-preview">,外层由模板给
+  const parsedHtml = renderMarkdown(replaced, {
+    className: false,
+    html: props.allowHtml
+  })
   const html = props.allowHtml ? parsedHtml : sanitizeRenderedHtml(parsedHtml)
 
-  // 把占位符还原成不可见标记,便于在 HTML 字符串里切分
+  // 独占一行的占位符会被 markdown-it 包成 <p>占位符</p>,切分时连标签一起吃掉,
+  // 免得片段边界留下空的 <p>
   const placeholderRe = new RegExp(
-    `${placeholderPrefix}(\\d+)${placeholderSuffix}`,
+    `(?:<p>)?\\s*${placeholderPrefix}(\\d+)${placeholderSuffix}\\s*(?:</p>)?`,
     'g'
   )
   const result: Segment[] = []
@@ -143,83 +144,12 @@ const segments = computed<Segment[]>(() => {
 </template>
 
 <style scoped>
+/* 排版 / 配色全部由 flowdash-md-preview 的主题预设提供(全局注入一套,
+   见 src/utils/markdownTheme.ts)。这里只保留必要的布局兜底与思维导图皮肤,
+   不再覆盖 h1/pre/code 等标签,否则会盖住主题(属性选择器特异性更高)。 */
 .md-preview {
-  padding: 20px 24px;
-  color: inherit;
-  font-size: var(--font-size-base);
-  line-height: 1.6;
   word-break: break-word;
 }
-
-/* 透出到全局样式:让 marked 出来的标签继承主题色 */
-.md-preview :deep(h1),
-.md-preview :deep(h2),
-.md-preview :deep(h3),
-.md-preview :deep(h4),
-.md-preview :deep(h5),
-.md-preview :deep(h6) {
-  border-bottom: 1px solid var(--border-color, var(--md-border));
-  padding-bottom: 0.3em;
-  margin-top: 24px;
-  margin-bottom: 16px;
-  font-weight: 600;
-}
-.md-preview :deep(h1) { font-size: 1.8em; }
-.md-preview :deep(h2) { font-size: 1.4em; }
-.md-preview :deep(h3) { font-size: 1.2em; }
-.md-preview :deep(p) { margin: 0 0 14px; }
-.md-preview :deep(a) { color: var(--text-link, #0969da); text-decoration: none; }
-.md-preview :deep(a:hover) { text-decoration: underline; }
-.md-preview :deep(code) {
-  background: var(--bg-code, var(--md-bg-subtle));
-  color: var(--text-primary, inherit);
-  border: 1px solid var(--border-color-light, transparent);
-  padding: 2px 5px;
-  border-radius: var(--radius-base);
-  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
-  font-size: 87%;
-}
-.md-preview :deep(pre) {
-  background: var(--bg-code, var(--md-bg-subtle));
-  color: var(--text-primary, inherit);
-  border: 1px solid var(--border-color-light, transparent);
-  padding: 14px 16px;
-  border-radius: var(--radius-md);
-  overflow: auto;
-  margin: 0 0 16px;
-}
-.md-preview :deep(pre code) {
-  background: none;
-  border: none;
-  padding: 0;
-  font-size: 100%;
-}
-.md-preview :deep(blockquote) {
-  border-left: 3px solid var(--border-color, var(--md-border));
-  margin: 0 0 16px;
-  padding: 0 16px;
-  color: var(--text-secondary, var(--md-text-muted));
-}
-.md-preview :deep(img) { max-width: 100%; border-radius: var(--radius-base); }
-.md-preview :deep(hr) {
-  border: none;
-  border-top: 1px solid var(--border-color, var(--md-border));
-  margin: 24px 0;
-}
-.md-preview :deep(table) {
-  border-collapse: collapse;
-  width: 100%;
-  margin-bottom: 16px;
-}
-.md-preview :deep(th),
-.md-preview :deep(td) {
-  border: 1px solid var(--border-color, var(--md-border));
-  padding: 6px 13px;
-}
-.md-preview :deep(thead tr) { background: var(--bg-code, var(--md-bg-subtle)); }
-.md-preview :deep(ul),
-.md-preview :deep(ol) { padding-left: 2em; margin-bottom: 16px; }
-.md-preview :deep(li) { margin: 4px 0; }
 
 .md-segment { display: block; }
 

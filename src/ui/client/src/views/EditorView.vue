@@ -105,17 +105,23 @@ onBeforeUnmount(() => {
   stopTreePolling()
 })
 
-// ── 文件树轮询:每 15s 自动刷新一次,捕获外部修改 ───────
+// ── 文件树轮询:默认每 60s 静默刷新一次,捕获外部修改 ───────
 // 为什么轮询而不是 fs.watch:
 //   - 后端 instanceRegistry 的 fs.watch 是给跨进程通信用的,不面向文件树
 //   - 前端 fs.watch 在沙箱/网络盘下不可靠,Socket.IO 推送需要后端再搭一套 watcher
-//   - 15s GET /api/browse_directory 在普通仓库 < var(--transition-fast),完全够用
-// 后端参考 src/ui/server/index.js:590 注释的"前端轮询(15s)兜底"约定
-const TREE_POLL_MS = 15000
+//   - 一次 POST /api/browse_directory_tree 只取"根 + 已展开目录",够用且便宜
+// 为什么是 60s 而不是 15s:
+//   - 它只是"兜底捕获外部改动",不需要准实时;刷新又走原地对账(见 refreshTree),
+//     内容没变时一次渲染都不触发,不会打断用户
+//   - 想立刻看到改动:点资源管理器标题栏的刷新按钮
+// 不想要自动刷新:设置 → 文件空间设置 → 文件树自动刷新(写入 ui.fileTreeAutoRefresh)
+const TREE_POLL_MS = 60000
 let treePollTimer: ReturnType<typeof setInterval> | null = null
 
 function startTreePolling() {
   stopTreePolling()
+  // 关掉自动刷新时不建 timer;设置里拨开关会重新走到这里
+  if (!configStore.ui.fileTreeAutoRefresh) return
   treePollTimer = setInterval(() => {
     // 标签页隐藏时跳过(fetch 会被浏览器节流,且用户看不到)
     if (document.hidden) return
@@ -139,6 +145,11 @@ watch(() => configStore.currentDirectory, () => {
   startTreePolling()
 })
 
+// 设置里切「文件树自动刷新」后立即生效,不用重开界面
+watch(() => configStore.ui.fileTreeAutoRefresh, () => {
+  startTreePolling()
+})
+
 async function loadDir(dirPath: string, depth = 0): Promise<TreeNode[]> {
   const resp = await fetch(`/api/browse_directory?path=${encodeURIComponent(dirPath)}`)
   const data = await resp.json()
@@ -152,6 +163,7 @@ async function loadDir(dirPath: string, depth = 0): Promise<TreeNode[]> {
   }))
 }
 
+// 首次加载:骨架式重建整棵树(只在这时动 treeLoading,它是会摘掉整棵 DOM 的)
 async function initTree() {
   const root = configStore.currentDirectory
   if (!root) return
@@ -174,31 +186,101 @@ function collectExpandedPaths(nodes: TreeNode[], result = new Set<string>()): Se
   return result
 }
 
-async function restoreExpanded(nodes: TreeNode[], expandedPaths: Set<string>): Promise<void> {
-  for (const n of nodes) {
-    if (n.type === 'directory' && expandedPaths.has(n.path)) {
-      if (!n.children) {
-        n.children = await loadDir(n.path, n.depth + 1)
-      }
-      n.expanded = true
-      await restoreExpanded(n.children!, expandedPaths)
+// 把后端返回的树快照转成前端节点结构。**仅用于对账**,别直接塞进 treeNodes:
+// 整棵替换会让 Vue 卸载 v-for 再重建,DOM 全丢 —— 那正是"每隔一会闪一下"的来源。
+function toTreeNodes(rawItems: any[], depth = 0): TreeNode[] {
+  return (rawItems || []).map((raw) => {
+    const node: TreeNode = {
+      name: raw.name,
+      path: raw.path,
+      type: raw.type,
+      depth,
+      // 后端只为"已展开"的目录返回 children,所以有 children 就等于展开
+      expanded: false,
+      loading: false,
     }
+    if (node.type === 'directory' && Array.isArray(raw.children)) {
+      node.children = toTreeNodes(raw.children, depth + 1)
+      node.expanded = true
+    }
+    return node
+  })
+}
+
+// 一次请求取回"根目录 + 已展开目录"的整棵可见子树。失败返回 null(保留现有树)。
+async function fetchTreeSnapshot(expandedPaths: string[]): Promise<TreeNode[] | null> {
+  const root = configStore.currentDirectory
+  if (!root) return null
+  try {
+    const resp = await fetch('/api/browse_directory_tree', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: root, expand: expandedPaths }),
+    })
+    const data = await resp.json().catch(() => null)
+    if (!data?.success || !Array.isArray(data.items)) return null
+    return toTreeNodes(data.items, 0)
+  } catch {
+    // 网络抖动/后端重启:静默失败,保留旧树,下一轮再试
+    return null
   }
 }
 
-async function refreshTree() {
+// 原地对账:fresh 里同 path 的节点如果旧树里还在,就复用旧对象(保留 Vue 的响应式
+// 身份与已渲染的 DOM),只把真正变化的字段写回去;返回"有没有真的变"。
+// 递归只走"旧树里已展开"的目录 —— 用户折叠的目录保持折叠,不会被刷新强行展开,
+// 也不会因为刷新丢滚动位置或选中态。
+function reconcileTree(oldNodes: TreeNode[], freshNodes: TreeNode[]): boolean {
+  const oldByPath = new Map(oldNodes.map((n) => [n.path, n]))
+  let changed = oldNodes.length !== freshNodes.length
+  if (!changed) {
+    for (let i = 0; i < freshNodes.length; i++) {
+      if (oldNodes[i].path !== freshNodes[i].path) { changed = true; break }
+    }
+  }
+  for (let i = 0; i < freshNodes.length; i++) {
+    const fresh = freshNodes[i]
+    const old = oldByPath.get(fresh.path)
+    // 旧树里没有 = 新出现的节点,直接保留 fresh
+    if (!old) continue
+    freshNodes[i] = old
+    if (old.name !== fresh.name) {
+      old.name = fresh.name
+      changed = true
+    }
+    if (old.type !== 'directory' || !old.expanded) continue
+    // 后端没给 children(该目录已不在展开列表里)= 保持原样
+    if (!Array.isArray(fresh.children)) continue
+    if (!Array.isArray(old.children)) {
+      old.children = fresh.children
+      changed = true
+    } else if (reconcileTree(old.children, fresh.children)) {
+      // 子层有变化:换成新数组(元素已被复用,老 DOM 仍在)
+      old.children = fresh.children
+      changed = true
+    }
+  }
+  return changed
+}
+
+// 静默刷新:原地对账,内容没变时一次渲染都不触发,更不会摘掉整棵 DOM。
+// 轮询走的是默认的"失败静默"(后台行为不该弹错);用户主动点刷新按钮传 notifyOnError。
+async function refreshTree(options: { notifyOnError?: boolean } = {}) {
   const root = configStore.currentDirectory
   if (!root) return
-  const expandedPaths = collectExpandedPaths(treeNodes.value)
-  treeLoading.value = true
-  try {
-    treeNodes.value = await loadDir(root, 0)
-    if (expandedPaths.size > 0) {
-      await restoreExpanded(treeNodes.value, expandedPaths)
-    }
-  } finally {
-    treeLoading.value = false
+  const fresh = await fetchTreeSnapshot([...collectExpandedPaths(treeNodes.value)])
+  // 请求失败,或树已被别处重置(切换目录)—— 交给下一次刷新
+  if (!fresh) {
+    if (options.notifyOnError) ElMessage.error($t('@EDITOR:刷新失败'))
+    return
   }
+  if (treeNodes.value.length === 0) {
+    treeNodes.value = fresh
+    return
+  }
+  const changed = reconcileTree(treeNodes.value, fresh)
+  // 只有真的变了才换数组引用,避免 flattenTree 无谓重算与重渲染
+  if (changed) treeNodes.value = fresh
 }
 
 async function toggleDir(node: TreeNode) {
@@ -606,7 +688,7 @@ onMounted(async () => {
   await initTree()
   // useThemeObserver 已自动注册观察者,无需在此再 observe
   setupViewVisibilityObserver()
-  // 启动文件树 15s 轮询,捕获外部修改(详见 startTreePolling 注释)
+  // 启动文件树 60s 轮询,捕获外部修改(详见 startTreePolling 注释)
   startTreePolling()
   // 首次 mount 时若已有打开的文件，主动把焦点交给 Monaco，避免初次进入编辑器视图时空格键失效。
   if (activeTabPath.value) {
@@ -1167,7 +1249,7 @@ function stopPreviewResize() {
             </button>
           </el-tooltip>
           <el-tooltip :content="$t('@EDITOR:刷新')" placement="bottom" :show-after="300">
-            <button class="sidebar-action-btn" @click="initTree">
+            <button class="sidebar-action-btn" @click="refreshTree({ notifyOnError: true })">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/>
                 <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>

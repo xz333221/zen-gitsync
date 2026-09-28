@@ -963,6 +963,9 @@ export default {
   '@42BB9:自定义编辑器行为': 'Customize file space behavior',
   '@42BB9:文件编辑': 'File Editing',
   '@42BB9:自动保存': 'Auto Save',
+  '@42BB9:文件树': 'File Tree',
+  '@42BB9:自动刷新': 'Auto Refresh',
+  '@42BB9:定时刷新左侧文件树': 'Periodically refresh the file tree silently to pick up files added or removed by the editor or external tools',
   '@42BB9:失去焦点时自动保存当前文件': 'Automatically save the current file when it loses focus',
   '@42BB9:编辑器设置已保存': 'File Space settings saved',
   // "Interface" subsection (persisted to ~/.zen-gitsync/config.json ui field)
@@ -996,6 +999,8 @@ export default {
   '@42BB9:已添加到资源管理器右键菜单': 'Added to the Explorer context menu',
   '@42BB9:已从资源管理器右键菜单移除': 'Removed from the Explorer context menu',
   '@42BB9:操作失败，请重试': 'Operation failed, please try again',
+  '@42BB9:Markdown 预览主题': 'Markdown preview theme',
+  '@42BB9:整个应用只用一个主题，同时作用于文件预览、差异预览与 AI 说明': 'One theme for the whole app: file preview, diff preview and AI summaries',
   // @42BB9: file end
   // @2AEBA: file path: components\GlobalLoading.vue
   '@2AEBA:加载中...': 'Loading...',
@@ -1717,6 +1722,10 @@ export default {
   '@13D1C:这些项目里该先处理哪个？按优先级给我一个处理顺序，并说明每一项该做什么。': 'Which of these projects should I handle first? Give me a priority order and what each step involves.',
   '@13D1C:哪些项目落后远端？': 'Which projects are behind the remote?',
   '@13D1C:哪些项目落后远端？分别落后多少个提交？': 'Which projects are behind the remote, and by how many commits each?',
+  '@13D1C:落后远端的都帮我 pull 下代码': 'Pull the projects that are behind',
+  '@13D1C:落后远端的项目都帮我 pull 下代码，逐个执行并汇报结果。': 'Pull the code for every project that is behind the remote, one at a time, and report the results.',
+  '@13D1C:看一下各项目未提交的都改了什么': 'What is uncommitted in each project?',
+  '@13D1C:看一下各项目未提交的改动都改了什么，按项目列出来。': 'Show me what is uncommitted in each project — list the changed files per project.',
   '@13D1C:共 {count} 个目录。徽标里的「领先/落后」是上次 fetch 时的快照，「未提交 N 项」来自本工作区的实时扫描。配置 AI 模型后，这里会自动解读各项目状态、指出需要注意的项目。': '{count} directories. The "ahead/behind" badges reflect the last fetch; "N uncommitted" is scanned live from the working tree. Configure an AI model and this area will summarize each project and flag what needs attention.',
   '@13D1C:暂无最近项目': 'No recent projects',
   '@13D1C:打开失败': 'Failed to open',
@@ -1982,6 +1991,7 @@ export default {
   // @EDITOR: file path: views\EditorView.vue
   '@EDITOR:资源管理器': 'Explorer',
   '@EDITOR:刷新': 'Refresh',
+  '@EDITOR:刷新失败': 'Refresh failed',
   '@EDITOR:打开文件失败: ': 'Failed to open file: ',
   '@EDITOR:文件未保存，确认关闭？': 'File has unsaved changes. Close anyway?',
   '@EDITOR:保存失败: ': 'Save failed: ',

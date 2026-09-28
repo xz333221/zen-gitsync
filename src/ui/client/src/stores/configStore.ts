@@ -20,6 +20,11 @@ import type { SupportLocale } from '@/locales'
 import { setLocale } from '@/locales'
 import { isTaskExecutorId, type TaskExecutorId } from '@/utils/taskExecutor'
 import { useLocaleStore } from './localeStore'
+import {
+  applyMarkdownTheme,
+  DEFAULT_MARKDOWN_THEME,
+  MARKDOWN_THEMES,
+} from '@/utils/markdownTheme'
 
 // AI 模型配置
 export interface ModelInfo {
@@ -236,6 +241,8 @@ export const useConfigStore = defineStore('config', () => {
     diffPreviewSplitPercent?: number
     commandConsole: UiCommandConsole
     editorAutoSave: boolean
+    /** 文件空间的文件树是否定时静默刷新（捕获编辑器/外部工具产生的改动） */
+    fileTreeAutoRefresh: boolean
     /** 思维导图目录列表（多根聚合，每个目录只列本级 *.mindmap.json） */
     mindmapDirs: string[]
     /** @deprecated 旧的单目录字段，仅作为迁移输入保留，不再写入 */
@@ -245,6 +252,9 @@ export const useConfigStore = defineStore('config', () => {
     /** 目录/文件选择弹窗(local-file-picker)打开时是否默认开启「全局」搜索。
      *  存的是上次用过的选择，打开弹窗时回传给 defaultGlobalSearch 就是"记住上次"。 */
     pickerGlobalSearch: boolean
+    /** Markdown 预览主题：flowdash-md-preview 的预设名(如 github / vuepress / phycat-forest)。
+     *  全局唯一一份 —— 文件预览、差异预览、AI 差异说明共用同一套配色。 */
+    markdownTheme: string
   }
 
   const defaultUiSettings: UiSettings = {
@@ -261,10 +271,12 @@ export const useConfigStore = defineStore('config', () => {
       splitPercent: 25,
     },
     editorAutoSave: false,
+    fileTreeAutoRefresh: true,
     mindmapDirs: [],
     mindmapDir: '',
     headerToolsHidden: [],
     pickerGlobalSearch: false,
+    markdownTheme: DEFAULT_MARKDOWN_THEME,
   }
 
   // 浅拷贝默认值（避免外部 mutate 到 defaultUiSettings）
@@ -638,6 +650,9 @@ export const useConfigStore = defineStore('config', () => {
               : defaultUiSettings.commandConsole.splitPercent,
           },
           editorAutoSave: typeof configData.ui.editorAutoSave === 'boolean' ? configData.ui.editorAutoSave : defaultUiSettings.editorAutoSave,
+          fileTreeAutoRefresh: typeof configData.ui.fileTreeAutoRefresh === 'boolean'
+            ? configData.ui.fileTreeAutoRefresh
+            : defaultUiSettings.fileTreeAutoRefresh,
           mindmapDirs,
           mindmapDir: legacyMindmapDir,
           headerToolsHidden: Array.isArray(configData.ui.headerToolsHidden)
@@ -646,6 +661,10 @@ export const useConfigStore = defineStore('config', () => {
           pickerGlobalSearch: typeof configData.ui.pickerGlobalSearch === 'boolean'
             ? configData.ui.pickerGlobalSearch
             : defaultUiSettings.pickerGlobalSearch,
+          // Markdown 预览主题：白名单校验，未知名字(手改配置/旧包主题被移除)回退默认
+          markdownTheme: typeof configData.ui.markdownTheme === 'string' && MARKDOWN_THEMES.includes(configData.ui.markdownTheme)
+            ? configData.ui.markdownTheme
+            : defaultUiSettings.markdownTheme,
         }
       }
 
@@ -657,6 +676,10 @@ export const useConfigStore = defineStore('config', () => {
       // 命中后直接把项目布局写进 ui.layout(ref),App.vue loadLayoutRatios 会读这同一个 ref。
       // 老用户首次升级:原 ui.layout 全局值会被迁移为当前项目的条目,不破坏既有体验。
       applyProjectLayoutToRef()
+
+      // Markdown 预览主题：读盘后立刻把选中的那套 CSS 注入 document.head，
+      // 之后所有 .md-preview 容器共用它（组件自身不再带排版样式）。
+      applyMarkdownTheme(ui.value.markdownTheme)
 
       // 标记 UI 配置已加载（启动防抖写入的 watch）
       isUiLoaded.value = true
@@ -783,11 +806,35 @@ export const useConfigStore = defineStore('config', () => {
   watch(() => ui.value.fileDiffSplitPercent, (v) => { if (isUiLoaded.value) saveUiSettings({ fileDiffSplitPercent: v }) })
   watch(() => ui.value.diffPreviewSplitPercent, (v) => { if (isUiLoaded.value && v != null) saveUiSettings({ diffPreviewSplitPercent: v }) })
   watch(() => ui.value.editorAutoSave, (v) => { if (isUiLoaded.value) saveUiSettings({ editorAutoSave: v }) })
+  watch(() => ui.value.fileTreeAutoRefresh, (v) => { if (isUiLoaded.value) saveUiSettings({ fileTreeAutoRefresh: v }) })
   watch(() => ui.value.headerToolsHidden, (v) => { if (isUiLoaded.value && Array.isArray(v)) saveUiSettings({ headerToolsHidden: v }) })
   // 思维导图目录列表(多根聚合)：增删目录后自动落盘
   watch(() => ui.value.mindmapDirs, (v) => { if (isUiLoaded.value && Array.isArray(v)) saveUiSettings({ mindmapDirs: v }) })
   // 选择弹窗的「全局」搜索开关：用户在弹窗里拨一下就落盘，下次打开弹窗按这个值开局。
   watch(() => ui.value.pickerGlobalSearch, (v) => { if (isUiLoaded.value) saveUiSettings({ pickerGlobalSearch: v }) })
+
+  // ---------------- Markdown 预览主题（全局唯一） ----------------
+  /** 当前 markdown 主题名，设置面板用它做双向绑定 */
+  const markdownTheme = computed(() => ui.value.markdownTheme)
+
+  /**
+   * 切换 Markdown 预览主题：写 ref（样式 watch 会同步注入）+ 立即落盘。
+   * 未知名字回退默认主题，避免配置被手改成乱码后预览彻底失去配色。
+   */
+  async function setMarkdownTheme(themeValue: string) {
+    const name = MARKDOWN_THEMES.includes(themeValue) ? themeValue : defaultUiSettings.markdownTheme
+    ui.value.markdownTheme = name
+    applyMarkdownTheme(name)
+    await saveUiSettings({ markdownTheme: name }, { immediate: true })
+    return name
+  }
+
+  // 主题变化即生效：同步把 CSS 注入 document，并防抖落盘（外部直接写 ui.markdownTheme 也覆盖到）
+  watch(() => ui.value.markdownTheme, (v) => {
+    if (!isUiLoaded.value || typeof v !== 'string' || !v) return
+    applyMarkdownTheme(v)
+    saveUiSettings({ markdownTheme: v })
+  })
   // layout 是当前项目的工作副本。变化时把当前项目的 layoutsByProject 条目更新为该值,
   // 同时持久化整张 layoutsByProject map(服务端对这个 key 做深合并,保留其它项目)。
   // 不再写全局 ui.layout(否则一个项目拖完会被另一个项目读到),保持 layout 字段为静态默认。
@@ -1463,6 +1510,7 @@ export const useConfigStore = defineStore('config', () => {
     ui,
     isUiLoaded,
     aiDiffSummaryEnabled,
+    markdownTheme,
 
     // 方法
     loadConfig,
@@ -1474,6 +1522,7 @@ export const useConfigStore = defineStore('config', () => {
     saveGeneralSettings,
     saveUiSettings,
     setAiDiffSummaryEnabled,
+    setMarkdownTheme,
     resetUiLayout,
     applyTheme,
     toggleTheme,

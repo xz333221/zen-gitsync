@@ -208,6 +208,38 @@
                 </div>
               </div>
 
+              <!-- Markdown 预览主题（全局唯一）：文件预览 / 差异预览 / AI 说明共用同一套配色 -->
+              <div class="setting-row setting-row--full setting-row--span">
+                <label class="setting-label">{{ $t('@42BB9:Markdown 预览主题') }}</label>
+                <div class="md-theme-row">
+                  <el-select
+                    :model-value="configStore.markdownTheme"
+                    class="modern-input md-theme-select"
+                    size="default"
+                    filterable
+                    @update:model-value="onMarkdownThemeChange"
+                  >
+                    <el-option
+                      v-for="opt in markdownThemeOptions"
+                      :key="opt.value"
+                      :label="opt.value"
+                      :value="opt.value"
+                    >
+                      <span class="md-theme-option">
+                        <span
+                          class="md-theme-swatch"
+                          :style="{ background: opt.bg || 'transparent', color: opt.fg || 'inherit' }"
+                        >Aa</span>
+                        <span>{{ opt.value }}</span>
+                      </span>
+                    </el-option>
+                  </el-select>
+                  <span class="setting-hint-block">
+                    {{ $t('@42BB9:整个应用只用一个主题，同时作用于文件预览、差异预览与 AI 说明') }}
+                  </span>
+                </div>
+              </div>
+
               <!-- 命令控制台（跨整行的复合控件）：4 个开关 + 比例滑条，
                    只在半格里会把 el-switch 的 active-text 压成竖排单字（实测），
                    所以整行跨两列 + 内部两列网格。 -->
@@ -586,6 +618,20 @@
               </div>
             </div>
           </div>
+          <div class="settings-section">
+            <div class="section-title">
+              <span>{{ $t('@42BB9:文件树') }}</span>
+            </div>
+            <div class="settings-grid">
+              <div class="setting-row">
+                <label class="setting-label">{{ $t('@42BB9:自动刷新') }}</label>
+                <el-switch v-model="tempFileTreeAutoRefresh" />
+              </div>
+              <div class="setting-row setting-row--hint" v-if="tempFileTreeAutoRefresh">
+                <span class="setting-hint">{{ $t('@42BB9:定时刷新左侧文件树') }}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -630,6 +676,7 @@ import { type SupportLocale } from '@/locales'
 import { AddModelForm } from 'ai-model-form/client'
 import type { AiModelFormSaveData } from 'ai-model-form/client'
 import 'ai-model-form/dist/ai-model-form.css'
+import { MARKDOWN_THEME_OPTIONS } from '@/utils/markdownTheme'
 
 const gitStore = useGitStore()
 const localeStore = useLocaleStore()
@@ -666,6 +713,15 @@ function toggleHeaderTool(id: ToolId, show: boolean) {
   configStore.ui.headerToolsHidden = [...next]
 }
 
+// ---------------- Markdown 预览主题（全应用唯一） ----------------
+/** 可选主题（含小色块），直接来自 flowdash-md-preview 的预设表 */
+const markdownThemeOptions = MARKDOWN_THEME_OPTIONS
+
+/** 切换主题：写进 configStore（内部负责注入 CSS + 落盘），预览无需重渲染 */
+async function onMarkdownThemeChange(value: string) {
+  await configStore.setMarkdownTheme(value)
+}
+
 export type SettingsTab = 'general' | 'ai-models' | 'git' | 'commit' | 'config' | 'editor'
 
 const props = defineProps<{
@@ -695,6 +751,8 @@ const notifyPermissionState = ref<NotifyPermission>('default')
 
 // 编辑器设置
 const tempEditorAutoSave = ref(false)
+// 文件树自动刷新:文件空间左侧资源管理器是否定时静默刷新(捕获编辑器/外部工具改动)
+const tempFileTreeAutoRefresh = ref(true)
 
 // AI 模型配置
 const aiModels = ref<ModelInfo[]>([])
@@ -760,7 +818,8 @@ const hasChanges = computed(() => {
     )
   }
   if (activeTab.value === 'editor') {
-    return tempEditorAutoSave.value !== configStore.ui.editorAutoSave
+    return tempEditorAutoSave.value !== configStore.ui.editorAutoSave ||
+      tempFileTreeAutoRefresh.value !== configStore.ui.fileTreeAutoRefresh
   }
   return false
 })
@@ -884,6 +943,7 @@ watch(() => props.modelValue, async (val) => {
     editingModelId.value = undefined
     // 加载编辑器设置
     tempEditorAutoSave.value = configStore.ui.editorAutoSave
+    tempFileTreeAutoRefresh.value = configStore.ui.fileTreeAutoRefresh
 
     // 外部指定了跳转 tab（footer / 头部按钮）→ 切过去
     if (props.initialTab) {
@@ -1149,6 +1209,7 @@ async function handleSave() {  // 配置编辑 tab 单独处理
   // 编辑器设置直接写入 store（watch 自动持久化到文件）
   if (activeTab.value === 'editor') {
     configStore.ui.editorAutoSave = tempEditorAutoSave.value
+    configStore.ui.fileTreeAutoRefresh = tempFileTreeAutoRefresh.value
     ElMessage.success($t('@42BB9:编辑器设置已保存'))
     visible.value = false
     return
@@ -2022,5 +2083,43 @@ html.dark .label-icon {
   margin-left: auto;
   font-size: var(--font-size-xs);
   color: var(--el-text-color-secondary);
+}
+
+/* ---------------- Markdown 预览主题（全局唯一） ---------------- */
+.md-theme-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.md-theme-select {
+  width: 260px;
+  max-width: 100%;
+}
+
+/* 下拉项：左侧一块主题底色 + 主题名（el-option 的 slot 内容仍属本组件作用域，
+   即便 dropdown 被 teleport 到 body，scoped 属性选择器也照样命中） */
+.md-theme-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.md-theme-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid var(--el-border-color-lighter);
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 600;
+  overflow: hidden;
 }
 </style>
