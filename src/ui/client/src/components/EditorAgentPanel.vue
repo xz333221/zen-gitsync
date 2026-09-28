@@ -29,6 +29,15 @@
       </template>
 
       <div class="agent-panel-spacer" />
+      <!-- 引擎切换：与「智能体」视图同一套（同一个 AgentEngineSelector）。
+           只在对话页出现；列表页没有正在跑的对话，摆这儿只会挤占标题。 -->
+      <AgentEngineSelector
+        v-if="page === 'chat'"
+        class="agent-panel-engine"
+        :engine="displayEngine"
+        :locked="isEngineLocked"
+        @select="onEngineSelect"
+      />
       <button
         v-if="page === 'chat'"
         class="agent-panel-icon-btn agent-panel-list-btn"
@@ -129,12 +138,14 @@ import { ChatContainer, ConversationList } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
 import { useThemeObserver } from '@/composables/useThemeObserver'
+import type { AgentEngineId } from '@/utils/agentEngine'
 import {
   buildConversationItems,
   agentConversationLabels,
   agentQuestionLabels,
   AGENT_ASSISTANT_NAME,
 } from '@/utils/agentConversations'
+import AgentEngineSelector from '@/components/AgentEngineSelector.vue'
 
 const props = defineProps<{
   /** 当前打开的文档路径（绝对或相对都行，服务端会归一化到项目根目录） */
@@ -160,6 +171,10 @@ const {
   pendingQuestion,
   answeringQuestion,
   isSessionGenerating,
+  currentEngine,
+  pendingEngine,
+  isEngineLocked,
+  pickEngine,
   loadSessions,
   loadSession,
   deleteSession,
@@ -169,6 +184,17 @@ const {
   answerQuestion,
   stop,
 } = useAgentChat()
+
+// ── 引擎：与「智能体」视图同一口径 ────────────────────────────
+// 已有会话显示它自己的引擎（且锁定），没有会话显示"下次新建会用哪个"。
+// 这条面板自己持有一个 useAgentChat 实例（见文件头注释），所以选择状态与
+// 那边的「对话」Tab 天然隔离 —— 但用的一定是同一个 AgentEngineSelector。
+const displayEngine = computed(() => (isEngineLocked.value ? currentEngine.value : pendingEngine.value))
+
+function onEngineSelect(id: AgentEngineId) {
+  if (isEngineLocked.value) return
+  pickEngine(id)
+}
 
 const conversationItems = computed(() => buildConversationItems(sessions.value, isSessionGenerating))
 const conversationLabels = agentConversationLabels()
@@ -354,10 +380,19 @@ onBeforeUnmount(() => {
   text-transform: uppercase;
   color: var(--text-tertiary);
   white-space: nowrap;
+  /* 面板跟 Monaco 抢宽度，天生很窄：标题给引擎下拉与图标让位，超了就省略号 */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .agent-panel-spacer {
   flex: 1;
+}
+
+/* 引擎切换：不参与压缩（引擎名是身份标识，挤扁了没法认），狭面板优先压标题 */
+.agent-panel-engine {
+  flex: none;
 }
 
 .agent-panel-icon-btn {

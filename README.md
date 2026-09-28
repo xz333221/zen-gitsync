@@ -354,6 +354,7 @@ A full IDE-like editor (fourth icon in the activity bar) for browsing and editin
 | Create | New file or folder inline in the file tree |
 | Rename / Delete | Rename or delete any file or folder directly from the tree |
 | Resizable sidebar | Drag the divider to adjust file tree width |
+| g ai chat panel | A `g ai` chat panel on the right (toggle it from the editor toolbar) that keeps the currently open file as context. It carries the same **engine selector** as the Agent view — pick the built-in **g ai** or an external CLI (**Claude Code** / **OpenCode** / **Codex**); uninstalled engines are greyed out and click to open the install guide |
 | Theme sync | Editor theme follows the global light / dark setting |
 
 ---
@@ -401,6 +402,7 @@ A dedicated view (robot icon in the activity bar) for chatting with the built-in
 | Feature | Description |
 |---|---|
 | Session list | Browse, search, rename, and delete past conversations; sessions created via `g ai` in the terminal also appear here with a **CLI** badge |
+| Engine choice | Run new sessions on the built-in **g ai** or hand them to an external CLI — **Claude Code**, **OpenCode** or **Codex**. The selector sits at the right of the chat tabs; engines whose CLI is not installed are greyed out and clicking one opens the install guide. The same selector lives in the file-space **g ai** chat panel. The engine is locked once a session is persisted, so switching means starting a new session |
 | Live session entry | Sending the first message of a new session makes it show up in the list **immediately** with a "Generating..." badge, instead of waiting for the whole turn to finish; once the reply ends and the server persists the session, the entry is replaced by the real timestamp and message count |
 | Streaming chat | SSE-based real-time streaming with thinking process, content, tool calls, and tool results rendered inline |
 | Tool call display | Each tool invocation (run_command, read_file, edit_file, list_files, search_text, write_file) is shown as a collapsible card with arguments preview and execution result |
@@ -1006,6 +1008,7 @@ Activity Bar 第四个视图，在 GUI 内直接浏览并编辑项目文件：
 | 新建 | 在文件树中内联创建文件或文件夹 |
 | 重命名 / 删除 | 在树中直接对文件或文件夹重命名、删除 |
 | 侧边栏调整 | 拖拽分隔条自由调整文件树宽度 |
+| g ai 对话面板 | 编辑器右侧的 `g ai` 对话面板（从编辑器工具栏切换），会把当前打开的文件作为上下文。它带与智能体视图**同款引擎选择器** —— 可选内置 **g ai** 或外部 CLI（**Claude Code** / **OpenCode** / **Codex**）；未安装的引擎置灰，点击即开安装引导 |
 | 主题同步 | 编辑器主题跟随全局明/暗设置 |
 
 ---
@@ -1053,6 +1056,7 @@ Activity Bar 中的机器人图标视图，可直接在浏览器中与内置 AI 
 | 功能 | 说明 |
 |---|---|
 | 会话列表 | 浏览、搜索、重命名、删除历史对话；通过 `g ai` 在终端创建的会话也会出现在这里，带 **CLI** 标记 |
+| 引擎选择 | 新建会话可跑内置 **g ai**，也可交给外部 CLI —— **Claude Code** / **OpenCode** / **Codex**。选择器在对话 Tab 行右端；未安装的引擎会置灰，点一下直接开安装引导。文件空间的 **g ai** 对话面板头部有同一个选择器。会话一旦落盘引擎就锁定，要换请新建会话 |
 | 会话实时入列 | 新会话发出第一条消息后，左侧列表**立刻**出现这一条（带「正在生成中…」标记），不用等整轮回答跑完；回答结束、服务端落盘后自动替换成真实的时间与条数 |
 | 流式对话 | 基于 SSE 的实时流式输出，包含思考过程、正文内容、工具调用和工具结果的内联渲染 |
 | 工具调用展示 | 每次工具调用（run_command、read_file、edit_file、list_files、search_text、write_file）以可折叠卡片形式展示，含参数预览和执行结果 |

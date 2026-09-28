@@ -20,6 +20,11 @@ const agent = vi.hoisted(() => ({
   loadSession: null as any,
   newSession: null as any,
   sendMessage: null as any,
+  // 引擎选择：面板头部那个执行器下拉（与「智能体」视图同一个 AgentEngineSelector）
+  currentEngine: null as any,
+  pendingEngine: null as any,
+  isEngineLocked: null as any,
+  pickEngine: null as any,
 }))
 
 vi.mock('@/composables/useThemeObserver', async () => {
@@ -32,6 +37,10 @@ vi.mock('@/composables/useAgentChat', async () => {
   agent.loadSession = vi.fn().mockResolvedValue(undefined)
   agent.newSession = vi.fn()
   agent.sendMessage = vi.fn().mockResolvedValue(undefined)
+  agent.currentEngine = ref('gai')
+  agent.pendingEngine = ref('gai')
+  agent.isEngineLocked = ref(false)
+  agent.pickEngine = vi.fn()
   return {
     AGENT_UPLOAD_ACCEPT: 'image/*',
     useAgentChat: () => ({
@@ -45,6 +54,10 @@ vi.mock('@/composables/useAgentChat', async () => {
       pendingQuestion: ref(null),
       answeringQuestion: ref(false),
       isSessionGenerating: () => false,
+      currentEngine: agent.currentEngine,
+      pendingEngine: agent.pendingEngine,
+      isEngineLocked: agent.isEngineLocked,
+      pickEngine: agent.pickEngine,
       loadSessions: vi.fn().mockResolvedValue(undefined),
       loadSession: agent.loadSession,
       deleteSession: vi.fn(),
@@ -73,15 +86,22 @@ vi.mock('zen-ai-chat-ui', () => ({
 }))
 
 import EditorAgentPanel from './EditorAgentPanel.vue'
+import AgentEngineSelector from './AgentEngineSelector.vue'
 
 // 读源码原文用（jsdom 里量不出宽度，只能从"有没有引入宽度判断"这个角度守）
 const PANEL_SRC = Object.values(
   import.meta.glob('./EditorAgentPanel.vue', { query: '?raw', import: 'default', eager: true })
 )[0] as string
 
+// el-icon 必须 stub：面板头部的引擎下拉里有 <el-icon>，而 jsdom 下真实的 ElIcon
+// 会被 ElDropdown 的更新循环反复触发，报 "Maximum recursive updates"（与 AgentView.test
+// 同一个原因、同一条处置）。
+const EL_ICON_STUB = { 'el-icon': { template: '<i><slot /></i>' } }
+
 function mountPanel() {
   return mountWithSetup(EditorAgentPanel, {
     props: { activeFilePath: 'src/a.md', activeFileName: 'a.md', active: true },
+    global: { stubs: EL_ICON_STUB },
   })
 }
 
@@ -92,6 +112,9 @@ function shown(w: VueWrapper<any>, sel: string): boolean {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  agent.currentEngine.value = 'gai'
+  agent.pendingEngine.value = 'gai'
+  agent.isEngineLocked.value = false
 })
 
 describe('EditorAgentPanel 恒两页', () => {
@@ -309,11 +332,62 @@ describe('EditorAgentPanel 恒两页', () => {
   it('没有打开文档时不渲染卡片，也不留锚点占位', async () => {
     const w = mountWithSetup(EditorAgentPanel, {
       props: { activeFilePath: null, activeFileName: '', active: true },
+      global: { stubs: EL_ICON_STUB },
     })
     await nextTick()
     await nextTick()
     expect(w.find('.agent-context-att').exists()).toBe(false)
     expect((w.find('.acu-input-wrap').element as HTMLElement).querySelector('.agent-context-slot'))
       .toBeNull()
+  })
+})
+
+// ── 引擎切换（文件空间 g ai 面板）──────────────────────────────
+// 用户反馈「文件空间里的 g ai 没有执行器的切换」—— 这里钉住：对话页头部常驻、
+// 列表页不出现、选中的引擎传回 useAgentChat、会话锁死后置灰且显示会话自己的引擎。
+describe('EditorAgentPanel 引擎选择器', () => {
+  it('对话页头部常驻引擎选择器，默认 g ai、未锁定', async () => {
+    const w = mountPanel()
+    await nextTick()
+
+    const sel = w.findComponent(AgentEngineSelector)
+    expect(sel.exists()).toBe(true)
+    expect(sel.props('engine')).toBe('gai')
+    expect(sel.props('locked')).toBe(false)
+    // 真的渲染在下拉按钮里，不是个空壳
+    expect(w.find('.agent-engine__name').text()).toBe('g ai')
+  })
+
+  it('切到会话列表页不显示（列表页没有正在跑的对话）', async () => {
+    const w = mountPanel()
+    await nextTick()
+    await w.find('.agent-panel-list-btn').trigger('click')
+    await nextTick()
+
+    expect(w.findComponent(AgentEngineSelector).exists()).toBe(false)
+  })
+
+  it('选中引擎 → 回传给 pickEngine', async () => {
+    const w = mountPanel()
+    await nextTick()
+
+    w.findComponent(AgentEngineSelector).vm.$emit('select', 'claude')
+    await nextTick()
+
+    expect(agent.pickEngine).toHaveBeenCalledWith('claude')
+  })
+
+  it('会话已落盘（引擎锁死）→ 选择器置灰，且显示的是这条会话自己的引擎', async () => {
+    agent.isEngineLocked.value = true
+    agent.currentEngine.value = 'claude'
+    // 故意让 pendingEngine 停在别的值：锁定时必须显示 currentEngine
+    agent.pendingEngine.value = 'codex'
+    const w = mountPanel()
+    await nextTick()
+
+    const sel = w.findComponent(AgentEngineSelector)
+    expect(sel.props('locked')).toBe(true)
+    expect(sel.props('engine')).toBe('claude')
+    expect(w.find('.agent-engine__btn').attributes('disabled')).toBeDefined()
   })
 })

@@ -111,6 +111,15 @@ test.describe('App smoke', () => {
     // 和附件一样带移除按钮（只是它移除的是"这一条不带当前文档"，不是删文件）
     await expect(page.locator('.editor-agent-panel .agent-context-att-remove')).toHaveCount(1)
 
+    // 执行器切换：用户反馈过"文件空间里的 g ai 没有执行器的切换"。面板头部要有与
+    // 智能体视图同款的引擎下拉 —— 默认 g ai，点开后有全部四个引擎。
+    const engine = page.locator('.editor-agent-panel .agent-engine')
+    await expect(engine).toBeVisible()
+    await expect(engine.locator('.agent-engine__name')).toHaveText('g ai')
+    await engine.locator('.agent-engine__btn').click()
+    await expect(page.locator('.el-dropdown-menu .agent-engine__item')).toHaveCount(4)
+    await page.keyboard.press('Escape')
+
     // 光"可见"不够：组件库的样式表要真的生效，否则面板是裸的（2026-09-27 用户实测报过）。
     // 本用例是全新 context、直接进文件空间，从未加载 AgentView / WorkbenchView / JobLogDetails
     // 那三个引了 zen-ai-chat-ui/style.css 的懒加载 chunk —— 正好是漏引样式时的现场。

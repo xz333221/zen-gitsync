@@ -24,35 +24,19 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import { $t } from '@/lang/static'
-import { ElIcon, ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus'
-import { Loading, ChatDotRound, Goods, Connection, ArrowDown, Check } from '@element-plus/icons-vue'
+import { ElIcon } from 'element-plus'
+import { Loading, ChatDotRound, Goods, Connection } from '@element-plus/icons-vue'
 import { ChatContainer, ConversationList } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { useConfigStore } from '@/stores/configStore'
-import { useToolsStore, type ToolId } from '@/stores/toolsStore'
 import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
 import { buildConversationItems, agentConversationLabels, agentQuestionLabels, AGENT_ASSISTANT_NAME } from '@/utils/agentConversations'
-import {
-  AGENT_ENGINE_OPTIONS,
-  BUILTIN_ENGINE_ICON,
-  agentEngineName,
-  isExternalAgentEngine,
-  type AgentEngineId,
-} from '@/utils/agentEngine'
-import type { TaskExecutorId } from '@/utils/taskExecutor'
+import type { AgentEngineId } from '@/utils/agentEngine'
 import { useNarrowPane } from '@/composables/useNarrowPane'
 import MarketplacePanel from '@/components/MarketplacePanel.vue'
-import SvgIcon from '@/components/SvgIcon/index.vue'
-import TaskExecutorIcon from '@/components/TaskExecutorIcon.vue'
-import ToolInstallDialog from '@/components/ToolInstallDialog.vue'
+import AgentEngineSelector from '@/components/AgentEngineSelector.vue'
 
 const configStore = useConfigStore()
-const toolsStore = useToolsStore()
-
-// 未安装的引擎点了不是静默失败，而是直接开安装弹窗（与工作台同一条路径）。
-// 类型用 ToolId：内置的 g ai 没有对应安装器，所以它永远是 null。
-const installDialogVisible = ref(false)
-const installTool = ref<ToolId | null>(null)
 
 // ── 面板宽度：够窄就把「会话列表」和「对话」折成两个页面 ──────────
 // 量的是这个视图容器自己的宽度（窄屏下拖动侧栏 / 分屏都会变；视口宽度反映不了）。
@@ -99,39 +83,14 @@ const {
 
 // ── 引擎选择 ──────────────────────────────────────────────
 // 展示哪个：已有会话显示它自己的引擎，没有会话显示"下次新建会用哪个"。
+// 下拉本体、可用性映射、未安装→安装弹窗都收口在 AgentEngineSelector 里
+//（文件空间 g ai 面板同一处消费，免得同一套实现抄两遍）。
 const displayEngine = computed(() => (isEngineLocked.value ? currentEngine.value : pendingEngine.value))
-const displayEngineName = computed(() => agentEngineName(displayEngine.value))
-// 图标的取舍不再需要一个 hasIcon 标志位：能分出"内置 / 外部"就够了
-//（内置走 sprite 的 g-ai，外部三家走 TaskExecutorIcon 的品牌 SVG）。
-// 这个判据本来就有、而且服务端分派也用同一条（isExternalAgentEngine），不再多一个概念。
 
-/**
- * 外部引擎是否已安装。未安装的项在下拉里置灰并标「未安装」——
- * 与工作台 OrchestratorConsole 同一口径（同一个 toolsStore）。
- */
-const engineAvailability = computed<Record<string, boolean>>(() => ({
-  gai: true,
-  claude: toolsStore.claudeAvailable,
-  opencode: toolsStore.opencodeAvailable,
-  codex: toolsStore.codexAvailable,
-}))
-
-function onEnginePick(id: AgentEngineId) {
+function handleEngineSelect(id: AgentEngineId) {
   // 已落盘的会话不允许中途换引擎（服务端也会拦），要换必须新建会话
   if (isEngineLocked.value) return
   pickEngine(id)
-}
-
-/** 选了未安装的引擎 → 直接开安装弹窗，不静默失败 */
-function onEngineCommand(id: AgentEngineId) {
-  if (!engineAvailability.value[id]) {
-    // g ai 是内置的、没有安装器；能走到「未安装」的必然是外部三家
-    if (!isExternalAgentEngine(id)) return
-    installTool.value = id
-    installDialogVisible.value = true
-    return
-  }
-  onEnginePick(id)
 }
 
 // ── 主题 ──────────────────────────────────────────────────
@@ -302,58 +261,15 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
 
         <!-- ═══ 引擎选择器 ═══
              与工作台执行器下拉同一套交互（点击展开、未安装标出来、点了直接开安装弹窗）。
-             四个引擎都带自己的图标：外部三家走 TaskExecutorIcon 的品牌彩色 SVG，
-             内置 g ai 走仓库既有的产品标识（sprite 里的 g-ai，与顶栏"用 g ai 打开当前目录"
-             同一个）。曾经刻意让 g ai 留空格，用户看下来只觉得"图标没加载出来"（见
-             utils/agentEngine.ts 头注释）。
+             下拉本体收口在 AgentEngineSelector，文件空间 g ai 面板复用同一份实现。
              会话一旦落盘就置灰：引擎在会话建立时锁定（三家续聊标识互不通用），要换请新建。 -->
-        <el-dropdown
+        <AgentEngineSelector
           v-if="activeTab === 'chat'"
-          trigger="click"
           class="agent-engine"
-          @command="onEngineCommand"
-        >
-          <button
-            type="button"
-            class="agent-engine__btn"
-            :class="{ 'is-locked': isEngineLocked }"
-            :disabled="isEngineLocked"
-            :title="isEngineLocked
-              ? $t('@AGENT:本会话的引擎已锁定；要换引擎请新建会话')
-              : $t('@AGENT:新建会话使用的引擎')"
-            :aria-label="$t('@AGENT:智能体引擎')"
-          >
-            <TaskExecutorIcon
-              v-if="isExternalAgentEngine(displayEngine)"
-              :executor="displayEngine as TaskExecutorId"
-              class="agent-engine__icon"
-            />
-            <svg-icon v-else :icon-class="BUILTIN_ENGINE_ICON" class="agent-engine__icon" />
-            <span class="agent-engine__name">{{ displayEngineName }}</span>
-            <el-icon class="agent-engine__caret"><ArrowDown /></el-icon>
-          </button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item
-                v-for="opt in AGENT_ENGINE_OPTIONS"
-                :key="opt.id"
-                :command="opt.id"
-              >
-                <span class="agent-engine__item">
-                  <TaskExecutorIcon
-                    v-if="isExternalAgentEngine(opt.id)"
-                    :executor="opt.id as TaskExecutorId"
-                    class="agent-engine__item-icon"
-                  />
-                  <svg-icon v-else :icon-class="BUILTIN_ENGINE_ICON" class="agent-engine__item-icon" />
-                  <span class="agent-engine__item-name">{{ opt.name }}</span>
-                  <el-icon v-if="displayEngine === opt.id" class="agent-engine__item-check"><Check /></el-icon>
-                  <span v-else-if="!engineAvailability[opt.id]" class="agent-engine__item-missing">{{ $t('@42BB9:未安装') }}</span>
-                </span>
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+          :engine="displayEngine"
+          :locked="isEngineLocked"
+          @select="handleEngineSelect"
+        />
       </nav>
 
       <div class="agent-tab-body">
@@ -435,9 +351,6 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
         <MarketplacePanel v-else :type="marketplaceType" />
       </div>
     </main>
-
-    <!-- 未安装的引擎被点选时走这里：与工作台是同一个安装弹窗组件，不另做一套 -->
-    <ToolInstallDialog v-model="installDialogVisible" :tool="installTool" />
   </div>
 </template>
 
@@ -494,71 +407,10 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
 /* ── 顶部 Tab 栏 ────────────────────────────────── */
 /* ── 引擎选择器 ───────────────────────────────────────────────
    放 Tab 行右端：常驻可见、不挤占对话区、也不用改组件库的 ChatContainer。
-   刻意扁平 —— 只有图标 + 引擎名 + caret，没有底色没有边框装饰；未安装的项在菜单里标出来。
-   四个引擎都带自己的图标（内置 g ai 用 sprite 的 g-ai，与顶栏同一个）。 */
+   （按钮自身样式收口在 AgentEngineSelector，这里只管它在 Tab 行里的位置） */
 .agent-engine {
   margin-left: auto;
   margin-bottom: 7px;
-}
-
-.agent-engine__btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-base);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  font-family: inherit;
-  line-height: 1.5;
-  cursor: pointer;
-  transition: border-color var(--transition-fast) ease, color var(--transition-fast) ease;
-}
-
-.agent-engine__btn:hover:not(:disabled) {
-  border-color: var(--color-primary);
-  color: var(--text-primary);
-}
-
-.agent-engine__btn:disabled {
-  cursor: not-allowed;
-  color: var(--text-tertiary);
-}
-
-/* 两种图标机制（<img> 品牌彩色 SVG / sprite 的 <svg-icon>）在同一个 1em 盒子里对齐：
-   尺寸统一由这里的 font-size 定，flex 里一律不许被压缩（否则窄一点的按钮会把图标挤扁）。 */
-.agent-engine__icon,
-.agent-engine__item-icon {
-  font-size: 14px;
-  flex: none;
-}
-
-.agent-engine__caret {
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.agent-engine__item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 148px;
-}
-
-.agent-engine__item-name {
-  flex: 1;
-}
-
-.agent-engine__item-check {
-  font-size: 13px;
-  color: var(--color-primary);
-}
-
-.agent-engine__item-missing {
-  font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
 }
 
 .agent-tabs {
