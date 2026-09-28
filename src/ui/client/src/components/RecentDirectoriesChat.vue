@@ -104,6 +104,19 @@ async function onSend(payload: { text: string; files: any[] }) {
   })
 }
 
+/**
+ * 开场白问题卡点击。**必须接 `@select`,否则点了完全没反应** ——
+ * 组件库的 WelcomeScreen 只 `emit('select', q)`、ChatContainer 原样往上传,
+ * 没有"默认自动发送"的兜底(对比 followup 的 onFollowupSelect 是会自动发的)。
+ * 不接就是死按钮:没有报错、没有 loading,什么都不发生。
+ *
+ * 走 onSend 而不是另起一条路径 —— 问题卡的 prompt 与用户手输的文本在服务端看来
+ * 完全等价,上下文(engine / dirStatus / dirSummary)必须与输入框那条一模一样。
+ */
+async function onSelectPreset(q: PresetQuestion) {
+  await onSend({ text: q.prompt, files: [] })
+}
+
 onBeforeUnmount(() => {
   // 关弹窗时把还在跑的这一轮停掉:否则服务端会继续生成完再落盘,
   // 用户回来时那条会话已经躺在智能体视图里,而他记得自己明明关掉了。
@@ -131,6 +144,7 @@ onBeforeUnmount(() => {
       :question-submitting="answeringQuestion"
       :question-labels="questionLabels"
       @send="onSend"
+      @select="onSelectPreset"
       @stop="stop"
       @answer="answerQuestion"
     />

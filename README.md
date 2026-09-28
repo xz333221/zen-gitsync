@@ -199,7 +199,7 @@ When the GUI is opened on a directory that is not a Git repository, the right pa
 
 The same list carries a short note underneath the cards — in the **full-screen** directory switcher dialog the path field and the **常用目录** cards take the left side, and that note lives in a right-hand column beside them. With an AI model configured it is an **AI status summary** — one paragraph written by the model from the freshly fetched states, naming the projects that need a pull, have unpushed commits or uncommitted changes, and saying so when everything is in sync. It is generated once per distinct state right after the **刷新全部** pass finishes (never mid-refresh), cached for the page, and there is a regenerate button on the right; the summary is shared between the panel and the dialog, so opening the switcher never triggers a second call. Without a model configured it falls back to a static note explaining what the badges mean.
 
-In the switcher dialog, that right column continues with a **g ai** follow-up box: ask which project to handle first, or how far one of them is behind, and it answers from the very same status the cards show — every turn carries the current directory states (plus the summary text) as request-scoped context, so there is no need to restate the background. It always runs on the built-in **g ai**, and each time the dialog opens it starts a fresh session, so the context is never a stale snapshot.
+In the switcher dialog, that right column continues with a **g ai** follow-up box: ask which project to handle first, or how far one of them is behind, and it answers from the very same status the cards show — every turn carries the current directory states (plus the summary text) as request-scoped context, so there is no need to restate the background. Four one-click question cards sit in the empty state (what to handle first / who is behind / pull everything behind / what is uncommitted) — clicking one sends it straight away, for the same reason the box exists: you should not have to retype the background. It always runs on the built-in **g ai**, and each time the dialog opens it starts a fresh session, so the context is never a stale snapshot.
 
 ---
 
@@ -855,7 +855,7 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 
 这份列表（以及切换目录弹窗里的 **常用目录**）在卡片下方还有一段说明；切换目录弹窗是**全屏**的，左栏放路径输入框与 **常用目录** 卡片，这段说明则落在右侧一列。配置了 AI 模型时，它是模型根据刚刷新的状态写成的 **AI 项目状态解读**：一段话说清哪些项目该 pull、哪些有未推送的提交、哪些只是工作区脏了，全都同步干净时也会明确说明。它在「刷新全部」跑完的那一刻按状态生成一次（刷新途中不会生成），整页缓存复用，右侧带重新生成按钮；面板与弹窗共用同一份解读，打开弹窗不会多问一次模型。没配模型时退回一段静态说明，讲清徽标里的数字各是什么意思。
 
-切换目录弹窗里，这一列的解读底下还接着一个 **g ai** 追问框：可以直接问「先处理哪个」「某个项目落后了多少」，它答的就是卡片上这份状态 —— 每一轮都会把当前的目录状态（连同这段解读原文）作为请求级上下文带给模型，不用重新复述背景。这块固定跑内置 **g ai**，每次打开弹窗都是一次新会话，上下文因此永远是界面上这一刻的状态。
+切换目录弹窗里，这一列的解读底下还接着一个 **g ai** 追问框：可以直接问「先处理哪个」「某个项目落后了多少」，它答的就是卡片上这份状态 —— 每一轮都会把当前的目录状态（连同这段解读原文）作为请求级上下文带给模型，不用重新复述背景。空态下还摆着四张一键问题卡（先处理哪个 / 谁落后 / 落后的都拉一下 / 未提交的改了什么），点一下直接发出去 —— 和这个框存在的理由是同一个：不该让人把背景再敲一遍。这块固定跑内置 **g ai**，每次打开弹窗都是一次新会话，上下文因此永远是界面上这一刻的状态。
 
 ---
 
