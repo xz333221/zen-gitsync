@@ -143,6 +143,8 @@ zen-gitsync/                                    [根: 配置文件 + 顶层脚�
 │       │       │   ├── MarketplacePanel.vue  # Skill / MCP 广场
 │       │       │   ├── ActivityBar.vue / AppErrorBanner.vue / AppVersionBadge.vue
 │       │       │   ├── AttachmentZone.vue / BranchSelector.vue / CanvasModal.vue
+│       │   ├── AgentChatSurface.vue  # 可嵌进窄栏的 g ai 对话面(主 Agent 控制台在用)
+│       │   ├── TaskExecutorPicker.vue / AgentEngineSelector.vue  # 执行器 / 引擎选择(各只有一份实现)
 │       │       │   ├── AiDiffSummary.vue / CommonDialog.vue
 │       │       │   ├── CustomCommandManager.vue / CustomCommandsPanel.vue
 │       │       │   ├── DirectorySelector.vue / ExecutionLogManager.vue
@@ -365,7 +367,7 @@ zen-gitsync/                                    [根: 配置文件 + 顶层脚�
 | `src/ui/server/index.js` | GUI 后端入口,所有路由注册中心 | P0 |
 | `src/ui/client/src/main.ts` + `App.vue` | 前端启动 + 全局 shell | P0 |
 | `src/ui/client/src/views/WorkbenchView.vue` | 工作台任务编辑器(浮层) | P0 |
-| `src/ui/client/src/views/components/WorkbenchBoard.vue` + `WorkbenchKanban.vue` + `OrchestratorConsole.vue` | 多项目编排台 / 看板 / 主 Agent 控制台 | P0 |
+| `src/ui/client/src/views/components/WorkbenchBoard.vue` + `WorkbenchKanban.vue` + `OrchestratorConsole.vue` | 多项目编排台 / 看板 / 主 Agent 控制台(对话·指令双模式) | P0 |
 | `src/ui/server/routes/workbench/dispatchInstruction.js` | **派发的唯一实现**:HTTP 端点与内置智能体的 `dispatch_task` 工具都落到它 | P0 |
 | `src/ui/client/src/components/CommandConsole.vue` | 命令控制台(第二大) | P0 |
 | `src/ui/client/src/views/components/GitStatus.vue` | Git 状态视图 | P0 |
@@ -438,7 +440,7 @@ zen-gitsync/                                    [根: 配置文件 + 顶层脚�
 
 ### 改工作台 (Workbench)
 1. `views/components/WorkbenchBoard.vue` (多项目编排台三栏壳)
-2. `views/components/WorkbenchKanban.vue` (看板 / 表格) + `OrchestratorConsole.vue` (主 Agent 派发)
+2. `views/components/WorkbenchKanban.vue` (看板 / 表格) + `OrchestratorConsole.vue` (主 Agent 派发；对话/指令双模式)
 3. `views/WorkbenchView.vue` (任务编辑器浮层：任务字段 / 附件 / 执行日志 / 续聊)
 4. `views/components/WorkbenchSidebar.vue` / `WorkbenchProjectPanel.vue`
 5. `routes/workbench/index.js` + `taskRunner.js` (后端执行引擎，claude / opencode / codex 三执行器)

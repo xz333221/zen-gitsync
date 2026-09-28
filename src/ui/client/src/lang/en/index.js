@@ -2433,6 +2433,16 @@ export default {
   '@WORKBENCH:执行出错：{name}': 'Failed: {name}',
   '@WORKBENCH:已停止：{name}': 'Stopped: {name}',
   // @WORKBENCH: file end (append: task finished notice)
+  // @WORKBENCH: file path: components/AgentChatSurface.vue, components/TaskExecutorPicker.vue (append: orchestrator console dispatches via g ai)
+  '@WORKBENCH:对话': 'Chat',
+  '@WORKBENCH:指令': 'Command',
+  '@WORKBENCH:切换主 Agent 控制台的工作方式': 'Switch how the orchestrator console works',
+  '@WORKBENCH:g ai 对话': 'g ai chat',
+  '@WORKBENCH:派发执行器': 'Dispatch executor',
+  '@WORKBENCH:它派出去的任务由这个执行器跑（与执行按钮的临时切换共用）': 'Tasks it dispatches run with this executor (shared with the run button toggle)',
+  '@WORKBENCH:当前引擎「{name}」只能对话，不能派发任务 —— 切到内置 g ai 才能派活': 'Engine "{name}" can only chat, not dispatch tasks — switch to the built-in g ai to dispatch',
+  '@WORKBENCH:任务会落到看板，跑完有完成提示': 'Tasks land on the board and notify you when they finish',
+  // @WORKBENCH: file end (append: orchestrator console dispatches via g ai)
 
   // @ACTBAR: file path: components/ActivityBar.vue (append: monitor)
   '@ACTBAR:系统监控': 'System Monitor',

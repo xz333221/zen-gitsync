@@ -29,8 +29,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { $t } from '@/lang/static'
-import { Paperclip, Promotion, Expand, Fold, Setting, ArrowDown, Check } from '@element-plus/icons-vue'
-import TaskExecutorIcon from '@components/TaskExecutorIcon.vue'
+import { Paperclip, Promotion, Expand, Fold, Setting } from '@element-plus/icons-vue'
 import type {
   Attachment,
   OrchestratorActivity,
@@ -39,9 +38,10 @@ import type {
 } from '@/types/workbench'
 import { clockFromIso, relativeTimeFromIso } from '@/utils/relativeTime'
 import AttachmentZone from '@/components/AttachmentZone.vue'
+import AgentChatSurface from '@/components/AgentChatSurface.vue'
+import TaskExecutorPicker from '@/components/TaskExecutorPicker.vue'
 import { useWorkbenchAttachments, type AttachmentTarget } from '@/composables/useWorkbenchAttachments'
-import { TASK_EXECUTOR_OPTIONS, getSelectedTaskExecutor, setSelectedTaskExecutor, taskExecutorName, type TaskExecutorId } from '@/utils/taskExecutor'
-import { useToolsStore } from '@/stores/toolsStore'
+import { getSelectedTaskExecutor, type TaskExecutorId } from '@/utils/taskExecutor'
 
 const props = defineProps<{
   active: boolean
@@ -99,32 +99,28 @@ const autoRun = ref(true)
 const useDefaultPrompt = ref(true)
 
 // ── 执行器（claude | opencode | codex）─────────────────────────────────
-// 与工作台执行按钮共用同一份临时选择（localStorage），两边切了互相跟手；
-// 选中的执行器没装时回落到另一个可用的（与看板卡片「执行」同一套兜底）。
-const toolsStore = useToolsStore()
-const executorAvailability = computed(() => ({
-  claude: toolsStore.claudeAvailable,
-  opencode: toolsStore.opencodeAvailable,
-  codex: toolsStore.codexAvailable,
-}))
+// 选择的 UI（未安装置灰 / 选中打勾 / 值不可用时回落）全部收口在 TaskExecutorPicker ——
+// 它在两处出现：指令模式的派发栏，与对话模式下"g ai 派出去的活由谁跑"。
+// 这里只持"当前值"，派发 / 对话时随 payload 交给服务端。
+// 与工作台执行按钮共用同一份临时选择（localStorage），两边切了互相跟手。
 const selectedExecutor = ref<TaskExecutorId>(getSelectedTaskExecutor())
-function onExecutorChange() {
-  // 原生 select 不会命中 disabled option，但键盘/历史脏值仍可能落进来
-  if (executorAvailability.value[selectedExecutor.value]) {
-    setSelectedTaskExecutor(selectedExecutor.value)
-    return
+
+// ── 工作方式：对话（g ai 派活）/ 指令（人敲一句话派一条）──────────────────
+// 两种方式落到的都是同一条派发链路与同一条指令流水，差别只在"谁决定派什么"：
+// 对话是 g ai 边聊边派（可多轮、可反问），指令是你自己写好一句话。
+// 选择记在 localStorage：控制台是常驻栏，刷新一次就跳回默认值会很烦。
+const MODE_KEY = 'wb.ocMode.v1'
+const mode = ref<'chat' | 'command'>((() => {
+  try {
+    return localStorage.getItem(MODE_KEY) === 'command' ? 'command' : 'chat'
+  } catch {
+    // 隐私模式：不记偏好而已，不影响用
+    return 'chat'
   }
-  const fallback = (Object.keys(executorAvailability.value) as TaskExecutorId[])
-    .find(id => executorAvailability.value[id])
-  if (fallback) selectedExecutor.value = fallback
-}
-function executorName(id: TaskExecutorId): string {
-  return taskExecutorName(id)
-}
-function onExecutorPick(id: TaskExecutorId) {
-  // disabled 项 el-dropdown 根本不会发 command，这里只做兜底
-  selectedExecutor.value = id
-  onExecutorChange()
+})())
+function setMode(next: 'chat' | 'command') {
+  mode.value = next
+  try { localStorage.setItem(MODE_KEY, next) } catch { /* 同上 */ }
 }
 
 // ── 附件 ────────────────────────────────────────────────────────────────
@@ -493,7 +489,43 @@ const gitSummary = computed(() => {
       <span class="oc__state-meta">{{ $t('@WORKBENCH:{n} 个执行中', { n: runningCount }) }}</span>
     </div>
 
-    <div v-show="!collapsed" class="oc__feed">
+    <!-- 工作方式：对话 = g ai 边聊边派（可以多轮、可以反问你）；指令 = 你自己敲一句话派一条。
+         两种方式落到的是**同一条派发链路、同一条指令流水**，变的只是"谁决定派什么"。 -->
+    <div
+      v-show="!collapsed"
+      class="oc__mode"
+      role="tablist"
+      :aria-label="$t('@WORKBENCH:切换主 Agent 控制台的工作方式')"
+    >
+      <button
+        type="button"
+        role="tab"
+        class="oc__mode-btn"
+        :class="{ 'is-active': mode === 'chat' }"
+        :aria-selected="mode === 'chat'"
+        @click="setMode('chat')"
+      >{{ $t('@WORKBENCH:对话') }}</button>
+      <button
+        type="button"
+        role="tab"
+        class="oc__mode-btn"
+        :class="{ 'is-active': mode === 'command' }"
+        :aria-selected="mode === 'command'"
+        @click="setMode('command')"
+      >{{ $t('@WORKBENCH:指令') }}</button>
+    </div>
+
+    <AgentChatSurface
+      v-show="!collapsed && mode === 'chat'"
+      v-model:dispatch-executor="selectedExecutor"
+      class="oc__chat"
+      :active="!collapsed && mode === 'chat'"
+      allow-dispatch
+      :dispatch-use-default-prompt="useDefaultPrompt"
+      :title="$t('@WORKBENCH:g ai 对话')"
+    />
+
+    <div v-show="!collapsed && mode === 'command'" class="oc__feed">
       <p class="oc__feed-title">{{ $t('@WORKBENCH:活动日志') }}</p>
       <ul class="oc__feed-list">
         <li v-for="r in activity" :key="r.id" class="oc-row" :class="'oc-row--' + r.kind">
@@ -520,7 +552,7 @@ const gitSummary = computed(() => {
       </ul>
     </div>
 
-    <div v-show="!collapsed" class="oc__git">
+    <div v-show="!collapsed && mode === 'command'" class="oc__git">
       <p class="oc__feed-title">
         {{ $t('@WORKBENCH:项目概览') }}
         <!-- 无选中项目即「全部项目」：显式标出来，否则底下只剩「今日完成」一行，看着像数据没加载出来 -->
@@ -543,7 +575,7 @@ const gitSummary = computed(() => {
     </div>
 
     <div
-      v-show="!collapsed"
+      v-show="!collapsed && mode === 'command'"
       class="oc__compose"
       @paste="onPaste"
       @drop.prevent="onDrop"
@@ -617,36 +649,11 @@ const gitSummary = computed(() => {
           <span>{{ $t('@WORKBENCH:默认提示词（{state}）', { state: promptStateLabel }) }}</span>
         </label>
         <!-- 执行器：与执行按钮共用同一份临时选择，派发时覆盖设置里的默认值。
-             不用原生 select —— option 里塞不了品牌图标，el-dropdown 才有精致度 -->
-        <el-dropdown trigger="click" class="oc__executor" @command="onExecutorPick">
-          <button
-            type="button"
-            class="oc__executor-btn"
-            :title="$t('@WORKBENCH:本次派发使用的执行器（与执行按钮的临时切换共用）')"
-            :aria-label="$t('@WORKBENCH:任务执行器')"
-          >
-            <TaskExecutorIcon :executor="selectedExecutor" class="oc__executor-btn__icon" />
-            <span>{{ executorName(selectedExecutor) }}</span>
-            <el-icon class="oc__executor-btn__caret"><ArrowDown /></el-icon>
-          </button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item
-                v-for="opt in TASK_EXECUTOR_OPTIONS"
-                :key="opt.id"
-                :command="opt.id"
-                :disabled="!executorAvailability[opt.id]"
-              >
-                <span class="oc__executor-item">
-                  <TaskExecutorIcon :executor="opt.id" class="oc__executor-item__icon" />
-                  <span class="oc__executor-item__name">{{ opt.name }}</span>
-                  <el-icon v-if="selectedExecutor === opt.id" class="oc__executor-item__check"><Check /></el-icon>
-                  <span v-else-if="!executorAvailability[opt.id]" class="oc__executor-item__missing">{{ $t('@42BB9:未安装') }}</span>
-                </span>
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+             下拉本体收口在 TaskExecutorPicker（对话模式底下那个也是它） -->
+        <TaskExecutorPicker
+          v-model="selectedExecutor"
+          :title="$t('@WORKBENCH:本次派发使用的执行器（与执行按钮的临时切换共用）')"
+        />
         <button type="button" class="oc__send" :disabled="!canSend" @click="send">
           <el-icon class="oc__send-icon"><Promotion /></el-icon>
           <span>{{ dispatching ? $t('@WORKBENCH:派发中…') : $t('@WORKBENCH:派发') }}</span>
@@ -807,6 +814,42 @@ const gitSummary = computed(() => {
 .oc__state-label { color: var(--text-tertiary); }
 .oc__state-value { font-weight: 500; }
 .oc__state-meta { margin-left: auto; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+
+/* 工作方式切换：一个两段式拨片。
+   为什么不做成两个独立按钮：它们互斥且只有两档，拨片能一眼看出"现在是哪一档"，
+   而两个按钮在窄栏里看起来像"两个动作"（尤其旁边就有一个真的动作按钮「暂停调度」）。 */
+.oc__mode {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  margin: 8px 12px 0;
+  padding: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color-light);
+}
+.oc__mode-btn {
+  flex: 1;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: var(--transition-ui-fast);
+}
+.oc__mode-btn:hover { color: var(--text-secondary); }
+.oc__mode-btn.is-active {
+  background: var(--bg-panel);
+  color: var(--color-primary);
+  font-weight: 500;
+  box-shadow: var(--shadow-xs, 0 1px 2px rgba(0, 0, 0, 0.06));
+}
+.oc__mode-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
+
+/* 对话模式：整块对话面吃满"活动流 + 项目概览 + 派发栏"让出来的那块高度 */
+.oc__chat { min-height: 0; }
 
 .oc__feed {
   display: flex;
@@ -986,42 +1029,8 @@ const gitSummary = computed(() => {
   user-select: none;
 }
 .oc__autorn input { cursor: pointer; }
-/* 执行器下拉：与旁边 11px 勾选项同体量，品牌图标点亮但不抢「派发」按钮的视觉重心 */
-.oc__executor { vertical-align: middle; }
-.oc__executor-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 22px;
-  padding: 0 8px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-pill);
-  background: var(--bg-panel);
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-  transition:
-    color var(--transition-fast) var(--ease-custom),
-    border-color var(--transition-fast) var(--ease-custom);
-}
-.oc__executor-btn:hover,
-.oc__executor-btn:focus-visible {
-  color: var(--color-primary);
-  border-color: var(--color-primary);
-}
-.oc__executor-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
-.oc__executor-btn__icon { font-size: var(--font-size-mid); }
-.oc__executor-btn__caret { font-size: var(--font-size-xs); opacity: 0.7; }
-.oc__executor-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 132px;
-}
-.oc__executor-item__icon { font-size: var(--font-size-base); flex: none; }
-.oc__executor-item__name { flex: 1; }
-.oc__executor-item__check { color: var(--color-primary); font-size: var(--font-size-sm); }
-.oc__executor-item__missing { font-size: var(--font-size-xs); color: var(--text-tertiary, var(--text-secondary)); }
+/* 执行器下拉的样式随组件走（TaskExecutorPicker 自带），这里不再留一份 —— 
+   同一个下拉在对话模式底下还有一个，样式留在这儿对它无效，只会变成"改了没反应"的死规则 */
 .oc__send {
   margin-left: auto;
   display: inline-flex;
