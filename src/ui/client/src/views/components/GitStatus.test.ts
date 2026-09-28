@@ -19,9 +19,13 @@ vi.mock('@/composables/useSuccessModal', () => ({
   useSuccessModal: () => ({ show: vi.fn() }),
 }))
 vi.mock('@/utils/fileLock', () => ({ isFilePathLocked: vi.fn().mockReturnValue(false) }))
+// 注意：beforeEach 里的 vi.restoreAllMocks() 会把 mockReturnValue 抹掉，
+// 必须把默认实现写在 vi.fn(impl) 里（该实现会被 mockRestore 复原），
+// 否则 buildFileTree 返回 undefined → 树状视图拿到 undefined 的 tree。
 vi.mock('@/utils/fileTree', () => ({
-  buildFileTree: vi.fn().mockReturnValue([]),
-  mergeTreeExpandState: vi.fn().mockReturnValue([]),
+  buildFileTree: vi.fn(() => []),
+  mergeTreeExpandState: vi.fn(),
+  toggleNodeExpanded: vi.fn(),
 }))
 vi.mock('@/utils/fileKind', () => ({ isImageFile: vi.fn().mockReturnValue(false) }))
 
@@ -35,7 +39,7 @@ import { isFilePathLocked } from '@/utils/fileLock'
 function mountGitStatus(props = {}) {
   return mountWithSetup(GitStatus, {
     props: { initialDirectory: '', ...props },
-    global: { stubs: { FileDiffViewer: true, CommonDialog: true, VirtualFileList: true, FileTreeView: true, NpmScriptsPanel: true, StashChangesButton: true, StashListButton: true, StashSelectedFilesButton: true, MergeBranchButton: true, UnstageAllButton: true, ResetToRemoteButton: true, DiscardAllChangesButton: true } },
+    global: { stubs: { FileDiffViewer: true, CommonDialog: true, VirtualFileList: true, VirtualFileTree: true, NpmScriptsPanel: true, StashChangesButton: true, StashListButton: true, StashSelectedFilesButton: true, MergeBranchButton: true, UnstageAllButton: true, ResetToRemoteButton: true, DiscardAllChangesButton: true } },
   })
 }
 

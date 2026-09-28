@@ -18,13 +18,15 @@
 import { describe, test, expect } from 'vitest'
 import {
   buildListRows,
-  buildRowOffsets,
-  findRowAtOffset,
   FILE_ROW_H,
   HEADER_ROW_H,
+  rowHeight,
   type FileGroupKey,
   type ListFileItem,
 } from './fileListRows'
+import { buildOffsets, findRowAtOffset } from './virtualRows'
+
+const buildRowOffsets = (rows: ReturnType<typeof buildListRows>) => buildOffsets(rows, rowHeight)
 
 const NO_COLLAPSE: Record<FileGroupKey, boolean> = {
   conflicted: false,

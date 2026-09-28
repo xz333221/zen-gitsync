@@ -17,11 +17,15 @@
  *
  * 需要前端 dev server 已在跑（默认 127.0.0.1:5544，即 npm run dev:vue）。
  * 探针页面 /verify/file-list-perf.html 是 dev-only（vite build 只吃 index.html，
- * 不会进产物），改完文件列表组件后跑一次即可拿到「挂载 / 首帧 / 刷新重渲染 / DOM 节点数」。
+ * 不会进产物）。改完文件列表 / 文件树组件后跑一次，即可拿到
+ * 「挂载 / 首帧 / 刷新重渲染 / DOM 节点数 / 滚到底滚到中间 / 交互」两组数字。
  *
  *   node verify/file-list-perf.mjs
  *   VITE_PORT=5544 N=8000 node verify/file-list-perf.mjs
  *   node verify/file-list-perf.mjs --json      # 只输出 JSON，便于脚本比对
+ *
+ * 退出码：功能断言（滚到底 / 滚到中间 / 点文件 / 折叠分组 / 目录展开折叠）不过 → 1；
+ * 性能数字不设阈值（交人工比对），只打印。
  */
 import { chromium } from '@playwright/test'
 import path from 'path'
@@ -41,7 +45,7 @@ function log(...a) {
 }
 
 async function runScenario(browser, mode) {
-  // 每个场景用独立 page/tab：上一场景残留的 5000+ DOM 节点会拖慢下一次导航
+  // 每个场景用独立 page/tab：上一场景残留的几千 DOM 节点会拖慢下一次导航
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 })
   const page = await ctx.newPage()
   const errors = []
@@ -61,58 +65,75 @@ async function runScenario(browser, mode) {
   fs.mkdirSync(SHOT_DIR, { recursive: true })
   const shot = path.join(SHOT_DIR, `${mode}-${N}.png`)
   await page.screenshot({ path: shot })
-  const visibleRows = await page.evaluate(
-    () => document.querySelectorAll('.file-list-container .file-item, .file-list-container .tree-node').length,
-  )
   await ctx.close()
-  return { ...perf, visibleRows, screenshot: shot, errors }
+  return { ...perf, screenshot: shot, errors }
 }
 
+const COLUMNS = [
+  'mode', 'n', 'buildTreeMs', 'mountMs', 'firstPaintMs', 'patchMs', 'domNodes',
+  'renderedItems', 'totalRows', 'domNodesAfterScroll',
+  'scrolledToBottom', 'midRowOk', 'fileClickOk', 'collapseOk', 'nodeToggleOk',
+]
+
 function printTable(rows) {
-  const cols = [
-    'mode', 'n', 'buildTreeMs', 'mountMs', 'firstPaintMs', 'patchMs', 'domNodes',
-    'renderedItems', 'domNodesAfterScroll',
-    'scrolledToBottom', 'midRowOk', 'fileClickOk', 'collapseOk',
-  ]
-  const head = cols.map((c) => c.padEnd(20)).join('')
+  const width = 20
+  const head = COLUMNS.map((c) => c.padEnd(width)).join('')
   log('\n' + head)
   log('-'.repeat(head.length))
-  for (const r of rows) {
-    log(cols.map((c) => String(r[c] ?? '-').padEnd(20)).join(''))
-  }
+  for (const r of rows) log(COLUMNS.map((c) => String(r[c] ?? '-').padEnd(width)).join(''))
+}
+
+/** 功能断言：两个视图都必须成立（性能数字不判） */
+function functionalFailures(r) {
+  const bad = []
+  if (!r.renderedItems || r.firstPaintMs == null) bad.push('未渲染出行')
+  if (!r.scrolledToBottom) bad.push(`滚到底没渲染出 ${r.lastRowProbe}`)
+  if (!r.midRowOk) bad.push(`滚到中间没渲染出 ${r.midRowProbe}`)
+  if (!r.fileClickOk) bad.push('点文件行没有回调')
+  if (!r.collapseOk) bad.push(`点标题行折叠失败（spacer=${r.collapsedSpacerHeight}）`)
+  if (r.mode === 'tree' && !r.nodeToggleOk) bad.push(`点目录展开/折叠失败（${r.nodeToggleDetail}）`)
+  return bad
 }
 
 ;(async () => {
   const browser = await chromium.launch()
   const errors = []
-
   const results = []
+  const failures = []
+
   try {
     for (const mode of ['list', 'tree']) {
       const r = await runScenario(browser, mode)
       errors.push(...r.errors)
       results.push(r)
+      const bad = functionalFailures(r)
+      if (bad.length) failures.push(`${mode}: ${bad.join('；')}`)
+
       // 每个场景跑完就报一次，避免后面的场景挂了前面的数字拿不到
-      log(`   mount=${r.mountMs}ms  firstPaint=${r.firstPaintMs}ms  patch=${r.patchMs ?? '-'}ms  dom=${r.domNodes}  items=${r.renderedItems}` +
-        (r.mode === 'list'
-          ? `  滚到底=${r.scrolledToBottom}  中间行=${r.midRowOk}  点击=${r.fileClickOk}  折叠=${r.collapseOk}  滚动后DOM=${r.domNodesAfterScroll}`
-          : '  （树状视图未走虚拟滚动，仅作对照）'))
+      log(
+        `   mount=${r.mountMs}ms  firstPaint=${r.firstPaintMs}ms  patch=${r.patchMs}ms  ` +
+          `dom=${r.domNodes}  渲染行=${r.renderedItems}/${r.totalRows}  ` +
+          `滚到底=${r.scrolledToBottom}  中间行=${r.midRowOk}  点文件=${r.fileClickOk}  ` +
+          `折叠分组=${r.collapseOk}` +
+          (r.mode === 'tree' ? `  目录展开折叠=${r.nodeToggleOk}（${r.nodeToggleDetail}）` : ''),
+      )
     }
   } finally {
     await browser.close()
   }
 
   if (JSON_ONLY) {
-    console.log(JSON.stringify({ results, errors }, null, 2))
+    console.log(JSON.stringify({ results, errors, failures }, null, 2))
   } else {
     printTable(results)
     log(`\n截图: ${results.map((r) => r.screenshot).join('  ')}`)
     if (errors.length) log(`\n页面错误 (${errors.length}):\n` + errors.slice(0, 10).join('\n'))
     else log('\n无页面错误')
   }
-  // 断言：探针自身跑通 + 列表视图的虚拟滚动功能必须成立
-  // （性能数字不设阈值，交人工比对；功能断言失败则 exit 1）
-  const list = results.find((r) => r.mode === 'list')
-  const bad = results.filter((r) => !r.renderedItems || r.firstPaintMs == null)
-  if (bad.length || (list && (!list.scrolledToBottom || !list.midRowOk || !list.fileClickOk || !list.collapseOk))) process.exit(1)
+
+  if (failures.length) {
+    log('\n功能断言失败:')
+    for (const f of failures) log(' - ' + f)
+    process.exit(1)
+  }
 })()

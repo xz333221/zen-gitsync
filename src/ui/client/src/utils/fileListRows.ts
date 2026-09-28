@@ -103,36 +103,4 @@ export function buildListRows(
   return rows
 }
 
-/** 前缀和偏移表（offsets[i] = 第 i 行的 top，offsets[n] = 总高），二分查找用 */
-export function buildRowOffsets(rows: readonly ListRow[]): Float64Array {
-  const offsets = new Float64Array(rows.length + 1)
-  let acc = 0
-  for (let i = 0; i < rows.length; i++) {
-    offsets[i] = acc
-    acc += rowHeight(rows[i])
-  }
-  offsets[rows.length] = acc
-  return offsets
-}
-
-/** 找到最大的 i 使 offsets[i] <= y（y 落在第 i 行内）；越界时收敛到首/末行 */
-export function findRowAtOffset(offsets: Float64Array, y: number): number {
-  const last = offsets.length - 2 // 最后一行下标
-  if (last < 0) return 0
-  if (y <= 0) return 0
-  if (y >= offsets[last]) return last
-
-  let lo = 0
-  let hi = last
-  let ans = 0
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1
-    if (offsets[mid] <= y) {
-      ans = mid
-      lo = mid + 1
-    } else {
-      hi = mid - 1
-    }
-  }
-  return ans
-}
+/** 偏移表 / 二分定位是通用逻辑，见 utils/virtualRows.ts（列表与树状视图共用） */

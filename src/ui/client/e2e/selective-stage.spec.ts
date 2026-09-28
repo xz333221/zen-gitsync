@@ -53,10 +53,16 @@ test.describe('StageButton 选择模式 - 只暂存勾选项', () => {
     await page.goto('/')
     await page.waitForTimeout(800)
 
-    // 通过 SVG use 的 xlink:href 定位"进入选择模式"按钮
+    // 前置:工作区必须有未处理文件,「选择模式」按钮才会渲染(v-if="fileList.length > 0")。
+    // 判据走 API 而不是 locator.count() —— count() 不自动等待,dev 下 GitStatus 首屏
+    // 要几秒(依赖图深、无预热),固定 800ms 后取数必然是 0,这条用例会永久静默跳过。
+    const status = await (await api.get('/api/status_porcelain')).json()
+    const changed = String(status.status || '').split('\n').filter(l => l.trim().length > 0)
+    test.skip(changed.length === 0, '工作区无文件,跳过此测试')
+
+    // 通过 SVG use 的 xlink:href 定位"进入选择模式"按钮(click/expect 都会自动等待)
     const selectModeBtn = page.locator('use[*|href="#icon-muti-choose"]').first()
-    const exists = (await selectModeBtn.count()) > 0
-    test.skip(!exists, '工作区无文件,跳过此测试')
+    await expect(selectModeBtn).toBeAttached({ timeout: 30_000 })
 
     await selectModeBtn.click()
     await page.waitForTimeout(300)

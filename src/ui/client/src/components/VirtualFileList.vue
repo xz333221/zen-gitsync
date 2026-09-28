@@ -15,23 +15,14 @@
   -->
 <!--
   列表视图的虚拟滚动（替代原来的 5 个 FileGroup 全量 v-for）。
-  只渲染视口 ± overscan 内的行；行高固定（见 utils/fileListRows.ts），
-  用"绝对定位 + 前缀和偏移表"算位置，所以 5000 行与 50 行的渲染量一样。
-
-  滚动容器是**外层**（GitStatus 的 .file-list-container，overflow-y:auto）——
-  与改造前保持一致，本组件只负责撑出总高度并渲染窗口内的行。
+  行数组由 utils/fileListRows.ts 摊平，窗口计算在 composables/useVirtualWindow.ts，
+  这里只负责渲染"分组标题行 + FileRow"。滚动容器是外层 .file-list-container（本组件不滚）。
 -->
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ArrowDown } from '@element-plus/icons-vue'
 import FileRow from './FileRow.vue'
-import {
-  buildRowOffsets,
-  findRowAtOffset,
-  type FileGroupKey,
-  type ListFileItem,
-  type ListRow,
-} from '@/utils/fileListRows'
+import { useVirtualWindow } from '@/composables/useVirtualWindow'
+import { rowHeight, type FileGroupKey, type ListFileItem, type ListRow } from '@/utils/fileListRows'
 
 interface Props {
   rows: ListRow[]
@@ -61,93 +52,10 @@ const emit = defineEmits<{
   toggleFileSelection: [filePath: string]
 }>()
 
-const root = ref<HTMLElement | null>(null)
-const scroller = ref<HTMLElement | null>(null)
-const scrollTop = ref(0)
-const viewportHeight = ref(0)
-
-// 前缀和：offsets[i] = 第 i 行的 top，offsets[rows.length] = 总高
-const offsets = computed(() => buildRowOffsets(props.rows))
-const totalHeight = computed(() => offsets.value[offsets.value.length - 1] || 0)
-
-// 只算视口内的行：5000 行通常命中 30~50 行
-const visibleRows = computed(() => {
-  const list = props.rows
-  if (!list.length) return [] as { row: ListRow; index: number; top: number }[]
-
-  const offs = offsets.value
-  const start = findRowAtOffset(offs, Math.max(0, scrollTop.value - props.overscan))
-  const end = Math.min(list.length - 1, findRowAtOffset(offs, scrollTop.value + viewportHeight.value + props.overscan))
-
-  const out: { row: ListRow; index: number; top: number }[] = []
-  for (let i = start; i <= end; i++) out.push({ row: list[i], index: i, top: offs[i] })
-  return out
-})
-
-/** 往上找最近的滚动祖先（GitStatus 里就是 .file-list-container） */
-function resolveScrollParent(el: HTMLElement | null): HTMLElement | null {
-  let node = el?.parentElement ?? null
-  while (node) {
-    const overflowY = getComputedStyle(node).overflowY
-    if ((overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') && node.scrollHeight > node.clientHeight) {
-      return node
-    }
-    node = node.parentElement
-  }
-  return (document.scrollingElement as HTMLElement | null) ?? null
-}
-
-function syncMetrics() {
-  const el = scroller.value
-  if (!el) return
-  viewportHeight.value = el.clientHeight
-  scrollTop.value = el.scrollTop
-}
-
-function handleScroll() {
-  const el = scroller.value
-  if (el) scrollTop.value = el.scrollTop
-}
-
-let ro: ResizeObserver | null = null
-let rafId = 0
-
-function scheduleSync() {
-  if (rafId) return
-  rafId = requestAnimationFrame(() => {
-    rafId = 0
-    syncMetrics()
-  })
-}
-
-onMounted(() => {
-  // 滚动事件挂在外层滚动容器上（本组件自身不滚动）
-  scroller.value = resolveScrollParent(root.value)
-  scroller.value?.addEventListener('scroll', handleScroll, { passive: true })
-  // 同步量一次视口高度：此刻还没绘制，能把首帧就填满视口的行渲染出来，
-  // 否则要等下一帧才补齐（首帧只渲染 overscan 那几行，下方会闪一下空白）。
-  syncMetrics()
-  // 滚动祖先高度变化（窗口缩放/面板拖宽）后需要重算视口高度
-  if (typeof ResizeObserver !== 'undefined' && scroller.value) {
-    ro = new ResizeObserver(scheduleSync)
-    ro.observe(scroller.value)
-  }
-})
-
-onBeforeUnmount(() => {
-  scroller.value?.removeEventListener('scroll', handleScroll)
-  ro?.disconnect()
-  ro = null
-  if (rafId) cancelAnimationFrame(rafId)
-})
-
-// 行集合变化（状态刷新 / 折叠切换）后总高会变，浏览器把 scrollTop 夹回有效范围时
-// 不一定触发 scroll 事件，这里主动同步一次，避免窗口停在旧位置。
-watch(
+const { root, visibleRows, totalHeight } = useVirtualWindow<ListRow>(
   () => props.rows,
-  () => {
-    nextTick(syncMetrics)
-  },
+  rowHeight,
+  props.overscan,
 )
 </script>
 
