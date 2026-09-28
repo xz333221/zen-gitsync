@@ -109,7 +109,8 @@ const selectedExecutor = ref<TaskExecutorId>(getSelectedTaskExecutor())
 // 两种方式落到的都是同一条派发链路与同一条指令流水，差别只在"谁决定派什么"：
 // 对话是 g ai 边聊边派（可多轮、可反问），指令是你自己写好一句话。
 // 选择记在 localStorage：控制台是常驻栏，刷新一次就跳回默认值会很烦。
-const MODE_KEY = 'wb.ocMode.v1'
+// key 升到 v2：默认方式改成「指令」后，旧的 v1 存着 'chat' 会让新默认不生效。
+const MODE_KEY = 'wb.ocMode.v2'
 const mode = ref<'chat' | 'command'>((() => {
   try {
     return localStorage.getItem(MODE_KEY) === 'chat' ? 'chat' : 'command'
