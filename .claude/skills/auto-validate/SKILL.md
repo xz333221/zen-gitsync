@@ -33,7 +33,8 @@ get_errors([
 若本次修改涉及前端 TypeScript / Vue 文件，执行：
 
 ```bash
-cd e:\workspace\xz333221_space\zen-gitsync\src\ui\client
+# 前端目录。**不要写死盘符**：工作区在不同电脑上不一样。
+cd "$(git rev-parse --show-toplevel)/src/ui/client"
 npx tsc --noEmit
 ```
 

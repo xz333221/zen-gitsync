@@ -19,7 +19,7 @@ description: zen-gitsync 专属 README 自动维护 skill。每次新增功能�
 ## 步骤 1 — 读取并理解当前 README
 
 ```
-read_file("e:\workspace\xz333221_space\zen-gitsync\README.md", startLine: 1, endLine: 100)
+read_file("README.md", startLine: 1, endLine: 100)   // 相对仓库根，别写死盘符
 ```
 
 重点识别：

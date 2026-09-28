@@ -22,7 +22,9 @@ description: zen-gitsync 专属 Git 自动提交 skill。大模型完成一轮�
 运行以下命令，获取本次会话相关的修改/新增文件：
 
 ```bash
-cd e:\workspace\xz333221_space\zen-gitsync
+# 仓库根。**不要写死盘符**：工作区在不同电脑上不一样（本仓库曾先后在
+# E:\workspace\... 与 D:\workspace\... 下），写死的路径会让这段命令直接跑不起来。
+cd "$(git rev-parse --show-toplevel)"
 git status --short
 ```
 
@@ -52,7 +54,7 @@ git add <file1> <file2> ...
 # 1) 生成只含本轮 hunk 的补丁（挑"新增行里含本轮特征串"的 hunk，保持 @@ 头原样即可，
 #    其余 hunk 整块丢弃后各 hunk 的行号依然对得上）
 # 2) 直接落进暂存区，工作区文件不动
-git apply --cached /tmp/only-mine.patch
+git apply --cached "$LOCALAPPDATA/Temp/only-mine.patch"
 git diff --cached <file>   # 复查：暂存区里就该只有本轮那几行
 ```
 
@@ -107,7 +109,9 @@ style(source-map): 文件树样式与 EditorView 保持一致
 ## 步骤 4 — 执行提交
 
 ```bash
-cd e:\workspace\xz333221_space\zen-gitsync
+# 仓库根。**不要写死盘符**：工作区在不同电脑上不一样（本仓库曾先后在
+# E:\workspace\... 与 D:\workspace\... 下），写死的路径会让这段命令直接跑不起来。
+cd "$(git rev-parse --show-toplevel)"
 git commit -m "<生成的提交信息>"
 ```
 

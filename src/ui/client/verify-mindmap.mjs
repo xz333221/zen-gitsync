@@ -11,13 +11,17 @@
 import { chromium } from '@playwright/test'
 import path from 'path'
 import fs from 'fs'
+import { fileURLToPath } from 'url'
 
 // Vite port.  Pass VITE_PORT env if it auto-incremented from the
 // default 5544 (which happens when a previous instance is still
 // running).
 const VITE_PORT = process.env.VITE_PORT || '5544'
 const BACKEND_PORT = process.env.BACKEND_PORT || '4445'
-const ROOT = 'E:/workspace/github_workspace/zen-git'
+// 仓库根用脚本自身位置推导（src/ui/client/ → 上溯三级），**不要写死盘符**：
+// 这个脚本原先钉死在 E:/workspace/github_workspace/zen-git，换台电脑/换个工作区
+// 就直接 No such file or directory。同 scripts/verify-config-split.mjs 的做法。
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
 const SCREENSHOT_PATH = path.join(ROOT, 'test-mindmap-preview.png')
 
 ;(async () => {
