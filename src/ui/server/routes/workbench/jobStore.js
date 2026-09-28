@@ -16,7 +16,8 @@
 // 拆分自原 routes/workbench.js 814-955 行。
 //
 // 设计要点：
-//   - 写盘在流式 chunk 阶段走 1.5s debounce；终态时（finally / cancel）强制 flush
+//   - 两条落盘路径：**jobs.json 只在终态写**；**运行中只写 live-jobs/<pid>.json**
+//     （1.5s 防抖）。后者是「别的 g ui 实例也能看到进行中」的依据，见 liveJobs.js
 //   - 永不持久化 child 引用（参考 cancel 路由的浅拷贝模式）
 //   - hydrate 时把 running/pending 降级为 error：原 child 进程已不存在
 //   - enforceRetention 在每次落盘后跑，按 endedAt desc FIFO 裁剪
@@ -38,6 +39,13 @@ import {
   writeJson,
   nowIso,
 } from './shared.js';
+import {
+  projectJob,
+  toLiveRecord,
+  writeLiveJobsFile,
+  removeLiveJobsFile,
+  scanLiveJobsDir,
+} from './liveJobs.js';
 
 // 进程表：记录每个子任务的运行状态
 // jobId -> { id, taskId, subId, status, pid, startedAt, endedAt, exitCode, error, prompt, child, output, thinking, claudeSessionId, toolCalls }
@@ -59,18 +67,23 @@ export const cancelledJobs = new Set();
 // 的 deriveTaskColumn),而数据其实一直在 jobs.json 里,只是没第二个进程去读它。
 //
 // 现在:凡是需要"反映别的 g ui 进程"的读取路径,先 await refreshJobsFromDisk(),
-// 再用 mergedJobs() 拿「磁盘 ∪ 内存」。**内存优先** —— 本进程跑的 job 带着最新的
-// 流式输出和终态,磁盘上的那一份还可能停在 1.5s debounce 之前的旧状态。
+// 再用 mergedJobs() 拿「内存 ∪ 运行中 ∪ 磁盘」。**内存优先** —— 本进程跑的 job 带着
+// 最新的流式输出和终态,磁盘上的那一份还可能停在 1.5s debounce 之前的旧状态。
 //
 // 同步 vs 异步:refreshJobsFromDisk() 是异步的(要 stat + 读文件),mergedJobs() /
-// snapshotJobs() 保持同步纯函数,读缓存的磁盘那一半 —— 调用点"先 await 刷新、
-// 再同步取快照"这个顺序别颠倒,否则拿到的是上一次的磁盘内容。
+// snapshotJobs() 保持同步纯函数,读缓存的两半 —— 调用点"先 await 刷新、再同步取快照"
+// 这个顺序别颠倒,否则拿到的是上一次的磁盘内容。
 //
 // 用户明确接受秒级延迟:看板本身 5s 轮询,不需要为跨实例推送再造一套 IPC/SSE。
 //
 // mtime + size 短路:jobs.json 涨到几百 KB 后,每 5s 一次的轮询不该真去 parse 它,
 // 没变就是一个 stat。
 let diskCache = { mtimeMs: -1, size: -1, jobs: [] };
+
+// 「运行中」那一半:别的 g ui 进程写的 live-jobs/<pid>.json(见 liveJobs.js)。
+// 这一半**只有 running/pending 的记录** —— 终态仍然只走 jobs.json,不存在两份口径。
+// 同样用 signature(mtime+size 拼串)做短路。
+let liveCache = { signature: null, jobs: [] };
 
 /** 磁盘记录自称 running/pending,但进程已消失、文件也已 N 秒没被写过 → 判为孤儿 */
 // 宽限期要大于 jobs 落盘的 1.5s debounce:job 刚结束时 child 已退出、终态还没 flush,
@@ -105,10 +118,24 @@ function reclaimOrphan(j, fileMtimeMs) {
 }
 
 /**
+ * 把 live-jobs/ 目录当前内容读进缓存（别的 g ui 进程正在跑的 job）。
+ * 目录整体没变（signature 一样）就直接返回 —— 与 jobs.json 的 mtime+size 短路同理。
+ */
+export async function refreshLiveJobs({ force = false } = {}) {
+  try {
+    const { signature, jobs: live } = await scanLiveJobsDir();
+    if (!force && signature === liveCache.signature) return;
+    liveCache = { signature, jobs: live };
+  } catch (err) {
+    logger.warn('[workbench] live-jobs 目录扫描失败，沿用上次缓存:', err?.message || err);
+  }
+}
+
+/**
  * 把 jobs.json 当前内容读进缓存。没变( mtime + size 都没动)就直接返回。
  * 读失败一律降级成"沿用上次缓存":看板请求不该因为一个坏文件而 500。
  */
-export async function refreshJobsFromDisk({ force = false } = {}) {
+async function refreshJobsFile({ force = false } = {}) {
   let st;
   try {
     st = await fsp.stat(JOBS_FILE);
@@ -134,29 +161,108 @@ export async function refreshJobsFromDisk({ force = false } = {}) {
   }
 }
 
+/**
+ * 刷新两半缓存：history(jobs.json) + live(live-jobs/)。
+ *
+ * **所有"要反映别的实例"的读取路径都走这里**，所以 live 的刷新被折进来而不是
+ * 另开一个函数让调用点各自记得调 —— 忘了调不会报错，只会让「进行中」又不同步，
+ * 那正是这个 bug 的形态。jobs.json 那边的 mtime 短路不影响这里：函数入口先把
+ * 两半都刷一遍，各自内部再短路。
+ */
+export async function refreshJobsFromDisk({ force = false } = {}) {
+  await refreshLiveJobs({ force });
+  await refreshJobsFile({ force });
+}
+
 /** 本进程自己写完盘后把缓存作废,免得下一次 refresh 被 mtime 短路在旧内容上 */
 function invalidateDiskCache() {
   diskCache = { mtimeMs: -1, size: -1, jobs: [] };
+  liveCache = { signature: null, jobs: [] };
 }
 
 /**
- * 磁盘 ∪ 内存的 job 表(id -> 记录)。内存优先。
- * 同步、无 IO —— 磁盘那一半由 refreshJobsFromDisk() 预先填好。
+ * 「内存 ∪ 运行中(别的实例) ∪ 磁盘」的 job 表(id -> 记录)。
+ * 优先级:内存 > live > 磁盘 —— 内存是本进程跑的(最新),live 是别人的**在跑**记录
+ * (可能比它自己 jobs.json 里的旧终态新),磁盘是历史档案。
+ * 同步、无 IO —— 两半缓存由 refreshJobsFromDisk() 预先填好。
+ *
+ * includeLive=false 的用途:**写 jobs.json 时不要把别人的 live 记录写进去**。
+ * 那份是历史档案,而 live 记录的 output/thinking/toolCalls 是截尾的 —— 写进去等于
+ * 把一份残缺的日志永久归档,还会参与 size 计价的保留策略。别人的 job 由他自己落盘。
  */
-export function mergedJobs() {
+export function mergedJobs({ includeLive = true } = {}) {
   const map = new Map();
   for (const j of diskCache.jobs) {
     if (!j || !j.id) continue;
     if (jobs.has(j.id)) continue;                        // 本进程跑的,下面用内存里的覆盖
     map.set(j.id, reclaimOrphan(j, diskCache.mtimeMs));
   }
+  // 别的实例正在跑的:覆盖同 id 的历史记录(那条历史多半是上一次跑的终态)
+  if (includeLive) {
+    for (const j of liveCache.jobs) {
+      if (!j || !j.id) continue;
+      if (jobs.has(j.id)) continue;
+      map.set(j.id, j);
+    }
+  }
   for (const [id, j] of jobs) map.set(id, j);
   return map;
 }
 
 // ── 持久化层 ─────────────────────────────────────────────────
-// jobs.json 是历史档案；jobs Map 只承载当前进程产出的活跃 job
-let jobsSaveTimer = null;
+// 两条落盘路径，分工明确：
+//   · jobs.json（历史档案）—— **只在终态写**：一整份 7.5MB 的东西不该为了同步
+//     "还在跑"这件事被反复重写
+//   · live-jobs/<pid>.json（运行中）—— 1.5s 防抖写，几十 KB 封顶
+// jobs Map 承载当前进程产出的活跃 job（也可能是刚结束、等终态 flush 的）。
+//
+// 历史档案没有防抖定时器了：它只在终态写（以前那个 `jobsSaveTimer`/`scheduleJobsSave`
+// 是给"流式阶段也写 jobs.json"准备的，但从来没有任何调用点，2026-09-28 被 live-jobs 取代）。
+
+// 运行中那一份的防抖写。由 taskRunner 在 job 转 running/pending 与流式 chunk 时调用。
+let activeSaveTimer = null;
+// 进程内写串行化：防抖回调与终态 flush 可能挨在一起，别让两次写交错
+let activeWriteChain = Promise.resolve();
+
+/** 本进程当前**活跃**的 job（running/pending），投影 + 瘦身后用于跨实例广播 */
+function activeJobRecords() {
+  const list = [];
+  for (const j of jobs.values()) {
+    if (j && (j.status === 'running' || j.status === 'pending')) list.push(toLiveRecord(j));
+  }
+  return list;
+}
+
+/**
+ * 防抖写 live-jobs。**这是运行中 job 唯一的落盘点** —— 少了它，「进行中」就只在
+ * 跑任务的那个实例可见（2026-09-28 修的正是这个）。
+ */
+export function scheduleActiveJobsSave() {
+  if (activeSaveTimer) return;
+  activeSaveTimer = setTimeout(() => {
+    activeSaveTimer = null;
+    flushActiveJobsSave().catch(err => logger.warn('[workbench] live-jobs save failed:', err?.message || err));
+  }, JOBS_SAVE_DEBOUNCE_MS);
+}
+
+/**
+ * 立即写 live-jobs：把本进程活跃 job 写进自己的文件，没有活跃 job 就删掉文件。
+ * 终态时（flushJobsSaveNow）必须走一次，否则别的实例的看板上那条会一直转圈，
+ * 直到 owner pid 消失才被回收。
+ */
+export function flushActiveJobsSave() {
+  if (activeSaveTimer) { clearTimeout(activeSaveTimer); activeSaveTimer = null; }
+  const run = () => writeLiveJobsFile(process.pid, activeJobRecords());
+  const next = activeWriteChain.then(run, run);
+  activeWriteChain = next.catch(() => {});
+  return next;
+}
+
+/** 本进程退出时清掉自己的运行中文件（进程内其它清理路径无需感知这件事） */
+export async function clearOwnLiveJobsFile() {
+  if (activeSaveTimer) { clearTimeout(activeSaveTimer); activeSaveTimer = null; }
+  await removeLiveJobsFile(process.pid);
+}
 
 // 序列化 job 落盘：剥离 child 引用（ChildProcess 无法 JSON.stringify），
 // 反范式 taskTitle 方便管理页直接读
@@ -181,18 +287,8 @@ export function serializeJob(j, taskMap) {
   };
 }
 
-// 流式 chunk 阶段 debounce 写盘；终态时由 flushJobsSaveNow() 强制立即落盘
-export function scheduleJobsSave() {
-  if (jobsSaveTimer) clearTimeout(jobsSaveTimer);
-  jobsSaveTimer = setTimeout(() => {
-    jobsSaveTimer = null;
-    flushJobsSaveNow().catch(err => logger.warn('[workbench] jobs save failed:', err.message));
-  }, JOBS_SAVE_DEBOUNCE_MS);
-}
-
 // 立即落盘（终态调用）：把 jobs Map 当前快照写到 jobs.json，然后跑 retention
 export async function flushJobsSaveNow() {
-  if (jobsSaveTimer) { clearTimeout(jobsSaveTimer); jobsSaveTimer = null; }
   // 读 tasks.json 给落盘 job 反范式 taskTitle——父任务被删后管理页仍可读
   const tasksData = await readJson(TASKS_FILE, { tasks: [] });
   const taskMap = new Map((tasksData.tasks || []).map(t => [t.id, t]));
@@ -201,9 +297,17 @@ export async function flushJobsSaveNow() {
   await refreshJobsFromDisk();
   const payload = {
     version: 1,
-    jobs: Array.from(mergedJobs().values()).map(j => serializeJob(j, taskMap))
+    // 只并「磁盘历史 ∪ 本进程内存」:别人的 live(运行中)记录不进历史档案,见 mergedJobs 注释
+    jobs: Array.from(mergedJobs({ includeLive: false }).values()).map(j => serializeJob(j, taskMap))
   };
   await writeJson(JOBS_FILE, payload);
+  // 运行中那一份同步收口：这个 job 已经不再 running/pending，别的实例的看板
+  // 必须立刻把它从「进行中」挪走，不能干等 owner pid 消失。
+  try {
+    await flushActiveJobsSave();
+  } catch (err) {
+    logger.warn('[workbench] live-jobs flush failed:', err?.message || err);
+  }
   invalidateDiskCache();
   await enforceRetention();
 }
@@ -290,6 +394,12 @@ export async function enforceRetention() {
   invalidateDiskCache();
   const keepIds = new Set(data.jobs.map(j => j.id));
   for (const id of Array.from(jobs.keys())) {
+    const j = jobs.get(id);
+    // **运行中的 job 一律不许在这里被删掉**：它还没进过 jobs.json(或者进来的是上一轮的
+    // 终态),按 keepIds 一刀切会把它从内存里剜掉 —— 表现是任务跑到一半"消失",界面
+    // 也不再有它,而 child 进程还在。启动时 hydrateJobs 的 fire-and-forget 链路
+    // (读文件 → 跑 retention)刚好能和"启动后立刻点执行"撞上,实测能复现。
+    if (j && (j.status === 'running' || j.status === 'pending')) continue;
     if (!keepIds.has(id)) jobs.delete(id);
   }
 }
@@ -304,35 +414,15 @@ export function publish(event, payload) {
   bus.emit('event', { event, payload, ts: nowIso() });
 }
 
-// 给 SSE / 看板 / cancel / continue 路由用：返回「磁盘 ∪ 内存」的可序列化快照
+// 给 SSE / 看板 / cancel / continue 路由用：返回「磁盘 ∪ 运行中 ∪ 内存」的可序列化快照
 // 剥离 child 引用（不可序列化），只保留前端需要的字段。
 //
-// 同步函数,磁盘那一半读的是 refreshJobsFromDisk() 填好的缓存 —— 想让别的 g ui
+// 同步函数,两半缓存读的是 refreshJobsFromDisk() 填好的 —— 想让别的 g ui
 // 进程跑的 job 出现在结果里,调用前先 await 一次刷新(见文件头的说明)。
+//
+// 投影口径只有一份:liveJobs.projectJob（live-jobs 落盘也用同一个函数）。
 export function snapshotJobs() {
-  return Array.from(mergedJobs().values()).map(j => ({
-    id: j.id,
-    taskId: j.taskId,
-    subId: j.subId,
-    title: j.title,
-    status: j.status,
-    prompt: j.prompt || '',
-    output: j.output || '',
-    thinking: j.thinking || '',
-    pid: j.pid || null,
-    startedAt: j.startedAt || null,
-    endedAt: j.endedAt || null,
-    exitCode: typeof j.exitCode === 'number' ? j.exitCode : null,
-    error: j.error || null,
-    // 本轮用的执行器（claude | opencode）。前端对话区助手名 / 日志详情按它显示;
-    // 加字段时记得同步这里 —— 白名单投影会把没列出的字段静默剥掉。
-    agent: j.agent || null,
-    // 工具调用流水（{id,name,argsPreview,arguments,result,status,error}[]）。
-    // 前端靠它画工具块;刷新页面 / 换实例后仍然可见,所以必须过白名单。
-    toolCalls: Array.isArray(j.toolCalls) ? j.toolCalls : [],
-    // 续接对话用:claude --output-format stream-json 的 system.init 事件捕获到的 session_id
-    claudeSessionId: j.claudeSessionId || null
-  }));
+  return Array.from(mergedJobs().values()).map(projectJob);
 }
 
 export const jobStore = {
@@ -340,7 +430,9 @@ export const jobStore = {
   bus,
   cancelledJobs,
   serializeJob,
-  scheduleJobsSave,
+  scheduleActiveJobsSave,
+  flushActiveJobsSave,
+  clearOwnLiveJobsFile,
   flushJobsSaveNow,
   readJobsConfig,
   writeJobsConfig,
@@ -349,5 +441,6 @@ export const jobStore = {
   publish,
   snapshotJobs,
   refreshJobsFromDisk,
+  refreshLiveJobs,
   mergedJobs,
 };

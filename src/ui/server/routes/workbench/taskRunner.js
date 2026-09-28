@@ -50,6 +50,7 @@ import {
   cancelledJobs,
   publish,
   flushJobsSaveNow,
+  scheduleActiveJobsSave,
 } from './jobStore.js';
 
 // ── 运行环境上下文的提供者 ────────────────────────────────────────────────
@@ -915,6 +916,10 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
   };
   jobs.set(jobId, job);
   publish('job:update', job);
+  // 跨实例可见性：别的 g ui 的看板列完全由执行记录推导，「进行中」必须能让它们
+  // 读到一个 running/pending 记录 —— 终态以前从来不落盘，所以这里（以及下面的
+  // 流式 chunk 与终态 flush）是运行中 job 唯一的对外通路，见 liveJobs.js。
+  scheduleActiveJobsSave();
 
   // 声明在 try 之外：启动器就抛错时 finally 也要能安全收口（见 toolTracker?.seal）
   let toolTracker = null;
@@ -1001,6 +1006,9 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
       for (const line of lines) handleLine(line, channel);
       flushThinkingBatch();
       toolTracker?.flush();
+      // 每批 chunk 后防抖写一次 live-jobs（1.5s 内只写一次），让别的实例看得到进度。
+      // 不写 jobs.json —— 那份是历史档案，几十 MB 级别的东西不该被 1.5s 一次重写。
+      scheduleActiveJobsSave();
     };
     if (child.stdout) child.stdout.on('data', (buf) => parseLines('stdout', buf));
     if (child.stderr) child.stderr.on('data', (buf) => parseLines('stderr', buf));

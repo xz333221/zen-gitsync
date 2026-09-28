@@ -83,8 +83,8 @@ import {
   bus,
   cancelledJobs,
   serializeJob,
-  scheduleJobsSave,
   flushJobsSaveNow,
+  clearOwnLiveJobsFile,
   readJobsConfig,
   writeJobsConfig,
   enforceRetention,
@@ -897,16 +897,17 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
   app.get('/api/workbench/jobs/:id', asyncRoute(async (req, res) => {
     // 优先查内存（含活跃）
     const live = jobs.get(req.params.id);
+    const tasksData = await readJson(TASKS_FILE, { tasks: [] });
+    const taskMap = new Map((tasksData.tasks || []).map(t => [t.id, t]));
     if (live) {
-      const tasksData = await readJson(TASKS_FILE, { tasks: [] });
-      const taskMap = new Map((tasksData.tasks || []).map(t => [t.id, t]));
       return res.json({ success: true, job: serializeJob(live, taskMap) });
     }
-    // 退回文件
-    const data = await readJson(JOBS_FILE, { version: 1, jobs: [] });
-    const j = (data.jobs || []).find(x => x.id === req.params.id);
+    // 退回「磁盘历史 ∪ 别的实例正在跑」的合并表 —— 光读 jobs.json 会让
+    // "看板上明明在转的那条"点开变成 404(运行中的记录不在历史档案里)。
+    await refreshJobsFromDisk();
+    const j = mergedJobs().get(req.params.id);
     if (!j) throw new HttpError(404, 'job 不存在');
-    res.json({ success: true, job: j });
+    res.json({ success: true, job: serializeJob(j, taskMap) });
   }));
 
   app.delete('/api/workbench/jobs/:id', asyncRoute(async (req, res) => {

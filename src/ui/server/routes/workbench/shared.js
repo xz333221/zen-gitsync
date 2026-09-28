@@ -41,8 +41,17 @@ export const INSTRUCTION_FILE = path.join(DATA_DIR, 'ai-instruction.json');
 // 执行日志持久化：jobs.json 是历史档案，jobs-config.json 是保留策略
 export const JOBS_FILE = path.join(DATA_DIR, 'jobs.json');
 export const JOBS_CONFIG_FILE = path.join(DATA_DIR, 'jobs-config.json');
+// 落盘防抖。名字里的 jobs 指的是"执行记录"这件事本身：2026-09-28 起它只给
+// **运行中**那一份(live-jobs)用，历史档案 jobs.json 改成只在终态写（见 jobStore.js）。
 export const JOBS_SAVE_DEBOUNCE_MS = 1500;
 export const DEFAULT_JOBS_CONFIG = { maxCount: 500, maxSizeMB: 256 };
+
+// 「运行中」job 的跨实例广播目录：每个 g ui 进程只写自己的 <pid>.json。
+// 为什么不复用 jobs.json：那份是历史档案，实测本机 48 条就有 7.5MB，而跑任务期间
+// 1.5s 一次的防抖落盘要读+解析+序列化+保留策略再写一遍 —— 为了同步一条"正在跑"
+// 的状态去反复搬 7.5MB 不划算（还要阻塞事件循环，反过来卡住流式输出）。
+// 每进程一个文件同时也消掉了多进程 read-modify-write 的丢更新（同 instances/ 的理由）。
+export const LIVE_JOBS_DIR = path.join(DATA_DIR, 'live-jobs');
 
 // 主 Agent 编排台：调度开关（active）+ 人类干预指令存档。
 // 指令存档是「我说过什么」的流水，不参与执行逻辑，只用于控制台日志流回放。

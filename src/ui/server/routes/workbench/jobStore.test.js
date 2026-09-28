@@ -60,15 +60,21 @@ after(async () => {
 });
 
 const modUrl = (rel) => pathToFileURL(path.join(projectRoot, rel)).href;
-const { DATA_DIR } = await import(modUrl('src/ui/server/routes/workbench/shared.js'));
+const { DATA_DIR, LIVE_JOBS_DIR } = await import(modUrl('src/ui/server/routes/workbench/shared.js'));
 const {
   jobs,
   snapshotJobs,
   mergedJobs,
   refreshJobsFromDisk,
   flushJobsSaveNow,
+  flushActiveJobsSave,
 } = await import(modUrl('src/ui/server/routes/workbench/jobStore.js'));
-const { deriveTaskColumn, groupJobsByTask } = await import(modUrl('src/ui/server/routes/workbench/projectRegistry.js'));
+const {
+  writeLiveJobsFile,
+  toLiveRecord,
+  liveJobsFilePath,
+} = await import(modUrl('src/ui/server/routes/workbench/liveJobs.js'));
+const { deriveTaskColumn, groupJobsByTask, decorateTaskForBoard } = await import(modUrl('src/ui/server/routes/workbench/projectRegistry.js'));
 
 const dataDir = path.join(fakeHome, '.zen-gitsync');
 const jobsFile = path.join(dataDir, 'jobs.json');
@@ -214,4 +220,135 @@ test('落盘不抹别人的记录:flush 必须并上磁盘上的历史 job 再�
   } finally {
     jobs.delete('j-mine');
   }
+});
+
+// ── 运行中(live-jobs):别的实例正在跑的任务 ─────────────────────────
+// 2026-09-28:终态以前才是唯一落盘点,运行中的 job 只活在跑它的进程内存里 ——
+// 于是「已完成」两边一致,「进行中」只有跑的那个实例看得到。这一组钉住修复后的口径:
+// 内存 > live > 磁盘,且终态 flush 之后 live 文件必须立刻消失。
+
+/** 一个"别的实例正在跑"的 job。pid 用假值,只影响 taskRunner 那边,读者不看它。 */
+const liveJob = (id, taskId, extra = {}) => ({
+  id,
+  taskId,
+  subId: `${taskId}__simple`,
+  title: `job-${id}`,
+  status: 'running',
+  startedAt: '2026-09-28T14:56:51.650Z',
+  endedAt: null,
+  pid: 4242,
+  agent: 'claude',
+  prompt: 'p',
+  output: 'partial output',
+  thinking: '',
+  toolCalls: [],
+  claudeSessionId: null,
+  ...extra,
+});
+
+/** 每个用例从空的 live 目录 + 空的 jobs.json 开始,免得上一轮的 owner 文件串味 */
+async function resetStores() {
+  jobs.clear();
+  await fs.rm(LIVE_JOBS_DIR, { recursive: true, force: true });
+  await seedJobsFile([]);
+  await refreshJobsFromDisk({ force: true });
+}
+
+/**
+ * 写一份"别的实例"的 live 文件。ownerPid 用**本测试进程**的 pid:读者靠
+ * process.kill(pid, 0) 判存活,只有真实存在的 pid 才会被采信(见 liveJobs.js)。
+ */
+async function seedLiveFile(records, ownerPid = process.pid) {
+  await writeLiveJobsFile(ownerPid, records.map(r => toLiveRecord(r)));
+}
+
+test('另一个实例正在跑的任务:刷新后必须推导成「进行中」', async () => {
+  await resetStores();
+  await seedLiveFile([liveJob('j-run', 't1')]);
+  await refreshJobsFromDisk({ force: true });
+
+  const snap = snapshotJobs();
+  assert.ok(snap.some(j => j.id === 'j-run'), '运行中的记录必须出现在快照里');
+  assert.equal(snap.find(j => j.id === 'j-run').status, 'running');
+
+  const byTask = groupJobsByTask(snap);
+  // 修复前这里是 todo —— 运行中的 job 根本没落盘,jobs.json 里查不到
+  assert.equal(deriveTaskColumn(simpleTask('t1'), byTask.get('t1') || []), 'doing');
+  assert.equal(deriveTaskColumn(simpleTask('t2'), byTask.get('t2') || []), 'todo');
+  // 看板卡片上的"进行中"计数也来自同一份快照
+  assert.equal(decorateTaskForBoard(simpleTask('t1'), byTask.get('t1') || []).runningJobs, 1);
+});
+
+test('live 覆盖磁盘:同一条历史 + 新一轮正在跑,以「进行中」为准', async () => {
+  await resetStores();
+  await seedJobsFile([diskJob('j-run', 't1', 'done')]);
+  await seedLiveFile([liveJob('j-run', 't1')]);
+  await refreshJobsFromDisk({ force: true });
+
+  assert.equal(
+    mergedJobs().get('j-run').status,
+    'running',
+    '磁盘上那条是上一轮的终态,不能盖住"这一轮正在跑"'
+  );
+});
+
+test('内存 > live:本进程跑的 job 用内存里的那份(带流式输出),不用广播文件里截过的', async () => {
+  await resetStores();
+  await seedLiveFile([liveJob('j-run', 't1', { output: '截断过的尾巴' })]);
+  jobs.set('j-run', {
+    id: 'j-run',
+    taskId: 't1',
+    subId: '',
+    title: 'job-j-run',
+    status: 'running',
+    pid: process.pid,
+    output: '本进程完整的输出',
+  });
+  await refreshJobsFromDisk({ force: true });
+
+  assert.equal(mergedJobs().get('j-run').output, '本进程完整的输出');
+});
+
+test('owner 进程没了:它的运行中记录不再出现在快照里', async () => {
+  await resetStores();
+  // 2147483647 = 一定不存在的 pid
+  await seedLiveFile([liveJob('j-ghost', 't1')], 2147483647);
+  await refreshJobsFromDisk({ force: true });
+
+  assert.equal(snapshotJobs().some(j => j.id === 'j-ghost'), false);
+  assert.equal(deriveTaskColumn(simpleTask('t1'), []), 'todo');
+});
+
+test('终态收口:job 跑完后自己那份 live 文件必须消失,读者看到的是 done', async () => {
+  await resetStores();
+  jobs.set('j-run', {
+    id: 'j-run',
+    taskId: 't1',
+    subId: '',
+    title: 'job-j-run',
+    status: 'running',
+    startedAt: '2026-09-28T14:56:51.650Z',
+    pid: process.pid,
+    output: '跑着呢',
+  });
+
+  // 1) 运行中:文件里有它
+  await flushActiveJobsSave();
+  const raw = JSON.parse(await fs.readFile(liveJobsFilePath(process.pid), 'utf-8'));
+  assert.deepEqual(raw.jobs.map(j => j.id), ['j-run']);
+
+  // 2) 终态:flush 之后文件必须删掉(留一个空壳会让别的实例白扫,留着 running 会一直转圈)
+  jobs.get('j-run').status = 'done';
+  jobs.get('j-run').endedAt = '2026-09-28T15:00:00.000Z';
+  await flushJobsSaveNow();
+  await assert.rejects(
+    fs.stat(liveJobsFilePath(process.pid)),
+    (err) => err.code === 'ENOENT',
+    '没有活跃 job 了就不该再留 live 文件'
+  );
+
+  // 3) 别的实例这时候读到的是 jobs.json 里的终态
+  await refreshJobsFromDisk({ force: true });
+  assert.equal(snapshotJobs().find(j => j.id === 'j-run').status, 'done');
+  jobs.clear();
 });

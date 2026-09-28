@@ -697,6 +697,14 @@ async function startUIServer(noOpen = false, savePort = false) {
       // 2) 清心跳 + 反注册实例
       try { clearInterval(heartbeatTimer); } catch (_) {}
       try { await instanceRegistry.unregister(process.pid); } catch (_) {}
+      // 2b) 清掉自己那份「运行中 job」广播文件（live-jobs/<pid>.json）。
+      //     不清也不会留下幽灵「进行中」——别的实例读的时候发现 owner pid 没了会跳过并
+      //     顺手删掉，这里只是让 Ctrl+C 这种常见路径当场干净。动态 import：模块早就在
+      //     路由注册时加载过了，这里只是拿它的函数，不会往入口的静态 import 图里加东西。
+      try {
+        const { clearOwnLiveJobsFile } = await import('./routes/workbench/jobStore.js');
+        await clearOwnLiveJobsFile();
+      } catch (_) {}
       console.log(chalk.gray(`[shutdown] 收到 ${signal}，已清理本实例`));
       // 3) 给 OS 100ms 刷盘日志
       setTimeout(() => process.exit(0), 100);

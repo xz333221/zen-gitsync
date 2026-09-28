@@ -35,6 +35,7 @@
     "verify:wb-dialogs": "node scripts/verify-workbench-dialogs.cjs",
     "verify:wb-dispatch": "node scripts/verify-workbench-dispatch-attach.cjs",
     "verify:wb-env-context": "node scripts/verify-workbench-env-context.mjs",
+    "verify:wb-live-jobs": "node scripts/verify-wb-live-jobs.mjs",
     "verify:wb-overview": "node scripts/verify-workbench-overview.cjs",
     "verify:wb-proj-branch": "node scripts/verify-workbench-proj-branch.cjs",
     "verify:wb-proj-filter": "node scripts/verify-wb-proj-filter.cjs",
