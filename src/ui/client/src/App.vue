@@ -979,10 +979,13 @@ function stopHResize() {
         <!-- 非 Git 仓库时,右侧空态直接用"最近项目"列表代替原"Git 仓库初始化"卡片
              (左侧 GitStatus 已经有"初始化 Git 仓库"按钮 + "尚未配置远程仓库"提示,这里不重复)
              默认即 panel(自带标题/搜索) + open(点击在新标签页打开)形态。
+             layout="split":与"切换工作目录"全屏弹窗同一个版式 —— 卡片在左、AI 状态解读 +
+             g ai 追问区在右。这块面板横向很宽(占右侧整列),横排比"卡片在上、解读在下"
+             更能用满宽度,也让追问区与解读挨在一起。
              refresh-on-mount:这是 g ui 首屏常驻的那块面板 —— 每次打开界面(页面加载)
              自动跑一遍「刷新全部」,免得「领先/落后」一直停在"上次 fetch 时的快照"上。
              整页只跑一次,切目录重建面板不会重复联网(守卫在组件模块作用域里)。 -->
-        <RecentDirectoriesList refresh-on-mount />
+        <RecentDirectoriesList refresh-on-mount layout="split" />
       </div>
 
       <!-- 水平分隔条（提交表单 | 提交历史） -->

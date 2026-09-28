@@ -94,8 +94,9 @@ const props = withDefaults(defineProps<{
   variant?: "panel" | "bare";
   /**
    * stack:卡片在上、底下的说明块在下(默认)
-   * split:卡片在左、AI 解读 + 追问区在右(给"切换工作目录"全屏弹窗)
-   * split 会把根节点从纵向 flex 翻成横向 flex —— 只在宽容器里用,窄栏会挤成两团。
+   * split:卡片在左、AI 解读 + 追问区在右(切换工作目录全屏弹窗 / 最近项目面板)
+   * 只在宽容器里用,窄栏会挤成两团:bare 形态翻成横向 flex,panel 形态改用 grid
+   * 把标题行与搜索框钉在左列顶部(见组件内 .dir-list--panel.dir-list--split)。
    */
   layout?: "stack" | "split";
   /** missing:只允许移除已失效目录(避免误删还能打开的有效项目) | always:任意条目都可移除 */
@@ -128,7 +129,8 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{ select: [path: string]; loaded: [count: number] }>();
 
-/** 左右分栏(卡片 | AI 栏):根节点翻成横向 flex,说明块落到右栏 */
+/** 左右分栏(卡片 | AI 栏):bare 形态根节点翻成横向 flex,panel 形态改用 grid
+ *  把标题行 / 搜索框留在左列(见样式里的 .dir-list--panel.dir-list--split) */
 const isSplit = computed(() => props.layout === "split");
 
 const directories = ref<Array<{ path: string; exists: boolean }>>([]);
@@ -694,10 +696,12 @@ defineExpose({ reload: load });
   max-height: none;
   overflow-y: auto;
 }
-/* split:卡片在左、AI 栏在右(全屏"切换工作目录"弹窗专用)。
-   根节点由纵翻横,卡片占满剩下的宽度、内部滚动,AI 栏固定一档宽度。
+/* split:卡片在左、AI 栏在右。两个消费方:
+   - bare(全屏"切换工作目录"弹窗):没有标题/搜索行,根节点直接由纵翻横。
+   - panel(最近项目面板):自带标题 + 搜索行,不能跟着一起横排,
+     所以改用 grid 把这两行钉在左列顶部(见下面 .dir-list--panel.dir-list--split)。
    max-height 在这里必须放开 —— bare 那条 74vh 是为"卡片在上"的旧布局设的,
-   横过来之后高度应由弹窗高度链决定,而不是再截一道。 */
+   横过来之后高度应由父容器高度链决定,而不是再截一道。 */
 .dir-list--split {
   flex-direction: row;
   align-items: stretch;
@@ -712,6 +716,43 @@ defineExpose({ reload: load });
   flex: 0 0 auto;
   width: clamp(360px, 38%, 560px);
   min-width: 0;
+}
+
+/* panel + split:标题行 / 搜索框只属于左列,AI 栏跨满整列高度。
+   用 grid 而不是再包一层 DOM:panel 的 DOM 顺序是 标题 → 搜索 → 卡片 → 说明,
+   grid 里分别落进 head / search / items 三行,说明栏跨满三行占据右列。
+   specificity(0,2,0)盖过上面的单类 .dir-list--split 与 .dir-list--panel。 */
+.dir-list--panel.dir-list--split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(360px, 38%, 560px);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "head summary"
+    "search summary"
+    "items summary";
+  /* 行间距沿用 panel 原有的 gap;列间距放宽,卡片列与 AI 栏分开 */
+  gap: var(--spacing-base) var(--spacing-xl);
+}
+.dir-list--panel.dir-list--split > .dir-list__head {
+  grid-area: head;
+  /* 间距交给 grid gap,清掉元素自带的 margin,否则行距会叠成两倍 */
+  margin-bottom: 0;
+}
+.dir-list--panel.dir-list--split > .dir-list__search {
+  grid-area: search;
+  margin-top: 0;
+}
+.dir-list--panel.dir-list--split > .dir-list__items,
+.dir-list--panel.dir-list--split > .dir-list__empty {
+  grid-area: items;
+  /* grid 行已给出确定高度,回落成普通块级滚动容器(panel 的 flex:1 在 grid 下无效) */
+  min-height: 0;
+  max-height: none;
+}
+.dir-list--panel.dir-list--split > .dir-list__summary {
+  grid-area: summary;
+  /* 宽度由 grid 列决定,不再叠加 clamp */
+  width: auto;
 }
 .dir-list__head {
   display: flex;

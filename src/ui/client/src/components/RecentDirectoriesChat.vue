@@ -40,7 +40,7 @@ const props = defineProps<{
   dirStatus: unknown[]
   /** 界面上那段自动解读的原文:用户说"那第二个呢"时指的就是它 */
   summary?: string
-  /** 撑满父级剩余高度(全屏弹窗右栏)。默认 false = 弹窗底部那一块固定高的条 */
+  /** 撑满父级剩余高度(切换工作目录弹窗 / 最近项目面板的右栏)。默认 false = 底部那一块固定高的条 */
   fill?: boolean
 }>()
 
