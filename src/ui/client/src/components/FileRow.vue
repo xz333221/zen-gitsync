@@ -13,12 +13,15 @@
   ~ See the License for the specific language governing permissions and
   ~ limitations under the License.
   -->
+<!--
+  列表视图的单行文件（原 FileGroup.vue 里 .file-item 的行内容 + 样式整体搬过来）。
+  行高在 CSS 里写死 28px，外层 .vfl__row--file 再留 1px 间隙 = 29px，
+  必须与 utils/fileListRows.ts 的 FILE_ROW_H 一致，否则虚拟滚动偏移会累加误差。
+-->
 <script setup lang="ts">
-import { computed } from 'vue'
-import { ArrowDown } from '@element-plus/icons-vue'
+import { Lock } from '@element-plus/icons-vue'
 import FileActionButtons from './FileActionButtons.vue'
 import { getFileIconClass } from '../utils/fileIcon'
-import { Lock } from '@element-plus/icons-vue'
 
 interface FileItem {
   path: string
@@ -26,10 +29,7 @@ interface FileItem {
 }
 
 interface Props {
-  files: FileItem[]
-  title: string
-  groupKey: 'staged' | 'unstaged' | 'untracked' | 'conflicted' | 'intent-to-add'
-  collapsedGroups: Record<string, boolean>
+  file: FileItem
   isFileLocked: (filePath: string) => boolean
   isLocking: (filePath: string) => boolean
   getFileName: (filePath: string) => string
@@ -41,7 +41,6 @@ interface Props {
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
-  toggleCollapse: [groupKey: 'staged' | 'unstaged' | 'untracked' | 'conflicted' | 'intent-to-add']
   fileClick: [file: FileItem]
   toggleFileLock: [filePath: string]
   stageFile: [filePath: string]
@@ -51,56 +50,15 @@ const emit = defineEmits<{
   toggleFileSelection: [filePath: string]
 }>()
 
-// 计算是否显示该组
-const shouldShow = computed(() => props.files.length > 0)
-
-// 计算是否折叠
-const isCollapsed = computed(() => props.collapsedGroups[props.groupKey])
-
-// 处理组折叠切换
-function handleToggleCollapse() {
-  emit('toggleCollapse', props.groupKey)
-}
-
 // 处理文件点击
-function handleFileClick(file: FileItem, event?: MouseEvent) {
+function handleFileClick(event?: MouseEvent) {
   // 如果在选择模式下，点击文件会切换选择状态
   if (props.isSelectionMode) {
     event?.stopPropagation()
-    emit('toggleFileSelection', file.path)
+    emit('toggleFileSelection', props.file.path)
   } else {
-    emit('fileClick', file)
+    emit('fileClick', props.file)
   }
-}
-
-// 处理复选框变化
-function handleCheckboxChange(filePath: string) {
-  emit('toggleFileSelection', filePath)
-}
-
-// 处理文件锁定切换
-function handleToggleFileLock(filePath: string) {
-  emit('toggleFileLock', filePath)
-}
-
-// 处理管理锁定文件
-function handleManageLockedFiles() {
-  emit('manageLockedFiles')
-}
-
-// 处理暂存文件
-function handleStageFile(filePath: string) {
-  emit('stageFile', filePath)
-}
-
-// 处理取消暂存
-function handleUnstageFile(filePath: string) {
-  emit('unstageFile', filePath)
-}
-
-// 处理撤回修改
-function handleRevertFile(filePath: string) {
-  emit('revertFileChanges', filePath)
 }
 
 // 将文件类型映射为字母标记
@@ -124,151 +82,83 @@ function getStatusLetter(fileType: string): string {
 }
 
 // 获取文件图标类名
-const getFileIcon = (filePath: string) => {
-  const fileName = props.getFileName(filePath)
-  return getFileIconClass(fileName)
-}
+const getFileIcon = (filePath: string) => getFileIconClass(props.getFileName(filePath))
 </script>
 
 <template>
-  <div v-if="shouldShow" class="file-group">
-    <div class="file-group-header" @click="handleToggleCollapse">
-      <el-icon class="collapse-icon" :class="{ 'collapsed': isCollapsed }">
-        <ArrowDown />
-      </el-icon>
-      <span>{{ title }}</span>
-      <span class="file-count">({{ files.length }})</span>
-    </div>
-    <div v-show="!isCollapsed" class="file-list">
-      <div
-        v-for="file in files"
-        :key="file.path"
-        class="file-item file-group-item"
-        :class="{ 
-          'is-loading': props.isLocking(file.path), 
-          'locked': props.isFileLocked(file.path),
-          'selected': props.isSelectionMode && props.isFileSelected?.(file.path),
-          [`file-type-${file.type}`]: file.type
-        }"
-        @click="handleFileClick(file, $event)"
-      >
-        <div class="file-info">
-          <!-- 选择模式下显示复选框 -->
-          <el-checkbox
-            v-if="props.isSelectionMode"
-            :model-value="props.isFileSelected?.(file.path)"
-            @change="handleCheckboxChange(file.path)"
-            @click.stop
-            class="file-checkbox"
-          />
-          <svg class="file-type-icon mit-icon" aria-hidden="true">
-            <use :xlink:href="`#${getFileIcon(file.path)}`" />
-          </svg>
-          <div class="file-name-section">
-            <el-tooltip
-              :content="props.getFileName(file.path)"
-              placement="top"
-              :disabled="props.getFileName(file.path).length <= 25"
-              
-              :show-after="200"
-            >
-              <div class="file-name" :class="{ 'locked-file-name': props.isFileLocked(file.path), 'deleted-file-name': file.type === 'deleted' }">
-                {{ props.getFileName(file.path) }}
-                <el-icon v-if="props.isFileLocked(file.path)" class="lock-indicator">
-                  <Lock />
-                </el-icon>
-              </div>
-            </el-tooltip>
+  <div
+    class="file-item file-group-item"
+    :class="{
+      'is-loading': isLocking(file.path),
+      'locked': isFileLocked(file.path),
+      'selected': isSelectionMode && isFileSelected?.(file.path),
+      [`file-type-${file.type}`]: file.type
+    }"
+    @click="handleFileClick($event)"
+  >
+    <div class="file-info">
+      <!-- 选择模式下显示复选框 -->
+      <el-checkbox
+        v-if="isSelectionMode"
+        :model-value="isFileSelected?.(file.path)"
+        @change="emit('toggleFileSelection', file.path)"
+        @click.stop
+        class="file-checkbox"
+      />
+      <svg class="file-type-icon mit-icon" aria-hidden="true">
+        <use :xlink:href="`#${getFileIcon(file.path)}`" />
+      </svg>
+      <div class="file-name-section">
+        <el-tooltip
+          :content="getFileName(file.path)"
+          placement="top"
+          :disabled="getFileName(file.path).length <= 25"
+          :show-after="200"
+        >
+          <div
+            class="file-name"
+            :class="{ 'locked-file-name': isFileLocked(file.path), 'deleted-file-name': file.type === 'deleted' }"
+          >
+            {{ getFileName(file.path) }}
+            <el-icon v-if="isFileLocked(file.path)" class="lock-indicator">
+              <Lock />
+            </el-icon>
           </div>
-          <div class="file-path-section" :title="props.getFileDirectory(file.path)">
-            <el-tooltip
-              :content="props.getFileDirectory(file.path)"
-              placement="top"
-              :disabled="props.getFileDirectory(file.path).length <= 30"
-              
-              :show-after="200"
-            >
-              <span class="file-directory">{{ props.getFileDirectory(file.path) }}</span>
-            </el-tooltip>
-          </div>
-          <div class="file-status-indicator" :class="[file.type, { 'locked': props.isFileLocked(file.path) }]">
-            {{ getStatusLetter(file.type) }}
-          </div>
-        </div>
-        <!-- 悬浮操作按钮（非选择模式下显示） -->
-        <div v-if="!props.isSelectionMode" class="file-actions">
-          <FileActionButtons
-            :file-path="file.path"
-            :file-type="file.type"
-            :is-locked="props.isFileLocked(file.path)"
-            :is-locking="props.isLocking(file.path)"
-            @toggle-lock="handleToggleFileLock"
-            @stage="handleStageFile"
-            @unstage="handleUnstageFile"
-            @revert="handleRevertFile"
-            @manage-locked-files="handleManageLockedFiles"
-          />
-        </div>
+        </el-tooltip>
       </div>
+      <div class="file-path-section" :title="getFileDirectory(file.path)">
+        <el-tooltip
+          :content="getFileDirectory(file.path)"
+          placement="top"
+          :disabled="getFileDirectory(file.path).length <= 30"
+          :show-after="200"
+        >
+          <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
+        </el-tooltip>
+      </div>
+      <div class="file-status-indicator" :class="[file.type, { 'locked': isFileLocked(file.path) }]">
+        {{ getStatusLetter(file.type) }}
+      </div>
+    </div>
+    <!-- 悬浮操作按钮（非选择模式下显示） -->
+    <div v-if="!isSelectionMode" class="file-actions">
+      <FileActionButtons
+        :file-path="file.path"
+        :file-type="file.type"
+        :is-locked="isFileLocked(file.path)"
+        :is-locking="isLocking(file.path)"
+        @toggle-lock="(p: string) => emit('toggleFileLock', p)"
+        @stage="(p: string) => emit('stageFile', p)"
+        @unstage="(p: string) => emit('unstageFile', p)"
+        @revert="(p: string) => emit('revertFileChanges', p)"
+        @manage-locked-files="emit('manageLockedFiles')"
+      />
     </div>
   </div>
 </template>
 
 <style scoped>
 /* 使用全局CSS变量 */
-
-.file-group {
-  margin-bottom: var(--spacing-xs);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--bg-container);
-  box-shadow: var(--shadow-base);
-  transition: var(--transition-all);
-}
-
-.file-group:hover {
-  box-shadow: var(--shadow-hover);
-}
-
-.file-group-header {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  padding: var(--spacing-base) var(--spacing-lg);
-  cursor: pointer;
-  font-weight: var(--font-weight-semibold);
-  
-  
-  transition: var(--transition-all);
-  position: relative;
-  
-  .file-count {
-    font-size: var(--font-size-xs);
-    color: var(--text-secondary);
-    font-weight: var(--font-weight-medium);
-    background: var(--bg-panel);
-    padding: var(--spacing-xs) var(--spacing-sm);
-    border-radius: var(--radius-full);
-    margin-left: auto;
-  }
-}
-
-.collapse-icon {
-  transition: var(--transition-transform);
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-}
-
-.collapse-icon.collapsed {
-  transform: rotate(-90deg);
-}
-
-.file-list {
-  display: flex;
-  flex-direction: column;
-  padding: var(--spacing-sm);
-  gap: 1px;
-}
 
 .file-item {
   display: flex;
@@ -305,22 +195,22 @@ const getFileIcon = (filePath: string) => {
 .file-item.file-type-conflicted {
   background-color: rgba(249, 115, 22, 0.1) !important;
   border-color: rgba(249, 115, 22, 0.3) !important;
-  
+
   .file-type-icon {
     color: var(--git-status-conflicted);
   }
-  
+
   .file-name {
     color: var(--git-status-conflicted);
     font-weight: var(--font-weight-semibold);
   }
-  
+
   &:hover {
     background-color: rgba(249, 115, 22, 0.15) !important;
     border-left-color: var(--git-status-conflicted) !important;
     border-color: rgba(249, 115, 22, 0.4) !important;
     box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.25);
-    
+
     &::before {
       width: 5px !important;
     }
@@ -374,7 +264,7 @@ const getFileIcon = (filePath: string) => {
 /* 锁定状态显示特殊样式 */
 .file-item.locked {
   opacity: 0.5;
-  
+
   &:hover {
     opacity: 0.65;
   }

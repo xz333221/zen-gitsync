@@ -35,7 +35,7 @@ import { isFilePathLocked } from '@/utils/fileLock'
 function mountGitStatus(props = {}) {
   return mountWithSetup(GitStatus, {
     props: { initialDirectory: '', ...props },
-    global: { stubs: { FileDiffViewer: true, CommonDialog: true, FileGroup: true, FileTreeView: true, NpmScriptsPanel: true, StashChangesButton: true, StashListButton: true, StashSelectedFilesButton: true, MergeBranchButton: true, UnstageAllButton: true, ResetToRemoteButton: true, DiscardAllChangesButton: true } },
+    global: { stubs: { FileDiffViewer: true, CommonDialog: true, VirtualFileList: true, FileTreeView: true, NpmScriptsPanel: true, StashChangesButton: true, StashListButton: true, StashSelectedFilesButton: true, MergeBranchButton: true, UnstageAllButton: true, ResetToRemoteButton: true, DiscardAllChangesButton: true } },
   })
 }
 

@@ -39,7 +39,7 @@ export function getNodeIcon(name: string, isDirectory: boolean, expanded = false
 
 // 历史说明：早期版本使用 file-icons-js 通过 CSS 字体伪元素渲染文件图标。
 // 现已迁移到 Material Icon Theme SVG sprite（见 ./materialFileIcons.ts）。
-// 以下两个函数仍导出，是因为 FileGroup / FileDiffViewer / SourceMapView / EditorView
+// 以下两个函数仍导出，是因为 FileRow / FileDiffViewer / SourceMapView / EditorView
 // 的 inline 树仍以 `<use :xlink:href="#${...}">` 形式消费返回值。
 // 它们的"返回值类型"从 CSS class 名（`icon-xxx`）变成了完整的 sprite id（含 `mit-` 前缀）。
 export function getFileIconClass(fileName: string): string {

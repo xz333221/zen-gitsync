@@ -28,8 +28,9 @@ import { useToolsStore } from '@stores/toolsStore'
 import { isFilePathLocked } from '@/utils/fileLock'
 import FileDiffViewer from '@components/FileDiffViewer.vue'
 import CommonDialog from '@components/CommonDialog.vue'
-import FileGroup from '@/components/FileGroup.vue'
+import VirtualFileList from '@/components/VirtualFileList.vue'
 import FileTreeView from '@/components/FileTreeView.vue'
+import { buildListRows, type FileGroupKey } from '@/utils/fileListRows'
 import { isImageFile } from '@/utils/fileKind'
 import NpmScriptsPanel from '@components/NpmScriptsPanel.vue'
 import StashChangesButton from '@/components/buttons/StashChangesButton.vue'
@@ -204,6 +205,19 @@ const viewMode = computed<'list' | 'tree'>({
   get: () => configStore.ui.fileListViewMode,
   set: (v) => { configStore.ui.fileListViewMode = v }
 });
+
+// 列表视图的分组标题（顺序与 utils/fileListRows.ts 的 GROUP_ORDER 对应）
+const groupTitles = computed<Record<FileGroupKey, string>>(() => ({
+  conflicted: $t('@13D1C:冲突文件'),
+  staged: $t('@13D1C:已暂存的更改'),
+  unstaged: $t('@13D1C:未暂存的更改'),
+  'intent-to-add': $t('@13D1C:已声明添加（待暂存）'),
+  untracked: $t('@13D1C:未跟踪的文件'),
+}));
+
+// 列表视图的行数组（分组标题 + 未折叠分组的文件），交给 VirtualFileList 虚拟滚动。
+// 原实现是 5 个 FileGroup 各自全量 v-for，5000+ 文件时首帧 ~11s、刷新重渲染 ~2.8s。
+const listRows = computed(() => buildListRows(gitStore.fileList, collapsedGroups.value, groupTitles.value));
 
 const currentDirectory = ref(props.initialDirectory || '');
 async function loadStatus() {
@@ -1343,14 +1357,13 @@ defineExpose({
           </div>
           
           <div class="file-list-container">
-            <!-- 列表视图 -->
+            <!-- 列表视图：虚拟滚动，只渲染视口内的行。
+                 原实现是 5 个 <FileGroup> 各自全量 v-for，5000+ 未跟踪文件时
+                 首帧 ~11s、刷新一次重渲染 ~2.8s（见 utils/fileListRows.ts 顶部注释、
+                 verify/file-list-perf.mjs 实测）。 -->
             <template v-if="viewMode === 'list'">
-              <!-- 冲突文件（优先级最高，显示在最前面） -->
-              <FileGroup
-                :files="gitStore.fileList.filter(f => f.type === 'conflicted')"
-                :title="$t('@13D1C:冲突文件')"
-                group-key="conflicted"
-                :collapsed-groups="collapsedGroups"
+              <VirtualFileList
+                :rows="listRows"
                 :is-file-locked="isFileLocked"
                 :is-locking="isLocking"
                 :get-file-name="getFileName"
@@ -1362,87 +1375,7 @@ defineExpose({
                 @toggle-file-lock="toggleFileLock"
                 @toggle-file-selection="toggleFileSelection"
                 @stage-file="stageFile"
-                @revert-file-changes="revertFileChanges"
-              />
-              
-              <!-- 已暂存的更改 -->
-              <FileGroup
-                :files="gitStore.fileList.filter(f => f.type === 'added')"
-                :title="$t('@13D1C:已暂存的更改')"
-                group-key="staged"
-                :collapsed-groups="collapsedGroups"
-                :is-file-locked="isFileLocked"
-                :is-locking="isLocking"
-                :get-file-name="getFileName"
-                :get-file-directory="getFileDirectory"
-                :is-selection-mode="isSelectionMode"
-                :is-file-selected="isFileSelected"
-                @toggle-collapse="toggleGroupCollapse"
-                @file-click="handleFileClick"
-                @toggle-file-lock="toggleFileLock"
-                @toggle-file-selection="toggleFileSelection"
                 @unstage-file="unstageFile"
-              />
-              
-              <!-- 未暂存的更改 -->
-              <FileGroup
-                :files="gitStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted')"
-                :title="$t('@13D1C:未暂存的更改')"
-                group-key="unstaged"
-                :collapsed-groups="collapsedGroups"
-                :is-file-locked="isFileLocked"
-                :is-locking="isLocking"
-                :get-file-name="getFileName"
-                :get-file-directory="getFileDirectory"
-                :is-selection-mode="isSelectionMode"
-                :is-file-selected="isFileSelected"
-                @toggle-collapse="toggleGroupCollapse"
-                @file-click="handleFileClick"
-                @toggle-file-lock="toggleFileLock"
-                @toggle-file-selection="toggleFileSelection"
-                @stage-file="stageFile"
-                @revert-file-changes="revertFileChanges"
-                @manage-locked-files="showLockedFilesDialog = true"
-              />
-
-              <!-- 已声明添加（待暂存）：git add -N 的产物,index 只注册了空 blob,
-                   实际内容还在工作区,点击"暂存"才会真正进暂存区 -->
-              <FileGroup
-                v-if="gitStore.fileList.some(f => f.type === 'intent-to-add')"
-                :files="gitStore.fileList.filter(f => f.type === 'intent-to-add')"
-                :title="$t('@13D1C:已声明添加（待暂存）')"
-                group-key="intent-to-add"
-                :collapsed-groups="collapsedGroups"
-                :is-file-locked="isFileLocked"
-                :is-locking="isLocking"
-                :get-file-name="getFileName"
-                :get-file-directory="getFileDirectory"
-                :is-selection-mode="isSelectionMode"
-                :is-file-selected="isFileSelected"
-                @toggle-collapse="toggleGroupCollapse"
-                @file-click="handleFileClick"
-                @toggle-file-lock="toggleFileLock"
-                @toggle-file-selection="toggleFileSelection"
-                @stage-file="stageFile"
-              />
-              
-              <!-- 未跟踪的文件 -->
-              <FileGroup
-                :files="gitStore.fileList.filter(f => f.type === 'untracked')"
-                :title="$t('@13D1C:未跟踪的文件')"
-                group-key="untracked"
-                :collapsed-groups="collapsedGroups"
-                :is-file-locked="isFileLocked"
-                :is-locking="isLocking"
-                :get-file-name="getFileName"
-                :get-file-directory="getFileDirectory"
-                :is-selection-mode="isSelectionMode"
-                :is-file-selected="isFileSelected"
-                @toggle-collapse="toggleGroupCollapse"
-                @file-click="handleFileClick"
-                @toggle-file-lock="toggleFileLock"
-                @toggle-file-selection="toggleFileSelection"
-                @stage-file="stageFile"
                 @revert-file-changes="revertFileChanges"
                 @manage-locked-files="showLockedFilesDialog = true"
               />
