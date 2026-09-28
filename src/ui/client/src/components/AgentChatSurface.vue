@@ -54,6 +54,7 @@ import {
   agentConversationLabels,
   agentQuestionLabels,
   AGENT_ASSISTANT_NAME,
+  AGENT_ASSISTANT_AVATAR,
 } from '@/utils/agentConversations'
 import AgentEngineSelector from '@/components/AgentEngineSelector.vue'
 import TaskExecutorPicker from '@/components/TaskExecutorPicker.vue'
@@ -244,6 +245,7 @@ onMounted(() => {
           :show-input="false"
           :messages="messages"
           :assistant-name="AGENT_ASSISTANT_NAME"
+          :assistant-avatar="AGENT_ASSISTANT_AVATAR"
           :theme="chatTheme"
           :question="pendingQuestion"
           :question-submitting="answeringQuestion"

@@ -30,7 +30,7 @@ import { ChatContainer, ConversationList } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { useConfigStore } from '@/stores/configStore'
 import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
-import { buildConversationItems, agentConversationLabels, agentQuestionLabels, AGENT_ASSISTANT_NAME } from '@/utils/agentConversations'
+import { buildConversationItems, agentConversationLabels, agentQuestionLabels, AGENT_ASSISTANT_NAME, AGENT_ASSISTANT_AVATAR } from '@/utils/agentConversations'
 import type { AgentEngineId } from '@/utils/agentEngine'
 import { useNarrowPane } from '@/composables/useNarrowPane'
 import MarketplacePanel from '@/components/MarketplacePanel.vue'
@@ -329,6 +329,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
                 :welcome-title="$t('@AGENT:智能体助手')"
                 :welcome-description="$t('@AGENT:我可以帮你阅读代码、执行命令、修改文件。选择下方话题或直接输入你的问题。')"
                 :assistant-name="AGENT_ASSISTANT_NAME"
+                :assistant-avatar="AGENT_ASSISTANT_AVATAR"
                 :theme="chatTheme"
                 :disabled="isStreaming"
                 :generating="isStreaming"
