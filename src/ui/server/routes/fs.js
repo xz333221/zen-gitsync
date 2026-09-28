@@ -996,4 +996,47 @@ export function registerFsRoutes({
       res.status(status).json({ success: false, error: error.message });
     }
   });
+
+  // ── 编辑器：用系统浏览器打开文件(HTML)──────────────────────
+  // 和上面的 VSCode 路线分工不同:HTML 的诉求是"看渲染结果",必须落到浏览器。
+  // 不能图省事用 open(resolved) 走系统默认程序 —— .html 的默认关联完全可能
+  // 是编辑器(装过 VSCode / 各种 IDE 后很常见),那样右键"用浏览器打开"就名不
+  // 副实,还难排查。
+  //
+  // open 的 app: 'browser' 会先用 default-browser 解析系统默认浏览器(Windows
+  // 读注册表 UserChoice、macOS 走 LaunchServices、Linux 走 xdg),再用它打开:
+  //   - 命中 chrome / edge / firefox / brave 之一 → 直接在默认浏览器里开
+  //   - 默认浏览器不在 open 的已知清单里        → open 抛错,退化为系统默认程序,
+  //     至少不会静默失败(比"报错但什么都没发生"体验好)
+  // 传文件路径而不是 http URL:file:// 下同目录的相对资源(样式 / 图片)能正常解析,
+  // 不需要把整个工作目录再挂一个静态服务出去。
+  app.post('/api/editor/open-in-browser', express.json(), async (req, res) => {
+    try {
+      const targetPath = req.body?.path;
+      if (!targetPath) throw new HttpError(400, '缺少 path 参数');
+
+      const safe = await safePathInProject(targetPath);
+      if (!safe) throw new HttpError(403, '禁止访问工作目录以外的内容');
+      const resolved = safe.safePath;
+
+      try {
+        await fs.access(resolved);
+      } catch {
+        throw new HttpError(404, '目标不存在');
+      }
+      const stat = await fs.stat(resolved);
+      if (stat.isDirectory()) throw new HttpError(400, '只能对文件用浏览器打开');
+
+      try {
+        await open(resolved, { app: 'browser', wait: false });
+      } catch {
+        await open(resolved, { wait: false });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      const status = error?.status || 500;
+      res.status(status).json({ success: false, error: error.message });
+    }
+  });
 }

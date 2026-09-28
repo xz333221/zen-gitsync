@@ -2001,6 +2001,8 @@ export default {
   '@EDITOR:删除': 'Delete',
   '@EDITOR:在资源管理器中打开': 'Open in File Explorer',
   '@EDITOR:在 VSCode 中打开': 'Open in VSCode',
+  '@EDITOR:在浏览器中打开': 'Open in Browser',
+  '@EDITOR:浏览器打开失败': 'Failed to open in browser',
   '@EDITOR:复制绝对路径': 'Copy Absolute Path',
   '@EDITOR:复制相对路径': 'Copy Relative Path',
   '@EDITOR:已复制到剪贴板': 'Copied to clipboard',

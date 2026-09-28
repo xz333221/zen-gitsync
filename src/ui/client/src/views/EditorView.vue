@@ -987,6 +987,37 @@ async function ctxOpenInVscode() {
   }
 }
 
+// 浏览器能直接渲染的扩展名 —— 只有这些才给右键"在浏览器中打开"。
+// 其它类型(图片 / PDF / Office)交给系统默认程序或 VSCode 更合适,
+// 塞进浏览器只会变成下载或一片空白。
+const BROWSER_OPEN_EXTS = new Set(['html', 'htm'])
+
+const ctxMenuCanOpenInBrowser = computed(() => {
+  const node = ctxMenu.value?.node
+  if (!node || node.type !== 'file') return false
+  const ext = node.name.slice(node.name.lastIndexOf('.') + 1).toLowerCase()
+  return BROWSER_OPEN_EXTS.has(ext)
+})
+
+async function ctxOpenInBrowser() {
+  const node = ctxMenu.value?.node
+  closeContextMenu()
+  if (!node) return
+  try {
+    const resp = await fetch('/api/editor/open-in-browser', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: node.path }),
+    })
+    const data = await resp.json()
+    if (!data.success) {
+      ElMessage.error(data.error || $t('@EDITOR:浏览器打开失败'))
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.message || String(error))
+  }
+}
+
 // 点击全局关闭右键菜单
 onMounted(() => document.addEventListener('click', closeContextMenu))
 onBeforeUnmount(() => document.removeEventListener('click', closeContextMenu))
@@ -1518,6 +1549,15 @@ function stopPreviewResize() {
         {{ $t('@EDITOR:复制相对路径') }}
       </button>
       <div class="ctx-menu-sep" />
+      <!-- 只有 HTML 才有"用浏览器打开"：浏览器能直接渲染出结果 -->
+      <button v-if="ctxMenuCanOpenInBrowser" class="ctx-menu-item" @click="ctxOpenInBrowser">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <path d="M12 3a13 13 0 0 1 3.5 9 13 13 0 0 1-3.5 9 13 13 0 0 1-3.5-9A13 13 0 0 1 12 3z"/>
+        </svg>
+        {{ $t('@EDITOR:在浏览器中打开') }}
+      </button>
       <button class="ctx-menu-item" @click="ctxRevealInExplorer">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>

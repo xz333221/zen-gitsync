@@ -349,6 +349,7 @@ A full IDE-like editor (fourth icon in the activity bar) for browsing and editin
 | Multi-tab editing | Open multiple files simultaneously; tabs show unsaved (●) indicator |
 | Monaco editor | Syntax highlighting for JS, TS, Vue, Python, Go, JSON, CSS, and more |
 | Markdown preview | Toggle between source and rendered preview for `.md` files |
+| HTML preview / browser | `.html` / `.htm` render in a sandboxed in-app iframe; right-click one in the file tree → **Open in Browser** to hand it to the system default browser instead |
 | Save | `Ctrl+S` to save; optional auto-save on focus loss |
 | Create | New file or folder inline in the file tree |
 | Rename / Delete | Rename or delete any file or folder directly from the tree |
@@ -1000,6 +1001,7 @@ Activity Bar 第四个视图，在 GUI 内直接浏览并编辑项目文件：
 | 多标签页 | 同时打开多个文件，未保存文件显示 ● 标记 |
 | Monaco 编辑器 | 支持 JS、TS、Vue、Python、Go、JSON、CSS 等语法高亮 |
 | Markdown 预览 | `.md` 文件可切换源码与渲染预览模式 |
+| HTML 预览 / 浏览器打开 | `.html` / `.htm` 在应用内沙箱 iframe 里渲染；在文件树里右键 → **在浏览器中打开**，改交系统默认浏览器渲染 |
 | 保存 | `Ctrl+S` 手动保存；可选失去焦点时自动保存 |
 | 新建 | 在文件树中内联创建文件或文件夹 |
 | 重命名 / 删除 | 在树中直接对文件或文件夹重命名、删除 |
