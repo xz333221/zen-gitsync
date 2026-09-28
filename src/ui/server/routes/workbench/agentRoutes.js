@@ -31,6 +31,7 @@ import { saveAgentAttachments, MAX_ATTACHMENTS } from '../../utils/agentAttachme
 import { registerAgentMarketplaceRoutes } from './agentMarketplace.js';
 import { createProjectListProvider } from './projectTool.js';
 import { createWorkspaceSnapshotter } from '../aiContext/wiring.js';
+import { normalizeItems, filterToRecentDirs, buildDirStatusBlock } from '../recentDirectoriesAiSummary.js';
 import { nowIso, logger } from './shared.js';
 
 const { genSessionId, autoTitle, read: readSession, write: writeSession, delete: deleteSession, listMeta: listSessionsMeta, enforceRetention, rename: renameSession } = agentSessionStore;
@@ -258,6 +259,13 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
     // 文件空间对话：客户端把"当前打开的文档"带上来，服务端只在请求副本里注入上下文（不落库）
     const openFilePath = String(req.body?.openFilePath || '').trim().slice(0, 512);
 
+    // 切换工作目录弹窗里的 g ai 追问：客户端把"常用目录那批目录的状态"带上来。
+    // 与 /api/recent_directories/summary 完全是同一份数据形状，走同一个归一化函数；
+    // 真正拼块要等拿到 configManager（需要读最近目录白名单），见下面 cwd 那一段。
+    const dirStatusItems = normalizeItems(req.body?.dirStatus);
+    // 界面上那段自动解读的原文：用户说"那第二个呢"时指的就是它（详见 injectRequestContext）
+    const dirSummary = String(req.body?.dirSummary || '').trim().slice(0, 2000);
+
     // SSE 头
     res.set({
       'Content-Type': 'text/event-stream',
@@ -409,6 +417,20 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
       // 工作目录
       const cwd = session.cwd || (typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : process.cwd());
 
+      // 常用目录状态块：白名单过滤（只认配置里的最近目录）+ 拼成事实块。
+      // 与 /summary 的差别：那里读不到白名单就**拒答**（它的全部意义就是解读这批目录），
+      // 这里读不到只是**少一段上下文** —— 用户是在正常聊天，不该因为读不到目录列表而发不出消息。
+      let dirStatusBlock = '';
+      if (dirStatusItems.length > 0) {
+        try {
+          const recentDirs = (await configManager?.getRecentDirectories?.()) || [];
+          const targets = filterToRecentDirs(dirStatusItems, recentDirs);
+          if (targets.length > 0) dirStatusBlock = buildDirStatusBlock(targets, locale, dirSummary);
+        } catch (err) {
+          logger.warn(`[agent/chat] 常用目录状态注入失败,本轮跳过: ${err?.message || err}`);
+        }
+      }
+
       // 推 meta
       send({
         type: 'meta',
@@ -424,6 +446,11 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
         let promptPrefix = '';
         if (typeof getContextBlock === 'function') {
           try { promptPrefix = await getContextBlock({ locale }); } catch (err) { logger.warn(`[agent] 外部引擎状态块获取失败: ${err?.message || err}`); }
+        }
+        // 常用目录状态块与内置引擎走同一份字符串（外部引擎没有"请求副本"可注入，
+        // 这段前缀只作用在本轮 prompt 上，不会写进项目里的任何文件）
+        if (dirStatusBlock) {
+          promptPrefix = promptPrefix ? `${dirStatusBlock}\n\n${promptPrefix}` : dirStatusBlock;
         }
         // 图片附件转成文件路径交给 CLI（它们收路径不收 base64）。走同一套落盘校验。
         const imageAttachments = images.map((u, i) => ({ name: `pasted-${i + 1}.png`, dataUrl: u }));
@@ -459,6 +486,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
           locale,
           openFilePath,
           attachments,
+          dirStatusBlock,
           signal: abortController.signal,
           send,
           onChild: (child) => { activeChild = child; },

@@ -539,7 +539,14 @@ export function useAgentChat() {
   }
 
   // ── 发送消息（SSE 流式，按会话隔离，可后台并行） ────────
-  async function sendMessage(text: string, files: SelectedFile[] = [], options: { openFilePath?: string } = {}) {
+  // options.engine：**只在新建会话时生效**的引擎覆盖。默认用当前选择（currentEngine），
+  //   传它的是「切换工作目录」弹窗里那块 g ai 追问 —— 那个入口固定用内置 g ai
+  //   （见 components/RecentDirectoriesChat.vue），不该被用户在别处选的 claude/codex 带走。
+  //   ⚠️ 已有会话仍以服务端落盘的引擎为准，传进来只会被 ENGINE_LOCKED 拦下（本来也不该传）。
+  // options.dirStatus / dirSummary：「常用目录」那批目录的 Git 状态与界面上那段自动解读，
+  //   服务端只把它注进**本轮请求副本**的 system 提示（不落会话历史，见
+  //   server/routes/workbench/agentChat.js 的 injectRequestContext）。
+  async function sendMessage(text: string, files: SelectedFile[] = [], options: { openFilePath?: string; engine?: AgentEngineId; dirStatus?: unknown[]; dirSummary?: string; allowDispatch?: boolean; dispatchExecutor?: string; dispatchUseDefaultPrompt?: boolean } = {}) {
     // 图片 → 多模态 dataURL（模型直接"看"）；
     // 非图片 → 字节交给服务端落盘，模型拿到的是**绝对路径**，需要时自己 read。
     const imageFiles = files.filter(f => f?.file?.type?.startsWith('image/'))
@@ -650,12 +657,26 @@ export function useAgentChat() {
           cwd: configStore.currentDirectory || '',
           // 引擎：只在**新建会话**时生效（已有会话服务端沿用自己落盘的那个，
           // 想换会回 ENGINE_LOCKED）。传当前值即可，两种情形都对。
-          engine: currentEngine.value,
+          engine: options.engine ?? currentEngine.value,
           ...(images.length > 0 ? { images } : {}),
           // 非图片附件：服务端落到数据目录后，只把绝对路径写进请求副本的 system 提示
           ...(attachments.length > 0 ? { attachments } : {}),
           // 文件空间对话：把"当前打开的文档"带给服务端（请求级注入上下文，不落会话历史）
-          ...(options.openFilePath ? { openFilePath: options.openFilePath } : {})
+          ...(options.openFilePath ? { openFilePath: options.openFilePath } : {}),
+          // 常用目录对话：把"那批目录的状态 + 界面上那段解读"带给服务端（同样只进请求副本）
+          ...(options.dirStatus?.length ? { dirStatus: options.dirStatus } : {}),
+          ...(options.dirSummary ? { dirSummary: options.dirSummary } : {}),
+          // 主 Agent 控制台：允许这一轮对话调用 dispatch_task 派发工作台任务，
+          // 并把界面上选好的执行器 / 默认提示词勾选一并带上（服务端拿它当工具的默认值）。
+          // 只在显式开启时才出现在请求体里 —— 其它入口（智能体页、编辑器面板）的请求
+          // 与改造前逐字节一致，它们没有派发能力。
+          ...(options.allowDispatch
+            ? {
+              allowDispatch: true,
+              dispatchExecutor: options.dispatchExecutor || '',
+              dispatchUseDefaultPrompt: options.dispatchUseDefaultPrompt !== false
+            }
+            : {})
         }),
         signal: myController.signal
       })

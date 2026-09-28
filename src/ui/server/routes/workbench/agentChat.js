@@ -242,6 +242,8 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 //   - userMessage: 用户输入文本
 //   - images: base64 dataURL 数组(可选,多模态图片,随最新一条 user 消息发给模型)
 //   - openFilePath: 文件空间里当前打开的文档(可选,注入请求副本,不落库)
+//   - dirStatusBlock: 「切换工作目录」弹窗里那批目录的 Git 状态(可选,由 agentRoutes
+//     读配置 + 白名单过滤后用 buildDirStatusBlock 拼好传进来,同样只进请求副本)
 //   - attachments: 非图片附件(可选) = [{ name, path }],path 是**服务端落盘后的绝对路径**,
 //     只把路径写进请求副本的 system 提示,内容由模型自己用工具读(见 utils/agentAttachments.js)
 //   - cwd: 工作目录
@@ -256,7 +258,7 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 //     (由 agentRoutes 注入,实现在 routes/aiContext/:七个板块的摘要 + 落盘文件路径)
 //
 // 返回: { aborted: boolean }
-export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, attachments = [], signal, send, onChild, askUser, listProjects, getContextBlock }) {
+export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, getContextBlock }) {
   const ctx = { cwd, locale, onChild, askUser, listProjects };
 
   // 确保 session.messages 存在
@@ -301,9 +303,9 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
     // 摘录成一条梗概 → 旧图片降级 → provider 兼容消毒。
     // 只作用于副本,session.messages 保持完整(与 CLI 的磁盘口径一致)。
     const messages = prepareRequestMessages(session.messages, { locale });
-    // 请求级上下文：工作区状态快照 + 当前打开的文档 + 本轮附件路径
+    // 请求级上下文：工作区状态快照 + 常用目录状态 + 当前打开的文档 + 本轮附件路径
     // （只改副本，不落 session.messages，下一轮不重复累积）
-    injectRequestContext(messages, { cwd, openFilePath, attachments, locale, workspaceBlock });
+    injectRequestContext(messages, { cwd, openFilePath, attachments, locale, workspaceBlock, dirStatusBlock });
 
     let result;
     try {
@@ -433,20 +435,21 @@ function summarizeArgs(name, args) {
   }
 }
 
-// ── 请求级上下文注入（工作区状态 / 文件空间对话 / 本轮附件） ──────────────
-// 把"工作区各板块的状态摘要""用户当前打开的文件"与"本轮附件的落盘路径"追加到
-// **请求副本**的 system 消息末尾：只影响这一次请求，session.messages 与磁盘历史保持原样，
-// 下一轮也不会重复累积。
+// ── 请求级上下文注入（工作区状态 / 常用目录状态 / 文件空间对话 / 本轮附件） ──
+// 把"工作区各板块的状态摘要""常用目录那批目录的 Git 状态""用户当前打开的文件"与
+// "本轮附件的落盘路径"追加到**请求副本**的 system 消息末尾：只影响这一次请求，
+// session.messages 与磁盘历史保持原样，下一轮也不会重复累积。
 //
 // ⚠️ 工作区快照**必须走这条副本路径，不能塞进 session.messages 里那条 system 消息**。
 // 那条只在首轮 push 一次（见上面 `session.messages.length === 0` 的判断）并会落盘，
 // 快照进去就等于永久停在"会话创建那天"——git 分支、任务进度全会是过期的，
 // 而且这种错不会报错、只会让模型理直气壮地给出错答案。有单测钉住这一点。
+// 常用目录状态同理，而且更严重：它说的是"这一刻"的领先/落后，几小时后必然不同。
 //
 // 附件为什么只给路径、不给内容：见 utils/agentAttachments.js 的头注释 —— 非图片附件
 // 由服务端落盘，模型自己用 read / grep 按需取，比把几百 KB 文本内联进消息省得多。
 // 快照块同理,只给摘要与目录路径,板块正文由模型按需读。
-export function injectRequestContext(messages, { cwd, openFilePath, attachments = [], locale, workspaceBlock = '' }) {
+export function injectRequestContext(messages, { cwd, openFilePath, attachments = [], locale, workspaceBlock = '', dirStatusBlock = '' }) {
   if (!Array.isArray(messages)) return;
   const en = String(locale || '').startsWith('en');
 
@@ -457,7 +460,14 @@ export function injectRequestContext(messages, { cwd, openFilePath, attachments 
     parts.push(workspaceBlock.trim());
   }
 
-  // ① 当前打开的文档（文件空间对话才有；项目外或等于根目录直接忽略）
+  // ① 常用目录那批目录的 Git 状态（切换工作目录弹窗里的追问才有）。
+  //    整块（含"屏幕上那段自动解读"）由 agentRoutes 调 buildDirStatusBlock 拼好传进来 ——
+  //    两条链路（内置引擎的副本 / 外部引擎的前缀）用的是同一个字符串，不在两处各拼一遍。
+  if (typeof dirStatusBlock === 'string' && dirStatusBlock.trim()) {
+    parts.push(dirStatusBlock.trim());
+  }
+
+  // ② 当前打开的文档（文件空间对话才有；项目外或等于根目录直接忽略）
   if (openFilePath) {
     const root = cwd || process.cwd();
     let rel = '';
@@ -474,7 +484,7 @@ export function injectRequestContext(messages, { cwd, openFilePath, attachments 
     }
   }
 
-  // ② 本轮附件：只给绝对路径，内容让模型自己去读
+  // ③ 本轮附件：只给绝对路径，内容让模型自己去读
   const files = (Array.isArray(attachments) ? attachments : [])
     .filter(a => a && typeof a.path === 'string' && a.path)
     .slice(0, 20);

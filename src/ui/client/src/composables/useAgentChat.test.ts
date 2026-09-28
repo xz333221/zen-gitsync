@@ -307,6 +307,53 @@ describe('useAgentChat parallel sessions', () => {
     expect(JSON.parse(String((call![1] as RequestInit).body)).openFilePath).toBe('src/ui/client/src/App.vue')
   })
 
+  // 常用目录对话（「切换工作目录」弹窗里的追问区）：
+  //   · dirStatus / dirSummary 随请求带给服务端（它只进请求副本的 system 提示）
+  //   · engine 覆盖：那个入口固定用内置 g ai，不该被用户在别处选的 claude/codex 带走
+  test('sendMessage 的 dirStatus / dirSummary / engine 选项会进请求体', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const dirStatus = [{ path: 'C:\\ws\\a', exists: true, git: { isGitRepo: true, behind: 3 } }]
+    const sendPromise = chat.sendMessage('先处理哪个', [], {
+      engine: 'gai',
+      dirStatus,
+      dirSummary: '这 1 个目录里有 1 个需要处理。'
+    })
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    chatStreams[0].send({ type: 'done', content: '好' })
+    chatStreams[0].close()
+    await sendPromise
+
+    const call = vi.mocked(globalThis.fetch).mock.calls.find(([url]) => url === '/api/agent/chat')
+    const body = JSON.parse(String((call![1] as RequestInit).body))
+    expect(body.engine).toBe('gai')
+    expect(body.dirStatus).toEqual(dirStatus)
+    expect(body.dirSummary).toBe('这 1 个目录里有 1 个需要处理。')
+  })
+
+  test('没传 dirStatus / dirSummary 时请求体里没有这两个字段（老调用点不受影响）', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const sendPromise = chat.sendMessage('随便问问', [])
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    chatStreams[0].send({ type: 'done', content: '好' })
+    chatStreams[0].close()
+    await sendPromise
+
+    const call = vi.mocked(globalThis.fetch).mock.calls.find(([url]) => url === '/api/agent/chat')
+    const body = JSON.parse(String((call![1] as RequestInit).body))
+    expect('dirStatus' in body).toBe(false)
+    expect('dirSummary' in body).toBe(false)
+    // engine 不传时仍按"当前选择"走（这里的 fixture 默认是 'gai'）
+    expect(body.engine).toBe('gai')
+  })
+
   // ── 附件：图片走多模态，非图片走"落盘 + 只给路径" ──────────────
   // 口径见 useAgentChat 顶部注释与 server/utils/agentAttachments.js：
   // images[] 里是 dataURL（模型直接看），attachments[] 里是 { name, dataUrl }（服务端落盘后

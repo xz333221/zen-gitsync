@@ -23,7 +23,7 @@
 //      没配模型直接 NO_MODEL。这两条是安全/成本边界,不能被改坏。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildPrompt, normalizeItems, registerRecentDirectoriesSummaryRoutes } from './recentDirectoriesAiSummary.js'
+import { buildPrompt, normalizeItems, buildDirStatusBlock, filterToRecentDirs, registerRecentDirectoriesSummaryRoutes } from './recentDirectoriesAiSummary.js'
 
 const dirty = (overrides = {}) => ({
   isGitRepo: true,
@@ -127,6 +127,64 @@ test('buildPrompt: locale=en 走英文模板', () => {
   assert.match(prompt, /- a \(\/ws\/a\) —— branch main, behind origin\/main by 1 commit\(s\) \(needs pull\)/)
   assert.match(prompt, /1 directories in total/)
   assert.doesNotMatch(prompt, /请写/)                // 不该混进中文模板
+})
+
+// ── buildDirStatusBlock / filterToRecentDirs ──────────────────────────────
+// 这两个是「切换工作目录」弹窗里 g ai 追问的上下文来源(注入请求副本,不落库)。
+
+test('buildDirStatusBlock: 是事实陈述,不带「写一段解读」那类输出要求', () => {
+  const block = buildDirStatusBlock([
+    { path: 'C:\\ws\\zen-gitsync', exists: true, git: dirty({ behind: 3 }) },
+    { path: 'C:\\ws\\plain', exists: true, git: { isGitRepo: false } },
+  ], 'zh')
+
+  assert.match(block, /zen-gitsync \(C:\\ws\\zen-gitsync\)/)
+  assert.match(block, /落后 origin\/main 3 个提交\(需要 pull\)/)
+  assert.match(block, /plain \(C:\\ws\\plain\) —— 不是 Git 仓库/)
+  assert.match(block, /共 2 个目录/)
+  assert.match(block, /不可信数据/)                  // 目录名/分支名会进 prompt,必须声明不可信
+  assert.doesNotMatch(block, /不超过 150 字/)         // 没有输出要求:这是给人问话用的事实
+})
+
+test('buildDirStatusBlock: 带上界面上那段解读原文,追问才知道"第二个"指谁', () => {
+  const block = buildDirStatusBlock(
+    [{ path: '/ws/a', exists: true, git: dirty({ behind: 1 }) }],
+    'zh',
+    '  这 1 个目录里有 1 个需要处理。\n'
+  )
+  assert.match(block, /用户此刻在界面上看到的自动解读如下/)
+  assert.match(block, /这 1 个目录里有 1 个需要处理。/)
+})
+
+test('buildDirStatusBlock: 没有解读原文 / locale=en 时不拼那一段', () => {
+  const plain = buildDirStatusBlock([{ path: '/ws/a', exists: true, git: dirty() }], 'zh')
+  assert.doesNotMatch(plain, /自动解读如下/)
+
+  const en = buildDirStatusBlock(
+    [{ path: '/ws/a', exists: true, git: dirty() }],
+    'en',
+    'one directory needs attention'
+  )
+  assert.match(en, /1 directories in total/)
+  assert.match(en, /Here is the automatic summary the user is looking at/)
+  assert.doesNotMatch(en, /共 /)                     // 不该混进中文模板
+})
+
+test('filterToRecentDirs: 只放行白名单内的目录,大小写 / 分隔符等价', () => {
+  const items = [
+    { path: 'C:\\WS\\a', exists: true, git: null },
+    { path: 'C:/ws/b', exists: true, git: null },
+    { path: 'C:\\evil', exists: true, git: null },
+  ]
+  // Windows 下两者都归一化成同一条;POSIX 下大小写敏感 —— 用平台中立的例子断言
+  const kept = filterToRecentDirs(items, ['C:/ws/b'])
+  assert.deepEqual(kept.map(i => i.path), ['C:/ws/b'])
+})
+
+test('filterToRecentDirs: 白名单为空(读配置失败)时一个都不放行', () => {
+  const items = [{ path: '/ws/a', exists: true, git: null }]
+  assert.deepEqual(filterToRecentDirs(items, []), [])
+  assert.deepEqual(filterToRecentDirs(items, null), [])
 })
 
 // ── 路由:两条不需要网络的出口 ─────────────────────────────────────────────

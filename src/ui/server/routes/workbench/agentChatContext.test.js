@@ -169,3 +169,38 @@ test('injectRequestContext: 快照 + 文档 + 附件三者可以共存，共用�
   assert.ok(sys.includes('src/a.md'))
   assert.ok(sys.includes('用户本轮附带了 1 个文件'))
 })
+
+// ── 常用目录状态块（「切换工作目录」弹窗里的 g ai 追问） ──────────
+// 整块由 agentRoutes 用 buildDirStatusBlock 拼好传进来，这里只管"注入与否、排在哪"。
+// 与快照同一条铁律：只进请求副本 —— 这批数字说的是"这一刻"的领先/落后，
+// 一旦落盘就会永久停在会话创建那天，而且不报错、只是答案悄悄过期。
+
+const DIR_BLOCK = '用户本机「最近项目 / 常用目录」里各目录的 Git 状态:\n共 1 个目录:\n- a (/ws/a) —— 分支 main, 落后 origin/main 3 个提交(需要 pull)'
+
+test('injectRequestContext: 常用目录状态块排在快照之后、文档之前，只进请求副本', () => {
+  const session = [{ role: 'system', content: 'rules' }, { role: 'user', content: '先处理哪个?' }]
+  const copy = session.map(m => ({ ...m }))
+  injectRequestContext(copy, {
+    cwd: ROOT,
+    locale: 'zh',
+    workspaceBlock: SNAPSHOT,
+    dirStatusBlock: DIR_BLOCK,
+    openFilePath: 'src/a.md'
+  })
+  const sys = copy[0].content
+  assert.match(sys, /^rules\n\n# 当前上下文/)
+  assert.ok(sys.indexOf('工作区状态') < sys.indexOf('常用目录'), '快照在前')
+  assert.ok(sys.indexOf('常用目录') < sys.indexOf('src/a.md'), '目录块在"当前打开的文件"之前')
+  assert.match(sys, /落后 origin\/main 3 个提交/)
+  assert.equal(session[0].content, 'rules', '原始会话记录保持干净')
+})
+
+test('injectRequestContext: 没传目录块时一个字段都不多，行为与从前一致', () => {
+  const legacy = [{ role: 'system', content: 'rules' }]
+  injectRequestContext(legacy, { cwd: ROOT, locale: 'zh', dirStatusBlock: '' })
+  assert.equal(legacy[0].content, 'rules')
+
+  const blank = [{ role: 'system', content: 'rules' }]
+  injectRequestContext(blank, { cwd: ROOT, locale: 'zh', dirStatusBlock: '  \n ' })
+  assert.equal(blank[0].content, 'rules', '空白块不留空段')
+})

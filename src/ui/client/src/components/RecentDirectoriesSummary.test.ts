@@ -38,6 +38,22 @@ vi.mock('@/lang/static', () => ({ $t: $tInterp }))
 const configStore = vi.hoisted(() => ({ models: [] as any[], locale: 'zh-CN' }))
 vi.mock('@stores/configStore', () => ({ useConfigStore: () => configStore }))
 
+// 追问区是 **defineAsyncComponent** 懒加载的(它一进来就把整个 zen-ai-chat-ui 拖进
+// 这个 chunk)。这里只留一个能认出"渲染了没有"的壳 —— 它自己往外发什么由
+// RecentDirectoriesChat.test.ts 守,本文件只管"什么时候该渲染它"。
+vi.mock('@/components/RecentDirectoriesChat.vue', () => ({
+  // __esModule 不能少:它是 defineAsyncComponent 的 dynamic import 取 `.default` 的依据
+  // (缺了它 Vue 会把整个模块命名空间当成组件,渲染时直接炸)。
+  __esModule: true,
+  // props 要显式声明:不声明的话 dir-status / summary 会落到 attrs 上,
+  // 用例里就拿不到它们,等于没守住"父组件到底递了什么下去"。
+  default: {
+    name: 'RecentDirectoriesChat',
+    props: ['dirStatus', 'summary'],
+    template: '<div class="dir-chat-stub" />',
+  },
+}))
+
 import RecentDirectoriesSummary from './RecentDirectoriesSummary.vue'
 import { resetDirectorySummaryCache } from '@/utils/directorySummaryCache'
 
@@ -262,5 +278,44 @@ describe('RecentDirectoriesSummary.vue', () => {
     expect(wrapper.find('.dir-summary__error').exists()).toBe(false)
     expect(wrapper.find('.dir-summary__text').text()).toContain('一切正常')
     wrapper.unmount()
+  })
+
+  test('RDS-07: 只有弹窗(bare)里才接 g ai 追问区;主面板与没配模型都不接', async () => {
+    configStore.models = [MODEL]
+    const items = [item('D:\\chat\\a', gitState({ behind: 1 }))]
+
+    // 主面板:那一列的高度预算全给列表,不摆对话区
+    const panel = mountSummary({ items, ready: true })
+    await vi.advanceTimersByTimeAsync(500)
+    await flushAll()
+    expect(panel.find('.dir-chat-stub').exists()).toBe(false)
+    panel.unmount()
+
+    // 弹窗:解读底下就地接一块追问区,并把"这份状态 + 解读原文"原样递下去
+    const bare = mountSummary({ items, ready: true, variant: 'bare' })
+    await vi.advanceTimersByTimeAsync(500)
+    await flushAll()
+    const chat = bare.findComponent({ name: 'RecentDirectoriesChat' })
+    expect(chat.exists()).toBe(true)
+    expect(chat.props('dirStatus')).toEqual([
+      {
+        path: 'D:\\chat\\a',
+        exists: true,
+        git: {
+          isGitRepo: true, branch: 'main', upstream: 'origin/main',
+          changed: 0, staged: 0, unstaged: 0, untracked: 0, ahead: 0, behind: 1,
+        },
+      },
+    ])
+    expect(chat.props('summary')).toBe('ok')          // 只有解读出完了才带原文
+    bare.unmount()
+
+    // 没配模型:没有 g ai 可问,与"只显示静态说明"是同一条口径
+    configStore.models = []
+    const noModel = mountSummary({ items, ready: true, variant: 'bare' })
+    await vi.advanceTimersByTimeAsync(500)
+    await flushAll()
+    expect(noModel.find('.dir-chat-stub').exists()).toBe(false)
+    noModel.unmount()
   })
 })
