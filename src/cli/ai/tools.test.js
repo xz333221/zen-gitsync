@@ -338,3 +338,50 @@ test('list_projects 没有注入实现时(CLI 下)给出可执行的替代做法
   assert.match(r, /只在 g ui/)
   assert.match(r, /git -C/)
 })
+
+test('dispatch_task schema 要求 text，并声明三条可选口径', async () => {
+  const definition = TOOL_DEFINITIONS.find(tool => tool.function.name === 'dispatch_task')
+  assert.ok(definition, '工具表里必须有 dispatch_task —— 主 Agent 控制台的派发就靠它')
+  assert.deepEqual(definition.function.parameters.required, ['text'])
+  assert.deepEqual(definition.function.parameters.properties.executor.enum, ['claude', 'opencode', 'codex'])
+  assert.ok(definition.function.parameters.properties.project_path)
+  assert.ok(definition.function.parameters.properties.auto_run)
+  assert.ok(definition.function.parameters.properties.use_default_prompt)
+})
+
+test('dispatch_task 把参数映射成派发 payload：省略 = 保持服务端默认', async () => {
+  const seen = []
+  const withDispatch = { ...ctx, dispatchTask: async payload => { seen.push(payload); return '已派发' } }
+
+  assert.equal(await executeTool('dispatch_task', {
+    text: '  重构登录模块  ',
+    project_path: ' D:/proj ',
+    executor: 'opencode',
+    auto_run: false,
+    use_default_prompt: false,
+  }, withDispatch), '已派发')
+  assert.deepEqual(seen[0], {
+    text: '重构登录模块',
+    projectPath: 'D:/proj',
+    executor: 'opencode',
+    autoRun: false,
+    useDefaultPrompt: false,
+  })
+
+  // 只给正文：其余三个键**一律不出现**，由服务端按控制台当前的选择决定
+  // （带上 undefined 或 true 都会把"跟随界面"变成"硬编码默认值"）
+  await executeTool('dispatch_task', { text: '只给正文' }, withDispatch)
+  assert.deepEqual(seen[1], { text: '只给正文' })
+
+  // 显式写默认值等价于省略
+  await executeTool('dispatch_task', { text: 'x', auto_run: true, use_default_prompt: true }, withDispatch)
+  assert.deepEqual(seen[2], { text: 'x' })
+})
+
+test('dispatch_task 在没有注入实现的入口给一句可照做的说明，并禁止模型假装已派', async () => {
+  const result = await executeTool('dispatch_task', { text: '派出去' }, ctx)
+  assert.match(result, /只在 g ui 的「主 Agent 控制台」/)
+  assert.match(result, /不要重试/)
+  assert.match(result, /不要假装/)
+  assert.match(await executeTool('dispatch_task', {}, ctx), /需要非空的 text/)
+})

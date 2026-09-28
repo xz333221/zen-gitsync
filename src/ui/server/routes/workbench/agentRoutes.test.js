@@ -289,3 +289,115 @@ test('停止(客户端断开)后会话仍要落盘，并带上自动标题与已
   assert.equal(last.role, 'assistant');
   assert.equal(last.content, '已经写了一半');
 });
+
+// ── dispatch_task 的注入闸门（2026-09-28）────────────────────────────────
+// 主 Agent 控制台改用 g ai 派活之后，这一条守两件事：
+//   ① allowDispatch 的对话里，dispatch_task 真的能建出任务，且工具结果说清了
+//      "落到哪个项目 / 有没有跑 / 凭什么这么落点" —— 这三句是模型不重复派发、
+//      不把"已建任务"说成"已经跑完"的唯一依据；
+//   ② 没开 allowDispatch 的入口（智能体页 / 编辑器面板 / CLI）拿到一句明确的
+//      unavailable，而不是静默成功或让模型反复重试。
+// 派发会写 tasks.json 与 orchestrator.json（HOME 已指向沙箱），所以断言直接读沙箱。
+test('dispatch_task：开了 allowDispatch 才注入，且工具结果说清落点与是否执行', async () => {
+  const activeCwd = path.resolve('active-project');
+  const projDir = mkdtempSync(path.join(SANDBOX, 'proj-dispatch-'));
+
+  let chatHandler;
+  const app = {
+    get() {},
+    delete() {},
+    put() {},
+    post(route, handler) {
+      if (route === '/api/agent/chat') chatHandler = handler;
+    }
+  };
+  registerAgentRoutes({
+    app,
+    // 派发器用它读全局默认执行器；这个假配置里没有 loadConfig →
+    // resolveExecutor 走 catch 回落 claude（正是要测的那条兜底）
+    configManager: {
+      readRawConfigFile: async () => ({
+        models: [{ model: 'test', name: 'T', baseURL: 'https://example.invalid/v1', apiKey: 'k', isDefault: true }]
+      })
+    },
+    getCurrentProjectPath: () => activeCwd,
+    snapshotter: STUB_SNAPSHOTTER
+  });
+
+  const sse = payload => `data: ${JSON.stringify(payload)}\n\n`;
+  const scripted = (chunks) => () => new Response(new ReadableStream({
+    start(stream) {
+      const bytes = new TextEncoder();
+      for (const c of chunks) stream.enqueue(bytes.encode(sse(c)));
+      stream.enqueue(bytes.encode('data: [DONE]\n\n'));
+      stream.close();
+    }
+  }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  const toolCall = args => scripted([{ choices: [{ delta: { tool_calls: [
+    { index: 0, id: 'call_dispatch_1', type: 'function', function: { name: 'dispatch_task', arguments: JSON.stringify(args) } }
+  ] } }] }]);
+  const text = t => scripted([{ choices: [{ delta: { content: t } }] }]);
+
+  let queue = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => queue.shift()();
+
+  const runChat = async (body) => {
+    let output = '';
+    const req = { body: { cwd: activeCwd, ...body }, headers: {}, socket: { once() {} } };
+    const res = { set() {}, flushHeaders() {}, write: c => { output += c }, end() {} };
+    await chatHandler(req, res);
+    return output.split('\n').filter(l => l.trim().startsWith('data:'))
+      .map(l => { try { return JSON.parse(l.trim().slice(5)) } catch { return null } })
+      .filter(Boolean);
+  };
+
+  const dataDir = path.join(SANDBOX, '.zen-gitsync');
+  const readTasks = () => {
+    try { return JSON.parse(readFileSync(path.join(dataDir, 'tasks.json'), 'utf-8')).tasks || [] } catch { return [] }
+  };
+  const before = readTasks().length;
+
+  try {
+    // ① 控制台：allowDispatch + 显式落点 + auto_run=false（只建不跑，
+    //    单测里绝不 spawn 本机真实的 claude）
+    queue = [
+      toolCall({ text: '给路由层补一组单测', project_path: projDir, auto_run: false }),
+      text('已经派给本地执行器了。')
+    ];
+    const events1 = await runChat({ userMessage: '把补单测这件事派出去', allowDispatch: true, dispatchExecutor: 'codex' });
+
+    const start1 = events1.find(e => e.type === 'tool_call_start' && e.name === 'dispatch_task');
+    assert.ok(start1, '开了 allowDispatch 就该看到 dispatch_task 的工具调用');
+    const result1 = events1.find(e => e.type === 'tool_result' && e.name === 'dispatch_task');
+    assert.match(result1.result, /已派发/);
+    assert.match(result1.result, /没有开始执行/);
+    assert.match(result1.result, /派发时显式指定了项目/, '落点依据要写给模型看');
+    assert.match(result1.result, /taskId=/);
+
+    const tasks = readTasks();
+    assert.equal(tasks.length, before + 1);
+    const created = tasks[tasks.length - 1];
+    assert.equal(created.projectPath, projDir);
+    assert.equal(created.desc, '给路由层补一组单测');
+
+    const state = JSON.parse(readFileSync(path.join(dataDir, 'orchestrator.json'), 'utf-8'));
+    const record = state.instructions[state.instructions.length - 1];
+    assert.equal(record.taskId, created.id);
+    assert.equal(record.status, 'created', 'auto_run=false 时只建任务');
+    assert.equal(record.targetSource, 'explicit');
+
+    // ② 同一个端点、不带 allowDispatch：工具仍在那张表里，但注入是关的 →
+    //    必须回一句明确的 unavailable，且不得建出任何任务
+    queue = [
+      toolCall({ text: '这条不该被派出去', project_path: projDir }),
+      text('我没法在这里派发。')
+    ];
+    const events2 = await runChat({ userMessage: '派一条给别的 agent 试试' });
+    const result2 = events2.find(e => e.type === 'tool_result' && e.name === 'dispatch_task');
+    assert.match(result2.result, /只在 g ui 的「主 Agent 控制台」/);
+    assert.equal(readTasks().length, before + 1, '没开闸门的入口不该建任务');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

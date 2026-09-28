@@ -366,6 +366,7 @@ zen-gitsync/                                    [根: 配置文件 + 顶层脚�
 | `src/ui/client/src/main.ts` + `App.vue` | 前端启动 + 全局 shell | P0 |
 | `src/ui/client/src/views/WorkbenchView.vue` | 工作台任务编辑器(浮层) | P0 |
 | `src/ui/client/src/views/components/WorkbenchBoard.vue` + `WorkbenchKanban.vue` + `OrchestratorConsole.vue` | 多项目编排台 / 看板 / 主 Agent 控制台 | P0 |
+| `src/ui/server/routes/workbench/dispatchInstruction.js` | **派发的唯一实现**:HTTP 端点与内置智能体的 `dispatch_task` 工具都落到它 | P0 |
 | `src/ui/client/src/components/CommandConsole.vue` | 命令控制台(第二大) | P0 |
 | `src/ui/client/src/views/components/GitStatus.vue` | Git 状态视图 | P0 |
 | `src/ui/client/src/stores/*.ts` (10 个) | 全部 Pinia store | P0 |
@@ -441,6 +442,8 @@ zen-gitsync/                                    [根: 配置文件 + 顶层脚�
 3. `views/WorkbenchView.vue` (任务编辑器浮层：任务字段 / 附件 / 执行日志 / 续聊)
 4. `views/components/WorkbenchSidebar.vue` / `WorkbenchProjectPanel.vue`
 5. `routes/workbench/index.js` + `taskRunner.js` (后端执行引擎，claude / opencode / codex 三执行器)
+6. `routes/workbench/dispatchInstruction.js` (派发唯一实现) + `src/cli/ai/tools.js` 的 `dispatch_task` (定义) +
+   `routes/workbench/agentRoutes.js` (按 `allowDispatch` 决定注不注入那件工具)
 
 ### 改可视化流程编排 (Flow)
 1. `components/flow/FlowOrchestrationWorkspace.vue` (画布，节点类型注册)

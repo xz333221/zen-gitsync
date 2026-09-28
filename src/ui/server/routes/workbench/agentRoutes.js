@@ -30,6 +30,7 @@ import { normalizeAgentEngine, isExternalEngine, engineLabel } from './agentEngi
 import { saveAgentAttachments, MAX_ATTACHMENTS } from '../../utils/agentAttachments.js';
 import { registerAgentMarketplaceRoutes } from './agentMarketplace.js';
 import { createProjectListProvider } from './projectTool.js';
+import { createDispatcher } from './dispatchInstruction.js';
 import { createWorkspaceSnapshotter } from '../aiContext/wiring.js';
 import { normalizeItems, filterToRecentDirs, buildDirStatusBlock } from '../recentDirectoriesAiSummary.js';
 import { nowIso, logger } from './shared.js';
@@ -118,6 +119,65 @@ export function submitAgentAnswer({ sessionId, interactionId, answer }) {
  * @param {() => string} deps.getCurrentProjectPath
  * @param {Object} deps.configManager
  */
+/**
+ * 落点依据 → 一句话。给**模型**看的那份（前端 OrchesratorConsole 的 targetReason 是
+ * 界面用的，走 i18n 且只有中英两版）。两边都要有，因为读者不同：模型读的是工具结果，
+ * 用户读的是活动流。文案不共用，判断依据是同一组 source 取值（targetResolver 定义）。
+ */
+function targetSourceLabel(source) {
+  switch (source) {
+    case 'explicit': return '派发时显式指定了项目';
+    case 'mention': return '指令里点明了这个项目';
+    case 'agent': return '按指令语义判断';
+    case 'default': return '没识别出项目，用了默认项目';
+    default: return '未知';
+  }
+}
+
+/**
+ * dispatch_task 工具的实现：补上控制台当前的选择 → 交给共用派发器 → 压成一行
+ * **给模型看**的字符串。
+ *
+ * 为什么结果要写得这么具体：它会作为工具结果进入会话历史，之后每一轮模型都读得到。
+ * 只说"成功"的话，模型不知道任务落在哪个项目、有没有真跑起来，于是要么重复派发，
+ * 要么向用户描述成"我已经在本地跑完了"（实际是另一个进程在跑）。所以三件事必须写清：
+ * 落到哪个项目、有没有真的开始执行、凭什么这么落点。
+ *
+ * 失败一律转成字符串（工具的契约就是"结果永远是字符串，不向外抛"）：
+ * HttpError 的 message 本来就是给人看的中文（"项目目录不存在：xxx"），直接透出。
+ *
+ * 导出只为单测（agentRoutes.test.js 钉住这几句文案与透传口径）——
+ * 与 waitForAgentAnswer / submitAgentAnswer 同一取舍。
+ */
+export async function runDispatchTask({ dispatch, payload, defaults }) {
+  try {
+    const result = await dispatch({
+      text: payload.text,
+      projectPath: payload.projectPath,
+      autoRun: payload.autoRun,
+      // 工具没显式表态时跟随控制台的勾选；显式 false 才关掉（tools.js 已保证）
+      useDefaultPrompt: payload.useDefaultPrompt === undefined
+        ? defaults.useDefaultPrompt
+        : payload.useDefaultPrompt,
+      executor: payload.executor || defaults.executor,
+    });
+
+    const project = result.target?.name || result.target?.path?.split(/[\\/]/).filter(Boolean).pop() || '';
+    const head = `已派发：任务「${result.task.title}」→ 项目「${project}」`;
+    const facts = `taskId=${result.task.id}；落点依据：${targetSourceLabel(result.target?.source)}`;
+
+    if (!result.ran) {
+      return `${head}，但**没有开始执行**（${result.instruction?.reason || '未开启自动执行'}）。${facts}。`
+        + '它在看板的「待处理」列里，等用户自己点执行。'
+    }
+    return `${head}，已交给 ${engineLabel(result.executor)} 开始执行。${facts}。`
+      + '它在独立进程里跑、不占用本次对话，跑完会有任务完成提示；'
+      + '不要等它结束，也不要为同一件事重复派发。'
+  } catch (err) {
+    return `派发失败：${err?.message || String(err)}`
+  }
+}
+
 export function registerAgentRoutes({ app, getCurrentProjectPath, configManager, snapshotter }) {
 
   registerAgentMarketplaceRoutes({ app, getCurrentProjectPath });
@@ -126,6 +186,12 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
   // 与看板统计,这些依赖只有本层拿得到 —— 与 taskRunner 的 setEnvContextProvider 同理。
   // 不给它加缓存:agent 一轮里最多问一两次,而"项目状态"本来就要现读才准。
   const listProjects = createProjectListProvider({ configManager, getCurrentProjectPath });
+
+  // dispatch_task 的实现 —— 与 POST /api/workbench/orchestrator/dispatch 共用**同一份**
+  // 派发实现（见 dispatchInstruction.js 的文件头）：落点怎么判、默认提示词附加哪一级、
+  // 指令流水记什么、执行器怎么回落，只有一套。这里只是把同一套依赖再绑一次
+  // （派发器无状态，两个实例等价）。
+  const { dispatchInstruction } = createDispatcher({ configManager, getCurrentProjectPath });
 
   // 工作区状态快照（七个板块的摘要 + 落盘文件路径）。同样在这里建一次、复用 ——
   // 它要读配置、tasks.json、执行记录、git 状态、监控与思维导图,这些依赖本层一并拿得最全。
@@ -439,6 +505,26 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
         title: isNew ? autoTitle([{ role: 'user', content: userMessage }]) : session.title
       });
 
+      // dispatch_task 的注入闸门：**只有主 Agent 控制台发起的对话**才有派发能力
+      // （前端在请求体里带 allowDispatch: true）。
+      //
+      // 为什么不无条件开放：派发是真有副作用的动作 —— 建任务 + 默认立刻起一个本地 CLI
+      // 进程。在「智能体」页或编辑器面板里聊天时，用户预期的是"回答我"，让模型突然
+      // 往外派活属于越权；这两个入口的行为保持改造前不变（工具表里有它，但调用会拿到
+      // 一句明确的 unavailable，见 tools.js 的 toolDispatchTask）。
+      const dispatchTask = req.body?.allowDispatch === true
+        ? (payload) => runDispatchTask({
+          dispatch: dispatchInstruction,
+          payload,
+          // 控制台当前的选择：勾选框（要不要带默认提示词）+ 选中的执行器。
+          // 用户界面上做过的选择不能因为"这活是 agent 派的"就失效。
+          defaults: {
+            executor: typeof req.body?.dispatchExecutor === 'string' ? req.body.dispatchExecutor : '',
+            useDefaultPrompt: req.body?.dispatchUseDefaultPrompt !== false,
+          },
+        })
+        : undefined;
+
       if (useExternal) {
         // 外部 CLI 引擎：CLI 自己跑循环，服务端只做 spawn + 事件翻译。
         // 工作区状态块走 prompt 前缀（见 runExternalTurn 文件头：往项目里写
@@ -500,6 +586,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
             send,
             signal: abortController.signal,
           }),
+          dispatchTask,
           listProjects,
           getContextBlock
         });

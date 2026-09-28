@@ -70,7 +70,6 @@ import {
   DISPATCH_STAGING_DIR,
   isSafeAttId,
   mimeForExt,
-  stagingPath,
   findStagingFile,
   cleanupDispatchStaging,
 } from './attachmentUtils.js';
@@ -110,14 +109,15 @@ import {
 } from './projectRegistry.js';
 import { buildEnvContextBlock } from './envContext.js';
 import { createJobSettledRefresher } from '../aiContext/jobRefresh.js';
-import { resolveInstructionTarget } from './targetResolver.js';
+import {
+  createDispatcher,
+  resolveExecutor,
+} from './dispatchInstruction.js';
 import {
   readOrchestrator,
   setOrchestratorActive,
   setDefaultPrompt,
   setProjectPrompt,
-  resolveDispatchPrompt,
-  appendInstruction,
   buildActivityFeed,
   buildRunningAgents,
 } from './orchestratorStore.js';
@@ -128,31 +128,6 @@ import {
  * @type {((evt: object) => boolean)|null}
  */
 let jobSettledHandler = null;
-
-/**
- * 解析本次执行用哪个执行器：body.executor 显式指定 > 配置里的全局默认 > 'claude'。
- * 配置读失败一律回落 'claude' —— 执行器选不出来不该挡住任务本身能跑。
- *
- * ⚠️ `configManager` **必须从参数传进来**（2026-09-28 修复）：这里是模块作用域，
- * 而 configManager 只是 registerWorkbenchRoutes 的形参 —— 直接引用会抛
- * ReferenceError，被下面这个 try 吞掉，表现为"配置里的全局默认执行器**永远不生效**、
- * 每次都悄悄回落 claude"，且只在日志里留一条看不太出问题的 warn。
- * 以后往这个函数里加依赖，一律走形参。
- */
-async function resolveExecutor(requested, configManager) {
-  const explicit = normalizeTaskExecutor(requested);
-  if (explicit) return explicit;
-  try {
-    if (configManager) {
-      const cfg = await configManager.loadConfig();
-      const fallback = normalizeTaskExecutor(cfg?.taskExecutor);
-      if (fallback) return fallback;
-    }
-  } catch (err) {
-    logger.warn('[workbench] 读取 taskExecutor 配置失败,回落 claude:', err && err.message || err);
-  }
-  return 'claude';
-}
 
 /**
  * 注册所有 workbench 路由（共 45 个端点）。
@@ -1293,205 +1268,34 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
     res.json({ success: true, projectPrompts });
   }));
 
+  // 派发器实例：它需要的两个依赖（configManager / getCurrentProjectPath）只有装配层
+  // 拿得到，所以在这一层建一次。无状态 —— agentRoutes 那边会用同一套依赖另建一个实例，
+  // 两边跑的是**同一份实现**（见 dispatchInstruction.js 的文件头）。
+  const { dispatchInstruction } = createDispatcher({ configManager, getCurrentProjectPath });
+
   /**
    * 派发一条指令。
-   * body: { text, projectPath?, autoRun? }
+   * body: { text, projectPath?, autoRun?, useDefaultPrompt?, executor?, attachments? }
    *   - projectPath 缺省 -> 交给 targetResolver 判断落到哪个项目（显式指定 > 指令里点名
    *     > 主 Agent 判断 > 应用当前项目）。用户不必先选项目，落点会如实记进指令流水
    *   - autoRun 默认 true；调度暂停时只建任务不执行（指令记录里会写明原因）
    *
    * 一条指令落成目标项目下的一个任务：整段指令就是那次会话的 prompt。
+   *
+   * 这里只做「从 req.body 取字段 -> 交给派发器 -> 回响应」。逻辑一概不放 ——
+   * 同一个派发动作还有第二个入口：内置智能体的 dispatch_task 工具（g ai 在主 Agent
+   * 控制台里自己派活）。两份实现分叉的表现是"不报错，只是落点 / 提示词不一样"。
    */
   app.post('/api/workbench/orchestrator/dispatch', asyncRoute(async (req, res) => {
-    const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
-    if (!text) throw new HttpError(400, '指令内容不能为空');
-    if (text.length > 4000) throw new HttpError(400, '指令过长（上限 4000 字）');
-
-    const fallbackPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
-    const bodyPath = typeof req.body?.projectPath === 'string' ? req.body.projectPath.trim() : '';
-
-    // 先把任务与项目清单读出来：解析落点要用它们。
-    // 清单复用 buildProjectEntries（与看板 / 运行环境上下文同一套口径），
-    // 刻意**不走** listProjects —— 那会 spawn git，派发不值得为它多等一轮。
-    const data = await readJson(TASKS_FILE, { tasks: [] });
-    const tasks = data.tasks || [];
-
-    let recentDirs = [];
-    try {
-      if (configManager && typeof configManager.getRecentDirectories === 'function') {
-        recentDirs = (await configManager.getRecentDirectories()) || [];
-      }
-    } catch (err) {
-      logger.warn('[workbench] 派发时读取最近目录失败，落点解析退化为仅按任务路径:', err.message);
-    }
-
-    const target = await resolveInstructionTarget({
-      text,
-      projects: buildProjectEntries({ recentDirs, tasks }),
-      explicitPath: bodyPath,
-      defaultPath: fallbackPath,
-      // 懒取模型：只有「指令里没点名、也没被显式指定」时才会真的读 config 去问模型
-      getModel: async () => {
-        if (!configManager) return null;
-        const rawConfig = await configManager.readRawConfigFile();
-        const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
-        return models.find(m => m.isDefault) || models[0] || null;
-      },
-      onAgentError: (err) => {
-        logger.warn('[workbench] 主 Agent 判断指令落点失败，退到默认项目:', err.message);
-      },
+    const result = await dispatchInstruction({
+      text: req.body?.text,
+      projectPath: req.body?.projectPath,
+      autoRun: req.body?.autoRun,
+      useDefaultPrompt: req.body?.useDefaultPrompt,
+      executor: req.body?.executor,
+      attachments: req.body?.attachments,
     });
-
-    const targetPath = target.path;
-    if (!targetPath) {
-      throw new HttpError(400, '没能识别出目标项目，也没有默认项目可用 —— 先在左侧打开或选一个项目');
-    }
-
-    // 目标目录必须真的存在：跑在不存在的工作区上只会拿到一堆无意义的报错
-    let stat = null;
-    try { stat = await fsp.stat(targetPath); } catch { /* 下面统一报错 */ }
-    if (!stat || !stat.isDirectory()) {
-      const rejected = await appendInstruction({
-        text,
-        projectPath: targetPath,
-        status: 'rejected',
-        reason: '项目目录不存在',
-        targetSource: target.source,
-      });
-      publish('orchestrator:instruction', rejected);
-      throw new HttpError(400, `项目目录不存在：${targetPath}`);
-    }
-
-    const autoRun = req.body?.autoRun !== false;
-    // 调度开关与默认提示词同在一份 state 里，只读一次：
-    // 分开读两次必然出现"读到的是两个瞬间"的窗口（改设置的同时派发）。
-    const orchestratorState = await readOrchestrator();
-    const schedulingActive = orchestratorState.active;
-
-    // 默认提示词按**落点项目**解析：全局那条对所有项目生效，项目级那条只在这个项目追加。
-    // useDefaultPrompt=false 是"这一次不附加" —— 全局提示词若没法单次关掉，
-    // 偶尔发一条纯指令就得先去设置里把它删了，再粘回来。
-    const dispatchPrompt = req.body?.useDefaultPrompt === false
-      ? { text: '', source: '' }
-      : resolveDispatchPrompt(orchestratorState, targetPath);
-
-    // ── 附件：前端只回传 { id, ext, originalName }，服务端按 id 回暂存区找文件 ──
-    // 路径完全由服务端拼（stagingPath 会同时校验 id 形状与 ext 白名单），
-    // 所以不存在"前端指定任意路径"这回事 —— 比"信任 absolutePath 再校验前缀"干净。
-    // 数量与文件存在性在这里统一校验：上传时服务端是无状态的，压根不知道前端一共攒了几个。
-    const rawAttachments = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
-    if (rawAttachments.length > MAX_ATTACHMENTS_PER_TASK) {
-      throw new HttpError(400, `附件最多 ${MAX_ATTACHMENTS_PER_TASK} 个`);
-    }
-    const staged = [];
-    for (const item of rawAttachments) {
-      const attId = typeof item?.id === 'string' ? item.id : '';
-      const ext = typeof item?.ext === 'string' ? item.ext : '';
-      const from = stagingPath(attId, ext);
-      if (!from) throw new HttpError(400, '附件参数不合法');
-      let attStat = null;
-      try { attStat = await fsp.stat(from); } catch { /* 下面统一报错 */ }
-      if (!attStat || !attStat.isFile()) throw new HttpError(400, '附件已失效，请重新添加');
-      staged.push({
-        id: attId,
-        ext,
-        from,
-        size: attStat.size,
-        originalName: String(item?.originalName || `attachment.${ext}`).slice(0, 200),
-      });
-    }
-
-    // tasks / data 已在上面读好（落点解析要用），这里不再重复读一遍
-    const now = nowIso();
-    const taskId = genId();
-
-    // 附件从暂存区搬进任务自己的目录（`_task-{id}/`），这样删除任务时会被一并清掉
-    const attachmentDir = path.join(IMAGES_DIR, '_task-' + taskId);
-    const attachments = [];
-    if (staged.length > 0) {
-      await fsp.mkdir(attachmentDir, { recursive: true });
-      for (const s of staged) {
-        const storedName = `${s.id}.${s.ext}`;
-        const dest = path.join(attachmentDir, storedName);
-        try {
-          await fsp.rename(s.from, dest);
-        } catch {
-          // 极端情况（跨卷等）退化成复制 + 删除；仍失败就跳过这个附件，
-          // 而不是让整条指令派发不出去 —— 指令本身是好的，不该被一个文件拖死。
-          try {
-            await fsp.copyFile(s.from, dest);
-            await fsp.unlink(s.from);
-          } catch { continue; }
-        }
-        attachments.push({
-          id: s.id,
-          originalName: s.originalName,
-          mimeType: mimeForExt(s.ext),
-          size: s.size,
-          ext: s.ext,
-          storedName,
-          absolutePath: dest,
-          createdAt: now,
-        });
-      }
-    }
-
-    const task = {
-      id: taskId,
-      // 标题取指令首行并截断：看板卡片只占一行，整段指令塞进标题会把卡片撑爆
-      title: text.split('\n')[0].slice(0, 120),
-      desc: text,
-      promptId: null,
-      // 默认提示词在派发这一刻抄进任务（这次生效的是什么，任务自己记着）。
-      // 之后用户改设置不会回头改写它 —— 一条已存在的任务，"它当时是被怎么派出去的"
-      // 是既成事实，不是当前配置的投影。
-      simpleOverride: dispatchPrompt.text,
-      projectPath: targetPath,
-      attachments,
-      status: 'todo',
-      createdAt: now,
-      updatedAt: now,
-    };
-    tasks.push(task);
-    await writeJson(TASKS_FILE, { tasks });
-
-    const willRun = autoRun && schedulingActive;
-    const record = await appendInstruction({
-      text,
-      projectPath: targetPath,
-      taskId: task.id,
-      status: willRun ? 'accepted' : 'created',
-      reason: autoRun && !schedulingActive ? '调度已暂停，只建了任务未执行' : '',
-      // 落点是怎么定下来的（explicit / mention / agent / default），
-      // 记下来才能在流水里回答用户那句"为什么派到这儿了"
-      targetSource: target.source,
-      // 附带的是哪一级默认提示词（'' = 没带）。流水里要能说清"这段话是谁加的"
-      promptSource: dispatchPrompt.source,
-    });
-
-    publish('task:created', { task });
-    publish('orchestrator:instruction', record);
-
-    // 与 POST /tasks/:id/run 走同一条执行路径，避免出现第二套执行入口
-    if (willRun) {
-      const virtualSub = {
-        id: `${task.id}__simple`,
-        title: task.title,
-        desc: task.desc || '',
-        status: 'todo',
-        // 提示词取自 task.simpleOverride（派发时已把
-        // 全局/项目默认提示词抄进去），而不是在这里再解析一次配置
-        promptOverride: task.simpleOverride || '',
-        attachments: [],
-      };
-      // 派发控制台可以显式指定执行器；不传则用配置里的全局默认（resolveExecutor 走回落链）
-      const executor = await resolveExecutor(req.body?.executor, configManager);
-      runSingleSubtask(task, virtualSub, targetPath, '', { executor }).catch(err => {
-        publish('task:error', { taskId: task.id, error: err.message });
-      });
-    }
-
-    res.json({ success: true, task, instruction: record, ran: willRun, schedulingActive, target });
+    res.json({ success: true, ...result });
   }));
 
   /**

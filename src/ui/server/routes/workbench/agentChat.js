@@ -254,12 +254,15 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 //   - askUser: (args, meta) => Promise<string>  等待用户回答
 //   - listProjects: (args) => Promise<string>  list_projects 工具的数据源
 //     (由 agentRoutes 注入:最近目录/tasks.json/看板统计只有 GUI 侧拿得到)
+//   - dispatchTask: (payload) => Promise<string>  dispatch_task 工具的实现 —— 派发一条
+//     工作台任务。同样由 agentRoutes 注入，但**只在主 Agent 控制台发起的对话里**注入
+//     （别的入口不注入 = 那个入口没有派发能力，工具会回一句可照做的 unavailable）
 //   - getContextBlock: ({locale}) => Promise<string>  工作区状态快照的摘要块
 //     (由 agentRoutes 注入,实现在 routes/aiContext/:七个板块的摘要 + 落盘文件路径)
 //
 // 返回: { aborted: boolean }
-export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, getContextBlock }) {
-  const ctx = { cwd, locale, onChild, askUser, listProjects };
+export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, dispatchTask, getContextBlock }) {
+  const ctx = { cwd, locale, onChild, askUser, listProjects, dispatchTask };
 
   // 确保 session.messages 存在
   if (!Array.isArray(session.messages)) session.messages = [];

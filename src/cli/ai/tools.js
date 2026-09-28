@@ -220,6 +220,48 @@ export const TOOL_DEFINITIONS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'dispatch_task',
+      description: '把一条任务派发到本机某个项目，由本地 CLI 执行器（claude / opencode / codex）去跑。'
+        + '这是"让别的 agent 替我干活"的唯一入口：工作台里的一条任务 = 一次独立会话，派出去之后它在自己的进程里跑，'
+        + '不占本次对话，也不阻塞你继续回答用户。'
+        + '只在 g ui 的多项目编排台（主 Agent 控制台）里可用；其它入口调用会拿到一句 unavailable，那时直接回答用户即可。'
+        + '落点：不传 project_path 时由服务端按指令内容判断（指令里点名的项目 > 语义判断 > 应用当前项目），'
+        + '判断依据会如实记进指令流水；不确定有哪些项目时先用 list_projects 看清楚，不要猜目录名。'
+        + '粒度：一次调用只建**一条**任务。要分成几件事就分几次调用 —— 每次调用都会真的建一个任务、'
+        + '默认还可能立刻起一个 CLI 进程，不要把一堆不相关的事塞进同一个 text。'
+        + '想先征得用户同意再派，就先调 ask_user 问清楚（auto_run 传 false 也能只建任务不执行）。',
+      parameters: {
+        type: 'object',
+        properties: {
+          text: {
+            type: 'string',
+            description: '完整任务指令，会**原样**成为那条任务的 prompt（不是标题）。写清目标、范围与验收标准；上限 4000 字。',
+          },
+          project_path: {
+            type: 'string',
+            description: '目标项目目录的绝对路径。不传则由服务端按指令内容判断落点。',
+          },
+          executor: {
+            type: 'string',
+            enum: ['claude', 'opencode', 'codex'],
+            description: '用哪个本地 CLI 执行这条任务。不传则用控制台当前选中的执行器，再退到配置里的全局默认。',
+          },
+          auto_run: {
+            type: 'boolean',
+            description: 'true（默认）= 建了任务立刻执行；false = 只建任务留在看板，等用户自己点执行。',
+          },
+          use_default_prompt: {
+            type: 'boolean',
+            description: '默认 true = 附加编排台配置的默认提示词（全局 + 落点项目级）；false = 这条任务不带。',
+          },
+        },
+        required: ['text'],
+      },
+    },
+  },
 ]
 
 // ──────────────────────────────────────────────
@@ -622,6 +664,33 @@ async function toolAskUser(args, ctx) {
   return ctx.askUser({ question, options, allowFreeText, multiple })
 }
 
+// dispatch_task 与 list_projects 同一条边界：工具的**定义**在这里（CLI 与 Web 共用
+// 这份表），而"派到哪儿、怎么建任务、用哪个执行器"全是 GUI 侧的事。
+// 由 GUI 侧(workbench/agentRoutes.js)把实现注入 ctx.dispatchTask —— 注入的时机还带
+// 一层开关：只有主 Agent 控制台发起的对话才注入（见 agentRoutes 里 allowDispatch 的注释）。
+// 没有实现时给一句能照着做的话，而不是崩掉、也不是让模型反复重试。
+async function toolDispatchTask(args, ctx) {
+  const text = String(args.text || '').trim()
+  if (!text) return '错误: dispatch_task 需要非空的 text —— 要派给那个 agent 的完整指令。'
+  if (typeof ctx.dispatchTask !== 'function') {
+    return '错误: dispatch_task 只在 g ui 的「主 Agent 控制台」（工作台右栏）里可用，当前入口没有派发能力。'
+      + '不要重试这个工具，也不要假装已经派出去：直接回答用户；'
+      + '如果用户确实想派活，告诉他到主 Agent 控制台里说这句话。'
+  }
+
+  const payload = { text }
+  if (typeof args.project_path === 'string' && args.project_path.trim()) {
+    payload.projectPath = args.project_path.trim()
+  }
+  if (typeof args.executor === 'string' && args.executor.trim()) {
+    payload.executor = args.executor.trim()
+  }
+  // 只有显式 false 才改变默认：省略 = 跟随控制台的默认行为
+  if (args.auto_run === false) payload.autoRun = false
+  if (args.use_default_prompt === false) payload.useDefaultPrompt = false
+  return ctx.dispatchTask(payload)
+}
+
 // ──────────────────────────────────────────────
 // 工具分发
 // ──────────────────────────────────────────────
@@ -634,6 +703,7 @@ const TOOL_HANDLERS = {
   search_text: toolSearchText,
   list_projects: toolListProjects,
   ask_user: toolAskUser,
+  dispatch_task: toolDispatchTask,
 }
 
 /**
