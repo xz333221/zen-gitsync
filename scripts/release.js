@@ -27,13 +27,17 @@
  *   npm run release -- --keep-instances   # 装全局前不停掉运行中的 UI 实例(默认会停)
  *   npm run release -- --skip-push        # 只发布到 npm,不 push git
  *   npm run release -- --dry-run          # 只打印计划,不真正改 package.json / commit / publish
- *   npm run release -- --poll-interval=20 --poll-timeout=600  # 调自更新重试节奏(秒)
+ *   npm run release -- --poll-interval=20 --poll-timeout=1800 # 调自更新重试节奏(秒)
  *   npm run release -- --install-timeout=900               # 单次 npm install 上限(秒),0 = 不限时(默认)
  *
- * 发布后自更新:每轮先探 tarball 能不能取,能取到才调 npm;两条路(`pkg@<版本>` /
- * tarball URL 直连)都试,装上后校验全局版本,失败把原因打出来。
+ * 发布后自更新:每轮看两个就绪信号(packument 里有没有这个版本 / tarball 能不能取),
+ * 任一为真就真调 npm,并两条路(`pkg@<版本>` / tarball URL 直连)都试,装上后校验全局版本;
+ * 探针说"取不到"时也每 4 轮强制真试一次,窗口用尽前还会补最后一次,失败把原因打出来。
  * 原因见 tarballUrl() / selfUpdateGlobal() 处注释 —— publish 成功不等于
  * packument 立即可见,也不等于 tarball 立即可取(两种先后顺序都实测出现过)。
+ *
+ * "这一轮要不要真调 npm"的判定抽在 src/utils/selfUpdatePolicy.js(有单测);
+ * 动那里的阈值/分支请连带跑 `node --test src/utils/selfUpdatePolicy.test.js`。
  *
  * 自更新前置步骤:先把运行中的 UI 实例停掉(见 stopRunningInstances 处注释)——
  * Windows 上全局包目录被实例占着时,npm 删旧目录会 EPERM,装不上或装出半成品。
@@ -48,6 +52,7 @@ import { execSync, spawn } from 'node:child_process'
 import chalk from 'chalk'
 import readline from 'node:readline/promises'
 import { createInstanceRegistry, getRegistryPath } from '../src/ui/server/utils/instanceRegistry.js'
+import { shouldAttemptInstall, shouldFinalAttempt, FORCE_INSTALL_EVERY } from '../src/utils/selfUpdatePolicy.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -93,11 +98,26 @@ function readNumberArg(name, fallback) {
 // 于是 600s 眼看要耗尽、终端上 25 轮只有"→ npm install"没有任何原因。
 // 对策两条:① 每轮先自己探一次 tarball(isTarballFetchable,GET 而非 HEAD),
 // 取不到就跳过这一轮的 npm 调用并把状态打出来;② 失败原因压一行打出来。
+//
+// 又实测(2026-09-29, v2.17.21):上面①被写成了**硬闸门**(`if (probe.ok) { 真装 }`),
+// 于是一旦探针连着误报,整个窗口就只剩"等待":那次 35 轮全是
+// `tarball 还取不到 HTTP 404`,`npm install` **一次都没被执行**;
+// 脚本刚放弃,手动 `npm install -g zen-gitsync@2.17.21` 16s 就装上了。
+// 事后查那个 tarball 的 CDN 响应头:`Last-Modified` = 发布 +2s、`Age` ≈ 600s、
+// `CF-Cache-Status: HIT` —— 对象在发布后 2 秒就进了缓存,探针嘴里的 404 与事实不符。
+// 教训:**探针只是省一次调用的优化,不是判据**;判据只有 npm 自己。
+// 对策(判定逻辑见 src/utils/selfUpdatePolicy.js):
+//   ① 探针降级为优化:两个就绪信号任一为真就真调 npm;
+//   ② 探针明确 404 时每 FORCE_INSTALL_EVERY 轮强制真试一次(600s 里 ≈ 8 次真装机会);
+//   ③ 窗口用尽时若整轮没真装过,再补最后一次真试(shouldFinalAttempt);
+//   ④ 失败摘要报"试了几轮 / 真装了几次",零真试要显式提示"探针可能误报"。
+//
 // 单次 npm 调用不再硬性截断(见 INSTALL_TIMEOUT_MS):曾经给 180s 是为了"快速失败、
 // 把重试交给外层循环",但实测更常见的是 180s 不够 —— 每轮装到一半被杀、下轮从零重来,
 // 进度永远清零(2026-09-24 v2.17.14 卡了 27 轮)。要收紧可用 `--install-timeout=<秒>`。
 //
 // 默认 15s 一轮、上限 600s;可用 `--poll-interval=<秒>` / `--poll-timeout=<秒>` 调。
+// 触发强制真试的轮次间隔见 src/utils/selfUpdatePolicy.js 的 FORCE_INSTALL_EVERY。
 const POLL_INTERVAL_MS = readNumberArg('--poll-interval', 15) * 1000
 const POLL_TIMEOUT_MS = readNumberArg('--poll-timeout', 600) * 1000
 
@@ -576,18 +596,23 @@ async function commitChanges(version) {
   }
 }
 
-// 查询 registry 上 dist-tags.latest。查询失败(网络抖动 / registry 波动)返回 null,
-// 不视为致命错误 —— 交给轮询循环重试。
-function readLatestDistTag() {
+// 问 registry 的 packument:这个**版本**在不在里面。
+// 查询失败(还没同步 / 网络抖动)返回 false —— 不是致命错误,交给轮询循环重试。
+//
+// 为什么问版本而不是问 `dist-tags.latest`(v2.17.6 之前的写法):
+// dist-tags 与 versions 同在一份 packument 里,但 dist-tags.latest 翻牌**晚于**
+// 版本本身可用 —— 只盯 latest 会把"其实已经能装"的几分钟当成"还没就绪"。
+// 而这条判据问的正是 `npm install -g pkg@<ver>` 要解析的东西,预言性更强。
+function readPackumentHasVersion(version) {
   try {
     const out = execSync(
-      `npm view ${PKG_NAME} dist-tags.latest --json --registry=${NPM_REGISTRY} --prefer-online`,
+      `npm view ${PKG_NAME}@${version} version --json --registry=${NPM_REGISTRY} --prefer-online`,
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000 }
     )
     const parsed = JSON.parse(out.trim())
-    return typeof parsed === 'string' ? parsed.replace(/^v/, '') : null
+    return (typeof parsed === 'string' ? parsed.replace(/^v/, '') : '') === version
   } catch {
-    return null
+    return false
   }
 }
 
@@ -820,17 +845,24 @@ async function forceRemoveGlobalPackage() {
 // 等待阶段白等 600s,超时后再装照样 ETARGET,等于什么都没解决。
 //
 // 所以顺序反过来:先"尝试装",装不上才等。每轮:
-//   ① 先探 tarball 能不能取(isTarballFetchable)—— 取不到就别浪费一次 npm 调用,
-//      并且把"还取不到 HTTP 404"如实打出来:这是"到底卡在哪"的唯一线索;
-//   ② 取得到就按两条路试,任一条装上且校验通过即结束:
-//      `pkg@<version>`(packument 已同步时的常规路径)/ tarball URL 直连;
+//   ① 取两个**就绪信号**:packument 里有没有这个版本(`npm view pkg@ver`)、
+//      tarball 能不能取(isTarballFetchable)。任一为真 → 真调 npm ——
+//      两个信号各对应一条能绕开对方缓存的安装路径(`pkg@ver` / tarball URL 直连);
+//   ② 两个都不为真 → 这一轮跳过 npm 调用(省下注定失败的一次),把状态打出来。
+//      但**跳过只是优化,不是判据**:探针明确 404 时每 FORCE_INSTALL_EVERY 轮强制真试,
+//      窗口用尽前还会补最后一次(shouldFinalAttempt)—— v2.17.21 那次就是反例:
+//      探针 35 轮全 404 → 一次 npm 都没调过 → 600s 全白等,而手动装 16s 就成;
 //   ③ 失败原因压成一行打出来(summarizeInstallError)。**别再默默重试**——
 //      v2.17.6 那次用户看到的就是"一直在执行安装命令"、25 轮里一句原因都没有,
 //      而真实原因是那几分钟 tarball 还没对外可取(见 tarballUrl 注释)。
 async function selfUpdateGlobal(version) {
   console.log(chalk.blue('\n=== 发布后自更新全局版本 ==='))
   console.log(chalk.gray('publish 成功 ≠ packument 立即可见、也 ≠ tarball 立即可取(两者先后顺序随机)。'))
-  console.log(chalk.gray('不空等 dist-tags:每轮先探 tarball,能取到才调 npm,失败会打印原因。'))
+  console.log(chalk.gray('每轮取两个就绪信号(packument 里有没有该版本 / tarball 能不能取),任一为真就真调 npm。'))
+  console.log(chalk.gray(
+    `探针说"取不到"时也每 ${FORCE_INSTALL_EVERY} 轮强制真试一次,窗口用尽前还会补最后一次`
+    + ' —— 探针只是"省一次调用"的优化,它也会误报。'
+  ))
   console.log(chalk.gray(
     `间隔 ${POLL_INTERVAL_MS / 1000}s,上限 ${POLL_TIMEOUT_MS / 1000}s`
     + '(可用 --poll-interval / --poll-timeout 调);'
@@ -842,89 +874,134 @@ async function selfUpdateGlobal(version) {
   const deadline = startedAt + POLL_TIMEOUT_MS
   let attempt = 0
   let lastOutput = ''
+  let installAttempts = 0      // 真调过几次 npm install(和"只是探了一下"分开记)
+  let skippedRounds = 0        // 探针说取不到 → 整轮跳过 npm 调用的次数
+  let lastRoundAttempted = false
   // 实例只在"第一次真要装"之前停一次,不在进循环时就停:前面的探测阶段可能还要等好几分钟
   // (tarball 还没对外可取),提前停等于白白占掉用户几分钟的 UI。
   let stopDone = false
 
+  // 真要装之前,先把运行中的实例停掉:接下来就是 npm 删旧目录 →
+  // 目录被实例占着会 EPERM(见 stopRunningInstances 处注释)。只做一次。
+  const ensureInstancesStopped = async () => {
+    if (stopDone) return
+    stopDone = true
+    if (KEEP_INSTANCES) {
+      console.log(chalk.yellow('--keep-instances: 不停运行中的实例,若安装报 EPERM / 文件占用属预期'))
+    } else {
+      await stopRunningInstances()
+    }
+  }
+
+  // 一轮"真装":两条 spec 依次试,任一条装上且全局版本校验通过即返回 { ok: true }。
+  // preferPackument=true 时先走常规精确版本;否则 tarball 优先,争取一轮命中。
+  const runInstallRound = async (preferPackument, label = `第 ${attempt} 轮`) => {
+    installAttempts += 1
+    await ensureInstancesStopped()
+    const targets = preferPackument
+      ? [`${PKG_NAME}@${version}`, tarballUrl(version, attempt > 1)]
+      : [tarballUrl(version, attempt > 1), `${PKG_NAME}@${version}`]
+
+    for (const spec of targets) {
+      const res = tryInstallGlobal(spec)
+      if (!res.ok) {
+        lastOutput = res.output
+        console.log(chalk.yellow(`  ✗ ${summarizeInstallError(res.output)}`))
+        // 文件占用和"registry 还没同步"是两类失败:前者要再杀一轮 + 强删旧目录,
+        // 后者只能等。混在一起会让前者白等满 600s。
+        if (looksLikeFileLock(res.output)) {
+          console.log(chalk.yellow('  检测到文件占用(Windows 常见):再停一轮实例 + 强制清旧全局目录'))
+          if (!KEEP_INSTANCES) await stopRunningInstances({ quiet: true })
+          await forceRemoveGlobalPackage()
+        }
+        continue
+      }
+      const installed = readGlobalInstalledVersion()
+      if (installed === version) {
+        const cost = ((Date.now() - startedAt) / 1000).toFixed(1)
+        console.log(chalk.green(
+          `全局已更新到 ${PKG_NAME}@${version}`
+          + `(${label},第 ${installAttempts} 次真装,耗时 ${cost}s)`
+        ))
+        return { ok: true }
+      }
+      // 退出码 0 但版本不对(极少见):按失败处理,继续下一轮
+      lastOutput = `安装命令退出码 0,但全局版本读到 ${installed ?? '未知'}`
+      console.log(chalk.yellow(`  安装命令成功,但全局版本是 ${installed ?? '未知'},继续重试`))
+    }
+    return { ok: false, output: lastOutput }
+  }
+
   for (;;) {
     attempt += 1
-    const packumentSynced = readLatestDistTag() === version
+    const packumentHasVersion = readPackumentHasVersion(version)
     // 第 2 轮起给 tarball 地址加时间戳,绕开 CDN 可能挂着的"这条路径 404"负缓存
     const bust = attempt > 1
-    const tarball = tarballUrl(version, bust)
     const probe = await isTarballFetchable(version, bust)
+    const plan = shouldAttemptInstall({ attempt, probe, packumentHasVersion })
+    lastRoundAttempted = plan.attempt
 
     console.log(chalk.gray(
-      `第 ${attempt} 次尝试(dist-tags.latest${packumentSynced ? '已同步' : '仍是旧版本'},`
-      + ` tarball ${probe.ok ? '已可取' : `还取不到${probe.status ? ` HTTP ${probe.status}` : ''}`})...`
+      `第 ${attempt} 轮(packument ${packumentHasVersion ? '已有该版本' : '还没有该版本'},`
+      + ` tarball ${probe.ok ? '已可取' : `还取不到${probe.status ? ` HTTP ${probe.status}` : ''}`}`
+      + `) → ${plan.attempt ? `真试安装(${plan.reason})` : '本轮跳过 npm 调用'}`
     ))
 
-    if (probe.ok) {
-      // 真要装之前,先把运行中的实例停掉:tarball 已可取,接下来就是 npm 删旧目录 →
-      // 目录被实例占着会 EPERM(见 stopRunningInstances 处注释)。只做一次。
-      if (!stopDone) {
-        stopDone = true
-        if (KEEP_INSTANCES) {
-          console.log(chalk.yellow('--keep-instances: 不停运行中的实例,若安装报 EPERM / 文件占用属预期'))
-        } else {
-          await stopRunningInstances()
-        }
-      }
-
-      // packument 已同步 → 先走常规精确版本;还没同步 → tarball 优先,争取一轮命中
-      const targets = packumentSynced
-        ? [`${PKG_NAME}@${version}`, tarball]
-        : [tarball, `${PKG_NAME}@${version}`]
-
-      for (const spec of targets) {
-        const res = tryInstallGlobal(spec)
-        if (!res.ok) {
-          lastOutput = res.output
-          console.log(chalk.yellow(`  ✗ ${summarizeInstallError(res.output)}`))
-          // 文件占用和"registry 还没同步"是两类失败:前者要再杀一轮 + 强删旧目录,
-          // 后者只能等。混在一起会让前者白等满 600s。
-          if (looksLikeFileLock(res.output)) {
-            console.log(chalk.yellow('  检测到文件占用(Windows 常见):再停一轮实例 + 强制清旧全局目录'))
-            if (!KEEP_INSTANCES) await stopRunningInstances({ quiet: true })
-            await forceRemoveGlobalPackage()
-          }
-          continue
-        }
-        const installed = readGlobalInstalledVersion()
-        if (installed === version) {
-          const cost = ((Date.now() - startedAt) / 1000).toFixed(1)
-          console.log(chalk.green(
-            `全局已更新到 ${PKG_NAME}@${version}(第 ${attempt} 次尝试,耗时 ${cost}s)`
-          ))
-          return
-        }
-        // 退出码 0 但版本不对(极少见):按失败处理,继续下一轮
-        lastOutput = `安装命令退出码 0,但全局版本读到 ${installed ?? '未知'}`
-        console.log(chalk.yellow(`  安装命令成功,但全局版本是 ${installed ?? '未知'},继续重试`))
+    if (plan.attempt) {
+      const res = await runInstallRound(packumentHasVersion)
+      if (res.ok) return
+    } else {
+      skippedRounds += 1
+      if (skippedRounds === FORCE_INSTALL_EVERY - 1) {
+        console.log(chalk.yellow(
+          `  · 已连续 ${skippedRounds} 轮跳过 npm 调用(探针都说 tarball 取不到)。`
+          + '跳过只是为了省一次注定失败的调用,**不是判据** —— 探针本身会误报'
+          + '(v2.17.21 实测:探针 600s 全 404,手动 npm install 只花 16s),'
+          + `所以每 ${FORCE_INSTALL_EVERY} 轮会强制真试一次,窗口用尽前还会补最后一次。`
+        ))
       }
     }
 
     const remain = deadline - Date.now()
-    if (remain <= 0) {
-      console.error(chalk.red(`已尝试 ${attempt} 次,仍未装上 ${PKG_NAME}@${version}`))
-      if (lastOutput) console.error(chalk.gray(lastOutput))
-      if (looksLikeFileLock(lastOutput)) {
-        console.error(chalk.yellow(
-          '看起来是文件被占(不是 registry 滞后):关掉所有 UI 实例 / 编辑器后重试,\n'
-          + '必要时手动删掉全局包目录再装(注意会短暂失去全局命令)。'
-        ))
-      }
-      console.error(chalk.gray(
-        '可稍后手动重试:\n'
-        + `  npm install -g ${PKG_NAME}@${version}\n`
-        + '若报 ETARGET / E404(registry 元数据与 tarball 还没对齐),直连 tarball:\n'
-        + `  npm install -g ${tarballUrl(version)}`
-      ))
-      return
-    }
+    if (remain <= 0) break
     console.log(chalk.gray(`  ${Math.ceil(remain / 1000)}s 后重试`))
     await sleep(Math.min(POLL_INTERVAL_MS, remain))
   }
+
+  // 窗口用尽。**别就这样放弃**:整轮可能都在"跳过 npm 调用"(探针误报时就是这个形态),
+  // 那就等于一次事实判据都没取到 —— 补最后一次真装。v2.17.21 那次只要补这一下就结束了。
+  if (shouldFinalAttempt({ installAttempts, lastRoundAttempted })) {
+    console.log(chalk.yellow(
+      `\n${POLL_TIMEOUT_MS / 1000}s 窗口用尽,且最后一轮没真装过 → 补最后一次真装`
+      + '(探针可能误报,事实判据只有 npm 自己)。'
+    ))
+    const res = await runInstallRound(readPackumentHasVersion(version), '超时前补的真装')
+    if (res.ok) return
+  }
+
+  console.error(chalk.red(
+    `已试 ${attempt} 轮(其中真调 npm ${installAttempts} 次),仍未装上 ${PKG_NAME}@${version}`
+  ))
+  if (skippedRounds > 0) {
+    console.error(chalk.yellow(
+      `${skippedRounds} 轮因探针报"取不到"跳过了 npm 调用 —— 若手动能装上,那就是探针误报,`
+      + '不是 registry 没就绪。'
+    ))
+  }
+  if (lastOutput) console.error(chalk.gray(lastOutput))
+  if (looksLikeFileLock(lastOutput)) {
+    console.error(chalk.yellow(
+      '看起来是文件被占(不是 registry 滞后):关掉所有 UI 实例 / 编辑器后重试,\n'
+      + '必要时手动删掉全局包目录再装(注意会短暂失去全局命令)。'
+    ))
+  }
+  console.error(chalk.gray(
+    '可稍后手动重试:\n'
+    + `  npm install -g ${PKG_NAME}@${version}\n`
+    + '若报 ETARGET / E404(registry 元数据与 tarball 还没对齐),直连 tarball:\n'
+    + `  npm install -g ${tarballUrl(version)}\n`
+    + `窗口不够长可放宽(默认 ${POLL_TIMEOUT_MS / 1000}s):npm run release -- --poll-timeout=1800`
+  ))
 }
 
 // 发布到 NPM

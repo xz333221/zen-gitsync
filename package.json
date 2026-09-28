@@ -28,6 +28,8 @@
     "verify:data-dir-migration": "node scripts/verify-data-dir-migration.mjs",
     "verify:config-split": "node scripts/verify-config-split.mjs",
     "verify:package-files": "node --test test/package-files.test.mjs",
+    "verify:release:self-update": "node scripts/verify-release-self-update.mjs",
+    "verify:release:self-update:reverse": "node scripts/verify-release-self-update.mjs --reverse",
     "verify:wb-agent-dispatch": "node scripts/verify-workbench-agent-dispatch.mjs",
     "verify:wb-oc-modes": "node scripts/verify-wb-oc-agent-chat.cjs",
     "verify:wb-oc-modes:reverse": "node scripts/verify-wb-oc-agent-chat-reverse.cjs",
