@@ -85,8 +85,10 @@ __pycache__/
 .agents/
 
 # 根 skills/ 是历史 skill 备份,权威只在 .claude/skills/
-skills/
-skills-lock.json
+# 前导斜杠不能省：`skills/` 会匹配任意层级的同名目录，把 .claude/skills/ 一起吃掉，
+# 覆盖上面 `!.claude/skills/**` 的例外（导致 96 个已提交的 skill 文件变成"已跟踪但被忽略"）。
+/skills/
+/skills-lock.json
 
 # TypeScript build info
 *.tsbuildinfo
