@@ -112,10 +112,10 @@ const selectedExecutor = ref<TaskExecutorId>(getSelectedTaskExecutor())
 const MODE_KEY = 'wb.ocMode.v1'
 const mode = ref<'chat' | 'command'>((() => {
   try {
-    return localStorage.getItem(MODE_KEY) === 'command' ? 'command' : 'chat'
+    return localStorage.getItem(MODE_KEY) === 'chat' ? 'chat' : 'command'
   } catch {
     // 隐私模式：不记偏好而已，不影响用
-    return 'chat'
+    return 'command'
   }
 })())
 function setMode(next: 'chat' | 'command') {
