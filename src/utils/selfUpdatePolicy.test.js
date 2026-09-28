@@ -21,6 +21,8 @@ import assert from 'node:assert/strict'
 import {
   shouldAttemptInstall,
   shouldFinalAttempt,
+  nextPollIntervalMs,
+  classifyInstallError,
   FORCE_INSTALL_EVERY,
 } from './selfUpdatePolicy.js'
 
@@ -151,4 +153,52 @@ test('shouldFinalAttempt: 最后一轮刚试过 → 不补(几秒前才失败,�
 
 test('shouldFinalAttempt: 试过但最后一轮在跳过 → 仍补一次', () => {
   assert.equal(shouldFinalAttempt({ installAttempts: 8, lastRoundAttempted: false }), true)
+})
+
+// ========== 轮询间隔退避(窗口从 600s 提到 30 分钟后必须有) ==========
+
+const INTERVAL_CFG = { fastWindowMs: 600_000, fastIntervalMs: 15_000, slowIntervalMs: 60_000 }
+
+test('nextPollIntervalMs: 前段(600s 内)保持密集 15s', () => {
+  for (const elapsedMs of [0, 1_000, 599_999]) {
+    assert.equal(nextPollIntervalMs({ ...INTERVAL_CFG, elapsedMs }), 15_000, `elapsed=${elapsedMs}`)
+  }
+})
+
+test('nextPollIntervalMs: 到点即切到慢炖 60s(边界取后段)', () => {
+  assert.equal(nextPollIntervalMs({ ...INTERVAL_CFG, elapsedMs: 600_000 }), 60_000)
+  assert.equal(nextPollIntervalMs({ ...INTERVAL_CFG, elapsedMs: 1_500_000 }), 60_000)
+})
+
+test('nextPollIntervalMs: 30 分钟窗口的总轮数可控(不是"15s 跳 120 轮")', () => {
+  // 前 600s / 15s = 40 轮;剩下 1200s / 60s = 20 轮 → 60 轮封顶
+  const total = 600_000 / 15_000 + (1_800_000 - 600_000) / 60_000
+  assert.equal(total, 60)
+  assert.ok(total <= 60, '长窗口不许把日志刷成上百轮')
+})
+
+// ========== 失败归类(放弃时汇总"卡在哪") ==========
+
+test('classifyInstallError: E404 / ETARGET → registry 还没就绪', () => {
+  assert.equal(classifyInstallError('npm error code E404\nnpm error 404 Not Found - GET https://...'), 'E404')
+  assert.equal(classifyInstallError('npm error code ETARGET\nnpm error No matching version found'), 'ETARGET')
+})
+
+test('classifyInstallError: EPERM / EBUSY → 文件被占(和"还没就绪"完全不同的处置)', () => {
+  assert.equal(classifyInstallError('npm warn cleanup Failed to remove some directories: EPERM'), 'EPERM')
+  assert.equal(classifyInstallError('npm error EBUSY: resource busy or locked'), 'EPERM')
+})
+
+test('classifyInstallError: 网络类与空输入不炸,各有短码', () => {
+  assert.equal(classifyInstallError('npm error code ENOTFOUND registry.npmjs.org'), 'ENOTFOUND')
+  assert.equal(classifyInstallError('npm error code ETIMEDOUT'), 'ETIMEDOUT')
+  assert.equal(classifyInstallError('npm error ECONNRESET'), 'ENETUNREACH')
+  assert.equal(classifyInstallError(''), '其他')
+  assert.equal(classifyInstallError(undefined), '其他')
+  assert.equal(classifyInstallError('some unknown failure'), '其他')
+})
+
+test('classifyInstallError: 两类同时出现时优先报文件占用(它是唯一要"动手"的那类)', () => {
+  const mixed = 'npm error code E404\nnpm error EPERM: operation not permitted'
+  assert.equal(classifyInstallError(mixed), 'EPERM')
 })

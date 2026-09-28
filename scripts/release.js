@@ -27,7 +27,9 @@
  *   npm run release -- --keep-instances   # 装全局前不停掉运行中的 UI 实例(默认会停)
  *   npm run release -- --skip-push        # 只发布到 npm,不 push git
  *   npm run release -- --dry-run          # 只打印计划,不真正改 package.json / commit / publish
- *   npm run release -- --poll-interval=20 --poll-timeout=1800 # 调自更新重试节奏(秒)
+ *   npm run release -- --poll-interval=20                 # 前段轮询间隔(秒,默认 15)
+ *   npm run release -- --poll-timeout=3600                # 窗口上限(秒,默认 1800 = 30 分钟)
+ *   npm run release -- --poll-fast-window=600 --poll-slow-interval=60  # 600s 后退避到 60s 一跳
  *   npm run release -- --install-timeout=900               # 单次 npm install 上限(秒),0 = 不限时(默认)
  *
  * 发布后自更新:每轮看两个就绪信号(packument 里有没有这个版本 / tarball 能不能取),
@@ -52,7 +54,13 @@ import { execSync, spawn } from 'node:child_process'
 import chalk from 'chalk'
 import readline from 'node:readline/promises'
 import { createInstanceRegistry, getRegistryPath } from '../src/ui/server/utils/instanceRegistry.js'
-import { shouldAttemptInstall, shouldFinalAttempt, FORCE_INSTALL_EVERY } from '../src/utils/selfUpdatePolicy.js'
+import {
+  shouldAttemptInstall,
+  shouldFinalAttempt,
+  nextPollIntervalMs,
+  classifyInstallError,
+  FORCE_INSTALL_EVERY,
+} from '../src/utils/selfUpdatePolicy.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -108,18 +116,28 @@ function readNumberArg(name, fallback) {
 // 教训:**探针只是省一次调用的优化,不是判据**;判据只有 npm 自己。
 // 对策(判定逻辑见 src/utils/selfUpdatePolicy.js):
 //   ① 探针降级为优化:两个就绪信号任一为真就真调 npm;
-//   ② 探针明确 404 时每 FORCE_INSTALL_EVERY 轮强制真试一次(600s 里 ≈ 8 次真装机会);
+//   ② 探针明确 404 时每 FORCE_INSTALL_EVERY 轮强制真试一次;
 //   ③ 窗口用尽时若整轮没真装过,再补最后一次真试(shouldFinalAttempt);
-//   ④ 失败摘要报"试了几轮 / 真装了几次",零真试要显式提示"探针可能误报"。
+//   ④ 失败摘要报"试了几轮 / 真装了几次 / 失败构成(E404 ×N、EPERM ×N)",并区分
+//      "探针误报"与"窗口不够长"两种情况(两者要采取的动作完全相反)。
 //
 // 单次 npm 调用不再硬性截断(见 INSTALL_TIMEOUT_MS):曾经给 180s 是为了"快速失败、
 // 把重试交给外层循环",但实测更常见的是 180s 不够 —— 每轮装到一半被杀、下轮从零重来,
 // 进度永远清零(2026-09-24 v2.17.14 卡了 27 轮)。要收紧可用 `--install-timeout=<秒>`。
 //
-// 默认 15s 一轮、上限 600s;可用 `--poll-interval=<秒>` / `--poll-timeout=<秒>` 调。
-// 触发强制真试的轮次间隔见 src/utils/selfUpdatePolicy.js 的 FORCE_INSTALL_EVERY。
+// 窗口长度(v2.17.21 之后重定):原来上限写死 600s,而"registry 元数据/对象就绪"
+// 这件事实测**能超过 600s**(那次 35 轮全在等,用户随后手动装才成),所以上限提到
+// **1800s(30 分钟)**;但这不能变成"30 分钟里 15s 一跳跳 120 轮",于是前 600s 保持
+// 15s 的灵敏度,之后退避到 60s 慢炖(见 nextPollIntervalMs)。总轮数封顶 60 左右。
+// 三个口子:`--poll-fast-window`(前段长度)/ `--poll-slow-interval`(后段间隔)/ `--poll-timeout`。
+// 间隔仍可用 `--poll-interval=<秒>`(前段)调。
+//
+// 注意窗口加长**不解耦**另一件事:轮询期间必须真的调 npm(见 selfUpdatePolicy),
+// 否则窗口再长也只是更长地等 —— v2.17.21 的 35 轮就是零真试。
 const POLL_INTERVAL_MS = readNumberArg('--poll-interval', 15) * 1000
-const POLL_TIMEOUT_MS = readNumberArg('--poll-timeout', 600) * 1000
+const POLL_TIMEOUT_MS = readNumberArg('--poll-timeout', 1800) * 1000
+const POLL_FAST_WINDOW_MS = readNumberArg('--poll-fast-window', 600) * 1000
+const POLL_SLOW_INTERVAL_MS = readNumberArg('--poll-slow-interval', 60) * 1000
 
 // 发布物 tarball 的地址。
 //
@@ -864,8 +882,9 @@ async function selfUpdateGlobal(version) {
     + ' —— 探针只是"省一次调用"的优化,它也会误报。'
   ))
   console.log(chalk.gray(
-    `间隔 ${POLL_INTERVAL_MS / 1000}s,上限 ${POLL_TIMEOUT_MS / 1000}s`
-    + '(可用 --poll-interval / --poll-timeout 调);'
+    `间隔 ${POLL_INTERVAL_MS / 1000}s(前 ${POLL_FAST_WINDOW_MS / 1000}s)→`
+    + ` ${POLL_SLOW_INTERVAL_MS / 1000}s(之后退避),窗口上限 ${POLL_TIMEOUT_MS / 1000}s`
+    + '(可用 --poll-interval / --poll-fast-window / --poll-slow-interval / --poll-timeout 调);'
     + `单次安装${INSTALL_TIMEOUT_MS > 0 ? `上限 ${INSTALL_TIMEOUT_MS / 1000}s` : '不限时'}`
     + '(可用 --install-timeout=<秒> 调,0 = 不限时)。'
   ))
@@ -877,6 +896,8 @@ async function selfUpdateGlobal(version) {
   let installAttempts = 0      // 真调过几次 npm install(和"只是探了一下"分开记)
   let skippedRounds = 0        // 探针说取不到 → 整轮跳过 npm 调用的次数
   let lastRoundAttempted = false
+  let slowPhase = false        // 是否已跨过前段窗口(退避提示只打一次)
+  const errorTally = new Map() // 失败短码 → 次数,放弃时汇总"到底卡在哪"
   // 实例只在"第一次真要装"之前停一次,不在进循环时就停:前面的探测阶段可能还要等好几分钟
   // (tarball 还没对外可取),提前停等于白白占掉用户几分钟的 UI。
   let stopDone = false
@@ -906,9 +927,11 @@ async function selfUpdateGlobal(version) {
       const res = tryInstallGlobal(spec)
       if (!res.ok) {
         lastOutput = res.output
-        console.log(chalk.yellow(`  ✗ ${summarizeInstallError(res.output)}`))
+        const code = classifyInstallError(res.output)
+        errorTally.set(code, (errorTally.get(code) || 0) + 1)
+        console.log(chalk.yellow(`  ✗ [${code}] ${summarizeInstallError(res.output)}`))
         // 文件占用和"registry 还没同步"是两类失败:前者要再杀一轮 + 强删旧目录,
-        // 后者只能等。混在一起会让前者白等满 600s。
+        // 后者只能等。混在一起会让前者白等满整个窗口。日志里的 [短码] 就是分类结果。
         if (looksLikeFileLock(res.output)) {
           console.log(chalk.yellow('  检测到文件占用(Windows 常见):再停一轮实例 + 强制清旧全局目录'))
           if (!KEEP_INSTANCES) await stopRunningInstances({ quiet: true })
@@ -962,10 +985,28 @@ async function selfUpdateGlobal(version) {
       }
     }
 
+    const elapsed = Date.now() - startedAt
+    // 跨过前段窗口时提示一次:窗口比原来长了一倍多,得让用户知道"还在等什么、怎么退出"
+    if (!slowPhase && elapsed >= POLL_FAST_WINDOW_MS) {
+      slowPhase = true
+      console.log(chalk.yellow(
+        `已超过原窗口上限(${POLL_FAST_WINDOW_MS / 1000}s),继续等但退避到 `
+        + `${POLL_SLOW_INTERVAL_MS / 1000}s 一跳,最长到 ${POLL_TIMEOUT_MS / 1000}s。\n`
+        + '  不想等可以 Ctrl-C,之后手动装(发布/推送/打标签都已经完成了,只剩装全局):\n'
+        + `    npm install -g ${PKG_NAME}@${version}`
+      ))
+    }
+
     const remain = deadline - Date.now()
     if (remain <= 0) break
-    console.log(chalk.gray(`  ${Math.ceil(remain / 1000)}s 后重试`))
-    await sleep(Math.min(POLL_INTERVAL_MS, remain))
+    const interval = nextPollIntervalMs({
+      elapsedMs: elapsed,
+      fastWindowMs: POLL_FAST_WINDOW_MS,
+      fastIntervalMs: POLL_INTERVAL_MS,
+      slowIntervalMs: POLL_SLOW_INTERVAL_MS,
+    })
+    console.log(chalk.gray(`  ${Math.ceil(remain / 1000)}s 后重试(本轮间隔 ${interval / 1000}s)`))
+    await sleep(Math.min(interval, remain))
   }
 
   // 窗口用尽。**别就这样放弃**:整轮可能都在"跳过 npm 调用"(探针误报时就是这个形态),
@@ -982,10 +1023,25 @@ async function selfUpdateGlobal(version) {
   console.error(chalk.red(
     `已试 ${attempt} 轮(其中真调 npm ${installAttempts} 次),仍未装上 ${PKG_NAME}@${version}`
   ))
+  if (errorTally.size > 0) {
+    // 汇总失败构成:E404 / ETARGET = registry 还没就绪(**只能等**);
+    // EPERM = 文件被占(要动手杀实例 + 清目录)。两类混在一起时人肉看日志分不出来。
+    const parts = [...errorTally.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ×${n}`)
+    console.error(chalk.yellow(`失败构成:${parts.join(' / ')}`))
+  }
+  if (installAttempts > 0 && !errorTally.has('EPERM')) {
+    // 真调过 npm、失败原因又都是"还没就绪" → 这就是"registry 比窗口还慢",不是探针的事。
+    console.error(chalk.yellow(
+      `真调 npm 的 ${installAttempts} 次里没有一次是文件占用,失败原因都是"还没就绪" —— `
+      + `说明是 registry 确实慢,窗口(${POLL_TIMEOUT_MS / 1000}s)不够长。下次可放宽:\n`
+      + `  npm run release -- --poll-timeout=${Math.max((POLL_TIMEOUT_MS / 1000) * 2, 3600)}`
+    ))
+  }
   if (skippedRounds > 0) {
     console.error(chalk.yellow(
-      `${skippedRounds} 轮因探针报"取不到"跳过了 npm 调用 —— 若手动能装上,那就是探针误报,`
-      + '不是 registry 没就绪。'
+      `${skippedRounds} 轮因探针报"取不到"跳过了 npm 调用。判断这次是哪种:`
+      + '手动装**立刻**就成 → 探针误报(窗口其实早就够);'
+      + '手动装同样报 404 / ETARGET → registry 真的慢,是窗口不够长。'
     ))
   }
   if (lastOutput) console.error(chalk.gray(lastOutput))
@@ -999,8 +1055,7 @@ async function selfUpdateGlobal(version) {
     '可稍后手动重试:\n'
     + `  npm install -g ${PKG_NAME}@${version}\n`
     + '若报 ETARGET / E404(registry 元数据与 tarball 还没对齐),直连 tarball:\n'
-    + `  npm install -g ${tarballUrl(version)}\n`
-    + `窗口不够长可放宽(默认 ${POLL_TIMEOUT_MS / 1000}s):npm run release -- --poll-timeout=1800`
+    + `  npm install -g ${tarballUrl(version)}`
   ))
 }
 

@@ -65,18 +65,30 @@ async function FAKE_STOP_QUIET() { HARNESS_LOG.stops += 1; return [] }
 process.on('exit', () => { console.log('HARNESS_LOG ' + JSON.stringify(HARNESS_LOG)) })
 `
 
-// 旧实现(硬闸门)的等价物:只有探针说可取才真装,且没有"超时前补一次"。
+// 旧实现(硬闸门)的等价物:只有探针说可取才真装,没有"超时前补一次",
+// 也没有后段退避与失败归类(那时固定 15s 跳、失败只打最后一次原文)。
 // 用于反证 —— 顺便把这个"旧行为长什么样"钉在探针里,而不是靠注释描述。
 const LEGACY_GATE = `
 const FORCE_INSTALL_EVERY = 4
 const shouldAttemptInstall = ({ probe }) => ({ attempt: !!probe?.ok, reason: probe?.ok ? 'tarball-ready' : 'probe-says-missing' })
 const shouldFinalAttempt = () => false
+const nextPollIntervalMs = ({ fastIntervalMs }) => fastIntervalMs
+const classifyInstallError = () => '其他'
 `
+
+// 注意:这条替换的是**整条 import**(多行),反证模式下它会连同 import 一起被换掉。
+const POLICY_IMPORT = `import {
+  shouldAttemptInstall,
+  shouldFinalAttempt,
+  nextPollIntervalMs,
+  classifyInstallError,
+  FORCE_INSTALL_EVERY,
+} from '../src/utils/selfUpdatePolicy.js'`
 
 const REPLACEMENTS = [
   {
     label: '策略模块 import',
-    from: "import { shouldAttemptInstall, shouldFinalAttempt, FORCE_INSTALL_EVERY } from '../src/utils/selfUpdatePolicy.js'",
+    from: POLICY_IMPORT,
     to: "__POLICY_LINE__",
   },
   { label: '探针调用点', from: 'await isTarballFetchable(version, bust)', to: 'await FAKE_PROBE(version, bust)' },
@@ -139,11 +151,13 @@ function buildHarnessSource() {
   return bad ? null : code
 }
 
-function runScenario(cfg, { intervalSec = 1, timeoutSec = 8 } = {}) {
+function runScenario(cfg, { intervalSec = 1, timeoutSec = 8, args } = {}) {
   const env = { ...process.env, HARNESS_CONFIG: JSON.stringify(cfg), HARNESS_VERSION: cfg.version }
+  // args 给了就用它(验证退避时需要一次给全四个口子),否则用 interval/timeout 两个快捷参数
+  const cliArgs = args ?? [`--poll-interval=${intervalSec}`, `--poll-timeout=${timeoutSec}`]
   const res = spawnSync(
     process.execPath,
-    [HARNESS, `--poll-interval=${intervalSec}`, `--poll-timeout=${timeoutSec}`],
+    [HARNESS, ...cliArgs],
     { cwd: path.join(__dirname, '..'), env, encoding: 'utf8', timeout: 120000 }
   )
   const out = `${res.stdout || ''}\n${res.stderr || ''}`
@@ -189,8 +203,25 @@ try {
     check('出现"补最后一次真装"(超时兜底)', b.out.includes('补最后一次真装'))
     check('真调 npm ≥ 4 次(强制轮 2 条 spec + 补试 2 条 spec)', (b.log?.installs.length ?? 0) >= 4, `installs=${b.log?.installs.length ?? 'null'}`)
     check('失败摘要报"已试 N 轮(其中真调 npm M 次)"', /已试 \d+ 轮\(其中真调 npm \d+ 次\)/.test(b.out))
-    check('提示"探针误报"而不是让用户以为 registry 没就绪', b.out.includes('探针误报'))
-    check('给出放宽窗口的提示', b.out.includes('--poll-timeout=1800'))
+    check('失败构成汇总到短码(E404 ×N)', /失败构成:E404 ×\d+/.test(b.out))
+    check('真装都失败时点明"是窗口不够长",不甩锅给探针',
+      b.out.includes('窗口(6s)不够长'))
+    check('给出加倍窗口的具体命令', b.out.includes('--poll-timeout=3600'))
+    check('探针跳过次数也解释清楚(含两种情况的判断口诀)',
+      b.out.includes('跳过 npm 调用') && b.out.includes('探针误报'))
+
+    // ---- 场景 D:窗口加长 + 后段退避 ----
+    console.log('\n[场景 D] 窗口过前段后不停摆烂:退避到慢间隔继续等,并提示可 Ctrl-C')
+    const d = runScenario(
+      { version: '9.9.9', probeOk: false, packumentHasVersion: false, installSucceeds: false },
+      { args: ['--poll-interval=1', '--poll-fast-window=3', '--poll-slow-interval=2', '--poll-timeout=9'] }
+    )
+    check('跨过前段窗口后仍在轮询(不是到点就收摊)', (d.log?.probes ?? 0) >= 5, `probes=${d.log?.probes ?? 'null'}`)
+    check('先按前段 1s 跳', d.out.includes('本轮间隔 1s'))
+    check('跨过前段后改成 2s 慢炖', d.out.includes('本轮间隔 2s'))
+    check('只提示一次"已超过原窗口上限 + 可 Ctrl-C 后手动装"',
+      d.out.includes('已超过原窗口上限(3s)') && d.out.includes('npm install -g zen-gitsync@9.9.9'))
+    check('前段之后仍然按期强制真试(不是纯等待)', (d.log?.installs.length ?? 0) >= 4, `installs=${d.log?.installs.length ?? 'null'}`)
   } else {
     // ---- 场景 C:反证 —— 换回旧的硬闸门,零真试 ----
     console.log('\n[场景 C·反证] 旧实现(if (probe.ok) 硬闸门)+ 探针全程 404 → npm 一次都不该被调')

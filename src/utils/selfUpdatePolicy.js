@@ -29,7 +29,7 @@
 //   - tarball 可取             → `npm install -g <tarball URL>` 直连能装(不经过 packument 缓存)。
 
 // 探针一直说"取不到"时,每隔几轮强制真试一次。
-// 4 轮 × 默认 15s ≈ 每 1 分钟一次真试:600s 的窗口里能拿到约 8 次真装机会,
+// 4 轮 × 前段 15s ≈ 每 1 分钟一次真试;窗口有 30 分钟,能拿到二十几次真装机会,
 // 而不是 0 次;单次失败(npm 报 404/ETARGET)只花几秒,不心疼。
 export const FORCE_INSTALL_EVERY = 4
 
@@ -77,4 +77,47 @@ export function shouldFinalAttempt({ installAttempts, lastRoundAttempted }) {
   if (lastRoundAttempted) return false
   // installAttempts === 0 是主目标(整轮零真试);> 0 但最后一轮在跳过,也顺手补一次。
   return true
+}
+
+/**
+ * 这一轮的轮询间隔:前段密集、后段退避。
+ *
+ * 为什么窗口加长后必须退避(v2.17.21 之后):registry 元数据/对象就绪最长见过
+ * 十几分钟(比原来 600s 的上限还长),所以上限提到 30 分钟。但 30 分钟里仍按 15s
+ * 一跳 = 一百多轮,既是上百次 `npm view` + 上百次探针,也把日志刷成噪声。
+ * 前段(默认 600s,原来就是"整段窗口")保持 15s 的灵敏度,之后退到 60s 慢炖。
+ *
+ * @param {object} input
+ * @param {number} input.elapsedMs - 从轮询开始到现在
+ * @param {number} input.fastWindowMs - 前段长度,超过它就开始退避
+ * @param {number} input.fastIntervalMs - 前段间隔
+ * @param {number} input.slowIntervalMs - 后段间隔
+ * @returns {number} 毫秒
+ */
+export function nextPollIntervalMs({ elapsedMs, fastWindowMs, fastIntervalMs, slowIntervalMs }) {
+  return elapsedMs < fastWindowMs ? fastIntervalMs : slowIntervalMs
+}
+
+/**
+ * 把 npm 的失败输出归成一个短码,用来在放弃时汇总"到底卡在哪"。
+ *
+ * 为什么需要:原先只打最后一次的失败原文,于是"E404(对象/元数据还没就绪)"
+ * 与"EPERM(文件被占)"分不清 —— 两者的处理方式完全相反(一个只能等,一个要杀实例)。
+ * 汇总成 `E404 ×8 / ETARGET ×2` 这样一行,下一次事故就不用再靠猜。
+ *
+ * @param {string} output - npm install 的 stdout+stderr
+ * @returns {string} E404 | ETARGET | EPERM | EBUSY | ENOTFOUND | ETIMEDOUT | ENETUNREACH | '其他'
+ */
+export function classifyInstallError(output) {
+  const s = String(output || '')
+  if (!s) return '其他'
+  // 顺序有讲究:E404 / ETARGET 是"registry 还没就绪",EPERM / EBUSY 是"文件被占",
+  // 两类混在一起时优先报前者(它是自更新这一段的主题),但两者都会各自计数。
+  if (/EPERM|EBUSY|operation not permitted|Failed to remove/i.test(s)) return 'EPERM'
+  if (/\bETARGET\b/.test(s)) return 'ETARGET'
+  if (/\bE404\b|404 Not Found/i.test(s)) return 'E404'
+  if (/\bENOTFOUND\b/.test(s)) return 'ENOTFOUND'
+  if (/\bETIMEDOUT\b|timed out/i.test(s)) return 'ETIMEDOUT'
+  if (/\bENETUNREACH\b|ECONNRESET|ECONNREFUSED/i.test(s)) return 'ENETUNREACH'
+  return '其他'
 }
