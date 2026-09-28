@@ -522,6 +522,12 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+/* g ai 头像是仓库自有的彩色标识（自带底色），不要再套组件库那层浅色圆底 ——
+   它的背景是透明的，叠上去会在图标后面露出一个灰圈。 */
+.agent-panel-chat :deep(.acu-avatar--left) {
+  background: transparent;
+}
+
 /* ── 当前文档卡片：和添加的附件同处一行、同一副样子 ─────────────
    锚点由 JS 插进库的输入框 DOM，动态创建的元素拿不到 scoped 属性，
    所以这些规则必须走 :deep()（编译成 `.agent-panel-chat[data-v-x] .agent-context-slot`，

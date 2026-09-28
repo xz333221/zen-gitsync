@@ -554,6 +554,12 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   overflow: hidden;
 }
 
+/* g ai 头像是仓库自有的彩色标识（自带底色），不要再套组件库那层浅色圆底 ——
+   它的背景是透明的，叠上去会在图标后面露出一个灰圈。 */
+.agent-chat-host :deep(.acu-avatar--left) {
+  background: transparent;
+}
+
 /* ── 欢迎区预设卡片：把落单的第 5 张拉满整行 ────────────────
    预设共 5 条（presetQuestions），而 zen-ai-chat-ui 的 .acu-welcome-grid
    是 2 列网格 → 排成 2+2+1，末行右侧空一格，看起来像漏了一张卡。

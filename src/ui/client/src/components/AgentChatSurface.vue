@@ -397,6 +397,11 @@ onMounted(() => {
   flex: 1;
   min-width: 0;
 }
+/* g ai 头像是仓库自有的彩色标识（自带底色），不要再套组件库那层浅色圆底 ——
+   它的背景是透明的，叠上去会在图标后面露出一个灰圈。 */
+.acs__chat :deep(.acu-avatar--left) {
+  background: transparent;
+}
 .acs__foot {
   flex: none;
   display: flex;
