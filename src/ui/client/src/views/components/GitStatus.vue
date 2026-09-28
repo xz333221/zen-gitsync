@@ -1936,7 +1936,7 @@ defineExpose({
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  justify-content: flex-start;
+  justify-content: center;
   padding: var(--spacing-lg) var(--spacing-lg) var(--spacing-xl);
   gap: var(--spacing-md);
   background: transparent;
@@ -1948,7 +1948,7 @@ defineExpose({
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   padding: var(--spacing-xl) var(--spacing-md) var(--spacing-md);
   gap: 0;
 }
