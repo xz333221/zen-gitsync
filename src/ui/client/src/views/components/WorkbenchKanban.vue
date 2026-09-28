@@ -232,11 +232,27 @@ function hasError(t: BoardTask): boolean {
             </div>
           </li>
 
-          <li v-if="col.tasks.length === 0" class="kb-col__empty">
-            <button v-if="col.key === 'todo'" type="button" class="kb-col__empty-btn" @click="emit('create-task')">
-              {{ $t('@WORKBENCH:新建任务') }}
+          <!--
+            「新建任务」常驻待处理列末尾，不再只在列空时出现。
+            之前入口和空状态是同一个 `v-if="col.tasks.length === 0"`：列里一有卡片，
+            新建入口就整块消失，用户只能绕到左侧栏去建（看板里无处可点）。
+            两件事本来就无关——空状态说的是"这列没有卡片"，新建入口说的是"能往这儿加卡片"。
+            列空时它顺带兼任空状态（--solo 撑高），所以待处理列不会再渲染下面的 kb-col__empty。
+            位置沿用 Trello「Add a card」的做法：跟着列表滚（不吸底），长列表滚到底就是它。
+          -->
+          <li v-if="col.key === 'todo'" class="kb-col__add">
+            <button
+              type="button"
+              class="kb-col__add-btn"
+              :class="{ 'kb-col__add-btn--solo': col.tasks.length === 0 }"
+              @click="emit('create-task')"
+            >
+              <span class="kb-col__add-plus" aria-hidden="true">+</span>
+              <span>{{ $t('@WORKBENCH:新建任务') }}</span>
             </button>
-            <span v-else>{{ $t('@WORKBENCH:暂无任务') }}</span>
+          </li>
+          <li v-else-if="col.tasks.length === 0" class="kb-col__empty">
+            <span>{{ $t('@WORKBENCH:暂无任务') }}</span>
           </li>
         </ul>
       </section>
@@ -571,17 +587,42 @@ function hasError(t: BoardTask): boolean {
   border-radius: var(--radius-lg);
   background: var(--bg-subtle);
 }
-.kb-col__empty-btn {
-  border: 1px dashed var(--border-color-medium);
-  background: transparent;
-  color: var(--text-tertiary);
-  font-size: var(--font-size-xs);
-  padding: 3px 10px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: color var(--transition-fast) var(--ease-custom), border-color var(--transition-fast) var(--ease-custom);
+
+/* ── 「新建任务」幽灵项（常驻待处理列末尾） ─────────────
+   虚线 + 透明底，与实心卡片拉开层级：一眼能看出它是"动作"不是"任务"。
+   宽度 100% 对齐上面的卡片内容盒（列表本身有 0 8px 内边距），不比卡片宽也不比它窄。 */
+.kb-col__add {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
-.kb-col__empty-btn:hover { color: var(--color-primary); border-color: var(--color-primary); }
+.kb-col__add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  padding: 5px 10px;
+  font-size: var(--font-size-xs);
+  line-height: 20px;
+  color: var(--text-tertiary);
+  background: transparent;
+  border: 1px dashed var(--border-color-medium);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: color var(--transition-fast) var(--ease-custom),
+              border-color var(--transition-fast) var(--ease-custom),
+              background var(--transition-fast) var(--ease-custom);
+}
+.kb-col__add-btn:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: var(--bg-subtle);
+}
+.kb-col__add-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
+.kb-col__add-plus { font-size: var(--font-size-base); line-height: 1; }
+/* 列空时它同时是空状态：撑高成一个"落点"，别让整列只剩一粒小按钮 */
+.kb-col__add-btn--solo { padding: 18px 8px; }
 
 /* ── 列表视图 ───────────────────────────────────────── */
 .kb__table-wrap {
