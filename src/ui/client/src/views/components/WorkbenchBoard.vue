@@ -62,9 +62,14 @@ const {
 
 // ── 选中项目（'' = 全部项目） ────────────────────────────────────────
 const SELECTED_KEY = 'wb.boardProject.v1'
-const selectedKey = ref<string>((() => {
-  try { return localStorage.getItem(SELECTED_KEY) || '' } catch { return '' }
-})())
+/**
+ * 本机存过的选择。null = 从没主动选过，'' = 主动选了「全部项目」——
+ * 这个区分决定首次加载要不要替用户落到「当前项目」（见 applyDefaultSelection）。
+ */
+const savedSelection = (() => {
+  try { return localStorage.getItem(SELECTED_KEY) } catch { return null }
+})()
+const selectedKey = ref<string>(savedSelection || '')
 watch(selectedKey, (k) => {
   try { localStorage.setItem(SELECTED_KEY, k) } catch { /* 隐私模式：不落地也不影响使用 */ }
 })
@@ -80,6 +85,23 @@ watch(projects, (list) => {
   if (list.some(p => p.key === selectedKey.value)) return
   selectedKey.value = ''
 })
+
+/**
+ * 打开编排台的默认落点：本机从没主动选过项目时，落到**当前项目**，
+ * 而不是停在「全部项目」这个跨项目全局视图上（用户不必每次进来都手点一下）。
+ * 只应用一次——存过选择（哪怕是主动选的「全部项目」）就尊重记忆，
+ * 之后的轮询刷新与用户切换都不再干预。
+ */
+let defaultSelectionApplied = false
+function applyDefaultSelection() {
+  if (defaultSelectionApplied) return
+  defaultSelectionApplied = true
+  if (savedSelection !== null) return
+  const key = currentProjectPath.value ? canonicalProjectPath(currentProjectPath.value) : ''
+  if (!key) return
+  if (!projects.value.some(p => p.key === key)) return
+  selectedKey.value = key
+}
 
 /**
  * 任务 projectPath（原样字符串）→ 项目名。
@@ -148,6 +170,7 @@ function onVisibilityChange() {
 onMounted(async () => {
   window.addEventListener('resize', onWindowResize)
   await refresh(false)
+  applyDefaultSelection()
   pollTimer = setInterval(() => {
     if (document.hidden) return
     refresh(true)
