@@ -208,35 +208,58 @@
                 </div>
               </div>
 
-              <!-- Markdown 预览主题（全局唯一）：文件预览 / 差异预览 / AI 说明共用同一套配色 -->
+              <!-- Markdown 预览主题（全局唯一）：文件预览 / 差异预览 / AI 说明共用同一套配色。
+                   光看下拉里的名字看不出主题长什么样，所以右侧常驻一块实时预览：
+                   默认渲染当前生效的那套，鼠标悬停下拉项时临时切到那一套（只预览，不改配置）。 -->
               <div class="setting-row setting-row--full setting-row--span">
                 <label class="setting-label">{{ $t('@42BB9:Markdown 预览主题') }}</label>
-                <div class="md-theme-row">
-                  <el-select
-                    :model-value="configStore.markdownTheme"
-                    class="modern-input md-theme-select"
-                    size="default"
-                    filterable
-                    @update:model-value="onMarkdownThemeChange"
-                  >
-                    <el-option
-                      v-for="opt in markdownThemeOptions"
-                      :key="opt.value"
-                      :label="opt.value"
-                      :value="opt.value"
+                <div class="md-theme-panel">
+                  <div class="md-theme-col">
+                    <el-select
+                      :model-value="configStore.markdownTheme"
+                      class="modern-input md-theme-select"
+                      size="default"
+                      filterable
+                      @update:model-value="onMarkdownThemeChange"
+                      @visible-change="onMarkdownThemeDropdownVisible"
                     >
-                      <span class="md-theme-option">
-                        <span
-                          class="md-theme-swatch"
-                          :style="{ background: opt.bg || 'transparent', color: opt.fg || 'inherit' }"
-                        >Aa</span>
-                        <span>{{ opt.value }}</span>
+                      <el-option
+                        v-for="opt in markdownThemeOptions"
+                        :key="opt.value"
+                        :label="opt.value"
+                        :value="opt.value"
+                        @mouseenter="onMarkdownThemeHover(opt.value)"
+                      >
+                        <span class="md-theme-option">
+                          <span
+                            class="md-theme-swatch"
+                            :style="{ background: opt.bg || 'transparent', color: opt.fg || 'inherit' }"
+                          >Aa</span>
+                          <span>{{ opt.value }}</span>
+                        </span>
+                      </el-option>
+                    </el-select>
+                    <span class="setting-hint-block">
+                      {{ $t('@42BB9:整个应用只用一个主题，同时作用于文件预览、差异预览与 AI 说明') }}
+                    </span>
+                    <span class="setting-hint-block">
+                      {{ $t('@42BB9:鼠标移到下拉项上可即时预览，点击即应用') }}
+                    </span>
+                  </div>
+
+                  <div class="md-theme-preview">
+                    <div class="md-theme-preview__head">
+                      <span>{{ $t('@42BB9:效果预览') }}</span>
+                      <span class="md-theme-preview__name">{{ mdThemePreviewName }}</span>
+                      <span
+                        class="md-theme-preview__tag"
+                        :class="{ 'is-hover': !!mdThemeHovered }"
+                      >
+                        {{ mdThemeHovered ? $t('@42BB9:悬停预览，未应用') : $t('@42BB9:当前生效') }}
                       </span>
-                    </el-option>
-                  </el-select>
-                  <span class="setting-hint-block">
-                    {{ $t('@42BB9:整个应用只用一个主题，同时作用于文件预览、差异预览与 AI 说明') }}
-                  </span>
+                    </div>
+                    <div ref="mdThemePreviewRef" class="md-theme-preview__body"></div>
+                  </div>
                 </div>
               </div>
 
@@ -655,9 +678,10 @@
 
 <script setup lang="ts">
 import { $t } from '@/lang/static'
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, nextTick, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Check, InfoFilled } from '@element-plus/icons-vue'
+import { createPreview, type PreviewInstance } from 'flowdash-md-preview'
 import CommonDialog from './CommonDialog.vue'
 import { useGitStore } from '@/stores/gitStore'
 import { useLocaleStore } from '@/stores/localeStore'
@@ -717,7 +741,8 @@ function toggleHeaderTool(id: ToolId, show: boolean) {
 /** 可选主题（含小色块），直接来自 flowdash-md-preview 的预设表 */
 const markdownThemeOptions = MARKDOWN_THEME_OPTIONS
 
-/** 切换主题：写进 configStore（内部负责注入 CSS + 落盘），预览无需重渲染 */
+/** 切换主题：写进 configStore（内部负责注入 CSS + 落盘）。
+ *  右侧预览卡片跟着会切过去（下拉收起 → 悬停态清掉 → 卡片显示新的生效主题）。 */
 async function onMarkdownThemeChange(value: string) {
   await configStore.setMarkdownTheme(value)
 }
@@ -981,6 +1006,118 @@ watch(() => props.initialTab, (newTab) => {
     activeTab.value = newTab
   }
 })
+
+// ---------------- Markdown 预览主题：实时预览卡片 ----------------
+// 说明：这一整块必须放在 `visible` 声明之后 —— watch 的取值函数在注册时就会执行一次，
+// 放到前面会踩 const 的暂时性死区。
+
+/** 预览卡片里的示例文档：标题 / 正文 / 引用 / 列表 / 代码 / 表格各来一段，
+ *  够看清一套主题的配色与排版。文案跟着语言走（中英文字形也是观感的一部分），
+ *  markdown 结构留在代码里 —— 整段丢进语言文件会被 vue-i18n 把表格里的 `|`
+ *  当成复数分隔符，消息编译失败后 $t 只会吐回原始 key。 */
+const mdThemeSample = computed(() => [
+  `# ${$t('@42BB9:Markdown 主题预览')}`,
+  '',
+  $t('@42BB9:这段话用来看主题的正文配色：**加粗**、*斜体*、`行内代码` 与 [链接](https://example.com)。'),
+  '',
+  `> ${$t('@42BB9:引用块：左侧竖条用的是主题强调色。')}`,
+  '',
+  `- ${$t('@42BB9:列表项一')}`,
+  `- [x] ${$t('@42BB9:已完成的任务')}`,
+  `- [ ] ${$t('@42BB9:待办的任务')}`,
+  '',
+  '```js',
+  'const total = items.length * 2',
+  '```',
+  '',
+  '| A | B |',
+  '| --- | --- |',
+  '| 1 | 2 |',
+].join('\n'))
+
+/** 悬停中的主题名（仅预览，不写配置）；空串 = 卡片展示当前生效的那套 */
+const mdThemeHovered = ref('')
+
+/** 下拉是否展开。收起后仍会飘来 mouseenter（列表重排/隐藏时浏览器把事件落在光标下的那一项上），
+ *  不挡住的话卡片会停在一个用户根本没在看的主题上 */
+const mdThemeDropdownOpen = ref(false)
+
+/** 卡片当前展示的主题名：悬停优先，否则用生效值 */
+const mdThemePreviewName = computed(() => mdThemeHovered.value || configStore.markdownTheme)
+
+/** 卡片容器（内容由 flowdash-md-preview 的 createPreview 注入） */
+const mdThemePreviewRef = ref<HTMLElement | null>(null)
+
+/** createPreview 实例。它的主题 CSS 是按实例作用域注入的
+ *  （选择器前缀是一个随机 data 属性，优先级高于全局那套 .md-preview），
+ *  所以卡片能显示"非当前"主题，而不会反过来把全应用的预览配色改掉。 */
+let mdThemePreview: PreviewInstance | null = null
+/** 实例上当前生效的主题名，避免每次同步都重建 <style> */
+let mdThemePreviewApplied = ''
+
+/** 懒创建。容器不存在（弹窗没开 / 已被 destroy-on-close 干掉）时返回 null 而不是抛错 */
+function ensureMdThemePreview(): PreviewInstance | null {
+  const host = mdThemePreviewRef.value
+  if (!host) return null
+  // 弹窗关闭会连容器一起销毁，重新打开是新节点：实例还在就换掉它，避免往旧节点里塞内容
+  if (mdThemePreview && mdThemePreview.element !== host) {
+    destroyMdThemePreview()
+  }
+  if (!mdThemePreview) {
+    mdThemePreview = createPreview(host, {
+      theme: configStore.markdownTheme,
+      initialValue: mdThemeSample.value,
+    })
+    mdThemePreviewApplied = configStore.markdownTheme
+  }
+  return mdThemePreview
+}
+
+/** 把示例文档与目标主题刷到卡片上（内容没变时 update 是空操作） */
+function syncMdThemePreview() {
+  const preview = ensureMdThemePreview()
+  if (!preview) return
+  preview.update(mdThemeSample.value)
+  if (mdThemePreviewApplied !== mdThemePreviewName.value) {
+    preview.setTheme(mdThemePreviewName.value)
+    mdThemePreviewApplied = mdThemePreviewName.value
+  }
+}
+
+function destroyMdThemePreview() {
+  mdThemePreview?.destroy()
+  mdThemePreview = null
+  mdThemePreviewApplied = ''
+}
+
+/** 悬停下拉项 → 卡片临时切到该主题（下拉已收起时的事件一律忽略） */
+function onMarkdownThemeHover(theme: string) {
+  if (!mdThemeDropdownOpen.value) return
+  mdThemeHovered.value = theme
+  syncMdThemePreview()
+}
+
+/** 下拉展开（可能是刚打开，容器这时才真正可用）时同步一次；
+ *  收起（含点选后自动收起）→ 回到生效的主题，卡片不会停在"未应用"的那套上 */
+function onMarkdownThemeDropdownVisible(opened: boolean) {
+  mdThemeDropdownOpen.value = opened
+  if (!opened) mdThemeHovered.value = ''
+  syncMdThemePreview()
+}
+
+// destroy-on-close 下弹窗一关内容就没了，实例必须跟着销毁：
+// 否则它注入到 head 的主题 <style> 会一直留着（虽然作用域是随机的，但没必要留）。
+watch(visible, async (val) => {
+  if (!val) {
+    destroyMdThemePreview()
+    return
+  }
+  // el-dialog 的内容要等一帧才挂上；最多等几帧，拿不到容器就先跳过（下次悬停还会重试）
+  for (let i = 0; i < 5 && !mdThemePreviewRef.value; i += 1) await nextTick()
+  syncMdThemePreview()
+})
+
+onBeforeUnmount(destroyMdThemePreview)
 
 function handleVisibleChange(val: boolean) {
   emit('update:modelValue', val)
@@ -2086,17 +2223,76 @@ html.dark .label-icon {
 }
 
 /* ---------------- Markdown 预览主题（全局唯一） ---------------- */
-.md-theme-row {
+/* 左列下拉 + 右列实时预览卡片。下拉弹层贴着 select 左边缘、宽度 = select 宽度，
+   卡片落在 320px 之后，所以展开时弹层不会盖住正在看的预览。 */
+.md-theme-panel {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: var(--spacing-lg);
+  align-items: start;
+  min-width: 0;
+}
+
+.md-theme-col {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: var(--spacing-xs);
   min-width: 0;
 }
 
 .md-theme-select {
-  width: 260px;
-  max-width: 100%;
+  width: 100%;
+}
+
+.md-theme-preview {
+  min-width: 0;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  /* 卡片底：主题自身会给 .md-preview 铺底色，这里只兜住加载/缺色时的观感 */
+  background: var(--el-fill-color-blank);
+}
+
+.md-theme-preview__head {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-base);
+  padding: 5px 10px;
+  font-size: var(--font-size-xs);
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-light);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.md-theme-preview__name {
+  font-family: var(--font-mono);
+  color: var(--el-text-color-primary);
+}
+
+.md-theme-preview__tag {
+  margin-left: auto;
+  flex: none;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--el-border-color-lighter);
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.md-theme-preview__tag.is-hover {
+  color: var(--el-color-primary);
+  border-color: var(--el-color-primary);
+}
+
+/* 固定高度：内容超出时由主题自己那层（overflow:auto）滚动，卡片高度不跳 */
+.md-theme-preview__body {
+  height: 208px;
+}
+
+/* 窄屏放不下两列：卡片落到下拉下方（弹层展开时可能压住卡片，收起后即可见） */
+@media (max-width: 1100px) {
+  .md-theme-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* 下拉项：左侧一块主题底色 + 主题名（el-option 的 slot 内容仍属本组件作用域，

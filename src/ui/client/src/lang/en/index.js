@@ -1001,6 +1001,16 @@ export default {
   '@42BB9:操作失败，请重试': 'Operation failed, please try again',
   '@42BB9:Markdown 预览主题': 'Markdown preview theme',
   '@42BB9:整个应用只用一个主题，同时作用于文件预览、差异预览与 AI 说明': 'One theme for the whole app: file preview, diff preview and AI summaries',
+  '@42BB9:鼠标移到下拉项上可即时预览，点击即应用': 'Hover an option to preview it live; click to apply',
+  '@42BB9:效果预览': 'Live preview',
+  '@42BB9:当前生效': 'In use',
+  '@42BB9:悬停预览，未应用': 'Hover preview, not applied',
+  '@42BB9:Markdown 主题预览': 'Markdown theme preview',
+  '@42BB9:这段话用来看主题的正文配色：**加粗**、*斜体*、`行内代码` 与 [链接](https://example.com)。': 'This paragraph shows the body palette: **bold**, *italic*, `inline code` and a [link](https://example.com).',
+  '@42BB9:引用块：左侧竖条用的是主题强调色。': 'Blockquote: the left bar uses the theme accent color.',
+  '@42BB9:列表项一': 'List item one',
+  '@42BB9:已完成的任务': 'A finished task',
+  '@42BB9:待办的任务': 'A pending task',
   // @42BB9: file end
   // @2AEBA: file path: components\GlobalLoading.vue
   '@2AEBA:加载中...': 'Loading...',
