@@ -957,13 +957,18 @@ function onBrowserSelect(path: string) {
   />
 
   <!-- 切换目录对话框 -->
+  <!-- 尺寸:里外两块内容(常用目录卡片 + 底下那段 AI 解读/追问区)都不适合窄栏 ——
+       1040px 时两列卡片各 ~490px,长路径("c:\workspace\gitee_workspace\...")
+       全被截成 article-gen…,17 个目录也只能露出 8 行。宽度放到 1360px 让两列各 ~650px,
+       高度上把 top/height-offset 收紧到 16/24px,列表上限的另一半在
+       RecentDirectoriesList 的 .dir-list--bare(74vh)。 -->
   <CommonDialog
     v-model="isDirectoryDialogVisible"
     :title="$t('@67CE7:切换工作目录')"
-    width="min(1040px, 90vw)"
+    width="min(1360px, 94vw)"
     type="flex"
-    top="20px"
-    height-offset="32px"
+    top="16px"
+    height-offset="24px"
     :destroy-on-close="true"
     :append-to-body="true"
     custom-class="directory-dialog"
@@ -994,6 +999,10 @@ function onBrowserSelect(path: string) {
         <!-- 常用目录:与"最近项目"同一个组件、同一份数据、同一套卡片样式。
              mode="pick"   → 普通点击把路径回填到上面的输入框,Ctrl/Cmd+点击在新标签页打开
              variant="bare" → 不渲染面板外壳(标题由本表单项 label 提供)
+             min-card-width→ 弹窗宽了(1360px)之后,卡片网格的默认 380px 下限会自己排成
+                             三列、每列又变回 ~410px 的窄卡(路径照样截断)。这里把下限
+                            提到 min(470px, 46%),窗口再宽也保持两列宽卡;窗口变窄时
+                             46% 那一档接手,仍与原来一样排两列而不是掉成一列。
              .form-item--dirs 让这一项吃掉弹窗剩余高度,由列表内部滚动 -->
         <el-form-item class="form-item--dirs">
           <template #label>
@@ -1009,6 +1018,7 @@ function onBrowserSelect(path: string) {
             mode="pick"
             variant="bare"
             removable="always"
+            min-card-width="min(470px, 46%)"
             :remove-label="$t('@67CE7:从常用目录中移除')"
             :empty-text="$t('@67CE7:暂无常用目录')"
             :aria-label="$t('@67CE7:常用目录')"

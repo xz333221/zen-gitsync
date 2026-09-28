@@ -663,13 +663,19 @@ defineExpose({ reload: load });
 }
 /* bare:弹窗内嵌,无外框;自身参与父级 flex 高度链,吃掉剩余高度后内部滚动,
    避免弹窗被长列表撑高、把输入框/按钮挤出视口。
-   max-height 是"父级不是高度链"时的兜底,防止列表无限长。 */
+   max-height 是"父级不是高度链"时的兜底,防止列表无限长。
+   上限取两者的较小值:视口比例 74vh,以及"弹窗真正给得出的高度"。
+   后者 = 弹窗自身的 max-height(calc(100% - 24px))减去 chrome —— 实测
+   列表上方 189px(页脚之外的头部 / 路径输入框 / 两个 label)+ 下方 82px(页脚 / 内边距)= 271px,
+   实测手段是 tmp 脚本在 1600x900 与 1024x700 两个视口下量 .el-dialog__body 的 scrollHeight
+   与 clientHeight 相等(即弹窗自身没有滚动)。少了这层约束,长列表会顶破弹窗 body,
+   变成"列表内滚 + 弹窗 body 滚"的二级滚动条。 */
 .dir-list--bare {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
-  max-height: 68vh;
+  max-height: min(74vh, calc(100vh - 300px));
 }
 .dir-list--bare .dir-list__items {
   flex: 1 1 auto;
