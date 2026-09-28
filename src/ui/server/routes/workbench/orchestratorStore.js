@@ -14,12 +14,17 @@
 //
 // 主 Agent 编排台的状态存储 + 活动流拼装。
 //
-// 三件事：
+// 四件事：
 //   1. 调度开关（active）+ 人类干预指令存档，持久化到 ~/.zen-gitsync/orchestrator.json。
 //      「暂停调度」是服务端强制的：暂停期间自动派发会被拒绝（手动点执行不受影响）。
 //   2. 派发默认提示词：一条全局的 + 每个项目一条的，同样存在 orchestrator.json。
 //      它们是「派发时自动附加的约束」，不是任务内容 —— 解析规则见 resolveDispatchPrompt。
-//   3. buildActivityFeed —— 把 job 的起止事实与人类指令合成一条时间倒序的活动流。
+//   3. 进度报告：自动报告的间隔配置存在 orchestrator.json（一个数字，跟着轮询下发），
+//      历史报告存在 orchestrator-reports.json（几 KB 一份，只在面板打开时按需取）。
+//      报告正文由 progressReport.js 生成，这里只负责"存哪、存几份、什么时候允许再生成"。
+//   4. buildActivityFeed —— 把 job 的起止事实与人类指令合成一条时间倒序的活动流。
+//      （控制台右栏的「活动日志」已换成进度报告，但这条流还在供顶栏「今日完成」计数，
+//      以及编排台接口的数据完整性 —— 别看到没人渲染就把它删了。）
 //
 // 活动流为什么不在服务端拼好文案：
 //   UI 文案统一走前端 i18n（lang/{zh,en}），服务端只回**结构化事实**
@@ -31,8 +36,12 @@
 
 import {
   ORCHESTRATOR_FILE,
+  ORCHESTRATOR_REPORTS_FILE,
   MAX_ORCHESTRATOR_INSTRUCTIONS,
   MAX_DEFAULT_PROMPT_CHARS,
+  MAX_PROGRESS_REPORTS,
+  PROGRESS_REPORT_INTERVALS_MS,
+  DEFAULT_PROGRESS_REPORT_INTERVAL_MS,
   readJson,
   writeJson,
   nowIso,
@@ -56,7 +65,18 @@ function defaultState() {
     instructions: [],
     defaultPrompt: '',
     projectPrompts: {},
+    reportIntervalMs: DEFAULT_PROGRESS_REPORT_INTERVAL_MS,
+    lastReportAt: null,
   };
+}
+
+/**
+ * 报告间隔归一。**只认白名单里的值**，其余（缺字段 / 脏值 / 手改文件写进去的 7 分钟）
+ * 一律回落到默认 10 分钟。老版本没有这个字段 —— 那正是"升级后按新默认开始报告"的语义。
+ */
+export function normalizeReportIntervalMs(value) {
+  const n = Number(value);
+  return PROGRESS_REPORT_INTERVALS_MS.includes(n) ? n : DEFAULT_PROGRESS_REPORT_INTERVAL_MS;
 }
 
 /** 单条指令归一：老数据/半损坏数据都要能渲染，不能让整份状态读不出来 */
@@ -122,6 +142,8 @@ export function normalizeOrchestrator(raw) {
       ? state.defaultPrompt.slice(0, MAX_DEFAULT_PROMPT_CHARS)
       : '',
     projectPrompts: normalizeProjectPrompts(state.projectPrompts),
+    reportIntervalMs: normalizeReportIntervalMs(state.reportIntervalMs),
+    lastReportAt: typeof state.lastReportAt === 'string' ? state.lastReportAt : null,
   };
 }
 
@@ -255,6 +277,95 @@ export async function clearInstructions() {
     state.instructions = [];
     state.updatedAt = nowIso();
     return persist(state);
+  });
+}
+
+// ── 进度报告的配置与历史 ────────────────────────────────────────────────
+// 「报告时间我自己设置」的那个设置：0 = 关掉自动报告（手动「立即报告」始终可用，
+// 它不受这个开关影响 —— 关掉的是"自己隔一会儿跑一次"，不是"不许报告"）。
+
+/** 写自动报告间隔。返回写后的值（已归一） */
+export async function setReportIntervalMs(value) {
+  return serialize(async () => {
+    const state = await readOrchestrator();
+    state.reportIntervalMs = normalizeReportIntervalMs(value);
+    state.updatedAt = nowIso();
+    await persist(state);
+    return state.reportIntervalMs;
+  });
+}
+
+/**
+ * 抢占一次自动报告的"名额"：距上次报告不足 intervalMs 就返回 false。
+ *
+ * 为什么占坑要写盘而不是只放内存里一个时间戳：报告历史是**多实例共享**的
+ * （同一个 ~/.zen-gitsync 可能同时开着两个 g ui），各自跑一个定时器的话，
+ * 内存里各记各的，两边会在同一分钟各生成一份内容几乎一样的报告。
+ * 时间戳落在共享文件上，后到的那个实例读到的就是"刚报过"。
+ *
+ * 抢占发生在**生成之前**（生成要等一次模型往返，几秒到几十秒）：
+ * 等生成完再写，两个实例的窗口就大得多。代价是生成失败也要等满一个间隔才重试 ——
+ * 失败会记进报告历史（errorCode），比"同一分钟内连打两次模型"划算。
+ */
+export async function claimReportSlot(intervalMs, now = Date.now()) {
+  return serialize(async () => {
+    const state = await readOrchestrator();
+    const last = Date.parse(state.lastReportAt || '');
+    if (Number.isFinite(last) && now - last < intervalMs) return false;
+    state.lastReportAt = new Date(now).toISOString();
+    await persist(state);
+    return true;
+  });
+}
+
+/** 单份报告归一：字段缺失 / 脏数据都必须能渲染，不能让面板整个读不出来 */
+function normalizeReport(raw) {
+  const r = raw && typeof raw === 'object' ? raw : {};
+  const tasks = Array.isArray(r.tasks) ? r.tasks : [];
+  return {
+    id: typeof r.id === 'string' && r.id ? r.id : genId(),
+    at: typeof r.at === 'string' ? r.at : null,
+    trigger: r.trigger === 'auto' ? 'auto' : 'manual',
+    text: typeof r.text === 'string' ? r.text : '',
+    errorCode: typeof r.errorCode === 'string' ? r.errorCode : '',
+    errorDetail: typeof r.errorDetail === 'string' ? r.errorDetail : '',
+    tasks: tasks
+      .filter(t => t && typeof t === 'object')
+      .map(t => ({
+        taskId: typeof t.taskId === 'string' ? t.taskId : null,
+        taskTitle: typeof t.taskTitle === 'string' ? t.taskTitle : '',
+        projectName: typeof t.projectName === 'string' ? t.projectName : '',
+        startedAt: typeof t.startedAt === 'string' ? t.startedAt : null,
+        // 跑多久是**生成那一刻**的事实，跟着报告存下来：
+        // 前端拿现在的时钟去减 startedAt，"已运行 12 分钟"会随报告变旧一路涨，
+        // 历史报告就再也说不清"当时是什么情况"了。
+        elapsedMs: Number.isFinite(Number(t.elapsedMs)) ? Math.max(0, Math.floor(Number(t.elapsedMs))) : 0,
+        agent: typeof t.agent === 'string' ? t.agent : '',
+        toolCallCount: Number.isFinite(Number(t.toolCallCount)) ? Math.max(0, Math.floor(Number(t.toolCallCount))) : 0,
+        lastTool: typeof t.lastTool === 'string' ? t.lastTool : '',
+        lastLine: typeof t.lastLine === 'string' ? t.lastLine : '',
+      })),
+  };
+}
+
+/** 读报告历史（新的在前）。文件缺失 / 损坏一律当"还没有报告"，不抛错 */
+export async function readReports() {
+  const data = await readJson(ORCHESTRATOR_REPORTS_FILE, null);
+  const list = data && Array.isArray(data.reports) ? data.reports : [];
+  return list
+    .map(normalizeReport)
+    .sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')))
+    .slice(0, MAX_PROGRESS_REPORTS);
+}
+
+/** 追加一份报告（新的在前），超出上限的旧报告直接丢掉 */
+export async function appendReport(entry) {
+  return serialize(async () => {
+    const report = normalizeReport({ id: genId(), at: nowIso(), ...entry });
+    const existing = await readReports();
+    const reports = [report, ...existing].slice(0, MAX_PROGRESS_REPORTS);
+    await writeJson(ORCHESTRATOR_REPORTS_FILE, { version: 1, reports });
+    return report;
   });
 }
 

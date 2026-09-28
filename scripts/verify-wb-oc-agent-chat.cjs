@@ -2,19 +2,25 @@
  * 主 Agent 控制台（工作台右栏）· 「对话 / 指令」双模式 的运行时验证。
  *
  * 守的契约（对应 OrchestratorConsole.vue / AgentChatSurface.vue）：
- *   C1  默认进「对话」模式：拨片在、两个 tab、对话那块是激活项
- *   C2  对话面真的铺开了（几何量，不是"元素存在"）：标题 / 引擎选择器 / 消息容器都有高度
- *   C3  对话模式底下的派发执行器：TaskExecutorPicker 在，且不是"引擎不会派活"的提示态
- *   C4  互斥：对话模式下活动日志 / Git 概览 / 派发输入框三块**都不可见**，
+ *   C1  默认进「指令」模式：拨片在、两个 tab、指令那块是激活项；
+ *       三块常驻面板可见、对话面让位；输入框几何没破（rows=4 且高度 ≥ 76，P26）
+ *   C2  切「对话」：激活项换、偏好落盘 wb.ocMode.v2=chat
+ *   C3  对话面真的铺开了（几何量，不是"元素存在"）：标题 / 引擎选择器 / 消息容器都有高度
+ *   C4  对话模式底下的派发执行器：TaskExecutorPicker 在，且不是"引擎不会派活"的提示态
+ *   C5  互斥：对话模式下进度报告 / Git 概览 / 派发输入框三块**都不可见**，
  *       但输入框仍在 DOM 里（v-show 不是 v-if —— 草稿不能在切模式时丢）
- *   C5  切「指令」：三块回来、对话面让位、偏好落盘 wb.ocMode.v1=command，
+ *   C6  切回「指令」：三块回来、对话面让位、偏好写回 wb.ocMode.v2=command，
  *       且派发栏里仍有执行器下拉（第二处 TaskExecutorPicker 没被拆掉）
- *   C6  切回「对话」：反向成立、偏好写回 chat
- *   C7  持久化：切成 command 后 reload，仍是 command（常驻栏不该每次跳回默认）
- *   C8  改造没破坏既有输入框契约：指令模式下 rows=4 且高度 ≥ 76（P26）
+ *   C7  持久化：切成 chat（**非默认**值）后 reload，仍是 chat（常驻栏不该每次跳回默认「指令」）
+ *   C8  反复切换后对话面不塌（回到对话模式仍 > 200px）
  *   C9  折叠右栏：对话面跟着收起（不是"折叠了但对话还在底下跑"）
  *   C10 独立上下文里把引擎设成外部 CLI → 底部换成"只能对话、不能派发"的提示，
  *       执行器下拉让位（产品约束要当场说清，不能等用户撞上去）
+ *   R1  反证：清掉偏好键 → 回落默认「指令」（证明 C2b / C6b / C7b 真的在看这个键）
+ *
+ * ⚠️ 模式默认值与 localStorage key 是**产品契约**，会变（v1「对话」→ v2「指令」，
+ *    见 6991f84c / f9a08dba）。本脚本断言的是当前契约：默认 command、键名 wb.ocMode.v2。
+ *    产品再改默认值/键名时，这里（以及 :reverse 里的 MUST_FAIL）要一起改，否则会假绿。
  *
  * ⚠️ 断言一律用几何量（getBoundingClientRect / computed / offsetParent），不看截图下结论。
  * ⚠️ 文案断言同时接受中英（locale 是用户可切的），只对该口径敏感、不对具体语言敏感。
@@ -108,7 +114,9 @@ function MEASURE() {
     footLabel: (document.querySelector('.acs__foot-label')?.textContent || '').trim(),
     footTepName: (document.querySelector('.acs__foot .tep__btn-name')?.textContent || '').trim(),
     // ── 指令模式那三块 ──
-    feed: info('.oc__feed'),
+    // 第一块原来是活动日志（.oc__feed），2026-09-28 换成了进度报告（.oc__report）——
+    // 这里只改选择器：C4 / C5 守的是"三块与对话面互斥"，与那块里放什么无关。
+    report: info('.oc__report'),
     git: info('.oc__git'),
     compose: info('.oc__compose'),
     composeHasTep: !!document.querySelector('.oc__compose .tep'),
@@ -123,7 +131,8 @@ function MEASURE() {
         }
       : null,
     // ── 持久化 ──
-    modeKey: (() => { try { return localStorage.getItem('wb.ocMode.v1') } catch { return null } })(),
+    // 键名与产品实现同源：OrchestratorConsole.vue: MODE_KEY = 'wb.ocMode.v2'
+    modeKey: (() => { try { return localStorage.getItem('wb.ocMode.v2') } catch { return null } })(),
     engineKey: (() => { try { return localStorage.getItem('zen-gitsync-agent-engine') } catch { return null } })(),
     execKey: (() => { try { return localStorage.getItem('zen-gitsync-task-executor') } catch { return null } })(),
     rail: info('.oc__rail'),
@@ -200,7 +209,7 @@ async function main() {
     await page.goto(BASE, { waitUntil: 'domcontentloaded' })
     await openBoard(page)
 
-    /* ══ C1 默认进「对话」 ══ */
+    /* ══ C1 默认进「指令」 ══ */
     let m = await M()
     check('C1a 拨片在，role=tablist（是切换器，不是装饰）',
       !!m.modeWrap && m.modeWrap.visible && m.modeRole === 'tablist',
@@ -209,83 +218,93 @@ async function main() {
       m.modeLabels.length === 2
         && hasText(m.modeLabels[0], T.chat) && hasText(m.modeLabels[1], T.command),
       JSON.stringify(m.modeLabels))
-    check('C1c 默认激活的是「对话」（且只有一个 aria-selected）',
-      m.modeSelected.length === 1 && hasText(m.modeSelected[0], T.chat),
+    check('C1c 默认激活的是「指令」（且只有一个 aria-selected）',
+      m.modeSelected.length === 1 && hasText(m.modeSelected[0], T.command),
       `selected=${JSON.stringify(m.modeSelected)} active=${JSON.stringify(m.modeActiveClass)}`)
     check('C1d 全新上下文里还没有模式偏好（不该一开局就往盘上写脏值）',
-      m.modeKey === null, `wb.ocMode.v1=${JSON.stringify(m.modeKey)}`)
+      m.modeKey === null, `wb.ocMode.v2=${JSON.stringify(m.modeKey)}`)
+    check('C1e 默认态就是指令模式：三块常驻面板可见、对话面让位',
+      !!m.report?.visible && !!m.git?.visible && !!m.compose?.visible && !m.chat?.visible,
+      `report=${m.report?.visible}(${m.report?.h}) git=${m.git?.visible} compose=${m.compose?.visible} chat=${m.chat?.visible}`)
+    check('C1f 指令模式派发栏里的执行器下拉在（第一处 TaskExecutorPicker）',
+      m.composeHasTep === true, `composeHasTep=${m.composeHasTep}`)
+    check('C1g 默认态输入框几何没被双模式改坏：rows=4 且高度 ≥ 76（P26 契约）',
+      m.input?.rows === '4' && (m.input?.h || 0) >= 76,
+      `rows=${m.input?.rows} h=${m.input?.h}`)
+    await shot(page, '1600-command-default')
 
-    /* ══ C2 对话面真的铺开了 ══ */
-    check('C2a 对话面可见且有实际高度（> 200px，不是塌成一条线）',
+    /* ══ C2 切「对话」：拨片换 + 偏好落盘 ══ */
+    await switchMode(page, T.chat[0])
+    m = await M()
+    check('C2a 激活项换成「对话」，且仍只有一个选中',
+      m.modeSelected.length === 1 && hasText(m.modeSelected[0], T.chat),
+      `selected=${JSON.stringify(m.modeSelected)}`)
+    check('C2b 偏好落盘 wb.ocMode.v2=chat',
+      m.modeKey === 'chat', `wb.ocMode.v2=${JSON.stringify(m.modeKey)}`)
+
+    /* ══ C3 对话面真的铺开了 ══ */
+    check('C3a 对话面可见且有实际高度（> 200px，不是塌成一条线）',
       !!m.chat && m.chat.visible && m.chat.h > 200,
       `visible=${m.chat?.visible} h=${m.chat?.h}`)
-    check('C2b 消息容器渲染出来了并占高（> 140px）',
+    check('C3b 消息容器渲染出来了并占高（> 140px）',
       !!m.chatWrap && m.chatWrap.visible && m.chatWrap.h > 140,
       `h=${m.chatWrap?.h} children=${m.chatChildClasses}`)
-    check('C2c 对话面内有标题（g ai 对话）',
+    check('C3c 对话面内有标题（g ai 对话）',
       hasText(m.chatTitle, T.title), `title="${m.chatTitle}"`)
-    check('C2d 引擎选择器在，且新会话状态下**没被锁死**（置灰了就换不了引擎）',
+    check('C3d 引擎选择器在，且新会话状态下**没被锁死**（置灰了就换不了引擎）',
       !!m.engineBtn && m.engineBtn.visible && m.engineBtn.disabled === false,
       `text="${m.engineBtn?.text}" disabled=${m.engineBtn?.disabled}`)
     await shot(page, '1600-chat-mode')
 
-    /* ══ C3 对话模式底下的派发执行器 ══ */
-    check('C3a 底部有「派发执行器」行 + TaskExecutorPicker',
+    /* ══ C4 对话模式底下的派发执行器 ══ */
+    check('C4a 底部有「派发执行器」行 + TaskExecutorPicker',
       !!m.foot && m.foot.visible && m.footHasTep,
       `footH=${m.foot?.h} label="${m.footLabel}" tepName="${m.footTepName}"`)
-    check('C3b 默认引擎是内置 g ai → **不出现**"不能派发"的提示',
+    check('C4b 默认引擎是内置 g ai → **不出现**"不能派发"的提示',
       m.footNotice === '', `notice="${m.footNotice}"`)
-    check('C3c 执行器下拉显示的是当前选择（非空，与工作台临时切换共用同一份）',
+    check('C4c 执行器下拉显示的是当前选择（非空，与工作台临时切换共用同一份）',
       m.footTepName.length > 0, `name="${m.footTepName}"`)
 
-    /* ══ C4 互斥 + 草稿不丢 ══ */
-    check('C4a 对话模式下活动日志不可见', !!m.feed && !m.feed.visible, `visible=${m.feed?.visible}`)
-    check('C4b 对话模式下 Git 概览不可见', !!m.git && !m.git.visible, `visible=${m.git?.visible}`)
-    check('C4c 对话模式下派发输入框不可见', !!m.compose && !m.compose.visible, `visible=${m.compose?.visible}`)
-    check('C4d 但输入框仍在 DOM 里（v-show 不是 v-if —— 切模式不许丢草稿）',
+    /* ══ C5 互斥 + 草稿不丢 ══ */
+    check('C5a 对话模式下进度报告不可见', !!m.report && !m.report.visible, `visible=${m.report?.visible}`)
+    check('C5b 对话模式下 Git 概览不可见', !!m.git && !m.git.visible, `visible=${m.git?.visible}`)
+    check('C5c 对话模式下派发输入框不可见', !!m.compose && !m.compose.visible, `visible=${m.compose?.visible}`)
+    check('C5d 但输入框仍在 DOM 里（v-show 不是 v-if —— 切模式不许丢草稿）',
       m.inputInDom === true, `inDom=${m.inputInDom}`)
 
-    /* ══ C5 切「指令」 ══ */
+    /* ══ C6 切回「指令」 ══ */
     await switchMode(page, T.command[0])
     m = await M()
-    check('C5a 激活项换成「指令」，且仍只有一个选中',
+    check('C6a 激活项换成「指令」，且仍只有一个选中',
       m.modeSelected.length === 1 && hasText(m.modeSelected[0], T.command),
       `selected=${JSON.stringify(m.modeSelected)}`)
-    check('C5b 偏好落盘 wb.ocMode.v1=command',
-      m.modeKey === 'command', `wb.ocMode.v1=${JSON.stringify(m.modeKey)}`)
-    check('C5c 活动日志 / 派发输入框回来，对话面让位',
-      !!m.feed && m.feed.visible && !!m.compose && m.compose.visible && !!m.chat && !m.chat.visible,
-      `feed=${m.feed?.visible} compose=${m.compose?.visible} chat=${m.chat?.visible}`)
-    check('C5d 指令模式的派发栏里也有执行器下拉（第二处 TaskExecutorPicker 没被拆掉）',
+    check('C6b 偏好写回 wb.ocMode.v2=command',
+      m.modeKey === 'command', `wb.ocMode.v2=${JSON.stringify(m.modeKey)}`)
+    check('C6c 进度报告 / 派发输入框回来，对话面让位',
+      !!m.report && m.report.visible && !!m.compose && m.compose.visible && !!m.chat && !m.chat.visible,
+      `report=${m.report?.visible} compose=${m.compose?.visible} chat=${m.chat?.visible}`)
+    check('C6d 指令模式的派发栏里也有执行器下拉（第二处 TaskExecutorPicker 没被拆掉）',
       m.composeHasTep === true, `composeHasTep=${m.composeHasTep}`)
-    check('C5e 输入框几何没被双模式改坏：rows=4 且高度 ≥ 76（P26 契约）',
+    check('C6e 输入框几何没被双模式改坏：rows=4 且高度 ≥ 76（P26 契约）',
       m.input?.rows === '4' && (m.input?.h || 0) >= 76,
       `rows=${m.input?.rows} h=${m.input?.h}`)
     await shot(page, '1600-command-mode')
 
-    /* ══ C6 切回「对话」 ══ */
+    /* ══ C7 持久化：切到「对话」（**非默认**值）后 reload，仍是 chat ══
+       测非默认值才有区分度 —— 若测 command，reload 后即使偏好丢了也会因"默认就是 command"而假绿 */
     await switchMode(page, T.chat[0])
-    m = await M()
-    check('C6a 切回对话：对话面可见、三块指令面板全部让位',
-      // 一律用 ?. —— 变异测试（v-show → v-if）下元素会整个不存在，
-      // 直接取 .visible 会让探针自己抛异常，那就测不出"该红没红"了
-      !!m.chat?.visible && !m.feed?.visible && !m.git?.visible && !m.compose?.visible,
-      `chat=${m.chat?.visible} feed=${m.feed?.visible} git=${m.git?.visible} compose=${m.compose?.visible}`)
-    check('C6b 偏好写回 chat', m.modeKey === 'chat', `wb.ocMode.v1=${JSON.stringify(m.modeKey)}`)
-
-    /* ══ C7 持久化：reload 后仍是 command ══ */
-    await switchMode(page, T.command[0])
     await page.reload({ waitUntil: 'domcontentloaded' })
     await openBoard(page)
     m = await M()
-    check('C7a reload 后仍是「指令」（常驻栏不该每次跳回默认）',
-      hasText(m.modeSelected[0], T.command) && !!m.compose?.visible && !m.chat?.visible,
-      `selected=${JSON.stringify(m.modeSelected)} compose=${m.compose?.visible}`)
+    check('C7a reload 后仍是「对话」（非默认值；常驻栏不该每次跳回默认「指令」）',
+      hasText(m.modeSelected[0], T.chat) && !!m.chat?.visible && !m.compose?.visible,
+      `selected=${JSON.stringify(m.modeSelected)} chat=${m.chat?.visible} compose=${m.compose?.visible}`)
     check('C7b reload 后偏好键还在（没被初始化逻辑覆盖）',
-      m.modeKey === 'command', `wb.ocMode.v1=${JSON.stringify(m.modeKey)}`)
-    await shot(page, '1600-command-after-reload')
+      m.modeKey === 'chat', `wb.ocMode.v2=${JSON.stringify(m.modeKey)}`)
+    await shot(page, '1600-chat-after-reload')
 
-    /* ══ C8 reload 后对话面照样立得起来（回来时不塌） ══ */
+    /* ══ C8 反复切换后对话面照样立得起来（回来时不塌） ══ */
+    await switchMode(page, T.command[0])
     await switchMode(page, T.chat[0])
     m = await M()
     check('C8 反复切换后对话面依然有高度（> 200px，没有累积塌陷）',
@@ -331,14 +350,14 @@ async function main() {
       m2.footHasTep === false, `footHasTep=${m2.footHasTep}`)
     await shot(page2, '1600-chat-external-engine')
 
-    /* ══ 反证：把模式键清掉，期望回到默认「对话」 ══ */
-    await page.evaluate(() => localStorage.removeItem('wb.ocMode.v1'))
+    /* ══ 反证：把模式键清掉，期望回到默认「指令」 ══ */
+    await page.evaluate(() => localStorage.removeItem('wb.ocMode.v2'))
     await page.reload({ waitUntil: 'domcontentloaded' })
     await openBoard(page)
     const m3 = await M()
-    check('R1 反证：清掉偏好键后回落默认「对话」（证明 C5b/C7 真的在看这个键）',
-      hasText(m3.modeSelected[0], T.chat) && !!m3.chat?.visible,
-      `selected=${JSON.stringify(m3.modeSelected)} chat=${m3.chat?.visible}`)
+    check('R1 反证：清掉偏好键后回落默认「指令」（证明 C2b/C6b/C7b 真的在看这个键）',
+      hasText(m3.modeSelected[0], T.command) && !!m3.compose?.visible && !m3.chat?.visible,
+      `selected=${JSON.stringify(m3.modeSelected)} compose=${m3.compose?.visible} chat=${m3.chat?.visible}`)
 
     await ctx2.close()
   } catch (err) {
@@ -350,6 +369,7 @@ async function main() {
 
   // ── 出对比页 ────────────────────────────────────────────────────────
   const pairs = [
+    { title: '默认（指令）：拨片 + 进度报告 / Git 概览 / 派发输入框', a: '1600-command-default', b: null },
     { title: '默认（对话）：拨片 + g ai 对话面 + 底部派发执行器', a: '1600-chat-mode', b: null },
     { title: '对话 vs 指令（同一右栏，互斥的两块）', a: '1600-chat-mode', b: '1600-command-mode' },
     { title: 'reload 后仍是「指令」（偏好落盘）', a: '1600-command-after-reload', b: null },

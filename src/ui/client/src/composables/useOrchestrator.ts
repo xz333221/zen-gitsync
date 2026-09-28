@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// 主 Agent 控制台数据源：GET /api/workbench/orchestrator 及其四个写接口
-// （调度开关 / 派发 / 全局默认提示词 / 项目默认提示词）。
+// 主 Agent 控制台数据源：GET /api/workbench/orchestrator 及其六个写接口
+// （调度开关 / 派发 / 全局默认提示词 / 项目默认提示词 / 立即报告 / 报告间隔）。
 //
 // 关于「暂停调度」的真实语义（别在 UI 上把它说成别的）：
 //   暂停只拦**自动派发** —— 通过控制台派发的指令在暂停期间只建任务不执行；
@@ -25,8 +25,16 @@
 //   并抄进任务的 simpleOverride —— 前端只负责编辑与显示，不自己拼提示词
 //   （两边各拼一次必然会分叉）。生效规则见服务端 resolveDispatchPrompt。
 //
+// 关于「进度报告」：
+//   报告**由服务端生成**（自动报告是服务端定时器，前端定时器在标签页隐藏后就不跑了，
+//   而那正是最需要"回来看看刚才发生了什么"的时刻）。所以这个组合式函数里
+//   没有报告相关的定时器，只有三件事：读列表、手动触发一次、改间隔。
+//   间隔走轮询下发的 reportIntervalMs（多标签页 / 多实例共用同一份设置），
+//   报告正文走单独接口 —— 一份几 KB × 20 份塞进 5s 轮询里纯属浪费。
+//
 // 活动流是服务端把 job 的起止事实 + 人类指令合成的结构化行，**文案由前端渲染**，
 // 所以这里不要把 taskTitle 拼成句子，交给组件里带 $t() 的模板。
+// （右栏的「活动日志」已经换成进度报告，这条流现在只供顶栏「今日完成」计数。）
 
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -35,11 +43,14 @@ import type {
   Attachment,
   OrchestratorActivity,
   OrchestratorInstruction,
+  ProgressReport,
   ProjectPromptEntry,
   RunningAgent,
   Task,
 } from '@/types/workbench'
 import type { TaskExecutorId } from '@/utils/taskExecutor'
+import { DEFAULT_REPORT_INTERVAL_MS, normalizeReportInterval } from '@/utils/progressReport'
+import { useConfigStore } from '@/stores/configStore'
 
 export interface DispatchPayload {
   text: string
@@ -66,6 +77,13 @@ export function useOrchestrator() {
   const defaultPrompt = ref('')
   /** 各项目默认提示词，键为归一化项目路径（与 ProjectSummary.key 同口径） */
   const projectPrompts = ref<Record<string, ProjectPromptEntry>>({})
+  /** 进度报告历史（新的在前）。正文走单独接口，不在这份 5s 轮询里 */
+  const reports = ref<ProgressReport[]>([])
+  const loadingReports = ref(false)
+  /** 正在生成一份报告（手动触发期间；自动报告在服务端跑，前端看不到这个态） */
+  const generatingReport = ref(false)
+  /** 自动报告间隔（毫秒，0 = 关闭）。值以服务端为准，本地只是镜像 */
+  const reportIntervalMs = ref(DEFAULT_REPORT_INTERVAL_MS)
 
   /** @param silent 静默刷新（轮询用），失败不弹 toast */
   async function loadOrchestrator(silent = false): Promise<boolean> {
@@ -84,10 +102,92 @@ export function useOrchestrator() {
       projectPrompts.value = res.projectPrompts && typeof res.projectPrompts === 'object'
         ? res.projectPrompts
         : {}
+      reportIntervalMs.value = normalizeReportInterval(res.reportIntervalMs)
       loaded.value = true
       return true
     } catch (err: any) {
       if (!silent) ElMessage.error($t('@WORKBENCH:网络错误: ') + (err?.message || err))
+      return false
+    }
+  }
+
+  /**
+   * 读报告历史。
+   *
+   * 与轮询分开取：一份报告几 KB，历史 20 份就是几十 KB，5s 一轮地拖着走纯属浪费
+   * （与「任务详情不进看板轮询」同一个理由）。由调用方在挂载时取一次、
+   * 之后按 30s 的节奏刷新 —— 自动报告是服务端定时器产生的，前端不知道它什么时候落盘。
+   */
+  async function loadReports(silent = false): Promise<boolean> {
+    if (loadingReports.value) return false
+    loadingReports.value = true
+    try {
+      const res = await fetch('/api/workbench/orchestrator/reports', { cache: 'no-store' }).then(r => r.json())
+      if (!res?.success) {
+        if (!silent) ElMessage.error(res?.error || $t('@WORKBENCH:读取进度报告失败'))
+        return false
+      }
+      reports.value = Array.isArray(res.reports) ? res.reports : []
+      return true
+    } catch (err: any) {
+      // 报告读不到不该打断看板：静默刷新时连 toast 都不弹，下一轮自然会重试
+      if (!silent) ElMessage.error($t('@WORKBENCH:网络错误: ') + (err?.message || err))
+      return false
+    } finally {
+      loadingReports.value = false
+    }
+  }
+
+  /**
+   * 立即生成一份进度报告。
+   *
+   * 语言按当前界面语言传给服务端 —— 自动报告那边读的是配置里的语言，
+   * 手动这一下如果用户刚切了语言，以他眼前看到的界面为准更合理。
+   *
+   * 服务端没有在跑的任务时也会返回一条"空事实"报告（不会叫模型）：
+   * 用户点这一下要的就是一个明确的"现在没有东西在跑"，返回 null 反而说不清。
+   */
+  async function generateReport(): Promise<ProgressReport | null> {
+    if (generatingReport.value) return null
+    generatingReport.value = true
+    try {
+      const locale = String(useConfigStore().locale || '').startsWith('en') ? 'en' : 'zh'
+      const res = await fetch('/api/workbench/orchestrator/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locale }),
+      }).then(r => r.json())
+      if (!res?.success) {
+        ElMessage.error(res?.error || $t('@WORKBENCH:生成进度报告失败'))
+        return null
+      }
+      // 就地把新报告插到最前，不再多打一次列表接口：这一份就是刚生成的那份
+      if (res.report) reports.value = [res.report, ...reports.value].slice(0, 20)
+      return res.report || null
+    } catch (err: any) {
+      ElMessage.error($t('@WORKBENCH:网络错误: ') + (err?.message || err))
+      return null
+    } finally {
+      generatingReport.value = false
+    }
+  }
+
+  /** 改自动报告间隔（毫秒，0 = 关闭自动报告）。服务端是白名单的唯一权威 */
+  async function setReportInterval(ms: number): Promise<boolean> {
+    try {
+      const res = await fetch('/api/workbench/orchestrator/report-interval', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ intervalMs: ms }),
+      }).then(r => r.json())
+      if (!res?.success) {
+        ElMessage.error(res?.error || $t('@WORKBENCH:保存失败'))
+        return false
+      }
+      reportIntervalMs.value = normalizeReportInterval(res.reportIntervalMs)
+      return true
+    } catch (err: any) {
+      ElMessage.error($t('@WORKBENCH:网络错误: ') + (err?.message || err))
       return false
     }
   }
@@ -219,7 +319,9 @@ export function useOrchestrator() {
     active, instructions, activity, running, updatedAt, loaded,
     togglingSchedule, dispatching,
     defaultPrompt, projectPrompts,
+    reports, loadingReports, generatingReport, reportIntervalMs,
     loadOrchestrator, setSchedulingActive, dispatch,
     saveDefaultPrompt, saveProjectPrompt,
+    loadReports, generateReport, setReportInterval,
   }
 }

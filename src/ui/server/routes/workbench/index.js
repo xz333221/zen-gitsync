@@ -120,7 +120,15 @@ import {
   setProjectPrompt,
   buildActivityFeed,
   buildRunningAgents,
+  setReportIntervalMs,
+  claimReportSlot,
+  readReports,
+  appendReport,
 } from './orchestratorStore.js';
+import {
+  buildRunningFacts,
+  generateProgressReport,
+} from './progressReport.js';
 
 /**
  * 「任务结束 → 刷快照」的监听器。存成模块级的，是为了在重复装配路由时
@@ -128,6 +136,12 @@ import {
  * @type {((evt: object) => boolean)|null}
  */
 let jobSettledHandler = null;
+
+/** 自动进度报告的定时器。同上：重复装配路由时先清掉上一个 */
+let reportTimer = null;
+
+/** 自动报告的检查粒度。它**不等于**报告间隔 —— 见 tickProgressReport 的注释 */
+const REPORT_TICK_MS = 30 * 1000;
 
 /**
  * 注册所有 workbench 路由（共 45 个端点）。
@@ -1205,10 +1219,144 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
       // 设置弹窗打开时也不必再单独取一次（单条上限 8000 字，体积可控）
       defaultPrompt: state.defaultPrompt,
       projectPrompts: state.projectPrompts,
+      // 进度报告的**配置**（一个数字 + 一个时间戳）跟着轮询走，报告的**正文**走
+      // /orchestrator/reports：报告历史一份几 KB，20 份就是几十 KB，
+      // 塞进这个 5s 轮询的接口纯属浪费（与 /tasks/:id/detail 不进 /projects 同一个理由）。
+      reportIntervalMs: state.reportIntervalMs,
+      lastReportAt: state.lastReportAt,
       activity: buildActivityFeed({ jobs: jobsSnap, tasks, instructions: state.instructions }),
       running: buildRunningAgents({ jobs: jobsSnap, tasks }),
     });
   }));
+
+  // ════════════════════════════════════════════════════════════════════════
+  // §19.5 进度报告（右栏「进度报告」面板）
+  //
+  // 面板上那一段"现在跑到哪一步了"由模型写，但**什么时候写、写几次**由这一层管：
+  //   · 手动「立即报告」→ POST /orchestrator/report，永远可用；
+  //   · 自动报告 → 下面的定时器，间隔来自用户设置（0 = 关）。
+  // 两份历史都存在 orchestrator-reports.json，读取走 /orchestrator/reports。
+  // ════════════════════════════════════════════════════════════════════════
+
+  /**
+   * 报告要用到的两份东西：默认模型 + 界面语言。
+   * 一次 config 读出来 —— 分两次读会读到"两个瞬间"（改设置的同时正好在报告）。
+   */
+  async function readReportContext() {
+    const out = { model: null, locale: '' };
+    if (!configManager || typeof configManager.readRawConfigFile !== 'function') return out;
+    try {
+      const raw = await configManager.readRawConfigFile();
+      const models = Array.isArray(raw && raw.models) ? raw.models : [];
+      out.model = models.find(m => m && m.isDefault) || models[0] || null;
+      out.locale = typeof (raw && raw.locale) === 'string' ? raw.locale : '';
+    } catch (err) {
+      logger.warn('[workbench] 读取模型配置失败，本次报告只记事实:', (err && err.message) || err);
+    }
+    return out;
+  }
+
+  /** 当前在跑的 job 拼成报告事实。先刷磁盘那一半，别的实例跑的任务也要算进来 */
+  async function collectRunningFacts() {
+    const data = await readJson(TASKS_FILE, { tasks: [] });
+    await refreshJobsFromDisk();
+    return buildRunningFacts({ jobs: Array.from(mergedJobs().values()), tasks: data.tasks || [] });
+  }
+
+  /**
+   * 生成并落盘一份进度报告。
+   *
+   * @param {'auto'|'manual'} trigger
+   * @param {{ locale?: string, intervalMs?: number }} [opts]
+   *        locale 缺省时用配置里的界面语言；intervalMs 只在 auto 时用（抢占名额）
+   * @returns {Promise<object|null>} null = 这次不该报（没任务在跑 / 名额已被占）
+   */
+  async function runProgressReport(trigger, { locale = '', intervalMs = 0 } = {}) {
+    const facts = await collectRunningFacts();
+
+    // 没任务在跑时自动报告**静默跳过**：一条"什么都没发生"的报告每 10 分钟占一格，
+    // 只会把真正有用的那几条挤出历史（上限 20 条）。
+    // 手动「立即报告」不受此限 —— 那时用户要的就是"现在确实没有东西在跑"这句实话。
+    if (!facts.length && trigger === 'auto') return null;
+    if (trigger === 'auto' && !(await claimReportSlot(intervalMs))) return null;
+
+    const ctx = await readReportContext();
+    const report = await generateProgressReport({
+      facts,
+      locale: locale || ctx.locale,
+      trigger,
+      model: ctx.model,
+    });
+    const saved = await appendReport(report);
+    publish('orchestrator:report', { id: saved.id, at: saved.at, trigger: saved.trigger });
+    return saved;
+  }
+
+  /**
+   * 同一时刻只跑一次生成。
+   * 「立即报告」连点两下、或手动与自动撞在一起时，第二次应该**等第一份**，
+   * 而不是再打一次模型换回一份几乎一样的报告。
+   */
+  let reportInFlight = null;
+  function runProgressReportOnce(trigger, opts) {
+    if (reportInFlight) return reportInFlight;
+    reportInFlight = runProgressReport(trigger, opts).finally(() => { reportInFlight = null; });
+    return reportInFlight;
+  }
+
+  /** 取报告历史（新的在前）。面板打开时取一次、之后每次生成后取一次 */
+  app.get('/api/workbench/orchestrator/reports', asyncRoute(async (_req, res) => {
+    res.json({ success: true, reports: await readReports() });
+  }));
+
+  /**
+   * 手动生成一份报告。body: { locale? }
+   *
+   * 与自动报告共用同一条链路，只在两处不同：跳过"必须有任务在跑"的静默跳过、
+   * 不占用自动报告的间隔名额（否则用户点一下「立即报告」，下一次自动报告被推迟一整个间隔）。
+   */
+  app.post('/api/workbench/orchestrator/report', asyncRoute(async (req, res) => {
+    const locale = typeof req.body?.locale === 'string' ? req.body.locale : '';
+    const report = await runProgressReportOnce('manual', { locale });
+    res.json({ success: true, report });
+  }));
+
+  /**
+   * 改自动报告间隔。body: { intervalMs }
+   * 取值由 shared.js 的白名单卡死（0 / 5 / 10 / 15 / 30 / 60 分钟），非法值回落默认 ——
+   * 这个数字直接决定每多久烧一次额度，不能让请求体里的任意值进来。
+   */
+  app.post('/api/workbench/orchestrator/report-interval', asyncRoute(async (req, res) => {
+    const reportIntervalMs = await setReportIntervalMs(req.body?.intervalMs);
+    publish('orchestrator:report-interval', { reportIntervalMs });
+    res.json({ success: true, reportIntervalMs });
+  }));
+
+  /**
+   * 自动报告定时器。
+   *
+   * 30s 一跳，但每一跳**只是判断该不该报**：读 orchestrator.json 拿间隔 + 看内存里
+   * 有没有在跑的 job。真正花额度的那一步被三重条件挡住 —— 开关打开、有任务在跑、
+   * 距上次报告满一个间隔。所以"10 分钟报一次"的实际误差不超过 30s，
+   * 而不是每 30 秒打一次模型。
+   *
+   * 为什么放服务端而不是前端定时器：报告是给**离开键盘的人**看的，
+   * 前端定时器在标签页隐藏/关掉后就不跑了，而那正是最需要它的时刻。
+   */
+  async function tickProgressReport() {
+    const state = await readOrchestrator();
+    if (!state.reportIntervalMs) return;
+    await runProgressReportOnce('auto', { intervalMs: state.reportIntervalMs });
+  }
+
+  if (reportTimer) { clearInterval(reportTimer); reportTimer = null; }
+  reportTimer = setInterval(() => {
+    tickProgressReport().catch(err => {
+      logger.warn('[workbench] 自动进度报告失败:', (err && err.message) || err);
+    });
+  }, REPORT_TICK_MS);
+  // 定时器不该把进程吊着不退出
+  reportTimer.unref?.();
 
   app.post('/api/workbench/orchestrator/state', asyncRoute(async (req, res) => {
     const active = req.body?.active;

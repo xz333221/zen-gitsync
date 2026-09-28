@@ -56,8 +56,10 @@ const {
 const {
   active, activity, running, dispatching, togglingSchedule,
   defaultPrompt, projectPrompts,
+  reports, generatingReport, reportIntervalMs,
   loadOrchestrator, setSchedulingActive, dispatch,
   saveDefaultPrompt, saveProjectPrompt,
+  loadReports, generateReport, setReportInterval,
 } = useOrchestrator()
 
 // ── 选中项目（'' = 全部项目） ────────────────────────────────────────
@@ -153,6 +155,17 @@ const POLL_MS = 5000
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let inFlight = false
 
+/**
+ * 进度报告的轮询节奏，与看板的 5s **分开**。
+ *
+ * 报告正文一份几 KB、历史 20 份，塞进 5s 轮询纯属浪费（服务端那边也刻意没把它
+ * 并进 /orchestrator 的返回）；而它又不适合"生成完再推"——自动报告是**服务端定时器**
+ * 产生的，前端根本不知道它什么时候落盘。所以按固定节奏取一次，30s 足够：
+ * 报告本身就是"每 10 分钟一次"的东西，晚看到半分钟没有区别。
+ */
+const REPORT_POLL_MS = 30000
+let reportPollTimer: ReturnType<typeof setInterval> | null = null
+
 async function refresh(silent = true) {
   if (inFlight) return
   inFlight = true
@@ -164,23 +177,34 @@ async function refresh(silent = true) {
 }
 
 function onVisibilityChange() {
-  if (!document.hidden) refresh(true)
+  if (!document.hidden) {
+    refresh(true)
+    // 回到这个标签页时顺手取一次报告：自动报告是服务端跑的，
+    // 「我离开的这段时间生成了几份」只有这一下才知道
+    loadReports(true)
+  }
 }
 
 onMounted(async () => {
   window.addEventListener('resize', onWindowResize)
   await refresh(false)
+  loadReports(true)
   applyDefaultSelection()
   pollTimer = setInterval(() => {
     if (document.hidden) return
     refresh(true)
   }, POLL_MS)
+  reportPollTimer = setInterval(() => {
+    if (document.hidden) return
+    loadReports(true)
+  }, REPORT_POLL_MS)
   document.addEventListener('visibilitychange', onVisibilityChange)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onWindowResize)
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+  if (reportPollTimer) { clearInterval(reportPollTimer); reportPollTimer = null }
   document.removeEventListener('visibilitychange', onVisibilityChange)
 })
 
@@ -733,7 +757,6 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
       <OrchestratorConsole
         ref="consoleRef"
         :active="active"
-        :activity="activity"
         :running-count="running.length"
         :selected-project="selectedProject"
         :dispatching="dispatching"
@@ -742,9 +765,14 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
         :collapsed="rightHidden"
         :default-prompt="defaultPrompt"
         :project-prompts="projectPrompts"
+        :reports="reports"
+        :report-interval-ms="reportIntervalMs"
+        :generating-report="generatingReport"
         @toggle-collapse="toggleRight"
         @toggle-schedule="onToggleSchedule"
         @dispatch="onDispatch"
+        @generate-report="generateReport"
+        @set-report-interval="setReportInterval"
         @open-prompt-settings="promptDialogOpen = true"
       />
     </div>

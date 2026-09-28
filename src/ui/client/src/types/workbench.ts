@@ -288,6 +288,43 @@ export interface RunningAgent {
   projectName: string
 }
 
+/**
+ * 一份进度报告里"当时某个任务长什么样"的事实快照。
+ *
+ * elapsedMs 是**生成那一刻**算好的，不是前端拿现在的时间减 startedAt：
+ * 否则回看三小时前那份"已运行 12 分钟"的报告，会显示成"已运行 3 小时 12 分"，
+ * 历史报告就再也说不清"当时是什么情况"了。
+ */
+export interface ProgressReportFact {
+  taskId: string | null
+  taskTitle: string
+  projectName: string
+  startedAt: string | null
+  elapsedMs: number
+  /** 本轮用的执行器（claude | opencode | codex），'' = 老记录没记 */
+  agent: string
+  toolCallCount: number
+  /** 最近一次工具调用的一句话描述，'' = 还没有 */
+  lastTool: string
+  /** 最近一行模型输出，'' = 还没有 */
+  lastLine: string
+}
+
+/** 报告生成失败的原因码。'' = 成功；正文由前端 $t() 渲染，服务端只给码 */
+export type ProgressReportErrorCode = '' | 'NO_MODEL' | 'LLM_TIMEOUT' | 'LLM_FAILED'
+
+/** 一份进度报告：一段模型写的汇报 + 当时那批任务的事实 */
+export interface ProgressReport {
+  id: string
+  at: string | null
+  trigger: 'auto' | 'manual'
+  text: string
+  errorCode: ProgressReportErrorCode
+  /** 失败时的原始报错（模型 / 网关给的），只用于展示细节 */
+  errorDetail: string
+  tasks: ProgressReportFact[]
+}
+
 export interface ProjectsResponse {
   success: boolean
   projects: ProjectSummary[]
@@ -305,6 +342,10 @@ export interface OrchestratorResponse {
   defaultPrompt?: string
   /** 各项目的默认提示词，键为归一化项目路径 */
   projectPrompts?: Record<string, ProjectPromptEntry>
+  /** 自动进度报告间隔（毫秒），0 = 关闭。报告正文走 /orchestrator/reports，不在这份轮询里 */
+  reportIntervalMs?: number
+  /** 上次生成报告的时间（含"已抢占名额、还在生成中"那一瞬间） */
+  lastReportAt?: string | null
   activity: OrchestratorActivity[]
   running: RunningAgent[]
   error?: string

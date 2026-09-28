@@ -199,13 +199,11 @@ async function main() {
       !!row && row.projectName === someProject.name && row.targetSource === 'mention',
       row ? `projectName="${row.projectName}" targetSource="${row.targetSource}"` : '找不到该指令的活动行')
 
-    // UI 层单独看一眼：接口字段对了，不代表组件真的把它渲染出来了
-    await sleep(6000) // 等看板这一轮轮询把新指令拉回活动流
-    const notes = await page.evaluate(() =>
-      Array.from(document.querySelectorAll('.oc-row__note')).map(e => e.textContent.trim()))
-    check('E6 活动流 UI 里渲染出「落点「…」· 依据」',
-      notes.some(t => t.includes('落点「') && t.includes('指令里提到了它')),
-      `notes=${JSON.stringify(notes.slice(0, 3))}`)
+    // ⚠️ 这里原本还有一条 E6：等 6s 轮询后在 UI 上找 `.oc-row__note` 里渲染出的
+    //    「落点「…」· 依据」。**已于 2026-09-28 随「活动日志」一起移除** ——
+    //    右栏那块换成了进度报告（见 OrchestratorConsole 的 .oc__report），
+    //    落点信息不再在界面上单独成行。事实本身仍由上面 E5 对着接口断言，
+    //    这里不再补一条"界面看不见但脚本说看得见"的假覆盖。
 
     check('F 无 JS 运行时异常', pageErrors.length === 0, pageErrors.join(' | '))
     const badConsole = consoleErrors.filter(t => !/favicon|ResizeObserver/i.test(t))

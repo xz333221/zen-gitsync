@@ -2,11 +2,14 @@
  * 反证：把「对话/指令」双模式的两条机制临时改坏，确认探针里的对应断言**真的会红**。
  *
  *   机制 A  .oc__compose 的 v-show 改成 v-if
- *           → 期望 C4c / C4d 变红（"切模式不丢草稿"这条正是靠 v-show 守的）
+ *           → 期望 C5c / C5d 变红（"切模式不丢草稿"这条正是靠 v-show 守的）
  *   机制 B  setMode() 不再写 localStorage
- *           → 期望 C5b / C6b / C7a / C7b 变红（"偏好落盘"那四条）
+ *           → 期望 C2b / C6b / C7a / C7b 变红（"偏好落盘 + reload 后仍生效"那四条）
  *
  * 其余断言应当**一条都不动** —— 有预期外的红灯说明存在没意识到的耦合，要查。
+ *
+ * ⚠️ MUST_FAIL 里的编号与主探针的用例编号一一对应。主探针改编号/改默认模式时，
+ *    这里必须同步（默认模式已从 chat 改成 command，见 6991f84c / f9a08dba）。
  *
  * 还原写在 finally 里，并且不做 git checkout（工作区里 OrchestratorConsole.vue
  * 本身还是未提交的新功能，checkout 会把功能一起清掉）—— 用整文件备份还原。
@@ -31,7 +34,7 @@ const MUTANTS = [
     to: 'void next /* 反证：不落盘 */',
   },
 ]
-const MUST_FAIL = ['C4c', 'C4d', 'C5b', 'C6b', 'C7a', 'C7b']
+const MUST_FAIL = ['C2b', 'C5c', 'C5d', 'C6b', 'C7a', 'C7b']
 
 /** 跑探针，收集 FAIL 的断言编号 */
 function runProbe() {

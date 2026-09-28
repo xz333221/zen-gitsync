@@ -224,13 +224,10 @@ async function main() {
       projectKeys.length === 1 && samey(projectKeys[0], target.path),
       JSON.stringify(projectKeys))
 
-    // ── F 活动流 UI ────────────────────────────────────────────────
-    await sleep(6500) // 等看板这一轮轮询把新指令拉回活动流
-    const notes = await page.evaluate(() =>
-      Array.from(document.querySelectorAll('.oc-row__note')).map(e => e.textContent.trim()))
-    check('F1 活动流渲染出「附带全局 + 项目默认提示词」',
-      notes.some(t => t.includes('附带全局 + 项目默认提示词')),
-      JSON.stringify(notes.slice(0, 4)))
+    // ⚠️ 这里原本还有一条 F1：等 6.5s 轮询后在 UI 上找 `.oc-row__note` 渲染出的
+    //    「附带全局 + 项目默认提示词」。**已于 2026-09-28 随「活动日志」一起移除** ——
+    //    右栏那块换成了进度报告（见 OrchestratorConsole 的 .oc__report），
+    //    提示词来源不再在界面上单独成行。事实本身仍由上面 E3 对着接口断言。
 
     // ── G 「全部项目」下项目栏禁用 ──────────────────────────────────
     await page.locator('.proj-item--all').first().click()

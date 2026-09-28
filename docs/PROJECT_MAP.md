@@ -239,6 +239,7 @@ zen-gitsync/                                    [根: 配置文件 + 顶层脚�
 │           │   │   ├── index.js (1383 行) / taskRunner.js (claude / opencode / codex 三执行器) / jobStore.js
 │           │   │   ├── agentRoutes.js / agentChat.js / agentSessionStore.js / agentMarketplace.js
 │           │   │   ├── orchestratorStore.js / projectRegistry.js / targetResolver.js / projectTool.js
+│           │   │   ├── progressReport.js (右栏进度报告: 事实快照 + 提示词 + 模型调用)
 │           │   │   ├── instructionStore.js / promptParts.js / envContext.js
 │           │   │   ├── llmClient.js / jsonParse.js / pdfText.js
 │           │   │   ├── projectScan.js / attachmentUtils.js / shared.js

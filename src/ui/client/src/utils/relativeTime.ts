@@ -42,6 +42,25 @@ export function relativeTimeFromIso(iso?: string | null, now: number = Date.now(
 }
 
 /**
+ * 时长（毫秒）→ 人话，形如 `1 小时 12 分` / `3 分 20 秒` / `8 秒`。
+ *
+ * 与 formatElapsed 共用同一组 i18n key —— 两处一旦各写一套，"已运行 1 小时 2 分"
+ * 和"已运行 1 小时 02 分"这种不一致就会在同一个面板里同时出现。
+ * 进度报告的事实快照存的是**时长**（不是起止时间，见 ProgressReportFact），走这个。
+ */
+export function formatDurationMs(ms?: number | null): string {
+  const diff = Number(ms)
+  if (!Number.isFinite(diff) || diff < 0) return ''
+  const totalSec = Math.floor(diff / 1000)
+  const h = Math.floor(totalSec / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  const s = totalSec % 60
+  if (h > 0) return $t('@WORKBENCH:N 小时 M 分', { n: h, m })
+  if (m > 0) return $t('@WORKBENCH:N 分 M 秒', { n: m, m: s })
+  return $t('@WORKBENCH:N 秒', { n: s })
+}
+
+/**
  * 起止时间（含尚未结束的）→ 已运行时长，形如 `1 小时 12 分` / `3 分 20 秒`。
  * @param endIso 结束时间；不传表示"还在跑"，用 now 当结束时刻
  * @param now    参照时刻，默认当前时间（传参便于单测与每秒刷新）
@@ -52,14 +71,7 @@ export function formatElapsed(startIso?: string | null, endIso?: string | null, 
   if (Number.isNaN(start)) return ''
   const end = endIso ? new Date(endIso).getTime() : now
   if (Number.isNaN(end)) return ''
-  const diff = Math.max(0, end - start)
-  const totalSec = Math.floor(diff / 1000)
-  const h = Math.floor(totalSec / 3600)
-  const m = Math.floor((totalSec % 3600) / 60)
-  const s = totalSec % 60
-  if (h > 0) return $t('@WORKBENCH:N 小时 M 分', { n: h, m })
-  if (m > 0) return $t('@WORKBENCH:N 分 M 秒', { n: m, m: s })
-  return $t('@WORKBENCH:N 秒', { n: s })
+  return formatDurationMs(Math.max(0, end - start))
 }
 
 function isSameDay(a: Date, b: Date): boolean {

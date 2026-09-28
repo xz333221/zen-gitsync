@@ -111,6 +111,8 @@ Thumbs.db
 # Temp directories
 .temp/
 tmp/
+# 探针 / 调试用的临时目录（截图等一次性产物）—— 不挡掉它就会一直挂在 git status 上
+.tmp/
 
 # E2E 验证产生的截图产物（按 task id 分子目录，一次性产物不入库）
 workbench-images/

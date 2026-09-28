@@ -21,22 +21,28 @@
   只会让人在排障时被误导。取而代之的是能真算出来的量：活跃执行数、
   今日完成轮次、项目/任务总数，以及每个项目的真实 Git 状态。
 
-  活动流的两类来源泾渭分明：
-    · 执行事实（派发 / 完成 / 出错 / 取消）—— 由 job 的起止推导，不可编辑；
-    · 人类干预 —— 你敲进去的指令，连同派发结果（建了任务 / 只建未执行 / 被拒绝）。
-  两者混在同一条时间线上，才看得出"我说了什么 → 系统做了什么"。
+  指令模式下这块原来是一条「活动日志」（谁派发了、谁完成了）——
+  那些事实看板本身就能看出来，于是换成了**进度报告**：让主 Agent 隔一会儿
+  读一次正在跑的 job（工具调用 + 最近输出），写一段"现在到哪一步了"。
+  报告由服务端生成（间隔可设、可手动点），前端只渲染，见 composables/useOrchestrator.ts。
 -->
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { $t } from '@/lang/static'
-import { Paperclip, Promotion, Expand, Fold, Setting } from '@element-plus/icons-vue'
+import { Paperclip, Promotion, Expand, Fold, Setting, Refresh } from '@element-plus/icons-vue'
 import type {
   Attachment,
-  OrchestratorActivity,
+  ProgressReport,
   ProjectPromptEntry,
   ProjectSummary,
 } from '@/types/workbench'
-import { clockFromIso, relativeTimeFromIso } from '@/utils/relativeTime'
+import { clockFromIso, formatDurationMs, relativeTimeFromIso } from '@/utils/relativeTime'
+import {
+  REPORT_INTERVAL_OPTIONS_MS,
+  reportErrorKey,
+  reportIntervalLabelKey,
+  reportIntervalLabelParams,
+} from '@/utils/progressReport'
 import AttachmentZone from '@/components/AttachmentZone.vue'
 import AgentChatSurface from '@/components/AgentChatSurface.vue'
 import TaskExecutorPicker from '@/components/TaskExecutorPicker.vue'
@@ -45,7 +51,6 @@ import { getSelectedTaskExecutor, type TaskExecutorId } from '@/utils/taskExecut
 
 const props = defineProps<{
   active: boolean
-  activity: OrchestratorActivity[]
   runningCount: number
   selectedProject: ProjectSummary | null
   dispatching: boolean
@@ -62,6 +67,12 @@ const props = defineProps<{
   defaultPrompt?: string
   /** 各项目的默认提示词，键为归一化项目路径（与 ProjectSummary.key 同口径） */
   projectPrompts?: Record<string, ProjectPromptEntry>
+  /** 进度报告历史，新的在前（服务端只回最近 20 份，前端不再裁） */
+  reports?: ProgressReport[]
+  /** 自动报告间隔（毫秒，0 = 关闭自动报告）。值以服务端为准 */
+  reportIntervalMs?: number
+  /** 正在生成一份报告（手动触发期间） */
+  generatingReport?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -70,6 +81,10 @@ const emit = defineEmits<{
   'toggle-collapse': []
   /** 打开「默认提示词」设置弹窗（弹窗由看板持有 —— 它才拿得到项目清单） */
   'open-prompt-settings': []
+  /** 点「立即报告」：让主 Agent 现在汇报一次 */
+  'generate-report': []
+  /** 改自动报告间隔（毫秒，0 = 关闭自动报告）。落盘在服务端，由看板转发 */
+  'set-report-interval': [ms: number]
   dispatch: [payload: {
     text: string
     autoRun: boolean
@@ -338,68 +353,52 @@ onBeforeUnmount(() => {
   inputRO = null
 })
 
-/** 活动流一行的正文。文案全部走 i18n，服务端只给结构化字段 */
-function describe(r: OrchestratorActivity): string {
-  const task = r.taskTitle || $t('@WORKBENCH:未命名任务')
-  const project = r.projectName || '—'
-  switch (r.kind) {
-    case 'user':
-      return r.text || ''
-    case 'dispatch':
-      return $t('@WORKBENCH:派发「{task}」至 {project}', { task, project })
-    case 'done':
-      return $t('@WORKBENCH:「{task}」执行完成', { task })
-    case 'error':
-      return $t('@WORKBENCH:「{task}」执行出错', { task })
-    case 'cancelled':
-      return $t('@WORKBENCH:「{task}」已取消', { task })
-    default:
-      return task
-  }
-}
+// ── 进度报告 ────────────────────────────────────────────────────────────
+// 报告正文是服务端模型写的，这里只渲染；能被前端改写的只有两类东西：
+//   1. 事实快照（任务标题 / 项目 / 时长 / 工具调用 / 最后一行输出）；
+//   2. 失败原因码（errorCode）→ 一句人话（见 utils/progressReport.ts）。
+// 服务端**不给**面向界面的句子，否则英文界面会漏出中文。
 
-const KIND_LABEL: Record<string, string> = {
-  user: '@WORKBENCH:用户派发',
-  dispatch: '@WORKBENCH:派发',
-  done: '@WORKBENCH:完成',
-  error: '@WORKBENCH:出错',
-  cancelled: '@WORKBENCH:取消',
-}
+/** 当前展示的是哪一份。null = 跟着最新走（新报告落地后自动换上来） */
+const selectedReportId = ref<string | null>(null)
 
-/** 指令的落点说明：建了任务并执行 / 只建了任务 / 被拒绝，各给一句实话 */
-function instructionNote(r: OrchestratorActivity): string {
-  if (r.kind !== 'user') return ''
-  if (r.instructionStatus === 'accepted') return $t('@WORKBENCH:已建任务并开始执行')
-  if (r.instructionStatus === 'rejected') return $t('@WORKBENCH:被拒绝：{reason}', { reason: r.reason || '' })
-  return r.reason || $t('@WORKBENCH:已建任务（未执行）')
+/**
+ * 正在展示的那份报告。
+ *
+ * selectedId 指向的那份被历史淘汰（上限 20 份）时自动退回最新一份 ——
+ * 用的是「找不到就取第一份」而不是「找不到就显示空」，免得面板莫名其妙变白。
+ */
+const currentReport = computed<ProgressReport | null>(() => {
+  const list = props.reports || []
+  if (!list.length) return null
+  return list.find(r => r.id === selectedReportId.value) || list[0]
+})
+
+function pickReport(r: ProgressReport) { selectedReportId.value = r.id }
+
+/** 历史列表里那一行摘要：有正文就取开头，没有就说清为什么没有 */
+function reportBrief(r: ProgressReport): string {
+  const text = String(r.text || '').replace(/\s+/g, ' ').trim()
+  if (text) return text.length > 42 ? text.slice(0, 42) + '…' : text
+  if (r.errorCode) return $t(reportErrorKey(r.errorCode))
+  return $t('@WORKBENCH:当时没有任务在执行')
 }
 
 /**
- * 落点是「怎么定下来的」。用户问"为什么派到这儿了"时，这行就是答案 ——
- * 尤其要能一眼分清「模型猜的」和「压根没识别出来、退了默认项目」。
- * explicit（用户自己选的）不解释；老记录没有 targetSource，也不解释。
+ * 没有正文时卡片上那句说明。
+ * 三种情况的实话各不相同，不能都写成"暂无"：没任务 / 模型挂了 / 正文为空。
  */
-function targetReason(r: OrchestratorActivity): string {
-  switch (r.targetSource) {
-    case 'mention': return $t('@WORKBENCH:指令里提到了它')
-    case 'agent': return $t('@WORKBENCH:主 Agent 判断')
-    case 'default': return $t('@WORKBENCH:没识别出项目，用了默认项目')
-    default: return ''
-  }
+function reportNotice(r: ProgressReport): string {
+  if (r.errorCode) return $t(reportErrorKey(r.errorCode))
+  if (!r.tasks.length) return $t('@WORKBENCH:生成这份报告时没有任务在执行')
+  return $t('@WORKBENCH:模型没有返回内容')
 }
 
-/**
- * 这条指令被附加了默认提示词 —— 任务正文里会多出一段用户没亲手敲的话，
- * 回看流水时必须能看出"这段话是设置里带进来的"，而不是以为模型自己加的。
- * 老记录没有 promptSource（''），不解释。
- */
-function promptNote(r: OrchestratorActivity): string {
-  switch (r.promptSource) {
-    case 'global': return $t('@WORKBENCH:附带全局默认提示词')
-    case 'project': return $t('@WORKBENCH:附带项目默认提示词')
-    case 'both': return $t('@WORKBENCH:附带全局 + 项目默认提示词')
-    default: return ''
-  }
+function onIntervalChange(e: Event) {
+  const el = e.target as HTMLSelectElement
+  const ms = Number(el.value)
+  if (!REPORT_INTERVAL_OPTIONS_MS.includes(ms)) return
+  emit('set-report-interval', ms)
 }
 
 const gitSummary = computed(() => {
@@ -526,35 +525,97 @@ const gitSummary = computed(() => {
       :title="$t('@WORKBENCH:g ai 对话')"
     />
 
-    <div v-show="!collapsed && mode === 'command'" class="oc__feed">
-      <p class="oc__feed-title">{{ $t('@WORKBENCH:活动日志') }}</p>
-      <ul class="oc__feed-list">
-        <li v-for="r in activity" :key="r.id" class="oc-row" :class="'oc-row--' + r.kind">
-          <div class="oc-row__head">
-            <span class="oc-row__kind">{{ $t(KIND_LABEL[r.kind] || '@WORKBENCH:派发') }}</span>
-            <!-- 时间走 clockFromIso：非当天会带上日期前缀，避免跨天记录看起来像今天刚发生 -->
-            <span class="oc-row__time">{{ clockFromIso(r.at) }}</span>
+    <!-- 进度报告：主 Agent 隔一会儿读一遍正在跑的 job，写一段"现在到哪一步了"。
+         报告由服务端生成（自动那份由服务端定时器产生），这里只渲染 + 两个入口：
+         改间隔、立即报告。 -->
+    <div v-show="!collapsed && mode === 'command'" class="oc__report">
+      <div class="oc__report-head">
+        <p class="oc__panel-title">{{ $t('@WORKBENCH:进度报告') }}</p>
+        <!-- 间隔设置。做成下拉而不是输入框：这个值直接决定每多久烧一次模型额度，
+             自由填一个 5（分钟写成了秒）会让额度很快见底，而用户不会立刻意识到 -->
+        <select
+          class="oc__interval"
+          :value="String(reportIntervalMs ?? 0)"
+          :title="$t('@WORKBENCH:自动报告的间隔（关掉后仍可随时点「立即报告」）')"
+          :aria-label="$t('@WORKBENCH:自动报告间隔')"
+          @change="onIntervalChange"
+        >
+          <option v-for="ms in REPORT_INTERVAL_OPTIONS_MS" :key="ms" :value="String(ms)">
+            {{ $t(reportIntervalLabelKey(ms), reportIntervalLabelParams(ms)) }}
+          </option>
+        </select>
+        <button
+          type="button"
+          class="oc__report-run"
+          :disabled="generatingReport"
+          :title="$t('@WORKBENCH:让主 Agent 现在汇报一次正在执行的任务进度')"
+          @click="emit('generate-report')"
+        >
+          <el-icon class="oc__report-run-icon" :class="{ 'is-spin': generatingReport }"><Refresh /></el-icon>
+          <span>{{ generatingReport ? $t('@WORKBENCH:生成中…') : $t('@WORKBENCH:立即报告') }}</span>
+        </button>
+      </div>
+
+      <ul class="oc__report-list">
+        <li v-if="currentReport" class="rp">
+          <div class="rp__head">
+            <span class="rp__trigger" :class="{ 'is-auto': currentReport.trigger === 'auto' }">
+              {{ currentReport.trigger === 'auto' ? $t('@WORKBENCH:自动') : $t('@WORKBENCH:手动') }}
+            </span>
+            <span class="rp__count">
+              {{ $t('@WORKBENCH:{n} 个任务进行中', { n: currentReport.tasks.length }) }}
+            </span>
+            <span class="rp__time">{{ clockFromIso(currentReport.at) }}</span>
           </div>
-          <p class="oc-row__text">{{ describe(r) }}</p>
-          <p v-if="instructionNote(r)" class="oc-row__note">{{ instructionNote(r) }}</p>
-          <!-- 落点 + 依据。判断错了，用户至少要能看出是"没识别出来、退了默认"
-               还是"模型猜的"，否则只能对着一个错误项目名干瞪眼 -->
-          <p v-if="r.kind === 'user' && r.projectName" class="oc-row__note">
-            {{ $t('@WORKBENCH:落点「{name}」', { name: r.projectName }) }}
-            <span v-if="targetReason(r)">· {{ targetReason(r) }}</span>
-          </p>
-          <!-- 提示词单独占一行：它解释的是"任务正文里多出来的那段话是哪来的"，
-               和落点是两件事，挤在一行会看不清 -->
-          <p v-if="r.kind === 'user' && promptNote(r)" class="oc-row__note">{{ promptNote(r) }}</p>
-          <p v-if="r.kind === 'error' && r.error" class="oc-row__error" :title="r.error">{{ r.error }}</p>
-          <p v-if="r.kind === 'done' && r.projectName" class="oc-row__note">{{ r.projectName }}</p>
+
+          <p v-if="currentReport.text" class="rp__text">{{ currentReport.text }}</p>
+          <!-- 没有正文时给的是**实话**：没任务 / 没配模型 / 模型没返回内容，
+               三种情况的处理办法完全不同，一律写"暂无"会让人白等 -->
+          <p v-else class="rp__notice" :title="currentReport.errorDetail">{{ reportNotice(currentReport) }}</p>
+
+          <ul v-if="currentReport.tasks.length" class="rp__tasks">
+            <li v-for="(t, i) in currentReport.tasks" :key="t.taskId || i" class="rpt">
+              <p class="rpt__title">{{ t.taskTitle || $t('@WORKBENCH:未命名任务') }}</p>
+              <p class="rpt__meta">
+                <span v-if="t.projectName" class="rpt__project">{{ t.projectName }}</span>
+                <span>{{ $t('@WORKBENCH:已运行 {elapsed}', { elapsed: formatDurationMs(t.elapsedMs) }) }}</span>
+                <span v-if="t.agent" class="rpt__agent">{{ t.agent }}</span>
+                <span v-if="t.toolCallCount">{{ $t('@WORKBENCH:工具 {n} 次', { n: t.toolCallCount }) }}</span>
+              </p>
+              <!-- 先给工具调用，再给最后一行输出：前者是"正在做什么"（更准），
+                   后者是"最近说了什么"（可能已经过去一会儿了） -->
+              <p v-if="t.lastTool" class="rpt__line" :title="t.lastTool">{{ t.lastTool }}</p>
+              <p v-else-if="t.lastLine" class="rpt__line" :title="t.lastLine">{{ t.lastLine }}</p>
+            </li>
+          </ul>
         </li>
-        <li v-if="activity.length === 0" class="oc-empty">{{ $t('@WORKBENCH:暂无活动记录') }}</li>
+        <li v-else class="oc-empty">
+          {{ $t('@WORKBENCH:暂无进度报告') }}
+        </li>
       </ul>
+
+      <!-- 历史：一行一份，点一条就把它换到上面看。只在有两份以上时出现 ——
+           只有一份时这个列表纯粹是噪音 -->
+      <div v-if="(reports || []).length > 1" class="oc__history">
+        <p class="oc__history-title">{{ $t('@WORKBENCH:历史报告') }}</p>
+        <ul class="oc__history-list">
+          <li v-for="r in reports" :key="r.id">
+            <button
+              type="button"
+              class="oc__history-item"
+              :class="{ 'is-active': r.id === currentReport?.id }"
+              @click="pickReport(r)"
+            >
+              <span class="oc__history-time">{{ clockFromIso(r.at) }}</span>
+              <span class="oc__history-sum">{{ reportBrief(r) }}</span>
+            </button>
+          </li>
+        </ul>
+      </div>
     </div>
 
     <div v-show="!collapsed && mode === 'command'" class="oc__git">
-      <p class="oc__feed-title">
+      <p class="oc__panel-title">
         {{ $t('@WORKBENCH:项目概览') }}
         <!-- 无选中项目即「全部项目」：显式标出来，否则底下只剩「今日完成」一行，看着像数据没加载出来 -->
         <span class="oc__git-name">{{ selectedProject ? selectedProject.name : $t('@WORKBENCH:全部项目') }}</span>
@@ -852,14 +913,16 @@ const gitSummary = computed(() => {
 /* 对话模式：整块对话面吃满"活动流 + 项目概览 + 派发栏"让出来的那块高度 */
 .oc__chat { min-height: 0; }
 
-.oc__feed {
+/* 进度报告：整块吃掉"项目概览 + 派发栏"让出来的高度，内部两段各自滚 ——
+   上面是正在看的那一份（可长可短），下面是历史（固定一截，够点就行） */
+.oc__report {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
   padding: 8px 0 0;
 }
-.oc__feed-title {
+.oc__panel-title {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -868,7 +931,65 @@ const gitSummary = computed(() => {
   color: var(--text-tertiary);
   flex-shrink: 0;
 }
-.oc__feed-list {
+/* 标题在报告头部里要让位给右边两个控件：占满剩余宽度把「间隔 + 立即报告」顶到行尾 */
+.oc__report-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 12px 6px;
+  flex-shrink: 0;
+}
+.oc__report-head .oc__panel-title { margin: 0; flex: 1; min-width: 0; }
+
+/* 间隔下拉。原生 <select>：弹出层在深色主题下的可读性由 common.scss 的
+   `select option` 规则兜着（见 scripts/verify-native-select-popup.cjs） */
+.oc__interval {
+  flex-shrink: 0;
+  height: 22px;
+  max-width: 116px;
+  padding: 0 2px 0 6px;
+  font-size: var(--font-size-xs);
+  font-family: inherit;
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--transition-fast) var(--ease-custom),
+              color var(--transition-fast) var(--ease-custom);
+}
+.oc__interval:hover { color: var(--text-primary); border-color: var(--border-color); }
+.oc__interval:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
+
+.oc__report-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-family: inherit;
+  cursor: pointer;
+  transition: color var(--transition-fast) var(--ease-custom),
+              border-color var(--transition-fast) var(--ease-custom);
+}
+.oc__report-run:hover:not(:disabled) { color: var(--color-primary); border-color: var(--color-primary); }
+.oc__report-run:disabled { opacity: 0.55; cursor: default; }
+.oc__report-run:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
+.oc__report-run-icon { font-size: var(--font-size-xs); }
+/* 生成中：转起来。它可能等上十几秒（一次模型往返），没动静会让人以为按钮没生效 */
+.oc__report-run-icon.is-spin { animation: oc-spin 1s linear infinite; }
+@keyframes oc-spin {
+  to { transform: rotate(360deg); }
+}
+
+.oc__report-list {
   list-style: none;
   margin: 0;
   padding: 0 10px 10px;
@@ -876,52 +997,127 @@ const gitSummary = computed(() => {
   flex: 1 1 auto;
   min-height: 0;
 }
-.oc-row {
-  padding: 6px 8px;
-  margin-bottom: 6px;
+
+/* ── 报告卡片 ─────────────────────────────────────────── */
+.rp {
+  padding: 8px 9px;
   border-radius: var(--radius-lg);
   background: var(--bg-subtle);
+  border: 1px solid var(--border-color-light);
 }
-.oc-row--user { background: color-mix(in srgb, var(--color-primary) 9%, transparent); }
-.oc-row--error { background: color-mix(in srgb, var(--color-danger) 9%, transparent); }
-.oc-row--done { background: color-mix(in srgb, var(--color-success) 8%, transparent); }
-.oc-row__head {
+.rp__head {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
   font-size: var(--font-size-xs);
 }
-.oc-row__kind { color: var(--text-tertiary); }
-.oc-row--user .oc-row__kind { color: var(--color-primary); }
-.oc-row--error .oc-row__kind { color: var(--color-danger-light); }
-.oc-row--done .oc-row__kind { color: var(--color-success); }
-.oc-row__time { margin-left: auto; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
-.oc-row__text {
+.rp__trigger { color: var(--color-primary); font-weight: 500; }
+/* 自动那份是"系统自己说的"，手动那份才是"你刚才要的" —— 颜色分得开，
+   回看历史时一眼能认出哪几份是自己点出来的 */
+.rp__trigger.is-auto { color: var(--text-tertiary); font-weight: 400; }
+.rp__count { color: var(--text-tertiary); }
+.rp__time {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.rp__text {
   margin: 0;
   font-size: var(--font-size-sm);
-  line-height: 1.55;
-  color: var(--text-secondary);
+  line-height: 1.6;
+  color: var(--text-primary);
   word-break: break-word;
   white-space: pre-wrap;
 }
-.oc-row--user .oc-row__text { color: var(--text-primary); }
-.oc-row__note {
-  margin: 2px 0 0;
+.rp__notice {
+  margin: 0;
   font-size: var(--font-size-xs);
+  line-height: 1.55;
   color: var(--text-tertiary);
 }
-.oc-row__error {
-  margin: 3px 0 0;
+/* 事实块：正文写的是"到哪一步了"，这里列的是**凭什么这么说**（哪个任务、跑了多久、
+   在调什么工具）。两者对不上时，用户至少能看出是模型在编 */
+.rp__tasks {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 8px 0 0;
+  border-top: 1px dashed var(--border-color-light);
+}
+.rpt__title {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rpt__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 1px 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.rpt__project { color: var(--text-secondary); }
+.rpt__line {
+  margin: 2px 0 0;
   font-size: var(--font-size-xs);
   line-height: 1.5;
-  color: var(--color-danger-light);
+  color: var(--text-tertiary);
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
   -webkit-box-orient: vertical;
+  word-break: break-word;
 }
+
+/* ── 历史报告 ─────────────────────────────────────────── */
+.oc__history {
+  flex-shrink: 0;
+  max-height: 132px;
+  overflow-y: auto;
+  padding: 6px 10px 8px;
+  border-top: 1px solid var(--border-color-light);
+}
+.oc__history-title {
+  margin: 0 2px 4px;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+.oc__history-list { list-style: none; margin: 0; padding: 0; }
+.oc__history-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 6px;
+  border: none;
+  border-radius: var(--radius-base);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast) var(--ease-custom),
+              color var(--transition-fast) var(--ease-custom);
+}
+.oc__history-item:hover { background: var(--bg-subtle); color: var(--text-secondary); }
+.oc__history-item.is-active {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--text-primary);
+}
+.oc__history-item:focus-visible { outline: var(--focus-outline); outline-offset: -2px; }
+.oc__history-time { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.oc__history-sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .oc-empty {
   padding: 20px 10px;
   text-align: center;

@@ -58,6 +58,25 @@ export const LIVE_JOBS_DIR = path.join(DATA_DIR, 'live-jobs');
 export const ORCHESTRATOR_FILE = path.join(DATA_DIR, 'orchestrator.json');
 export const MAX_ORCHESTRATOR_INSTRUCTIONS = 200;
 
+// 进度报告：**配置与历史分两个文件**。
+// 报告历史（每份都带着当时的任务事实，几 KB 一份）如果塞进 orchestrator.json，
+// 那个被 5s 轮询的接口每轮都要把几十上百 KB 解析一遍 —— 与 jobs.json / jobs-config.json
+// 分成两个文件是同一个理由：轮询读配置，历史按需读。
+export const ORCHESTRATOR_REPORTS_FILE = path.join(DATA_DIR, 'orchestrator-reports.json');
+export const MAX_PROGRESS_REPORTS = 20;
+
+/**
+ * 自动进度报告允许的间隔（毫秒），0 = 关闭。
+ *
+ * 用白名单而不是"任意正整数"：这个值直接决定**每隔多久烧一次模型额度**，
+ * 一个手滑输进去的 5（毫秒）会在几分钟里把额度打光，而用户不会立刻意识到。
+ * 前端给的就是这几个档位，服务端再卡一道。
+ */
+export const PROGRESS_REPORT_INTERVALS_MS = [0, 5, 10, 15, 30, 60].map(min => min * 60 * 1000);
+
+/** 缺省间隔：10 分钟。装完就能用，嫌频繁就在面板上改（改设置不重启服务） */
+export const DEFAULT_PROGRESS_REPORT_INTERVAL_MS = 10 * 60 * 1000;
+
 /**
  * 「真相源文件」清单 —— 注入给模型、让它需要细节时自己去读全文的那几个文件。
  *
