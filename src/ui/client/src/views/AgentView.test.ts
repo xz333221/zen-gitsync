@@ -18,6 +18,11 @@ const agent = vi.hoisted(() => ({
   loadSession: null as any,
   newSession: null as any,
   loadSessions: null as any,
+  // 引擎选择：整块提到 hoisted 里，用例才能单独拨（默认 g ai / 未锁定）
+  currentEngine: null as any,
+  pendingEngine: null as any,
+  isEngineLocked: null as any,
+  pickEngine: null as any,
 }))
 
 vi.mock('@/composables/useNarrowPane', async () => {
@@ -38,6 +43,10 @@ vi.mock('@/composables/useAgentChat', async () => {
   agent.loadSession = vi.fn().mockResolvedValue(undefined)
   agent.newSession = vi.fn()
   agent.loadSessions = vi.fn().mockResolvedValue(undefined)
+  agent.currentEngine = ref('gai')
+  agent.pendingEngine = ref('gai')
+  agent.isEngineLocked = ref(false)
+  agent.pickEngine = vi.fn()
   return {
     AGENT_UPLOAD_ACCEPT: 'image/*',
     useAgentChat: () => ({
@@ -52,6 +61,10 @@ vi.mock('@/composables/useAgentChat', async () => {
       pendingQuestion: ref(null),
       answeringQuestion: ref(false),
       isSessionGenerating: () => false,
+      currentEngine: agent.currentEngine,
+      pendingEngine: agent.pendingEngine,
+      isEngineLocked: agent.isEngineLocked,
+      pickEngine: agent.pickEngine,
       loadSessions: agent.loadSessions,
       loadSession: agent.loadSession,
       deleteSession: vi.fn(),
@@ -103,6 +116,10 @@ async function setNarrow(value: boolean) {
 
 beforeEach(() => {
   pane.refs.length = 0
+  agent.currentEngine.value = 'gai'
+  agent.pendingEngine.value = 'gai'
+  agent.isEngineLocked.value = false
+  agent.pickEngine.mockClear()
 })
 
 describe('AgentView 窄屏折行', () => {
@@ -192,5 +209,79 @@ describe('AgentView 窄屏折行', () => {
     expect(w.find('.stub-marketplace').exists()).toBe(true)
     expect(w.find('.agent-list-page').exists()).toBe(false)
     expect(w.find('.agent-page-bar').exists()).toBe(false)
+  })
+})
+
+// ── 引擎选择器 ────────────────────────────────────────────
+// 只钉"用户能看见的契约"：默认显示什么、什么时候置灰、什么时候不该出现。
+// 下拉菜单本体是 el-dropdown 的 teleport 弹层，jsdom 里选不稳；可用性映射与
+// 「未安装 → 安装弹窗」的判定逻辑由 utils/agentEngine.test.ts 覆盖。
+describe('AgentView 引擎选择器', () => {
+  it('对话 Tab 上常驻显示当前引擎（默认 g ai）', async () => {
+    const w = mountView()
+    await setNarrow(false)
+    expect(w.find('.agent-engine').exists()).toBe(true)
+    expect(w.find('.agent-engine__name').text()).toBe('g ai')
+  })
+
+  // 每个引擎都要显示自己的图标 —— 这条是一个真实回归：初版刻意让 g ai 留空格，
+  // 用户看下来只觉得"图标没加载出来"（下面三家都有，只有它空着）。
+  // 两种机制都钉住：内置走 sprite 的 <svg-icon>，外部三家走 TaskExecutorIcon 的 <img>。
+  it('内置 g ai 显示 sprite 图标（不是空格子）', async () => {
+    const w = mountView()
+    await setNarrow(false)
+    const btn = w.find('.agent-engine__btn')
+    expect(btn.find('svg.svg-icon').exists()).toBe(true)
+    expect(btn.find('img.task-executor-icon').exists()).toBe(false)
+    // 不能是个空的 <svg>：sprite 的 icon-class 必须真的传到 <use> 上。
+    // 不断言属性名（xlink:href / href 随 vue 版本与命名空间写法会变），只看目标 id。
+    expect(btn.html()).toContain('icon-g-ai')
+  })
+
+  it('外部引擎显示各自的品牌图标，且不再是 sprite', async () => {
+    agent.isEngineLocked.value = true
+    agent.currentEngine.value = 'claude'
+    const w = mountView()
+    await setNarrow(false)
+    await nextTick()
+    const btn = w.find('.agent-engine__btn')
+    expect(btn.find('img.task-executor-icon').exists()).toBe(true)
+    expect(btn.find('svg.svg-icon').exists()).toBe(false)
+  })
+
+  it('引擎没锁定时可点：按钮不禁用', async () => {
+    const w = mountView()
+    await setNarrow(false)
+    expect(w.find('.agent-engine__btn').attributes('disabled')).toBeUndefined()
+  })
+
+  it('会话已落盘（引擎锁死）→ 按钮禁用，且显示的是这条会话自己的引擎', async () => {
+    agent.isEngineLocked.value = true
+    agent.currentEngine.value = 'claude'
+    // 故意让 pendingEngine 停在别的值：锁定时必须显示 currentEngine，不能显示"下次新建用的"
+    agent.pendingEngine.value = 'codex'
+    const w = mountView()
+    await setNarrow(false)
+    await nextTick()
+    expect(w.find('.agent-engine__btn').attributes('disabled')).toBeDefined()
+    expect(w.find('.agent-engine__name').text()).toBe('Claude Code')
+  })
+
+  it('未锁定（新建会话）→ 显示的是"下次新建会用哪个"', async () => {
+    agent.isEngineLocked.value = false
+    agent.currentEngine.value = 'claude'
+    agent.pendingEngine.value = 'codex'
+    const w = mountView()
+    await setNarrow(false)
+    await nextTick()
+    expect(w.find('.agent-engine__name').text()).toBe('Codex')
+  })
+
+  it('非对话 Tab（广场）不显示引擎选择器 —— 那里没在跑智能体', async () => {
+    const w = mountView()
+    await setNarrow(false)
+    await w.find('.agent-tab:nth-child(2)').trigger('click')
+    await nextTick()
+    expect(w.find('.agent-engine').exists()).toBe(false)
   })
 })

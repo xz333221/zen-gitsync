@@ -1,11 +1,15 @@
 // API 级验证:npm run verify:wb-env-context
 //
 // 守的是「派发指令时有没有真的把运行环境上下文喂给 claude CLI」这条链路 ——
-// 它横跨 configManager → projectRegistry → envContext → taskRunner 四个模块,
+// 它横跨 configManager → aiContext 快照 → envContext → taskRunner 四个模块,
 // 单元测试(envContext.test.js)只覆盖得到中间的纯函数,接线断了它是看不见的。
 // 实测:把 taskRunner 里的注入关掉,这份脚本有 10 条断言会变红;
 // 把 canonicalProjectPath 的大小写归一撤掉,win32 下另有 2 条变红
 // (第 6 组:同一目录的两种写法裂成两条项目 —— 就是用户在左栏看到的那个 bug)。
+//
+// 第 7 组守的是**反方向**的那条链路:任务执行结束 → 快照自动重采。
+// 判据是 tasks 板块的采集时间必须往前走(桩 claude 活满 5s,秒级时间戳必跨整数秒)。
+// 把 workbench/index.js 里那条 bus.on('event', jobSettledHandler) 删掉,这一组会红。
 //
 // 隔离:server 进程的 USERPROFILE/HOME 指向 mkdtemp 沙箱,绝不碰用户真实
 // ~/.zen-gitsync/(见 src/paths.js 的说明)。
@@ -205,6 +209,37 @@ try {
   } else {
     console.log('[env-context e2e] 非 win32：跳过"大小写去重"断言（POSIX 路径大小写是真区别）')
   }
+
+  // ── 7. 任务执行结束必须自己触发一次快照刷新 ──
+  // 这是"实时"链条上最容易漏的一环：没有它，用户跑完任务立刻去问 g ai
+  //「刚才那个任务怎么样」，拿到的还是最多 30s 前（tasks 板块的 TTL）的快照，
+  // 表现为"任务明明跑完了，g ai 却说还在进行中"。
+  //
+  // 判据用**采集时间必须往前走**：桩 claude 会活满 5s（taskRunner 等的是
+  // waitProcessExit，不是 stream-json 的 result），而时间戳是秒级 ——
+  // 5s 足够跨过整数秒，所以这个比较是确定的，不是撞运气。
+  const stateBefore = await (await fetch(`${base}/api/ai-context/state`)).json()
+  const tasksBefore = (stateBefore.sections || []).find(s => s.id === 'tasks')
+  check(!!tasksBefore?.collectedAt, '派发后 tasks 板块就该已有采集时间（provider 注入前会强制刷一次）')
+
+  let settled = null
+  for (let i = 0; i < 120 && !settled; i += 1) {
+    const body = await (await fetch(`${base}/api/workbench/jobs`)).json()
+    const j = (body.jobs || []).find(x => x.id === job.id)
+    if (j && ['done', 'cancelled', 'error'].includes(j.status)) settled = j
+    else await sleep(500)
+  }
+  check(!!settled, `job 应能走到终态，实际 ${settled ? settled.status : '(超时仍在跑)'}`)
+  check(settled?.status === 'done', `桩 claude 正常退出，job 应为 done，实际 ${settled?.status}`)
+
+  // 终态事件是 fire-and-forget 的，给它一点落地时间
+  await sleep(1200)
+  const stateAfter = await (await fetch(`${base}/api/ai-context/state`)).json()
+  const tasksAfter = (stateAfter.sections || []).find(s => s.id === 'tasks')
+  check(
+    !!tasksAfter?.collectedAt && tasksAfter.collectedAt > tasksBefore.collectedAt,
+    `任务结束后 tasks 板块应被重新采集（前 ${tasksBefore?.collectedAt} / 后 ${tasksAfter?.collectedAt}）`,
+  )
 } catch (err) {
   failures.push(`异常: ${err.message}`)
 } finally {

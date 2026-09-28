@@ -43,9 +43,8 @@ import {
   fsp,
   PROMPTS_FILE,
   TASKS_FILE,
-  CONFIG_FILE,
   JOBS_FILE,
-  ORCHESTRATOR_FILE,
+  TRUTH_FILES,
   IMAGES_DIR,
   MAX_IMAGE_BYTES,
   MAX_ATTACHMENTS_PER_TASK,
@@ -110,6 +109,7 @@ import {
   canonicalProjectPath,
 } from './projectRegistry.js';
 import { buildEnvContextBlock } from './envContext.js';
+import { createJobSettledRefresher } from '../aiContext/jobRefresh.js';
 import { resolveInstructionTarget } from './targetResolver.js';
 import {
   readOrchestrator,
@@ -123,10 +123,23 @@ import {
 } from './orchestratorStore.js';
 
 /**
+ * 「任务结束 → 刷快照」的监听器。存成模块级的，是为了在重复装配路由时
+ * 先把上一个摘掉（bus 是模块级单例，否则同一次 job 结束会被刷好几遍）。
+ * @type {((evt: object) => boolean)|null}
+ */
+let jobSettledHandler = null;
+
+/**
  * 解析本次执行用哪个执行器：body.executor 显式指定 > 配置里的全局默认 > 'claude'。
  * 配置读失败一律回落 'claude' —— 执行器选不出来不该挡住任务本身能跑。
+ *
+ * ⚠️ `configManager` **必须从参数传进来**（2026-09-28 修复）：这里是模块作用域，
+ * 而 configManager 只是 registerWorkbenchRoutes 的形参 —— 直接引用会抛
+ * ReferenceError，被下面这个 try 吞掉，表现为"配置里的全局默认执行器**永远不生效**、
+ * 每次都悄悄回落 claude"，且只在日志里留一条看不太出问题的 warn。
+ * 以后往这个函数里加依赖，一律走形参。
  */
-async function resolveExecutor(requested) {
+async function resolveExecutor(requested, configManager) {
   const explicit = normalizeTaskExecutor(requested);
   if (explicit) return explicit;
   try {
@@ -149,8 +162,17 @@ async function resolveExecutor(requested) {
  * @param {() => string} deps.getProjectRoomId
  * @param {import('socket.io').Server} deps.io
  * @param {Object} deps.configManager
+ * @param {() => object|null} [deps.getAiContextSnapshotter]
+ *        工作区状态快照生成器（延迟取值的 getter，见下面 setEnvContextProvider 的注释）
  */
-export function registerWorkbenchRoutes({ app, getCurrentProjectPath, getProjectRoomId, io, configManager }) {
+export function registerWorkbenchRoutes({
+  app,
+  getCurrentProjectPath,
+  getProjectRoomId,
+  io,
+  configManager,
+  getAiContextSnapshotter,
+}) {
   // ════════════════════════════════════════════════════════════════════════
   // §1. AI 生成提示词（基于当前项目）
   // ════════════════════════════════════════════════════════════════════════
@@ -563,7 +585,7 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
     const liveJob = snapshotJobs().find(j => j.taskId === task.id && (j.status === 'running' || j.status === 'pending'));
     if (liveJob) throw new HttpError(400, '该任务已有正在执行的 job');
     const repoPath = resolveTaskRepoPath(task, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
-    const executor = await resolveExecutor(req.body?.executor);
+    const executor = await resolveExecutor(req.body?.executor, configManager);
     const virtualSub = {
       id: `${task.id}__simple`,
       title: task.title,
@@ -1097,44 +1119,68 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
   /**
    * 注册「运行环境上下文」的提供者 —— 执行引擎（taskRunner）拼 prompt 时会回调它。
    *
-   * 为什么在这一层注册：只有这里同时拿得到 configManager（最近目录）与 jobStore
-   * 的 job 快照；taskRunner 两个都没有，放它那儿就得再造一条「读最近目录」的路径，
-   * 也就是又一次口径分叉。
+   * ⚠️ 数据**不再在这里现读**。项目清单 / 各列计数 / 合计口径一律从
+   * aiContext 的 `tasks` 板块拿（collectWorkbenchTasks 的结构化 `data`）。
+   * 以前这里是"读 tasks.json + 最近目录 + buildProjectEntries + summarizeProjectTasks"
+   * 的第二份实现，与 aiContext 那份是同一个口径的两个副本 —— 改一处漏一处不会报错，
+   * 只会让 Agent 在编排台里和智能体页里看到**不同的项目数**。现在只剩一份。
    *
-   * 复用 buildProjectEntries + summarizeProjectTasks（与看板同一套口径），
-   * 但**刻意不走** listProjects：那是给看板用的，会去 spawn git 探状态。
-   * 分支、改动数这类信息 Agent 在自己的 cwd 里一条 git 命令就有，
-   * 不值得为它在这里每次执行都多探一轮。
+   * 拿之前先**强制刷一次 tasks**：这次派发出去的 prompt 必须看到"刚刚"的看板状态
+   *（别的 g ui 实例刚跑完的任务、刚改过状态的任务）。tasks 的 forceTtlMs = 0，是真刷，
+   * 成本与改动前（每次都现读 tasks.json + refreshJobsFromDisk）完全一样。
+   *
+   * 为什么是 getter 而不是直接传 snapshotter：本函数在 registerWorkbenchRoutes 里被调用，
+   * 而快照生成器在服务端入口创建、注册顺序在它之前就已经建好了 —— 但两者是同一次装配，
+   * 用 getter 可以避免"必须记得按某个顺序注册"这种隐性契约。
    */
   setEnvContextProvider(async ({ repoPath } = {}) => {
-    const data = await readJson(TASKS_FILE, { tasks: [] });
-    const tasks = data.tasks || [];
-    // 任务状态同样由执行记录推导：不刷磁盘的话，Agent 看到的会是本进程启动那一刻的
-    // 旧状态（别的 g ui 跑完的任务在它眼里还没完成）。
-    await refreshJobsFromDisk();
+    const snapshotter = typeof getAiContextSnapshotter === 'function' ? getAiContextSnapshotter() : null;
 
-    let recentDirs = [];
-    try {
-      if (configManager && typeof configManager.getRecentDirectories === 'function') {
-        recentDirs = (await configManager.getRecentDirectories()) || [];
-      }
-    } catch (err) {
-      // 与 loadBoardPayload 同一处理：读不到最近目录就退化成"只按任务里出现过的项目"
-      logger.warn('[workbench] 注入运行环境上下文时读取最近目录失败，退化为仅按任务路径:', err.message);
+    if (!snapshotter || typeof snapshotter.refreshSections !== 'function') {
+      // 快照生成器没装配上（理论上不会发生）。至少把**不需要取数**的两样递进去：
+      // 用户偏好与真相源路径 —— 前者少一次就会让任务卡在 https 凭据窗口上。
+      return buildEnvContextBlock({ currentProjectPath: repoPath || '', truthFiles: TRUTH_FILES });
     }
 
-    const projects = buildProjectEntries({ recentDirs, tasks });
+    try {
+      await snapshotter.refreshSections(['tasks'], { force: true });
+    } catch (err) {
+      // 刷不动就用快照里已有的（哪怕旧一点）—— 上下文是锦上添花，
+      // 不能因为它挂了就让用户的指令执行不了（与 taskRunner.resolveEnvContext 同一条原则）。
+      logger.warn('[workbench] 注入运行环境上下文前刷新 tasks 板块失败，改用现有快照:', err?.message || err);
+    }
+
+    let board = null;
+    try {
+      // 用 getSectionResult 而不是 getSnapshot：后者会顺手把其余过期板块推到后台刷，
+      // 派发任务没理由因此去拉 gh/gitee（只在智能体页聊天时才值得那样做）。
+      board = snapshotter.getSectionResult?.('tasks')?.data || null;
+    } catch (err) {
+      logger.warn('[workbench] 读取快照里的 tasks 板块失败，本次只注入偏好与真相源路径:', err?.message || err);
+    }
+
     return buildEnvContextBlock({
       currentProjectPath: repoPath || '',
-      projects,
-      tasks,
-      jobs: snapshotJobs(),
-      tasksFile: TASKS_FILE,
-      jobsFile: JOBS_FILE,
-      orchestratorFile: ORCHESTRATOR_FILE,
-      configFile: CONFIG_FILE,
+      board,
+      truthFiles: TRUTH_FILES,
     });
   });
+
+  /**
+   * 「工作台任务执行结束」→ 定向刷新快照。
+   *
+   * 挂在 jobStore 的事件总线上（本层已经在消费同一条总线做 SSE 广播）。
+   * 终态判定与去重都在 createJobSettledRefresher 里，见那个文件的头注释。
+   *
+   * `bus.on` 前先 `off` 掉上一个：bus 是模块级单例，重复注册（例如同一进程里
+   * 再次装配路由）会让同一次 job 结束被刷好几遍。
+   */
+  if (jobSettledHandler) bus.off('event', jobSettledHandler);
+  jobSettledHandler = createJobSettledRefresher({
+    getSnapshotter: getAiContextSnapshotter,
+    onError: (err) => logger.warn('[workbench] 任务结束后刷新工作区快照失败:', err?.message || err),
+  });
+  bus.on('event', jobSettledHandler);
 
   app.get('/api/workbench/projects', asyncRoute(async (_req, res) => {
     const payload = await loadBoardPayload();
@@ -1439,7 +1485,7 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
         attachments: [],
       };
       // 派发控制台可以显式指定执行器；不传则用配置里的全局默认（resolveExecutor 走回落链）
-      const executor = await resolveExecutor(req.body?.executor);
+      const executor = await resolveExecutor(req.body?.executor, configManager);
       runSingleSubtask(task, virtualSub, targetPath, '', { executor }).catch(err => {
         publish('task:error', { taskId: task.id, error: err.message });
       });

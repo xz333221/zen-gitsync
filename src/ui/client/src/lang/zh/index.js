@@ -2630,6 +2630,10 @@ export default {
   '@AGENT:对话': '对话',
   '@AGENT:Skill 广场': 'Skill 广场',
   '@AGENT:MCP 广场': 'MCP 广场',
+  // 引擎选择器（与工作台执行器下拉同一套交互；引擎名本身是产品名，不走 i18n）
+  '@AGENT:智能体引擎': '智能体引擎',
+  '@AGENT:新建会话使用的引擎': '新建会话使用的引擎',
+  '@AGENT:本会话的引擎已锁定；要换引擎请新建会话': '本会话的引擎已锁定；要换引擎请新建会话',
   // @MKT: file path: components/MarketplacePanel.vue
   '@MKT:加载失败': '加载失败',
   '@MKT:搜索 Skill...': '搜索 Skill...',

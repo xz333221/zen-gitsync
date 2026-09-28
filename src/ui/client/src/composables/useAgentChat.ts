@@ -13,6 +13,12 @@ import { uid } from 'zen-ai-chat-ui'
 import { extractThinkSegments } from 'zen-ai-chat-ui'
 import { $t } from '@/lang/static'
 import { useConfigStore } from '@/stores/configStore'
+import {
+  getSelectedAgentEngine,
+  setSelectedAgentEngine,
+  isAgentEngineId,
+  type AgentEngineId,
+} from '@/utils/agentEngine'
 
 // ── 附件口径 ──────────────────────────────────────────────
 // 图片走多模态（转 dataURL 随请求发给模型）；**非图片只在服务端落盘，把绝对路径写进
@@ -36,6 +42,8 @@ interface SessionMeta {
   source: string
   cwd: string
   model: string
+  // 跑这个会话的引擎：'gai'（内置，默认）| 'claude' | 'opencode' | 'codex'
+  engine?: string
   createdAt: string
   updatedAt: string
   messageCount: number
@@ -62,6 +70,10 @@ interface AgentSession {
   source: string
   cwd: string
   model: string
+  // 引擎在会话建立时锁死，中途不可换（服务端会拦 ENGINE_LOCKED）
+  engine?: string
+  // 外部 CLI 自己的续聊标识；g ai 用不到
+  engineSessionId?: string
   createdAt: string
   updatedAt: string
   messages: AgentMsg[]
@@ -258,6 +270,16 @@ export function useAgentChat() {
   const sessions = ref<SessionMeta[]>([])
   const sessionsLoading = ref(false)
 
+  // ── 引擎选择 ──────────────────────────────────────────────
+  // `pendingEngine` 是"下一次新建会话用哪个引擎"，记在 localStorage（同工作台的临时切换口径）。
+  // 已有会话**不用它** —— 引擎在会话建立时锁死，服务端也会拦中途切换（ENGINE_LOCKED）。
+  const pendingEngine = ref<AgentEngineId>(getSelectedAgentEngine())
+  function pickEngine(id: AgentEngineId) {
+    if (!isAgentEngineId(id)) return
+    pendingEngine.value = id
+    setSelectedAgentEngine(id)
+  }
+
   // 打开过的会话的运行时状态，按 key（真实 sessionId / 未落盘时的本地临时 key）索引
   const runs = reactive(new Map<string, SessionRun>())
 
@@ -305,6 +327,24 @@ export function useAgentChat() {
   )
   const messages = computed<ChatMessage[]>(() => activeRun.value?.messages ?? [])
   const isStreaming = computed(() => activeRun.value?.isStreaming ?? false)
+
+  // 当前会话用的引擎。已有会话取它自己落盘的那个；没有会话（或还没落盘的新会话）
+  // 取用户选的默认值 —— 这样"新建会话用 g ai，切到 claude 后再新建就是 claude"。
+  const currentEngine = computed<AgentEngineId>(() => {
+    const meta = sessions.value.find(s => s.sessionId === currentSessionId.value)
+    return isAgentEngineId(meta?.engine) ? meta!.engine as AgentEngineId : pendingEngine.value
+  })
+
+  /**
+   * 引擎是否已被锁死（不能在当前会话里改）。
+   *
+   * 判据：这条会话**已经落盘过**（左栏列表里存在）。落盘意味着它至少跑过一轮，
+   * 而三家的续聊标识互不通用、历史消息格式也不同，中途换引擎只会把上下文搅乱。
+   * 此时选择器置灰，要换就新建会话 —— 服务端也做同样的拦截。
+   */
+  const isEngineLocked = computed(() =>
+    sessions.value.some(s => s.sessionId === currentSessionId.value)
+  )
   const pendingQuestion = computed<PendingAgentQuestion | null>(() => activeRun.value?.pendingQuestion ?? null)
   const answeringQuestion = computed(() => activeRun.value?.answeringQuestion ?? false)
 
@@ -337,6 +377,7 @@ export function useAgentChat() {
         source: 'web',
         cwd: configStore.currentDirectory || '',
         model: '',
+        engine: pendingEngine.value,
         createdAt: nowIso,
         updatedAt: nowIso,
         messageCount: run.messages.filter(m => m.role === 'user').length || 1,
@@ -394,6 +435,7 @@ export function useAgentChat() {
         source: 'web',
         cwd: configStore.currentDirectory || '',
         model: '',
+        engine: pendingEngine.value,
         createdAt: nowIso,
         updatedAt: nowIso,
         messageCount: 1,
@@ -606,6 +648,9 @@ export function useAgentChat() {
           userMessage: text,
           // 新建会话时服务端用它确定项目归属(已有会话沿用其落盘 cwd)
           cwd: configStore.currentDirectory || '',
+          // 引擎：只在**新建会话**时生效（已有会话服务端沿用自己落盘的那个，
+          // 想换会回 ENGINE_LOCKED）。传当前值即可，两种情形都对。
+          engine: currentEngine.value,
           ...(images.length > 0 ? { images } : {}),
           // 非图片附件：服务端落到数据目录后，只把绝对路径写进请求副本的 system 提示
           ...(attachments.length > 0 ? { attachments } : {}),
@@ -874,6 +919,11 @@ export function useAgentChat() {
     pendingQuestion,
     answeringQuestion,
     isSessionGenerating,
+    // 引擎选择：currentEngine 是"这次会用的"，isEngineLocked 决定选择器是否置灰
+    currentEngine,
+    pendingEngine,
+    isEngineLocked,
+    pickEngine,
     loadSessions,
     loadSession,
     deleteSession,

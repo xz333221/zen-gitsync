@@ -42,6 +42,27 @@ git add <file1> <file2> ...
 - 只 add 本轮实际修改/新建的文件，不要 `git add .`
 - 不暂存与本次任务无关的文件（如未改动的测试文件、第三方文件）
 
+### 本轮文件里混着**别人的在飞改动**时（hunk 级暂存）
+
+本仓库的调度台会并行跑多个任务，工作区常年压着别的任务的未提交改动（`git status`
+一眼看不出哪几行是谁的）。此时**新旧改动挤在同一个文件**（尤其两个 `lang/index.js`，
+每个任务都要往里加 key），整文件 `git add` 就会把别人的活儿一起提交掉。做法是按 hunk 挑：
+
+```bash
+# 1) 生成只含本轮 hunk 的补丁（挑"新增行里含本轮特征串"的 hunk，保持 @@ 头原样即可，
+#    其余 hunk 整块丢弃后各 hunk 的行号依然对得上）
+# 2) 直接落进暂存区，工作区文件不动
+git apply --cached /tmp/only-mine.patch
+git diff --cached <file>   # 复查：暂存区里就该只有本轮那几行
+```
+
+两个坑：
+- **`git diff` 在本机带 ANSI 颜色**（`color.ui` 非 never），直接按 `@@` 前缀解析会一个
+  hunk 都匹配不到 → 解析前先 `git -c color.ui=never diff` 或把 `\x1b\[[0-9;]*m` 剥掉。
+- **Git Bash 的 `/tmp` 与 node 的 `/tmp` 不是同一个目录**：bash 里写的 `/tmp/x.cjs`
+  node 会当成 `D:\tmp\x.cjs`（ENOENT）。临时脚本统一放 `$LOCALAPPDATA/Temp` 并用
+  Windows 绝对路径传给 node。
+
 ---
 
 ## 步骤 3 — 生成提交信息

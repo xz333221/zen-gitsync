@@ -2619,6 +2619,10 @@ export default {
   '@AGENT:对话': 'Chat',
   '@AGENT:Skill 广场': 'Skill Hub',
   '@AGENT:MCP 广场': 'MCP Hub',
+  // 引擎选择器（引擎名是产品名，中英一致，不在这里译）
+  '@AGENT:智能体引擎': 'Agent engine',
+  '@AGENT:新建会话使用的引擎': 'Engine for new sessions',
+  '@AGENT:本会话的引擎已锁定；要换引擎请新建会话': 'This session\u2019s engine is locked. Start a new session to switch.',
   // @MKT: file path: components/MarketplacePanel.vue
   '@MKT:加载失败': 'Failed to load',
   '@MKT:搜索 Skill...': 'Search skills...',
