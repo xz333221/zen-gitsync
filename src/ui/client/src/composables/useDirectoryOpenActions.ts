@@ -130,7 +130,10 @@ export function launchGuiInNewTab(dirPath: string): Promise<OpenDirectoryResult>
 
 /**
  * 用某个编辑器 / AI 工具打开目录。
- * @param permissionMode 仅 claude 用（default / acceptEdits / bypassPermissions），其它工具会忽略
+ * @param permissionMode 仅 claude 与 opencode 用；其它工具会忽略。
+ *   claude: 'default' | 'acceptEdits' | 'bypassPermissions'
+ *   opencode: 'auto'（= `--auto`，官方 auto mode：自动批准**未被显式拒绝**的权限；
+ *   它不等于"什么都放行"，配置里显式 deny 的仍会被拦）
  */
 export function openPathWithTool(
   tool: ToolId,

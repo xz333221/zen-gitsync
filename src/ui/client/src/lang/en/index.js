@@ -660,6 +660,8 @@ export default {
   '@67CE7:已在新终端中启动 g ai': 'Started g ai in a new terminal',
   '@67CE7:用 Claude Code 打开': 'Open with Claude Code',
   '@67CE7:用 Claude Code 打开（完全批准）': 'Open with Claude Code (full permissions)',
+  '@67CE7:用 OpenCode 打开（完全批准）': 'Open with OpenCode (full permissions)',
+  '@67CE7:完全批准（--auto）': 'Full permissions (--auto)',
   '@67CE7:用 Codex 打开': 'Open with Codex',
   '@67CE7:用 OpenCode 打开': 'Open with OpenCode',
   '@67CE7:用 Kimi Code 打开': 'Open with Kimi Code',

@@ -664,6 +664,8 @@ export default {
   '@67CE7:已在新终端中启动 g ai': '已在新终端中启动 g ai',
   '@67CE7:用 Claude Code 打开': '用 Claude Code 打开',
   '@67CE7:用 Claude Code 打开（完全批准）': '用 Claude Code 打开（完全批准）',
+  '@67CE7:用 OpenCode 打开（完全批准）': '用 OpenCode 打开（完全批准）',
+  '@67CE7:完全批准（--auto）': '完全批准（--auto）',
   '@67CE7:用 Codex 打开': '用 Codex 打开',
   '@67CE7:用 OpenCode 打开': '用 OpenCode 打开',
   '@67CE7:用 Kimi Code 打开': '用 Kimi Code 打开',

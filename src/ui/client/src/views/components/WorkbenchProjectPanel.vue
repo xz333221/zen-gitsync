@@ -554,6 +554,22 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
                 </span>
                 <span class="proj-menu__label">{{ $t('@67CE7:用 Claude Code 打开（完全批准）') }}</span>
               </li>
+
+              <!-- opencode 的「完全批准」（`--auto`）与 claude 的 bypass 档并列收在末尾：
+                   它带警示色，混进上面的普通工具列表会把"一行一个工具"的节奏打乱，
+                   而它又确实得单独成项（默认档已经在上面那条 v-for 里了）。 -->
+              <li
+                class="proj-menu__item proj-menu__item--danger"
+                :class="{ 'is-missing': toolMissing('opencode') }"
+                role="menuitem"
+                tabindex="-1"
+                @click="openWithTool(p, 'opencode', 'auto')"
+                @keydown.enter.prevent="openWithTool(p, 'opencode', 'auto')"
+                @keydown.space.prevent="openWithTool(p, 'opencode', 'auto')"
+              >
+                <span class="proj-menu__icon"><svg-icon icon-class="opencode" /></span>
+                <span class="proj-menu__label">{{ $t('@67CE7:用 OpenCode 打开（完全批准）') }}</span>
+              </li>
             </ul>
           </el-popover>
         </div>

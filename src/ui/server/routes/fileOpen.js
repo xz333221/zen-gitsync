@@ -447,14 +447,40 @@ async function launchCodex(dirPath) {
   return launchInTerminal(dirPath, 'codex');
 }
 
-async function launchOpenCode(dirPath) {
+/**
+ * opencode 的「完全批准」= `--auto`（官方文档里的 auto mode）：把**未被显式拒绝**的
+ * 权限请求自动批准。
+ *
+ * 它不等于"什么都放行"：配置里显式 `deny` 的仍然会被拦（opencode 默认就 deny 了
+ * `read` 的 `*.env` / `*.env.*`，TUI 里 `--auto` 也一样读不到），这与 claude 的
+ * bypassPermissions 受 `~/.claude/settings.json` deny 约束是同一个口径 —— 两边都是
+ * "除非你明确禁止，否则全放"。
+ *
+ * 档位 token：`auto` 是本工具的正式叫法；`bypassPermissions` 只是为了让调用方
+ * （顶栏菜单与编排台项目菜单）与 claude 那档共用同一个字符串。
+ */
+const OPENCODE_AUTO_MODES = new Set(['auto', 'bypassPermissions']);
+
+/**
+ * opencode 的启动参数（按权限档位）。
+ *
+ * 单独抽成纯函数是为了能**真的跑断言**而不用 spawn 一个终端窗口 —— 带 `--auto` 的
+ * TUI 会弹出来并停在那里等人输入，验证不能有这种副作用。回归 `test/opencode-permission.test.mjs`。
+ * 白名单式：非字符串 / 未知 token 一律返回空数组，不存在拼参数注入的面。
+ */
+export function buildOpencodeArgs(permissionMode) {
+  return OPENCODE_AUTO_MODES.has(permissionMode) ? ['--auto'] : [];
+}
+
+async function launchOpenCode(dirPath, { permissionMode } = {}) {
   // opencode (sst/opencode) CLI - https://opencode.ai
+  const cliArgs = buildOpencodeArgs(permissionMode);
   if (process.platform === 'win32') {
-    return spawnDetached('cmd.exe', ['/c', 'start', '""', 'opencode'], {
+    return spawnDetached('cmd.exe', ['/c', 'start', '""', 'opencode', ...cliArgs], {
       cwd: dirPath
     });
   }
-  return launchInTerminal(dirPath, 'opencode');
+  return launchInTerminal(dirPath, 'opencode', cliArgs);
 }
 
 // Run the CLI shipped with this server, even when `g` is not in PATH or points
@@ -988,7 +1014,7 @@ export function registerFileOpenRoutes({
   // 用 OpenCode 打开目录
   app.post('/api/open-directory-with-opencode', asyncRoute(async (req, res) => {
       try {
-        const { path: dirPath } = req.body || {};
+        const { path: dirPath, permissionMode } = req.body || {};
         if (!dirPath) {
           throw new HttpError(400, '目录路径不能为空');
         }
@@ -1000,8 +1026,11 @@ export function registerFileOpenRoutes({
         }
 
         try {
-          await launchOpenCode(dirPath);
-          res.json({ success: true, message: '已用 OpenCode 打开目录' });
+          await launchOpenCode(dirPath, { permissionMode });
+          const message = OPENCODE_AUTO_MODES.has(permissionMode)
+            ? '已用 OpenCode 打开目录（--auto：自动批准未被显式拒绝的权限）'
+            : '已用 OpenCode 打开目录';
+          res.json({ success: true, message });
         } catch (error) {
           res.status(400).json({
             success: false,
