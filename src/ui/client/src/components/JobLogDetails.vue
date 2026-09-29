@@ -70,19 +70,27 @@
 
     <!--
       body 容器:用 zen-ai-chat-ui 的 ChatContainer 渲染单轮对话。
-      隐藏 ChatContainer 自带的输入框(acu-chat-footer),续聊输入由父组件统一承载。
+      关掉 ChatContainer 自带的输入框(show-input=false —— 续聊输入由父组件统一承载)，
       下方保留"重新执行"footer。
+
+      ⚠️ 别改回「class 挂到 ChatContainer 上 + CSS 隐藏」：传给 zen-ai-chat-ui 组件的 class
+      在**生产构建**里不会落到组件根节点上（dev 会落、prod 静默丢），`.wb-job-chat :deep(.acu-*)`
+      就全成了死代码 —— 自带的输入框藏不住，背景/气泡密度也全是库默认值。
+      2026-09-29 在 WorkbenchView 上就是这个坑（「已完成任务点开有 2 个输入框」）。
+      所以外层套一个自己的 div 承载 class。
     -->
     <div v-show="!isCollapsed" class="wb-log-details__body">
-      <ChatContainer
-        :messages="chatMessages"
-        :assistant-name="assistantLabel"
-        :assistant-avatar="assistantAvatar"
-        :show-avatar="true"
-        :theme="configStore.theme"
-        :tool-calls-config="{ group: true, collapseThreshold: 2 }"
-        class="wb-job-chat"
-      />
+      <div class="wb-job-chat">
+        <ChatContainer
+          :messages="chatMessages"
+          :assistant-name="assistantLabel"
+          :assistant-avatar="assistantAvatar"
+          :show-avatar="true"
+          :theme="configStore.theme"
+          :tool-calls-config="{ group: true, collapseThreshold: 2 }"
+          :show-input="false"
+        />
+      </div>
 
       <!-- footer:任务结束后显示"重新执行",运行中不显示 -->
       <footer v-if="canReExecute" class="wb-chat__foot">
@@ -382,11 +390,15 @@ function onReExecute() {
   overflow: hidden;
 }
 
-/* ChatContainer 容器:占满 body 剩余高度,隐藏自带输入框(续聊由父组件承载) */
+/* ChatContainer 外层容器:吃满 body 剩余高度,ChatContainer(.acu-chat 有 height:100%)再填满它。
+   样式钩子挂在这层上 —— 见模板里的注释:class 传给组件本身在生产构建里会丢。 */
 .wb-job-chat {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
 }
+/* 自带输入框的主开关是 `show-input=false`(见模板);这条兜底,防 prop 换名后冒出第二个输入框 */
 .wb-job-chat :deep(.acu-chat-footer) {
   display: none;
 }

@@ -1312,17 +1312,27 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
               <!-- 任务对话流：所有轮次合并到单个 ChatContainer -->
               <template v-if="simpleAllJobsFor(selectedTask).length > 0">
                 <div class="wb-simple-chat-wrap" ref="chatWrapRef">
-                  <ChatContainer
-                    ref="chatRef"
-                    :key="selectedTask.id"
-                    :messages="simpleConversationMessages"
-                    :assistant-name="simpleAssistantLabel"
-                    :assistant-avatar="simpleAssistantAvatar"
-                    :show-avatar="true"
-                    :theme="configStore.theme"
-                    :tool-calls-config="{ group: true, collapseThreshold: 2 }"
-                    class="wb-simple-chat"
-                  />
+                  <!-- ⚠️ 这层 div 不是多余的，class 也**不要**挪回 ChatContainer 上（2026-09-29 踩过）：
+                       传给 zen-ai-chat-ui 组件的 class 在**生产构建**里不会落到组件根节点上
+                       （同一份源码 dev 会落、prod 静默丢掉，实测 class 与父级 data-v-* 双双消失），
+                       于是 `.wb-simple-chat :deep(.acu-*)` 这一组样式钩子在生产 bundle 里全是死的。
+                       症状之一就是「已完成的任务点开后有 2 个输入框」：原来靠
+                       `.acu-chat-footer{display:none}` 藏 ChatContainer 自带输入框，prod 里那条规则
+                       根本没匹配上，lib 自带输入框与下面常驻的 ChatInput 同时显示。
+                       把 class 挂在自己的 div 上，样式钩子才在 dev / prod 都成立。 -->
+                  <div class="wb-simple-chat">
+                    <ChatContainer
+                      ref="chatRef"
+                      :key="selectedTask.id"
+                      :messages="simpleConversationMessages"
+                      :assistant-name="simpleAssistantLabel"
+                      :assistant-avatar="simpleAssistantAvatar"
+                      :show-avatar="true"
+                      :theme="configStore.theme"
+                      :tool-calls-config="{ group: true, collapseThreshold: 2 }"
+                      :show-input="false"
+                    />
+                  </div>
                   <!-- 终态控件 -->
                   <div
                     v-if="simpleJobFor(selectedTask) && ['done','error','cancelled'].includes(simpleJobState(simpleJobFor(selectedTask)))"
@@ -2650,10 +2660,17 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   /* 强制 zen-ai-chat-ui 内部背景与容器一致 */
   --acu-bg: var(--bg-code);
 }
+/* 对话容器：外层 div 先吃满 chat-wrap 的剩余高度，ChatContainer（库给 .acu-chat 定了
+   height:100%）再填满它。样式钩子统一挂在这层上 —— 见模板里的注释：class 传给组件本身
+   在生产构建里会静默丢掉，钩子全变死代码。 */
 .wb-simple-chat {
+  display: flex;
+  flex-direction: column;
   flex: 1 1 0%;
   min-height: 0;
 }
+/* 自带输入框的主开关是 ChatContainer 的 `show-input=false`（见模板）；这条只是兜底：
+   万一那个 prop 在新版本里换名/失效，也不能让对话区同时冒出第二个输入框。 */
 .wb-simple-chat :deep(.acu-chat-footer) { display: none; }
 .wb-simple-chat :deep(.acu-chat),
 .wb-simple-chat :deep(.acu-message-list),
