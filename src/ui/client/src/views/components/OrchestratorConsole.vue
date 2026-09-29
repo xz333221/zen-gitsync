@@ -784,7 +784,7 @@ const gitSummary = computed(() => {
   padding: 10px 0;
   border: none;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   cursor: pointer;
   transition: color var(--transition-fast) var(--ease-custom), background var(--transition-fast) var(--ease-custom);
 }
@@ -815,8 +815,8 @@ const gitSummary = computed(() => {
 .oc__head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border-color-light);
   flex-shrink: 0;
 }
@@ -845,7 +845,7 @@ const gitSummary = computed(() => {
 .oc__toggle {
   border: none;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-xs);
   padding: 2px 6px;
   border-radius: var(--radius-base);
@@ -867,7 +867,7 @@ const gitSummary = computed(() => {
   padding: 0;
   border: none;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   border-radius: var(--radius-base);
   font-size: var(--font-size-mid);
   cursor: pointer;
@@ -879,8 +879,8 @@ const gitSummary = computed(() => {
 .oc__state {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 8px;
+  padding: 8px 12px;
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
   background: var(--bg-subtle);
@@ -888,9 +888,9 @@ const gitSummary = computed(() => {
   flex-shrink: 0;
 }
 .oc__state.is-paused { color: var(--color-warning); }
-.oc__state-label { color: var(--text-tertiary); }
+.oc__state-label { color: var(--text-meta); }
 .oc__state-value { font-weight: 500; }
-.oc__state-meta { margin-left: auto; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.oc__state-meta { margin-left: auto; color: var(--text-meta); font-variant-numeric: tabular-nums; }
 
 /* 工作方式切换：一个两段式拨片。
    为什么不做成两个独立按钮：它们互斥且只有两档，拨片能一眼看出"现在是哪一档"，
@@ -911,7 +911,7 @@ const gitSummary = computed(() => {
   border: none;
   border-radius: var(--radius-pill);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-xs);
   cursor: pointer;
   transition: var(--transition-ui-fast);
@@ -943,7 +943,7 @@ const gitSummary = computed(() => {
   gap: 6px;
   margin: 0 12px 6px;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   flex-shrink: 0;
 }
 /* 标题在报告头部里要让位给右边两个控件：占满剩余宽度把「间隔 + 立即报告」顶到行尾 */
@@ -1030,11 +1030,11 @@ const gitSummary = computed(() => {
 .rp__trigger { color: var(--color-primary); font-weight: 500; }
 /* 自动那份是"系统自己说的"，手动那份才是"你刚才要的" —— 颜色分得开，
    回看历史时一眼能认出哪几份是自己点出来的 */
-.rp__trigger.is-auto { color: var(--text-tertiary); font-weight: 400; }
-.rp__count { color: var(--text-tertiary); }
+.rp__trigger.is-auto { color: var(--text-meta); font-weight: 400; }
+.rp__count { color: var(--text-meta); }
 .rp__time {
   margin-left: auto;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
 .rp__text {
@@ -1049,7 +1049,7 @@ const gitSummary = computed(() => {
   margin: 0;
   font-size: var(--font-size-xs);
   line-height: 1.55;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 /* 事实块：正文写的是"到哪一步了"，这里列的是**凭什么这么说**（哪个任务、跑了多久、
    在调什么工具）。两者对不上时，用户至少能看出是模型在编 */
@@ -1076,7 +1076,7 @@ const gitSummary = computed(() => {
   gap: 6px;
   margin: 1px 0 0;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
 .rpt__project { color: var(--text-secondary); }
@@ -1086,7 +1086,7 @@ const gitSummary = computed(() => {
   margin: 2px 0 0;
   font-size: var(--font-size-xs);
   line-height: 1.5;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1103,7 +1103,7 @@ const gitSummary = computed(() => {
 }
 .rpt__thought-tag {
   margin-right: 4px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 /* ── 历史报告 ─────────────────────────────────────────── */
@@ -1117,7 +1117,7 @@ const gitSummary = computed(() => {
 .oc__history-title {
   margin: 0 2px 4px;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 .oc__history-list { list-style: none; margin: 0; padding: 0; }
 .oc__history-item {
@@ -1129,7 +1129,7 @@ const gitSummary = computed(() => {
   border: none;
   border-radius: var(--radius-base);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-xs);
   font-family: inherit;
   text-align: left;
@@ -1150,7 +1150,7 @@ const gitSummary = computed(() => {
   padding: 20px 10px;
   text-align: center;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   list-style: none;
 }
 
@@ -1170,7 +1170,7 @@ const gitSummary = computed(() => {
   margin: 0;
   font-size: var(--font-size-xs);
 }
-.oc__git-label { color: var(--text-tertiary); }
+.oc__git-label { color: var(--text-meta); }
 .oc__git-value {
   margin: 0;
   text-align: right;
@@ -1212,7 +1212,7 @@ const gitSummary = computed(() => {
   border-color: var(--input-border-focus);
   box-shadow: var(--input-shadow-focus);
 }
-.oc__input::placeholder { color: var(--text-tertiary); }
+.oc__input::placeholder { color: var(--text-meta); }
 .oc__compose-foot {
   display: flex;
   align-items: center;
@@ -1234,7 +1234,7 @@ const gitSummary = computed(() => {
   padding: 0;
   border: none;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-base);
   cursor: pointer;
   transition: color var(--transition-fast) var(--ease-custom);
@@ -1284,7 +1284,7 @@ const gitSummary = computed(() => {
   margin: 6px 0 0;
   font-size: var(--font-size-xs);
   line-height: 1.5;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 /* ── 窄屏 ──────────────────────────────────────────── */

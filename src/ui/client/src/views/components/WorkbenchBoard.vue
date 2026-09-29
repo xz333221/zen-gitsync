@@ -815,7 +815,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 0 14px;
+  padding: 0 12px;
   height: 52px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-color-light);
@@ -853,15 +853,15 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
 }
 .board__subtitle {
   margin: 0;
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  color: var(--text-meta);
   line-height: 1.3;
 }
 
 .board__stats {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   margin-left: 4px;
   flex-wrap: wrap;
   min-width: 0;
@@ -871,7 +871,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   align-items: baseline;
   gap: 4px;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 .board__stat-value {
   font-size: var(--font-size-mid);
@@ -885,7 +885,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
 .board__icon-btn {
   border: none;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   width: 26px;
   height: 26px;
   display: inline-flex;
@@ -982,8 +982,8 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
 .board__main-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px 8px;
+  gap: 8px;
+  padding: 8px 12px;
   flex-shrink: 0;
   min-width: 0;
 }
@@ -1004,7 +1004,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
 }
 .board__project-path {
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1013,7 +1013,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
 .board__project-meta {
   flex-shrink: 0;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
 

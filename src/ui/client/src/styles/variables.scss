@@ -371,6 +371,16 @@
   --text-tertiary: #909399;
   --text-tertiary-dark: #cbd0d6; /* 再次提升：原 #aeb3b9 */
 
+  /* 承载信息的元文字（light 主题）。
+     与 --text-tertiary 的分工：tertiary 只用于**装饰**（状态点 / 图标 / 占位符），
+     凡是"要读的字"一律用 meta。实测 #909399 在 --bg-panel 上只有 2.87:1、
+     在画布上 2.75:1，而 11~12px 中文按 WCAG AA 需要 4.5:1。
+     #686a6f 是按**新画布** #e7ebf2 反解出来的：画布上 4.50、面板 #f5f7fa 上 5.01、白底 5.38。
+     取值刻意比 --text-secondary(#606266) 略亮一档，这样"列标题(secondary) / 列计数(meta)"
+     这类上下级关系还能靠颜色分出来；再暗就与 secondary 撞车了。 */
+  --text-meta: #686a6f;
+  --text-meta-dark: #cbd0d6;
+
   /* 占位符文字 */
   --text-placeholder: #c0c4cc;
   --text-placeholder-dark: #bac0c6; /* 再次提升：原 #9aa0a6 */
@@ -725,8 +735,11 @@
   --wb-card-shadow-hover: var(--shadow-card-lift);
   --wb-card-inset-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.015);
 
-  /* 表面层级：canvas 退后 / 卡片浮起，形成三栏纵深 */
-  --surface-canvas: var(--bg-page);
+  /* 表面层级：canvas 退后 / 面板居中 / 卡片浮起，形成三栏纵深。
+     canvas 比 --bg-panel(#f5f7fa) 深一档：两者明度比 1.114
+     （原来 canvas=#f0f2f5 与面板只差 5/255≈2%，肉眼分辨不出，左中右三栏糊成一整块灰，
+     只剩"灰底/白卡"一层；这条路径只有 WorkbenchBoard 的 .board__main 消费）。 */
+  --surface-canvas: #e7ebf2;
   --surface-elevated: #ffffff;
 
   /* 卡片阴影：静息 / 悬浮抬升（冷蓝着色） */

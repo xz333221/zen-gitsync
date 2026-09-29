@@ -378,7 +378,7 @@ function onWindowMouseUp(_e: MouseEvent) {
   font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: 0.4px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   background: var(--bg-subtle);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-base);
@@ -403,7 +403,7 @@ function onWindowMouseUp(_e: MouseEvent) {
 .wb-section__action {
   border: none;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   width: 28px;
   height: 28px;
   border-radius: var(--radius-base);
@@ -549,7 +549,7 @@ function onWindowMouseUp(_e: MouseEvent) {
   background: linear-gradient(to right, transparent 0%, color-mix(in srgb, var(--color-warning, var(--color-warning-light)) 8%, var(--bg-panel)) 40%);
 }
 .wb-task-item__copy {
-  border: none; background: transparent; color: var(--text-tertiary); width: 22px; height: 22px;
+  border: none; background: transparent; color: var(--text-meta); width: 22px; height: 22px;
   border-radius: var(--radius-md); display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer; font-size: var(--font-size-sm); flex-shrink: 0;
   transition: background var(--transition-fast) var(--ease-custom), color var(--transition-fast) var(--ease-custom), transform var(--transition-fast) var(--ease-custom);
@@ -558,7 +558,7 @@ function onWindowMouseUp(_e: MouseEvent) {
 .wb-task-item__copy:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-outline-offset); }
 .wb-task-item__copy:active { transform: scale(0.9); }
 .wb-task-item__del {
-  border: none; background: transparent; color: var(--text-tertiary); width: 22px; height: 22px;
+  border: none; background: transparent; color: var(--text-meta); width: 22px; height: 22px;
   border-radius: var(--radius-md); display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer; font-size: var(--font-size-sm); flex-shrink: 0;
   transition: background var(--transition-fast) var(--ease-custom), color var(--transition-fast) var(--ease-custom), transform var(--transition-fast) var(--ease-custom);
@@ -579,14 +579,14 @@ function onWindowMouseUp(_e: MouseEvent) {
 .wb-prompt-item__tag { flex-shrink: 0; max-width: 96px; padding: 1px 6px; border-radius: var(--radius-xs); font-size: var(--font-size-xs); line-height: 16px; letter-spacing: 0.1px; background: var(--tint-primary-08); color: var(--color-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wb-prompt-item__tag--project { background: var(--bg-subtle); color: var(--text-secondary); border: 1px solid var(--border-color-light); }
 .wb-prompt-item__del {
-  border: none; background: transparent; color: var(--text-tertiary); width: 20px; height: 20px;
+  border: none; background: transparent; color: var(--text-meta); width: 20px; height: 20px;
   border-radius: var(--radius-xs); display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer; font-size: var(--font-size-sm); flex-shrink: 0; opacity: 0;
   transition: opacity var(--transition-fast) var(--ease-custom), background var(--transition-fast) var(--ease-custom), color var(--transition-fast) var(--ease-custom);
 }
 .wb-prompt-item__del:hover { background: color-mix(in srgb, var(--color-danger) 14%, transparent); color: var(--color-danger); }
 .wb-prompt-item__del:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-outline-offset); opacity: 1; }
-.wb-empty { padding: 24px 14px 20px; text-align: center; color: var(--text-tertiary); display: flex; flex-direction: column; align-items: center; gap: 8px; border-radius: var(--radius-md); background: linear-gradient(135deg, var(--bg-subtle) 0%, color-mix(in srgb, var(--tint-primary-06) 50%, transparent) 100%); border: 1px dashed var(--border-color-light); position: relative; overflow: hidden; }
+.wb-empty { padding: 24px 14px 20px; text-align: center; color: var(--text-meta); display: flex; flex-direction: column; align-items: center; gap: 8px; border-radius: var(--radius-md); background: linear-gradient(135deg, var(--bg-subtle) 0%, color-mix(in srgb, var(--tint-primary-06) 50%, transparent) 100%); border: 1px dashed var(--border-color-light); position: relative; overflow: hidden; }
 .wb-empty::before {
   content: '';
   position: absolute;
@@ -602,9 +602,9 @@ function onWindowMouseUp(_e: MouseEvent) {
 .wb-empty--compact::before { display: none; }
 .wb-empty__art { width: 52px; height: 52px; border-radius: var(--radius-xl); display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--tint-primary-12) 0%, var(--tint-primary-08) 100%); color: var(--color-primary); font-size: var(--font-size-2xl); margin-bottom: 4px; box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 10%, transparent); position: relative; z-index: 1; }
 .wb-empty__title { font-size: var(--font-size-base); font-weight: 600; letter-spacing: var(--letter-spacing-heading, -0.25px); color: var(--text-secondary); line-height: 1.45; position: relative; z-index: 1; }
-.wb-empty--rich .wb-empty__hint { font-size: var(--font-size-sm); line-height: 1.6; color: var(--text-tertiary); max-width: 280px; position: relative; z-index: 1; }
+.wb-empty--rich .wb-empty__hint { font-size: var(--font-size-sm); line-height: 1.6; color: var(--text-meta); max-width: 280px; position: relative; z-index: 1; }
 .wb-empty__cta { display: flex; align-items: center; gap: 14px; margin-top: 8px; flex-wrap: wrap; justify-content: center; position: relative; z-index: 1; }
-.wb-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 5px; border-radius: var(--radius-lg); font-size: var(--font-size-xs); font-weight: 600; color: var(--text-tertiary); background: var(--bg-subtle); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.wb-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 5px; border-radius: var(--radius-lg); font-size: var(--font-size-xs); font-weight: 600; color: var(--text-meta); background: var(--bg-subtle); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .wb-section__count { background: var(--tint-primary-12); color: var(--color-primary); }
 /* 分组头：作为 section header，比组内任务标题(.wb-task-item__title 12px/500/secondary)
    字号更大、字重更重,承担"这是什么项目"的语义。

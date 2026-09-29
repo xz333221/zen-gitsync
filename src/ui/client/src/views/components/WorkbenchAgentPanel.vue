@@ -130,7 +130,7 @@ const rows = computed(() => props.running.map(r => ({
 }
 .agents__count {
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
 .agents__count.is-live { color: var(--color-warning); }
@@ -203,7 +203,7 @@ const rows = computed(() => props.running.map(r => ({
   gap: 8px;
   margin: 3px 0 0 12px;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
 .agent-item__elapsed { margin-left: auto; }
@@ -212,7 +212,7 @@ const rows = computed(() => props.running.map(r => ({
   padding: 14px 10px;
   text-align: center;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   list-style: none;
 }
 </style>

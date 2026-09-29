@@ -596,8 +596,8 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 .proj__head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 12px 6px;
+  gap: 8px;
+  padding: 8px 12px;
   flex-shrink: 0;
 }
 .proj__title {
@@ -610,7 +610,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 }
 .proj__count {
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -621,16 +621,16 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 .proj__tools {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   padding: 0 12px 8px;
   flex-shrink: 0;
 }
 .proj__search {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   height: 24px;
-  padding: 0 7px;
+  padding: 0 8px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--bg-subtle);
@@ -639,7 +639,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 .proj__search:focus-within { border-color: var(--color-primary); box-shadow: var(--focus-ring-soft); }
 .proj__search-icon {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   flex-shrink: 0;
 }
 .proj__search-input {
@@ -652,22 +652,22 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   font-size: var(--font-size-sm);
   color: var(--text-primary);
 }
-.proj__search-input::placeholder { color: var(--text-tertiary); }
+.proj__search-input::placeholder { color: var(--text-meta); }
 .proj__toggles {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 /* 开关：等宽平分，选中只变颜色 + 一层很淡的主色底（和 .proj-item__action:hover 同款） */
 .proj__toggle {
   flex: 1 1 0;
   min-width: 0;
   height: 22px;
-  padding: 0 6px;
+  padding: 0 8px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-family: inherit;
   font-size: var(--font-size-xs);
   line-height: 1;
@@ -695,7 +695,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 .proj__list {
   list-style: none;
   margin: 0;
-  padding: 0 6px 8px;
+  padding: 0 8px 8px;
   overflow-y: auto;
   flex: 1 1 auto;
   min-height: 0;
@@ -705,7 +705,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 .proj-item {
   /* hover 操作按钮的定位锚点 */
   position: relative;
-  padding: 7px 8px;
+  padding: 8px;
   border-radius: var(--radius-lg);
   cursor: pointer;
   transition: background var(--transition-fast) var(--ease-custom),
@@ -751,7 +751,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 }
 .proj-item__icon {
   font-size: var(--font-size-mid);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   flex-shrink: 0;
 }
 .proj-item.is-active .proj-item__icon { color: var(--color-primary); }
@@ -841,7 +841,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   border: none;
   border-radius: var(--radius-base);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-mid);
   cursor: pointer;
   transition:
@@ -914,7 +914,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 .proj-menu__hint {
   flex-shrink: 0;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   transition: color var(--transition-fast) var(--ease-custom);
 }
 .proj-menu__item:hover .proj-menu__hint { color: var(--color-primary); }
@@ -928,7 +928,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: 0.3px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 /* 完全批准（含 Shell）：给个琥珀色，和顶栏 claude 菜单里那条危险项同一套语言 */
 .proj-menu__item--danger .proj-menu__label { color: var(--color-warning); }
@@ -939,11 +939,11 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 .proj-item__row2 {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   margin-top: 2px;
   min-width: 0;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 .proj-item__branch {
   /* 图标 + 分支名并排；max-width 比只有文字时略宽，给图标让出位置 */
@@ -1015,7 +1015,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 .proj-item__progress-text {
   flex-shrink: 0;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1036,7 +1036,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   margin: 0;
   font-size: var(--font-size-xs);
   line-height: 1.6;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 /* 「清除筛选」：文字按钮，不加底色不加边框，只给主色 */
 .proj-empty__clear {
