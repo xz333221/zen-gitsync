@@ -177,7 +177,15 @@ async function main() {
   try {
     // 看板视图固定在"看板"（列表视图在第 G 组单独切过去验）
     await page.addInitScript(() => {
-      try { localStorage.setItem('wb.boardView.v1', 'kanban') } catch { /* 隐私模式 */ }
+      try {
+        localStorage.setItem('wb.boardView.v1', 'kanban')
+        // 必须预置「全部项目」（''）。全新上下文里 savedSelection === null 时，
+        // WorkbenchBoard 的 applyDefaultSelection() 会把选中项落到**当前项目**；
+        // 它烧的是 mock 的 projects 接口 —— 返回得比那次点击晚，就会把「全部项目」
+        // 顶掉，合成任务（synth-running 等）全被 visibleTasks 过滤掉，
+        // B1/D1/D2/D4/G2 一起假失败（2026-09-29 实测同一个脚本两次跑出 21/23 与 17/23）。
+        localStorage.setItem('wb.boardProject.v1', '')
+      } catch { /* 隐私模式 */ }
     })
     await page.route('**/api/workbench/projects*', (route) => {
       route.fulfill({
@@ -200,6 +208,12 @@ async function main() {
       const card = cards.find(c => (c.querySelector('.kb-card__title')?.textContent || '').trim() === t)
       if (!card) return { found: false, titles: cards.map(c => (c.querySelector('.kb-card__title')?.textContent || '').trim()) }
       const reply = card.querySelector('.kb-card__reply')
+      // 截行的活儿在**正文 span** 上，不在引文容器上：引文是 flex 行（图标 + 正文），
+      // 而 -webkit-line-clamp 要的 display:-webkit-box 与 flex 互斥，所以 clamp 只能落在
+      // .kb-card__reply-text 上（见 WorkbenchKanban.vue 的样式注释）。读容器会恒得
+      // webkitLineClamp: 'none' —— 2026-09-29 引文拆成「图标 + 正文」之后本探针没跟着改，
+      // A5 一直红着（拿 DOM 复核过：容器 flex / 正文 -webkit-box + clamp 3）。
+      const replyText = card.querySelector('.kb-card__reply-text')
       const titleEl = card.querySelector('.kb-card__title')
       return {
         found: true,
@@ -210,10 +224,12 @@ async function main() {
         borderLeft: reply ? getComputedStyle(reply).borderLeftWidth : null,
         color: reply ? getComputedStyle(reply).color : null,
         titleColor: titleEl ? getComputedStyle(titleEl).color : null,
-        clamp: reply ? getComputedStyle(reply).webkitLineClamp : null,
+        clamp: replyText ? getComputedStyle(replyText).webkitLineClamp : null,
         // 被 CSS 截掉多少（0 = 整段都看得见）。卡片宽、字号、行数三者一变这个就会变，
-        // 所以它验的是"MAX_REPLY_CHARS 这个数是不是按这块地方定的"
-        overflowPx: reply ? reply.scrollHeight - reply.clientHeight : null,
+        // 所以它验的是"MAX_REPLY_CHARS 这个数是不是按这块地方定的"。
+        // 同样必须量 clamp 所在的正文 span：量外层 flex 容器的话，子元素自己 overflow:hidden
+        // 把高度收住了，容器永远不溢出 → 恒 0，等于一条测不出东西的断言。
+        overflowPx: replyText ? replyText.scrollHeight - replyText.clientHeight : null,
       }
     }, title)
 
