@@ -279,6 +279,12 @@ export interface OrchestratorInstruction {
   targetSource?: string
   /** 这条指令附带了哪一级默认提示词：global / project / both（'' = 没附带） */
   promptSource?: string
+  /**
+   * `text` 是否因超过**下发**上限而被截断（落盘那份始终完整，见服务端
+   * shared.js 的 INSTRUCTION_PREVIEW_CHARS）。前端据此显示"已截断"，
+   * 别让人以为当初就只写了这么多 —— 完整原文在 task.desc 里。
+   */
+  textTruncated?: boolean
 }
 
 /**
@@ -311,6 +317,12 @@ export interface OrchestratorActivity {
   projectName: string
   instructionId?: string
   text?: string
+  /**
+   * `text` 是否因超过**下发**上限而被截断（落盘那份始终完整，见服务端
+   * shared.js 的 INSTRUCTION_PREVIEW_CHARS）。前端据此显示"已截断"，
+   * 别让人以为当初就只写了这么多 —— 完整原文在 task.desc 里。
+   */
+  textTruncated?: boolean
   instructionStatus?: string
   reason?: string
   /** 落点是怎么定下来的：explicit / mention / agent / default（'' = 本次升级前的老记录） */
@@ -411,6 +423,12 @@ export interface OrchestratorResponse {
   reportIntervalMs?: number
   /** 上次生成报告的时间（含"已抢占名额、还在生成中"那一瞬间） */
   lastReportAt?: string | null
+  /**
+   * 指令正文上限（字符）。**以服务端为准**（派发校验的同一份常量，
+   * 见服务端 shared.js 的 MAX_INSTRUCTION_CHARS）—— 前端只拿它显示计数器，
+   * 不自己另定一个数，否则就是"界面说还有余量、点下去 400"。
+   */
+  maxInstructionChars?: number
   activity: OrchestratorActivity[]
   running: RunningAgent[]
   error?: string

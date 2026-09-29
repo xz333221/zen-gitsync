@@ -55,7 +55,7 @@ delete process.env.HOMEPATH;
 const load = p => import(pathToFileURL(path.join(projectRoot, p)).href);
 const { createDispatcher, resolveExecutor } = await load('src/ui/server/routes/workbench/dispatchInstruction.js');
 const { readOrchestrator, setOrchestratorActive, setDefaultPrompt } = await load('src/ui/server/routes/workbench/orchestratorStore.js');
-const { readJson, TASKS_FILE } = await load('src/ui/server/routes/workbench/shared.js');
+const { readJson, TASKS_FILE, MAX_INSTRUCTION_CHARS } = await load('src/ui/server/routes/workbench/shared.js');
 
 // 两个项目目录：proj 是"选中/当前"的落点，other 用来证明显式指定优先于默认
 const proj = path.join(fakeHome, 'proj-alpha');
@@ -201,8 +201,35 @@ test('空指令 / 超长指令一律 400，不留下任务', async () => {
   const { dispatchInstruction } = makeDispatcher();
   const before = (await readTasks()).length;
   await assert.rejects(() => dispatchInstruction({ text: '   ' }), err => err.statusCode === 400 && /指令内容不能为空/.test(err.message));
-  await assert.rejects(() => dispatchInstruction({ text: 'x'.repeat(4001) }), err => err.statusCode === 400 && /指令过长/.test(err.message));
+  // 用常量而不是写死数字：上限放宽过（4000 → 100000），钉死的用例会在放宽那天
+  // 悄悄变成"检查 4001 字"——它照样通过，却再也不测真正那道闸门了。
+  await assert.rejects(
+    () => dispatchInstruction({ text: 'x'.repeat(MAX_INSTRUCTION_CHARS + 1) }),
+    err => err.statusCode === 400 && /指令过长/.test(err.message),
+  );
   assert.equal((await readTasks()).length, before);
+});
+
+test('刚好卡在上限的指令放行（闸门是 >，不是 >=）', async () => {
+  const { dispatchInstruction } = makeDispatcher();
+  const result = await dispatchInstruction({
+    text: 'x'.repeat(MAX_INSTRUCTION_CHARS),
+    autoRun: false,
+  });
+  // 整段正文原样落进任务：截断发生在"下发预览"那一层，不在派发这一层
+  assert.equal(result.task.desc.length, MAX_INSTRUCTION_CHARS);
+});
+
+test('指令正文原样进任务，不被悄悄截断', async () => {
+  const { dispatchInstruction } = makeDispatcher();
+  // 2026-09-29：用户粘一整段报错日志被 400 挡回来。除了放宽上限，还要钉住
+  // "整段进 desc" —— 因为 dispatchInstruction 是唯一拿得到原文的地方，
+  // 一旦这里截了，任务执行时模型看到的就是半截需求，而界面毫无异样。
+  const long = Array.from({ length: 3000 }, (_, i) => `第 ${i} 行：原始需求内容`).join('\n');
+  assert.ok(long.length > 20000 && long.length < MAX_INSTRUCTION_CHARS);
+  const result = await dispatchInstruction({ text: long, autoRun: false });
+  assert.equal(result.task.desc, long);
+  assert.equal(result.instruction.text, long, '指令流水那份也存完整原文（截断只发生在 5s 轮询下发时）');
 });
 
 test('目标目录不存在：记一条 rejected 流水再抛 400', async () => {

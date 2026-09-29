@@ -52,6 +52,19 @@ import type { TaskExecutorId } from '@/utils/taskExecutor'
 import { DEFAULT_REPORT_INTERVAL_MS, normalizeReportInterval } from '@/utils/progressReport'
 import { useConfigStore } from '@/stores/configStore'
 
+/**
+ * 指令正文上限的**本地兜底值**。
+ *
+ * 真实值由服务端 /api/workbench/orchestrator 的 maxInstructionChars 下发
+ * （见服务端 shared.js 的 MAX_INSTRUCTION_CHARS —— 那是派发校验的唯一出处）。
+ * 这里的数字只服务于"首帧还没拿到状态"的那几百毫秒：宁可先用一份与服务端
+ * 一致的值，也不要让输入框在状态到达前短暂显示成别的上限。
+ *
+ * ⚠️ 改这个数字必须同步改 shared.js 的 MAX_INSTRUCTION_CHARS，两边分叉的表现是
+ * "刷新前能发、刷新后发不出去"。dispatchInstruction 的单测钉住了服务端那一侧。
+ */
+export const DEFAULT_MAX_INSTRUCTION_CHARS = 100000
+
 export interface DispatchPayload {
   text: string
   projectPath?: string
@@ -68,6 +81,14 @@ export function useOrchestrator() {
   const active = ref(true)
   const instructions = ref<OrchestratorInstruction[]>([])
   const activity = ref<OrchestratorActivity[]>([])
+  /**
+   * 指令正文上限（字符）。**以服务端下发的为准**，本地这份只是首次渲染前的兜底。
+   *
+   * 为什么不在前端写死：派发校验在服务端（dispatchInstruction.js），两边各写一份
+   * 就会出现"输入框显示还有余量、点下去服务端 400"，而指令正文已经发出去了。
+   * 与 reportIntervalMs 同一套口径（值以服务端为准，本地只是镜像）。
+   */
+  const maxInstructionChars = ref(DEFAULT_MAX_INSTRUCTION_CHARS)
   const running = ref<RunningAgent[]>([])
   const updatedAt = ref<string | null>(null)
   const loaded = ref(false)
@@ -94,6 +115,11 @@ export function useOrchestrator() {
         return false
       }
       active.value = res.active !== false
+      // 只认正整数：老服务端没有这个字段（undefined）时保留本地兜底值，
+      // 别把计数器的上限渲染成 0 / undefined
+      if (Number.isInteger(res.maxInstructionChars) && res.maxInstructionChars > 0) {
+        maxInstructionChars.value = res.maxInstructionChars
+      }
       instructions.value = Array.isArray(res.instructions) ? res.instructions : []
       activity.value = Array.isArray(res.activity) ? res.activity : []
       running.value = Array.isArray(res.running) ? res.running : []
@@ -323,7 +349,7 @@ export function useOrchestrator() {
 
   return {
     active, instructions, activity, running, updatedAt, loaded,
-    togglingSchedule, dispatching,
+    togglingSchedule, dispatching, maxInstructionChars,
     defaultPrompt, projectPrompts,
     reports, loadingReports, generatingReport, reportIntervalMs,
     loadOrchestrator, setSchedulingActive, dispatch,

@@ -2447,6 +2447,8 @@ export default {
   '@WORKBENCH:派发中…': 'Dispatching…',
   '@WORKBENCH:指令会在「{name}」下新建一个任务；Enter 派发，Shift+Enter 换行': 'The instruction creates a task under "{name}"; Enter to dispatch, Shift+Enter for a newline',
   '@WORKBENCH:指令落到哪个项目由主 Agent 判断；Enter 派发，Shift+Enter 换行': 'The main agent decides which project this lands in; Enter to dispatch, Shift+Enter for a newline',
+  // Instruction char counter (2026-09-29: limit raised from 4000 to 100000; "nearly full" now visible)
+  '@WORKBENCH:超出上限 {max} 字，请精简后再派发（超出的部分不会被发出）': 'Over the {max}-character limit — trim it before dispatching (the excess will not be sent)',
   // ── Dispatch default prompts (global / per project) ─────────────
   '@WORKBENCH:默认提示词': 'Default prompt',
   '@WORKBENCH:默认提示词设置': 'Default prompt settings',

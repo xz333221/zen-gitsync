@@ -278,7 +278,8 @@ export const TOOL_DEFINITIONS = [
         properties: {
           text: {
             type: 'string',
-            description: '完整任务指令，会**原样**成为那条任务的 prompt（不是标题）。写清目标、范围与验收标准；上限 4000 字。',
+            description: '完整任务指令，会**原样**成为那条任务的 prompt（不是标题）。写清目标、范围与验收标准；'
+              + '可粘整段报错日志 / 需求原文（上限 10 万字），但一次只讲一件事 —— 拆成多条各自更清楚。',
           },
           project_path: {
             type: 'string',

@@ -24,8 +24,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { resolveDispatchPrompt, normalizeOrchestrator } from './orchestratorStore.js';
-import { MAX_DEFAULT_PROMPT_CHARS } from './shared.js';
+import { resolveDispatchPrompt, normalizeOrchestrator, withInstructionPreview } from './orchestratorStore.js';
+import { MAX_DEFAULT_PROMPT_CHARS, INSTRUCTION_PREVIEW_CHARS } from './shared.js';
 
 /** 造一份最小可用的编排状态（字段与 normalizeOrchestrator 的输出对齐） */
 function stateWith({ defaultPrompt = '', projectPrompts = {} } = {}) {
@@ -156,4 +156,49 @@ test('normalizeOrchestrator：指令的 promptSource 只认白名单，脏值归
     ],
   });
   assert.deepEqual(s.instructions.map(i => i.promptSource), ['both', 'global', '', '']);
+});
+
+// ── 指令流水的「下发预览」截断（2026-09-29）────────────────────────────
+//
+// 指令上限从 4000 放宽到 100000 之后，唯一会先崩的是**5s 轮询**：
+// /api/workbench/orchestrator 每轮下发 state.instructions 整份（200 条上限），
+// 不截就是 200 × 100000 = 20MB 一轮。
+//
+// 关键在"截哪一份"：落盘那份（orchestrator.json）与任务正文（task.desc）必须完整 ——
+// 指令流水的意义就是"我说过什么"能被翻到，而 Agent 侧的真相源清单指着那个文件。
+// 所以这里守的是"只截下发、且如实标出被截过"。
+
+test('withInstructionPreview：超长正文截到预览上限并标出已截断', () => {
+  const long = 'x'.repeat(INSTRUCTION_PREVIEW_CHARS + 500);
+  const r = withInstructionPreview({ id: 'a', text: long, status: 'accepted' });
+  assert.equal(r.text.length, INSTRUCTION_PREVIEW_CHARS);
+  assert.equal(r.textTruncated, true);
+  // 其余字段一个都不能丢：前端要靠 status / projectPath / targetSource 渲染这行
+  assert.equal(r.id, 'a');
+  assert.equal(r.status, 'accepted');
+});
+
+test('withInstructionPreview：没超长时原样返回，且不误标截断', () => {
+  const short = '一句话指令';
+  const r = withInstructionPreview({ id: 'a', text: short });
+  assert.equal(r.text, short);
+  assert.equal(r.textTruncated, false);
+  // 恰好等于上限不算超（截断口是 >）
+  const atLimit = withInstructionPreview({ id: 'b', text: 'y'.repeat(INSTRUCTION_PREVIEW_CHARS) });
+  assert.equal(atLimit.textTruncated, false);
+  assert.equal(atLimit.text.length, INSTRUCTION_PREVIEW_CHARS);
+});
+
+test('withInstructionPreview：不改传入的记录（落盘那份必须还是完整的）', () => {
+  const long = 'z'.repeat(INSTRUCTION_PREVIEW_CHARS + 10);
+  const original = { id: 'a', text: long };
+  withInstructionPreview(original);
+  assert.equal(original.text.length, INSTRUCTION_PREVIEW_CHARS + 10, '截断只发生在返回的新对象上');
+});
+
+test('withInstructionPreview：脏输入不炸（缺 text / null / 非对象）', () => {
+  assert.deepEqual(withInstructionPreview({ id: 'a' }), { id: 'a', text: '', textTruncated: false });
+  assert.equal(withInstructionPreview(null).text, '');
+  assert.equal(withInstructionPreview(undefined).text, '');
+  assert.equal(withInstructionPreview({ text: 123 }).text, '');
 });

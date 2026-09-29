@@ -73,6 +73,14 @@ const props = defineProps<{
   reportIntervalMs?: number
   /** 正在生成一份报告（手动触发期间） */
   generatingReport?: boolean
+  /**
+   * 指令正文上限（字符），**由父组件从服务端状态透传**。
+   *
+   * 为什么不在组件里写死：派发校验在服务端（dispatchInstruction.js），
+   * 两边各写一份必然漂开，漂开的表现是"界面说还有余量、点下去服务端 400"。
+   * 缺省值只在"父组件还没拿到状态"的那一瞬间起作用（DEFAULT 兜底由父组件给）。
+   */
+  maxInstructionChars?: number
 }>()
 
 const emit = defineEmits<{
@@ -103,6 +111,7 @@ const emit = defineEmits<{
   }]
 }>()
 
+// 指令正文草稿。**派发成功后才清**（见 clearDraft）—— 失败时留着让用户改一改再发。
 const draft = ref('')
 const autoRun = ref(true)
 /**
@@ -190,7 +199,16 @@ function onRemoveAttachment(att: Attachment) { removeAttachment(attachTarget.val
  * 派发失败（项目目录不存在等）时暂存文件还在，清掉只会让用户重贴一遍。
  */
 function clearAttachments() { draftAttachments.value = [] }
-defineExpose({ clearAttachments })
+
+/**
+ * 清空指令正文草稿。**由父组件在派发成功后调用**，与 clearAttachments 同一口径。
+ *
+ * 为什么不在 send() 里顺手清：失败时（超长 / 目录不存在 / 落点判不出）正文必须留着
+ * 让用户改一改再发。清空是"成功"的一部分，不是"点了按钮"的一部分。
+ */
+function clearDraft() { draft.value = '' }
+
+defineExpose({ clearAttachments, clearDraft })
 
 // ── 默认提示词：这里只负责"显示会带上什么"与"这次带不带" ──────────────
 // 提示词正文一律由服务端在派发时解析后写进任务（resolveDispatchPrompt），
@@ -227,10 +245,25 @@ const promptStateLabel = computed(() => {
   return $t('@WORKBENCH:未设置')
 })
 
+// ── 字数：上限以服务端为准，本地只做提前提醒 ──────────────────────────
+//
+// 为什么不在这里直接拦：上限归服务端定（派发校验在 dispatchInstruction.js），
+// 前端再写一份数字必然漂开，漂开的表现是"界面显示还有余量、点下去服务端 400"。
+// 所以这里只用它做**视觉提醒 + 禁用按钮**，真正的闸门始终在服务端。
+const draftChars = computed(() => draft.value.trim().length)
+// 兜底上限：父组件还没把服务端状态传下来时（首帧）用它，别让计数器显示成 0。
+// 与 useOrchestrator 的 DEFAULT_MAX_INSTRUCTION_CHARS 同值 —— 服务端一下发就被覆盖。
+const charLimit = computed(() => props.maxInstructionChars || 100000)
+// 超过上限：按钮禁用 + 计数器转红。差一点点（≥90%）也转黄，给个"快满了"的信号。
+const overLimit = computed(() => draftChars.value > charLimit.value)
+const nearLimit = computed(
+  () => !overLimit.value && draftChars.value >= charLimit.value * 0.9
+)
+
 // 落点由服务端判断，前端不为"能不能派发"前置任何目标检查 ——
 // 判断不出目标时服务端会退到默认项目，真没有可用项目才回 400 并给出说明
 const canSend = computed(
-  () => draft.value.trim().length > 0 && !props.dispatching && !attachBusy.value
+  () => draft.value.trim().length > 0 && !props.dispatching && !attachBusy.value && !overLimit.value
 )
 function send() {
   if (!canSend.value) return
@@ -243,7 +276,14 @@ function send() {
     useDefaultPrompt: useDefaultPrompt.value,
     executor: selectedExecutor.value,
   })
-  draft.value = ''
+  // ⚠️ 这里**不清空** draft。
+  //
+  // 2026-09-29 修：原来 emit 之后立刻 draft.value = ''，于是服务端 400
+  // （超长 / 目录不存在 / 落点判不出）时正文已经被抹掉了 —— 用户粘了一大段，
+  // 点一下全没了，还得重新粘一遍，而超长恰恰是最容易失败的那一类。
+  //
+  // 现在改成"派发成功才清"，与草稿附件同一套口径（clearAttachments 也是由父组件
+  // 在拿到结果后调用）。代价是失败时草稿留在框里，这正是想要的：改一改还能再发。
 }
 
 /**
@@ -664,6 +704,7 @@ const gitSummary = computed(() => {
       <textarea
         ref="inputRef"
         class="oc__input"
+        :class="{ 'is-over': overLimit }"
         v-model="draft"
         :style="inputStyle"
         rows="4"
@@ -688,6 +729,16 @@ const gitSummary = computed(() => {
         @dragenter.prevent="attachDragging = true"
         @dragleave="attachDragging = false"
       />
+      <!--
+        字数：单独占输入框下方一行，不挤底部那一排按钮。
+        空草稿时不渲染（"0 / 100000" 是噪音），接近上限转黄、超了转红 ——
+        目的是让"粘太长发不出去"在**点之前**看得见，而不是点完等服务端 400 才知道
+        （而超长恰恰是最容易失败的那一类，必须能改一改再发）。
+      -->
+      <p v-if="draftChars > 0" class="oc__count" :class="{ 'is-warn': nearLimit, 'is-over': overLimit }">
+        <span v-if="overLimit">{{ $t('@WORKBENCH:超出上限 {max} 字，请精简后再派发（超出的部分不会被发出）', { max: charLimit }) }}</span>
+        <span v-else>{{ draftChars }} / {{ charLimit }}</span>
+      </p>
       <div class="oc__compose-foot">
         <button
           type="button"
@@ -1212,6 +1263,22 @@ const gitSummary = computed(() => {
   box-shadow: var(--input-shadow-focus);
 }
 .oc__input::placeholder { color: var(--text-meta); }
+/* 超上限：边框转红，和下面那行字一起说"这条现在发不出去"。
+   只改边框色，不动 focus 的 box-shadow —— 聚焦时仍然要看得见焦点环。 */
+.oc__input.is-over {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 1px var(--color-danger);
+}
+/* 字数行：右对齐贴在输入框下沿，tabular-nums 让数字跳动时不左右晃 */
+.oc__count {
+  margin: 5px 2px 0;
+  text-align: right;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-meta);
+}
+.oc__count.is-warn { color: var(--color-warning); }
+.oc__count.is-over { color: var(--color-danger); }
 .oc__compose-foot {
   display: flex;
   align-items: center;

@@ -38,6 +38,7 @@ import {
   genId,
   TASKS_FILE,
   IMAGES_DIR,
+  MAX_INSTRUCTION_CHARS,
 } from './shared.js';
 import { stagingPath, mimeForExt } from './attachmentUtils.js';
 import { readOrchestrator, resolveDispatchPrompt, appendInstruction } from './orchestratorStore.js';
@@ -108,7 +109,11 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
   async function dispatchInstruction(payload = {}) {
     const text = typeof payload.text === 'string' ? payload.text.trim() : '';
     if (!text) throw new HttpError(400, '指令内容不能为空');
-    if (text.length > 4000) throw new HttpError(400, '指令过长（上限 4000 字）');
+    // 上限来自 shared.js，不在这里写死数字：写死过一次（4000），前端提示、
+    // 工具描述、这条校验各说各的，改的时候漏一处就变成"界面说能发、后端说不能"。
+    if (text.length > MAX_INSTRUCTION_CHARS) {
+      throw new HttpError(400, `指令过长（上限 ${MAX_INSTRUCTION_CHARS} 字）`);
+    }
 
     const fallbackPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
     const bodyPath = typeof payload.projectPath === 'string' ? payload.projectPath.trim() : '';

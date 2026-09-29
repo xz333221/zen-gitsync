@@ -39,6 +39,7 @@ import {
   ORCHESTRATOR_REPORTS_FILE,
   MAX_ORCHESTRATOR_INSTRUCTIONS,
   MAX_DEFAULT_PROMPT_CHARS,
+  INSTRUCTION_PREVIEW_CHARS,
   MAX_PROGRESS_REPORTS,
   PROGRESS_REPORT_INTERVALS_MS,
   DEFAULT_PROGRESS_REPORT_INTERVAL_MS,
@@ -243,6 +244,27 @@ export function resolveDispatchPrompt(state, projectPath) {
   const text = [globalText, projectText].filter(Boolean).join('\n\n').slice(0, MAX_DEFAULT_PROMPT_CHARS);
   const source = globalText && projectText ? 'both' : (globalText ? 'global' : (projectText ? 'project' : ''));
   return { text, source };
+}
+
+/**
+ * 把一条指令流水压成「可以每 5 秒下发」的形状：正文只留开头 INSTRUCTION_PREVIEW_CHARS 字。
+ *
+ * 为什么需要它：指令正文上限已放宽到十万字（MAX_INSTRUCTION_CHARS），而
+ * /api/workbench/orchestrator 是 5s 轮询、下发 state.instructions 整份（200 条）。
+ * 不截就是 200 × 100000 = 20MB 一轮。
+ *
+ * 只压**下发**：落盘那份（orchestrator.json）与任务正文（task.desc）都保持完整，
+ * 指令流水的意义就是"我说过什么"能被翻到。附 textTruncated 让前端能如实说"已截断"，
+ * 而不是让用户以为当初就只写了这么多。
+ *
+ * @param {object} it orchestratorStore 的指令记录
+ * @returns {object} 新对象（不改原记录 —— 落盘那份必须还是完整的）
+ */
+export function withInstructionPreview(it) {
+  const src = it && typeof it === 'object' ? it : {};
+  const text = typeof src.text === 'string' ? src.text : '';
+  const truncated = text.length > INSTRUCTION_PREVIEW_CHARS;
+  return { ...src, text: truncated ? text.slice(0, INSTRUCTION_PREVIEW_CHARS) : text, textTruncated: truncated };
 }
 
 /** 追加一条人类干预指令记录，返回写入后的那条记录 */
@@ -508,12 +530,18 @@ export function buildActivityFeed({ jobs = [], tasks = [], instructions = [] } =
 
   for (const it of Array.isArray(instructions) ? instructions : []) {
     if (!it || !it.id) continue;
+    // 正文只带**开头一段**进活动流：这条流跟着 5s 轮询下发（截断口径见
+    // withInstructionPreview）。落盘那份不截 —— 完整原文在 orchestrator.json 与
+    // task.desc 里，要全文的人去那两个地方拿。
+    const preview = withInstructionPreview(it);
     rows.push({
       id: `ins:${it.id}`,
       kind: 'user',
       at: it.at,
       instructionId: it.id,
-      text: it.text || '',
+      text: preview.text,
+      // 前端据此显示"已截断"，而不是让人以为指令本来就那么短
+      textTruncated: preview.textTruncated,
       taskId: it.taskId || null,
       instructionStatus: it.status || 'created',
       reason: it.reason || '',

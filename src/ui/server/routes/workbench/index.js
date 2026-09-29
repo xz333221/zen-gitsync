@@ -48,6 +48,8 @@ import {
   IMAGES_DIR,
   MAX_IMAGE_BYTES,
   MAX_DEFAULT_PROMPT_CHARS,
+  MAX_INSTRUCTION_CHARS,
+  INSTRUCTION_PREVIEW_CHARS,
   readJson,
   writeJson,
   nowIso,
@@ -124,6 +126,7 @@ import {
   claimReportSlot,
   readReports,
   appendReport,
+  withInstructionPreview,
 } from './orchestratorStore.js';
 import {
   buildRunningFacts,
@@ -1229,7 +1232,14 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
       success: true,
       active: state.active,
       updatedAt: state.updatedAt,
-      instructions: state.instructions,
+      // ⚠️ 这个接口是 5s 轮询的。指令正文在**下发这一份**里被截到
+      // INSTRUCTION_PREVIEW_CHARS（落盘那份不截，见 shared.js 的注释）。
+      // 指令上限放宽到十万字之后不截就是 200 × 100000 = 20MB 一轮。
+      instructions: state.instructions.map(withInstructionPreview),
+      // 指令正文上限跟着状态一起下发：前端要显示"还剩多少字"就得知道这个数，
+      // 而它归服务端定（派发校验也在这儿）。前端不再自己写一份数字 ——
+      // 之前 maxlength 那种"界面说能发、后端 400"的分叉就是这么来的。
+      maxInstructionChars: MAX_INSTRUCTION_CHARS,
       // 默认提示词跟着这份状态一起下发：控制台要拿它显示"当前会附带什么"，
       // 设置弹窗打开时也不必再单独取一次（单条上限 8000 字，体积可控）
       defaultPrompt: state.defaultPrompt,

@@ -60,6 +60,7 @@ const {
 } = useWorkbenchProjects()
 const {
   active, activity, running, dispatching, togglingSchedule,
+  maxInstructionChars,
   defaultPrompt, projectPrompts,
   reports, generatingReport, reportIntervalMs,
   loadOrchestrator, setSchedulingActive, dispatch,
@@ -489,9 +490,13 @@ async function onDispatch(payload: {
     useDefaultPrompt: payload.useDefaultPrompt,
     executor: payload.executor,
   })
+  // 失败（超长 / 目录不存在 / 落点判不出 / 网络错误）时**什么都不清**：
+  // 正文与附件都留在输入框里让用户改一改再发。2026-09-29 之前正文是在 send()
+  // 里 emit 完就清的，失败一次就白粘一遍。
   if (!result) return
   // 成功即可清：服务端此刻已把暂存文件搬进 `_task-{id}/`，前端留着这份记录只会指向失效路径
   consoleRef.value?.clearAttachments()
+  consoleRef.value?.clearDraft()
   ElMessage.success(
     result.ran
       ? $t('@WORKBENCH:已派发并开始执行')
@@ -682,6 +687,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
         :reports="reports"
         :report-interval-ms="reportIntervalMs"
         :generating-report="generatingReport"
+        :max-instruction-chars="maxInstructionChars"
         @toggle-collapse="toggleRight"
         @toggle-schedule="onToggleSchedule"
         @dispatch="onDispatch"

@@ -2456,6 +2456,8 @@ export default {
   '@WORKBENCH:派发中…': '派发中…',
   '@WORKBENCH:指令会在「{name}」下新建一个任务；Enter 派发，Shift+Enter 换行': '指令会在「{name}」下新建一个任务；Enter 派发，Shift+Enter 换行',
   '@WORKBENCH:指令落到哪个项目由主 Agent 判断；Enter 派发，Shift+Enter 换行': '指令落到哪个项目由主 Agent 判断；Enter 派发，Shift+Enter 换行',
+  // 指令字数计数器（2026-09-29：上限从 4000 放宽到 100000，顺带让"快满了"可见）
+  '@WORKBENCH:超出上限 {max} 字，请精简后再派发（超出的部分不会被发出）': '超出上限 {max} 字，请精简后再派发（超出的部分不会被发出）',
   // ── 派发默认提示词（全局 / 各项目）──────────────────────────────
   '@WORKBENCH:默认提示词': '默认提示词',
   '@WORKBENCH:默认提示词设置': '默认提示词设置',

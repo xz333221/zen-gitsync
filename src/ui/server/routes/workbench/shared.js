@@ -102,6 +102,31 @@ export const TRUTH_FILES = {
 // 就不会出现"派发时写进去了、回头在编辑器里一保存又被悄悄截掉"。
 export const MAX_DEFAULT_PROMPT_CHARS = 4000;
 
+// 派发指令正文长度上限。
+//
+// 2026-09-29 从 4000 放宽到 100000：执行侧走的是 claude / opencode / codex，
+// 上下文窗口早已是百万级，而 prompt 是**经 stdin 喂进去**的（见 taskRunner 的
+// launchXxxRun），不受 Windows 命令行 32K 上限约束。4000 是模型上下文还小的时候
+// 定的，现在它卡住的不是模型，是"粘一份完整报错日志 / 一整段需求"这种最普通的用法。
+//
+// 十万字不是"随便多大都行"，它同时要落在三份存储里（见下方各自的注释）：
+//   · tasks.json 的 task.desc —— 一次执行真正用的正文
+//   · jobs.json 的 job.prompt —— 保留策略 500 条 / 256MB 兜底
+//   · orchestrator.json 的指令流水 —— 200 条上限
+// 真正会让界面卡住的不是这三份，而是**轮询下发**（INSTRUCTION_PREVIEW_CHARS 那道口子）。
+export const MAX_INSTRUCTION_CHARS = 100000;
+
+// 指令流水进 5s 轮询 / 活动流时的正文上限。
+//
+// 为什么单独一道：/api/workbench/orchestrator 每 5 秒把 state.instructions 与活动流
+// 整份下发（MAX_ORCHESTRATOR_INSTRUCTIONS = 200 条）。指令放宽到十万字之后，
+// 不截就是 200 × 100000 = 20MB 一轮 —— 界面先卡住，而"卡住"和"上限"毫无关系。
+//
+// 只截**下发**这一份，不截落盘：流水存在的意义就是"我说过什么"能被翻到，
+// 落盘那份必须完整（Agent 侧的真相源清单也指着 orchestrator.json）。
+// 任务正文本身更不截 —— 完整正文在 task.desc 里，流水这条只是同一句话的旁证。
+export const INSTRUCTION_PREVIEW_CHARS = 2000;
+
 // 子项目识别 / 文件扫描时需要跳过的目录
 export const SKIP_DIRS = new Set([
   'node_modules', 'dist', 'build', '.next', '.nuxt', '__pycache__',
