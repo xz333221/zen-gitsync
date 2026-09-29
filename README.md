@@ -352,7 +352,7 @@ A full IDE-like editor (fourth icon in the activity bar) for browsing and editin
 | Monaco editor | Syntax highlighting for JS, TS, Vue, Python, Go, JSON, CSS, and more |
 | Markdown preview | Toggle between source and rendered preview for `.md` files |
 | HTML preview / browser | `.html` / `.htm` render in a sandboxed in-app iframe; right-click one in the file tree → **Open in Browser** to hand it to the system default browser instead |
-| Save | `Ctrl+S` to save; optional auto-save on focus loss |
+| Save | `Ctrl+S` to save; auto-save on focus loss is on by default (can be turned off in settings) |
 | Create | New file or folder inline in the file tree |
 | Rename / Delete | Rename or delete any file or folder directly from the tree |
 | Resizable sidebar | Drag the divider to adjust file tree width |
@@ -433,7 +433,7 @@ A dedicated view (robot icon in the activity bar) for chatting with the built-in
 | Git global settings | `user.name` / `user.email`, auto-set upstream, pull strategy, auto-prune remote branches, line-ending handling, the default branch for `git init` |
 | Commit settings | Standardised commit form, skip hooks (`--no-verify`), Enter-to-commit, auto-close the push modal, pull before push, auto-fill the default commit message |
 | Edit config | Raw JSON editor for the config, plus a button to open the file on disk |
-| Editor settings | Editor behaviour such as auto-save on focus loss |
+| Editor settings | Editor behaviour such as auto-save on focus loss (on by default) |
 
 ---
 
@@ -1009,7 +1009,7 @@ Activity Bar 第四个视图，在 GUI 内直接浏览并编辑项目文件：
 | Monaco 编辑器 | 支持 JS、TS、Vue、Python、Go、JSON、CSS 等语法高亮 |
 | Markdown 预览 | `.md` 文件可切换源码与渲染预览模式 |
 | HTML 预览 / 浏览器打开 | `.html` / `.htm` 在应用内沙箱 iframe 里渲染；在文件树里右键 → **在浏览器中打开**，改交系统默认浏览器渲染 |
-| 保存 | `Ctrl+S` 手动保存；可选失去焦点时自动保存 |
+| 保存 | `Ctrl+S` 手动保存；失去焦点时自动保存默认开启（可在设置里关闭） |
 | 新建 | 在文件树中内联创建文件或文件夹 |
 | 重命名 / 删除 | 在树中直接对文件或文件夹重命名、删除 |
 | 侧边栏调整 | 拖拽分隔条自由调整文件树宽度 |
@@ -1091,7 +1091,7 @@ Activity Bar 中的机器人图标视图，可直接在浏览器中与内置 AI 
 | Git 全局设置 | `user.name` / `user.email`、自动设置上游、拉取策略、自动清理远程分支、换行符处理、`git init` 默认分支 |
 | 提交设置 | 标准化提交、跳过钩子检查（`--no-verify`）、回车自动提交、Push 完成自动关闭、推送前拉取更新、自动填充默认提交信息 |
 | 编辑配置 | 直接编辑配置 JSON，并可打开系统配置文件 |
-| 编辑器设置 | 编辑器行为，例如失去焦点时自动保存 |
+| 编辑器设置 | 编辑器行为，例如失去焦点时自动保存（默认开启） |
 
 ---
 

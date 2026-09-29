@@ -270,7 +270,10 @@ export const useConfigStore = defineStore('config', () => {
       showTerminalSessions: true,
       splitPercent: 25,
     },
-    editorAutoSave: false,
+    // 默认开启：文件空间是"随手改完就走"的场景，忘了 Ctrl+S 会丢改动；
+    // 自动保存只写当前文件，且有未保存标记可见，代价远小于丢失编辑内容。
+    // 只影响没显式存过该项的配置 —— 用户手动关过就在 config.json 里留着 false，不会被这条默认值翻回去。
+    editorAutoSave: true,
     fileTreeAutoRefresh: true,
     mindmapDirs: [],
     mindmapDir: '',
