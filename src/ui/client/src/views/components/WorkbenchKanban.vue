@@ -652,8 +652,9 @@ function liveSummary(live: BoardTaskLive): string {
  * 又不比旁边的时间 / 工具次数抢眼。字号写在这一层（而不是给 img 写 px）是因为
  * TaskExecutorIcon 自带 `width: 1em`，父级字号定了它就跟着走。
  *
- * 那圈描边是给**彩色标压在深浅底上**用的：实心色块在浅色主题的白底上边界会糊掉，
- * 极淡的描边把轮廓提出来；currentColor 自动跟随主题，不用再开一套暗色覆盖。
+ * 图标不描边。早先给三个 icon 类加过一圈 1px currentColor 的描边（理由是彩色标压在
+ * 白底上边界会糊），但品牌标原图自带留白、底色也不浅，描边反倒像给图标套了个方框，
+ * 用户明确说不需要，已去掉。真遇到某张图在白底上糊，改图不改框。
  *
  * 两处各用各的类名（不共用一个 .kb-card__agent）：一个在活动区那一行里、一个在引文里，
  * 验证脚本按类名找元素时不会把两处搞混。
@@ -667,9 +668,6 @@ function liveSummary(live: BoardTaskLive): string {
   font-size: 12px;
   color: var(--text-tertiary);
 }
-.kb-card__live-agent-icon,
-.kb-card__quote-agent-icon,
-.kb-table__agent-icon { border: 1px solid currentColor; border-radius: 3px; }
 
 /* 活动区那一行是 flex 行（gap: 6px），图标不用自己留间距；引文与列表行不是 flex，靠外边距推 */
 .kb-card__live-agent,

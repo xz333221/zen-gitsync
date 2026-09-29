@@ -12,7 +12,7 @@
  *   C 认不出执行器时不画图标 —— 老记录没写 agent 字段，以及写了不等于瞎猜一个品牌
  *   D 从没跑过的任务：卡片上一个图标都没有
  *   E 列表视图同一行也有（同一批任务的两种画法，一边有一边没有会让人以为是两份数据）
- *   F 图标尺寸与文字同量级（12px，不是糊成一团也不是抢戏），且带一圈描边
+ *   F 图标尺寸与文字同量级（12px，不是糊成一团也不是抢戏），且不描边
  *   G 悬停提示是产品名（Claude Code / OpenCode / Codex），鼠标停上去能认清是哪个
  *   H 页面无 console / page 错误
  * F1–F3 是前置事实而不是 UI 契约：F1 fixture 与运行中后端的看板口径无漂移、
@@ -319,8 +319,8 @@ async function main() {
         const pxOf = (v) => parseFloat(String(v || '0'))
         check('F4 图标是 12px（三个品牌标都是实心小色块，跟 11px 正文字号走会糊）',
           pxOf(card.liveAgent.width) === 12, card.liveAgent.width)
-        check('F5 有一圈描边（浅色主题下彩色标压在白底上要靠它提轮廓）',
-          pxOf(card.liveAgent.border) === 1, card.liveAgent.border)
+        check('F5 图标不描边（品牌标原图自带留白，套一圈方框反而像图标坏了）',
+          pxOf(card.liveAgent.border) === 0, card.liveAgent.border)
       }
     }
 
