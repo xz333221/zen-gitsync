@@ -2670,6 +2670,7 @@ export default {
 
   // @ACTBAR: file path: components/ActivityBar.vue (追加: 智能体)
   '@ACTBAR:智能体': '智能体',
+  '@ACTBAR:个对话正在生成': '个对话正在生成',
   // @ACTBAR: file end (追加4)
 
   // @AGENT: file path: views/AgentView.vue

@@ -334,7 +334,7 @@ Configure commands or workflows to run automatically when a project is opened:
 | **Git** | Day-to-day staging, committing, pushing, history review | Per-project UI prefs (view mode, layout ratios) | Structured commit form, AI commit message, selection-scoped quick push |
 | **Editor** | Browse & edit project files without leaving the GUI | Open tabs, unsaved markers, recent files | Monaco editor with syntax highlighting, Markdown preview, file search |
 | **Workbench** | Multi-project board for dispatching and running agent tasks | Tasks, prompts, board layout, log retention | Kanban board, master-agent console, executor choice, live chat-style logs |
-| **Agent** | Chat with the built-in AI agent (web + CLI sessions) | Sessions, pending questions | Streaming answers, tool-call cards, Skill / MCP plaza |
+| **Agent** | Chat with the built-in AI agent (web + CLI sessions) | Sessions, pending questions | Streaming answers, tool-call cards, Skill / MCP plaza, rail badge counting the conversations still generating |
 
 **Console**, **System Monitor** and **Mindmap** are utility views on the same rail.
 
@@ -998,7 +998,7 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 | **Git** | 日常暂存、提交、推送、历史回看 | 每个项目的 UI 偏好（视图模式、布局比例） | 结构化提交表单、AI 生成提交信息、选择范围一键推送 |
 | **编辑器** | 不离开 GUI 浏览并编辑项目文件 | 打开的 tab、未保存标记、最近访问 | Monaco 编辑器带语法高亮、Markdown 预览、文件搜索 |
 | **工作台** | 多项目看板：派发并执行智能体任务 | 任务、提示词、看板布局、日志保留策略 | 看板视图、主 Agent 控制台、执行器选择、对话式实时日志 |
-| **智能体** | 与内置 AI 智能体对话（Web + CLI 会话） | 会话、待回答问题 | 流式回答、工具调用卡片、Skill / MCP 广场 |
+| **智能体** | 与内置 AI 智能体对话（Web + CLI 会话） | 会话、待回答问题 | 流式回答、工具调用卡片、Skill / MCP 广场、导航栏徽标显示仍在生成的对话数 |
 
 **控制台**、**系统监控**、**思维导图** 是同一导航栏上的辅助视图。
 

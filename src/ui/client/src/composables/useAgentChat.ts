@@ -15,6 +15,7 @@ import { extractThinkSegments } from 'zen-ai-chat-ui'
 import { parsePlanArgs, planProgress } from 'zen-ai-chat-ui'
 import { $t } from '@/lang/static'
 import { useConfigStore } from '@/stores/configStore'
+import { useAgentActivityStore } from '@/stores/agentActivity'
 import {
   getSelectedAgentEngine,
   setSelectedAgentEngine,
@@ -99,6 +100,10 @@ const MAX_LOG_DISPLAY = 64 * 1024
 
 // 新会话在服务端 meta 事件返回真实 sessionId 之前使用的本地临时 key 前缀
 const LOCAL_KEY_PREFIX = 'local-'
+
+// 每个 useAgentChat 实例一个序号：起流登记令牌里必须能区分是**哪个实例**起的
+// —— 四个入口各持一份独立的 runs，同一个 sessionId 完全可能同时在两处跑。
+let instanceSeed = 0
 
 // ── 后端消息 → ChatMessage 转换 ──────────────────────────
 // 把 OpenAI 格式的消息数组转换为 zen-ai-chat-ui 的 ChatMessage[]
@@ -275,6 +280,9 @@ interface SessionRun {
 // ── composable ───────────────────────────────────────────
 export function useAgentChat() {
   const configStore = useConfigStore()
+  // 全局活动计数（左侧机器人图标徽标读它）：本实例起的流在起流/收流时登记/销号
+  const agentActivity = useAgentActivityStore()
+  const instanceId = ++instanceSeed
 
   // 会话列表
   const sessions = ref<SessionMeta[]>([])
@@ -648,6 +656,12 @@ export function useAgentChat() {
 
     run.isStreaming = true
 
+    // 登记到全局活动计数（ActivityBar 左侧机器人图标上的数字读它）。
+    // 令牌 = 实例 + 目标会话 + 本会话第几轮：三者都带上才不会与另一实例 / 另一轮撞号；
+    // 下面 finally 里销号，重复销号幂等，被下一轮顶掉时也只减自己那一个。
+    const turnToken = `${instanceId}:${runKey}:${myNonce}`
+    agentActivity.begin(turnToken)
+
     // 当前 assistant 消息的工具调用列表（实时更新）
     let currentToolCalls: ToolCall[] = []
 
@@ -884,6 +898,9 @@ export function useAgentChat() {
         ElMessage.error(assistantMsg.error || $t('@AGENT:对话失败'))
       }
     } finally {
+      // 销号放在最前面、且不看 nonce：这一轮请求**确实**已经结束了（正常 / 出错 / 中止
+      // 都走到这里），而同一会话的新一轮有它自己的令牌，不该由我这一轮的收尾去动它。
+      agentActivity.end(turnToken)
       if (myNonce === run.nonce) {
         run.isStreaming = false
         run.pendingQuestion = null

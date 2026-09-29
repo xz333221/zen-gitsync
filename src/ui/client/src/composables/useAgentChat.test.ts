@@ -22,6 +22,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { ElMessage } from 'element-plus'
 import { useConfigStore } from '@/stores/configStore'
+import { useAgentActivityStore } from '@/stores/agentActivity'
 import { convertSessionToMessages, useAgentChat } from './useAgentChat'
 
 interface SseStream {
@@ -423,6 +424,78 @@ describe('useAgentChat parallel sessions', () => {
     expect(warn).toHaveBeenCalledTimes(1)
     expect(String(warn.mock.calls[0][0])).toContain('big.bin')
     warn.mockRestore()
+  })
+
+  // ── 全局活动计数（左侧机器人图标徽标的数据源）────────────────────
+  // 口径：此刻真的在流式输出的轮数，**跨实例**累计。切走视图后后台还在跑的那几轮
+  // 也算数 —— 那正是从别的视图切回时唯一能看见"它还忙"的信号。
+  test('起流登记、结束销号；后台轮次与别的实例都各算一份', async () => {
+    const activity = useAgentActivityStore()
+    expect(activity.runningCount).toBe(0)
+
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const p1 = chat.sendMessage('第一个问题')
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    await flush()
+    expect(activity.runningCount).toBe(1)
+
+    // 切到 B 再起一轮：A 在后台继续跑 → 两条
+    await chat.loadSession('B')
+    const p2 = chat.sendMessage('第二个问题')
+    await flush()
+    chatStreams[1].send({ type: 'meta', sessionId: 'B', title: '会话 B' })
+    await flush()
+    expect(activity.runningCount).toBe(2)
+
+    // 另一个 useAgentChat 实例（另一个入口）再起一轮 → 三条
+    const other = useAgentChat()
+    const p3 = other.sendMessage('第三个问题')
+    await flush()
+    chatStreams[2].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    await flush()
+    expect(activity.runningCount).toBe(3)
+
+    // 逐条收尾，每条只减自己那一个
+    chatStreams[0].send({ type: 'done', content: '好' })
+    chatStreams[0].close()
+    await p1
+    await flush()
+    expect(activity.runningCount).toBe(2)
+
+    chatStreams[1].send({ type: 'done', content: '好' })
+    chatStreams[1].close()
+    await p2
+    await flush()
+    expect(activity.runningCount).toBe(1)
+
+    chatStreams[2].send({ type: 'done', content: '好' })
+    chatStreams[2].close()
+    await p3
+    await flush()
+    expect(activity.runningCount).toBe(0)
+  })
+
+  test('被中止的轮次也要销号（不能留下永久幽灵计数）', async () => {
+    const activity = useAgentActivityStore()
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const p = chat.sendMessage('停下来')
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    await flush()
+    expect(activity.runningCount).toBe(1)
+
+    chat.stop()
+    chatStreams[0].error(new DOMException('aborted', 'AbortError'))
+    await p
+    await flush()
+    expect(activity.runningCount).toBe(0)
   })
 })
 

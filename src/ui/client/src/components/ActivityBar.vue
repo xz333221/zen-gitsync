@@ -18,6 +18,7 @@ import { $t } from '@/lang/static'
 import { ElTooltip } from 'element-plus'
 import { computed } from 'vue'
 import { useWorkbenchStatusStore } from '@stores/workbenchStatus'
+import { useAgentActivityStore } from '@stores/agentActivity'
 import { useGitStore } from '@stores/gitStore'
 import { useEditorTabsStore } from '@stores/editorTabs'
 import { useTerminalSessionsStore } from '@stores/terminalSessions'
@@ -31,6 +32,9 @@ const emit = defineEmits<{
 }>()
 
 const wbStatus = useWorkbenchStatusStore()
+// 正在生成的 g ai 对话数（跨四个 useAgentChat 实例统计，见 stores/agentActivity.ts）。
+// 没有它的话，用户在别的视图里发起对话、或对话在后台继续跑时，左侧完全看不出它还在跑
+const agentStatus = useAgentActivityStore()
 const gitStore = useGitStore()
 const editorTabsStore = useEditorTabsStore()
 const terminalSessionsStore = useTerminalSessionsStore()
@@ -57,6 +61,13 @@ const uncommittedBadge = computed(() => {
 // 数值由 EditorView 通过 editorTabs store 同步。
 const editorDirtyBadge = computed(() => {
   const n = editorTabsStore.dirtyCount
+  return n > 99 ? '99+' : String(n)
+})
+
+// 正在生成的 g ai 对话数。口径是"此刻真的在流式输出的会话数"，
+// 包含切走视图后仍在后台跑的那几轮 —— 这正是从别的视图切回时唯一能看见的信号。
+const agentRunningBadge = computed(() => {
+  const n = agentStatus.runningCount
   return n > 99 ? '99+' : String(n)
 })
 
@@ -122,12 +133,16 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
     </el-tooltip>
 
     <!-- 智能体 -->
-    <el-tooltip :content="$t('@ACTBAR:智能体')" placement="right" :show-after="300">
+    <el-tooltip
+      :content="agentStatus.hasRunning ? `${$t('@ACTBAR:智能体')} · ${agentStatus.runningCount} ${$t('@ACTBAR:个对话正在生成')}` : $t('@ACTBAR:智能体')"
+      placement="right"
+      :show-after="300"
+    >
       <button
         class="activity-btn"
         :class="{ active: props.activeView === 'agent' }"
         @click="select('agent')"
-        :aria-label="$t('@ACTBAR:智能体')"
+        :aria-label="agentStatus.hasRunning ? `${$t('@ACTBAR:智能体')} · ${agentStatus.runningCount} ${$t('@ACTBAR:个对话正在生成')}` : $t('@ACTBAR:智能体')"
         :aria-pressed="props.activeView === 'agent'"
       >
         <!-- robot/bot.svg: 智能体图标 -->
@@ -138,6 +153,12 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
           <line x1="8" y1="16" x2="8" y2="16" />
           <line x1="16" y1="16" x2="16" y2="16" />
         </svg>
+        <span
+          v-if="agentStatus.hasRunning"
+          class="agent-running-badge"
+          :title="`${agentStatus.runningCount} ${$t('@ACTBAR:个对话正在生成')}`"
+          aria-hidden="true"
+        >{{ agentRunningBadge }}</span>
       </button>
     </el-tooltip>
 
@@ -447,6 +468,31 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   z-index: 1;
 }
 
+/* ── 智能体：正在生成的对话数 ───────────────────────────────────── */
+/* 几何与其余三个徽标一致；颜色用紫色（--color-info-light），
+   避开工作台绿(running)、控制台青(终端会话)、Git 蓝(未提交)、编辑器橙(未保存)四种。 */
+.agent-running-badge {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  line-height: 1;
+  color: #fff;
+  background: var(--color-info-light);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 0 0 2px var(--bg-container);
+  pointer-events: none;
+  animation: wb-badge-in var(--transition-base) var(--ease-spring);
+  z-index: 1;
+}
+
 /* 左侧指示条进入动画 */
 @keyframes actbar-indicator-in {
   from {
@@ -464,6 +510,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   .git-uncommitted-badge,
   .editor-dirty-badge,
   .console-sessions-badge,
+  .agent-running-badge,
   .activity-btn.active::before {
     animation: none;
   }

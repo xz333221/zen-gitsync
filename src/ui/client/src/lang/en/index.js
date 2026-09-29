@@ -2659,6 +2659,7 @@ export default {
 
   // @ACTBAR: file path: components/ActivityBar.vue (追加: 智能体)
   '@ACTBAR:智能体': 'Agent',
+  '@ACTBAR:个对话正在生成': 'conversations generating',
   // @ACTBAR: file end (追加4)
 
   // @AGENT: file path: views/AgentView.vue
