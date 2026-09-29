@@ -2219,13 +2219,15 @@ function stopPreviewResize() {
   background: transparent;
 }
 
+/* 只负责铺满面板 + 滚动。底色与文字色必须留给 flowdash-md-preview 的主题:
+   这个 class 是直接落在 MarkdownPreview 的根节点上的,而根节点自己就带 .md-preview,
+   `.preview-markdown[data-v-*]` 的特异性高于 `.md-preview`,一旦在这里写 background/color
+   就会把主题的底色盖成纯白 —— 与设置页的主题预览卡片对不上(暗色主题下尤其明显)。 */
 .preview-markdown {
   flex: 1;
   width: 100%;
   height: 100%;
   overflow: auto;
-  background: var(--bg-container, #ffffff);
-  color: var(--text-primary, var(--md-text-strong));
 }
 
 .preview-mindmap {
