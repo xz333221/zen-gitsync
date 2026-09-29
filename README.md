@@ -350,6 +350,7 @@ A full IDE-like editor (fourth icon in the activity bar) for browsing and editin
 | File search | Type in the sidebar search box to filter the tree (180 ms debounce); matched substrings are highlighted in node names; `Ctrl+F` / `Cmd+F` focuses the box; `Esc` clears the query or blurs the input |
 | Multi-tab editing | Open multiple files simultaneously; tabs show unsaved (●) indicator |
 | Workspace restore | The tree's expanded folders and the open tabs (their order plus which one is active) are remembered **per project** and put back on reload, and when you switch back to that project. The snapshot lives in `~/.zen-gitsync/config.json` under `ui.editorWorkspaceByProject`; only paths are stored — files are re-read from disk, so unsaved edits do not survive a reload, and files that no longer exist are skipped silently |
+| Sidebar width | Drag the divider to resize the file tree pane; unlike the workspace snapshot the width is **global** (one value for every project) and is stored in `~/.zen-gitsync/config.json` under `ui.editorSidebarWidth`, restored on reload. Clamped to 140–400px |
 | Monaco editor | Syntax highlighting for JS, TS, Vue, Python, Go, JSON, CSS, and more |
 | Markdown preview | Toggle between source and rendered preview for `.md` files |
 | HTML preview / browser | `.html` / `.htm` render in a sandboxed in-app iframe; right-click one in the file tree → **Open in Browser** to hand it to the system default browser instead |
@@ -1010,6 +1011,7 @@ Activity Bar 第四个视图，在 GUI 内直接浏览并编辑项目文件：
 | 文件搜索 | 在侧边栏搜索框中输入关键字过滤文件树（180ms 防抖），命中片段会在节点名中高亮；`Ctrl+F` / `Cmd+F` 聚焦搜索框，`Esc` 清空内容或失焦 |
 | 多标签页 | 同时打开多个文件，未保存文件显示 ● 标记 |
 | 工作区恢复 | **按项目**记住文件树展开了哪些目录、开了哪些标签（顺序 + 当前激活的那个），刷新页面或切回该项目时自动恢复；快照存在 `~/.zen-gitsync/config.json` 的 `ui.editorWorkspaceByProject`。只记路径 —— 文件按盘上最新内容重开，未保存的改动不跨会话保留，已被删除的文件静默跳过 |
+| 侧边栏宽度 | 拖拽分隔条调整文件树栏宽度；与工作区快照不同，宽度是**全局**一份（所有项目共用），存在 `~/.zen-gitsync/config.json` 的 `ui.editorSidebarWidth`，刷新后自动恢复，取值夹在 140–400px |
 | Monaco 编辑器 | 支持 JS、TS、Vue、Python、Go、JSON、CSS 等语法高亮 |
 | Markdown 预览 | `.md` 文件可切换源码与渲染预览模式 |
 | HTML 预览 / 浏览器打开 | `.html` / `.htm` 在应用内沙箱 iframe 里渲染；在文件树里右键 → **在浏览器中打开**，改交系统默认浏览器渲染 |

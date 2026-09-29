@@ -155,6 +155,12 @@ export interface OrchestrationStep {
   userInputParams?: UserInputParam[]
 }
 
+// 文件空间左侧文件树栏的宽度范围（px）。拖拽时夹紧和读盘 sanitize 共用这一套边界，
+// 免得手改 config.json 塞进一个把编辑区挤没（或挤压成一条缝）的宽度。
+export const EDITOR_SIDEBAR_MIN_WIDTH = 140
+export const EDITOR_SIDEBAR_MAX_WIDTH = 400
+export const EDITOR_SIDEBAR_DEFAULT_WIDTH = 220
+
 export const useConfigStore = defineStore('config', () => {
   // 配置状态
   const defaultCommitMessage = ref('')
@@ -260,6 +266,9 @@ export const useConfigStore = defineStore('config', () => {
     editorAutoSave: boolean
     /** 文件空间的文件树是否定时静默刷新（捕获编辑器/外部工具产生的改动） */
     fileTreeAutoRefresh: boolean
+    /** 文件空间左侧文件树栏的宽度（px）。**全局一份**，不按项目隔离 ——
+     *  面板宽度是界面偏好，切项目时跳一下宽度只会让人以为没记住。 */
+    editorSidebarWidth: number
     /** 思维导图目录列表（多根聚合，每个目录只列本级 *.mindmap.json） */
     mindmapDirs: string[]
     /** @deprecated 旧的单目录字段，仅作为迁移输入保留，不再写入 */
@@ -295,6 +304,7 @@ export const useConfigStore = defineStore('config', () => {
     // 只影响没显式存过该项的配置 —— 用户手动关过就在 config.json 里留着 false，不会被这条默认值翻回去。
     editorAutoSave: true,
     fileTreeAutoRefresh: true,
+    editorSidebarWidth: EDITOR_SIDEBAR_DEFAULT_WIDTH,
     mindmapDirs: [],
     mindmapDir: '',
     headerToolsHidden: [],
@@ -697,6 +707,11 @@ export const useConfigStore = defineStore('config', () => {
           fileTreeAutoRefresh: typeof configData.ui.fileTreeAutoRefresh === 'boolean'
             ? configData.ui.fileTreeAutoRefresh
             : defaultUiSettings.fileTreeAutoRefresh,
+          // 左栏宽度：非数字/越界都夹回合法区间。旧配置里没这一项时落回默认宽度，
+          // 正好等于升级前写死的 220。
+          editorSidebarWidth: Number.isFinite(Number(configData.ui.editorSidebarWidth))
+            ? Math.min(EDITOR_SIDEBAR_MAX_WIDTH, Math.max(EDITOR_SIDEBAR_MIN_WIDTH, Number(configData.ui.editorSidebarWidth)))
+            : defaultUiSettings.editorSidebarWidth,
           mindmapDirs,
           mindmapDir: legacyMindmapDir,
           headerToolsHidden: Array.isArray(configData.ui.headerToolsHidden)
@@ -844,6 +859,18 @@ export const useConfigStore = defineStore('config', () => {
       { aiDiffSummaryByProject: { [cwd]: enabled } },
       { immediate: true },
     )
+  }
+
+  /**
+   * 记住文件空间左侧文件树栏的宽度。
+   * 拖拽结束时调一次即可（不是每帧都写）—— 拖拽过程中宽度只活在 EditorView 的本地 ref 里，
+   * 落盘的是松手那一刻的终值。
+   */
+  async function setEditorSidebarWidth(width: number) {
+    if (!Number.isFinite(width)) return
+    const clamped = Math.min(EDITOR_SIDEBAR_MAX_WIDTH, Math.max(EDITOR_SIDEBAR_MIN_WIDTH, width))
+    ui.value.editorSidebarWidth = clamped
+    await saveUiSettings({ editorSidebarWidth: clamped })
   }
 
   /**
@@ -1595,6 +1622,7 @@ export const useConfigStore = defineStore('config', () => {
     saveGeneralSettings,
     saveUiSettings,
     setAiDiffSummaryEnabled,
+    setEditorSidebarWidth,
     saveEditorWorkspace,
     getEditorWorkspace,
     setMarkdownTheme,

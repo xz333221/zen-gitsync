@@ -50,6 +50,7 @@
     "verify:wb-editor-persist": "node scripts/verify-workbench-editor-persist.cjs",
     "verify:wb-open-scroll-bottom": "node scripts/verify-workbench-open-scroll-bottom.cjs",
     "verify:editor-preview-scroll": "node scripts/verify-editor-preview-scroll.cjs",
+    "verify:editor-sidebar-width": "node scripts/verify-editor-sidebar-width.cjs",
     "verify:wb-copy-folder-name": "node scripts/verify-copy-folder-name.cjs",
     "verify:repo-list": "node scripts/verify-repo-list.cjs",
     "e2e": "cd src/ui/client && npx playwright test",

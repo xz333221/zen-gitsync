@@ -18,7 +18,7 @@ import { $t } from '@/lang/static'
 import { ref, shallowRef, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElTooltip } from 'element-plus'
 import * as monaco from 'monaco-editor'
-import { useConfigStore } from '@/stores/configStore'
+import { useConfigStore, EDITOR_SIDEBAR_MIN_WIDTH, EDITOR_SIDEBAR_MAX_WIDTH } from '@/stores/configStore'
 import { useEditorTabsStore } from '@/stores/editorTabs'
 import { getLanguageByExt } from '@/utils/editorLang'
 import { getFileIconClass, getFolderIconClass } from '@/utils/fileIcon'
@@ -608,6 +608,10 @@ async function restoreWorkspace() {
       await new Promise(r => setTimeout(r, 50))
     }
     if (!configStore.isUiLoaded) return
+    // 左栏宽度也等这个时点才应用：ui 加载完之前 configStore.ui.editorSidebarWidth
+    // 还是默认值，早读等于把用户存的宽度又按回 220。
+    // 放在 snap 判空之前 —— 这个项目没存过工作区快照，但宽度是全局的，照样要恢复。
+    sidebarWidth.value = configStore.ui.editorSidebarWidth
     const snap = configStore.getEditorWorkspace()
     if (!snap) return
     workspaceRestoring = true
@@ -884,8 +888,10 @@ onMounted(() => window.addEventListener('keydown', handleKeydown))
 onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
 
 // ── 拖拽调整左侧宽度 ────────────────────────────────────
+// 宽度是**全局持久化**的（configStore.ui.editorSidebarWidth，落盘到 config.json）。
+// 拖拽过程中只改本地 ref，松手时才写一次，避免每帧都发一次配置写请求。
 const containerRef = ref<HTMLElement | null>(null)
-const sidebarWidth = ref(220)
+const sidebarWidth = ref(configStore.ui.editorSidebarWidth)
 let isResizing = false
 let resizeStartX = 0
 let resizeStartW = 0
@@ -902,13 +908,17 @@ function startSidebarResize(e: MouseEvent) {
 function onSidebarResize(e: MouseEvent) {
   if (!isResizing) return
   const delta = e.clientX - resizeStartX
-  sidebarWidth.value = Math.max(140, Math.min(400, resizeStartW + delta))
+  sidebarWidth.value = Math.max(EDITOR_SIDEBAR_MIN_WIDTH, Math.min(EDITOR_SIDEBAR_MAX_WIDTH, resizeStartW + delta))
 }
 
 function stopSidebarResize() {
   isResizing = false
   document.removeEventListener('mousemove', onSidebarResize)
   document.removeEventListener('mouseup', stopSidebarResize)
+  // 只在值真变了时写：单纯点一下分隔条（mousedown 后没动）不该产生一次配置写
+  if (sidebarWidth.value !== configStore.ui.editorSidebarWidth) {
+    configStore.setEditorSidebarWidth(sidebarWidth.value)
+  }
 }
 
 // ── 文件图标 ──────────────────────────────────────
