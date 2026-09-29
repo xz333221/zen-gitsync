@@ -45,6 +45,7 @@ import {
 } from './shared.js';
 import { buildAttachmentBlock } from './pdfText.js';
 import { composePromptBody } from './promptParts.js';
+import { buildMemoryPointerBlock } from './memoryContext.js';
 import {
   jobs,
   cancelledJobs,
@@ -52,6 +53,11 @@ import {
   flushJobsSaveNow,
   scheduleActiveJobsSave,
 } from './jobStore.js';
+// MEMORY_DIR 在 paths.js（路径唯一真相源），projectIndexFile 在 memory/store.js ——
+// 两个模块各取一处，别图省事都从 store.js 拿：store.js 没有 re-export MEMORY_DIR，
+// 混着写会在**链接期**就炸（node --check 查不出来，得靠动态 import 或真跑单测）。
+import { MEMORY_DIR } from '../../../../paths.js';
+import { projectIndexFile } from '../../../../memory/store.js';
 
 // ── 运行环境上下文的提供者 ────────────────────────────────────────────────
 // 为什么用注入而不是在这里直接读：拼这份上下文要「最近目录」（在 configManager 上），
@@ -82,6 +88,23 @@ async function resolveEnvContext(repoPath) {
     return typeof block === 'string' ? block : '';
   } catch (err) {
     logger.warn(`[workbench] 运行环境上下文注入失败，本次跳过: ${err.message}`);
+    return '';
+  }
+}
+
+/**
+ * 取本仓库的记忆索引路径。
+ *
+ * **只读不建** —— 与 resolveEnvContext 同一原则：拼 prompt 是锦上添花，
+ * 记忆库不存在就只给全局那层，让 Agent 收尾时自己建（它有文件工具，也有那个动机）。
+ * 在这里建目录等于"读一次就产生一次副作用"，派发任务不该有这种语义。
+ */
+function resolveProjectMemoryIndex(repoPath) {
+  if (!repoPath) return '';
+  try {
+    return projectIndexFile(repoPath);
+  } catch (err) {
+    logger.warn(`[workbench] 记忆索引路径解析失败，本次不注入项目层: ${err.message}`);
     return '';
   }
 }
@@ -885,13 +908,33 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
     }
   }
 
-  // ── 运行环境上下文：项目清单 + 看板概览 + 真相源文件路径 ──
-  // 拼在**最前面**、任务正文压尾：
-  // 越靠后离模型的注意力中心越近，用户真正要办的那句话必须在最后一屏。
-  // task.envContext === false 可以单任务关掉（默认开 —— 老任务不迁移也一并受益）。
+  // ── 两块「背景」都拼在最前面，任务正文压尾 ──
+  // 顺序刻意是 [环境上下文 → 记忆指针 → 任务正文]：
+  //   · 越靠后离模型的注意力中心越近，**用户真正要办的那句话必须在最后一屏**；
+  //   · 记忆块夹在两块之间，不能放末尾 —— 放末尾等于把"背景"讲成了"当前任务"，
+  //     Agent 会以为这轮用户要求它去整理记忆库。
+  // 两块都可用 `task.<key> === false` 单任务关掉（默认开 —— 老任务不迁移也一并受益）。
+  const prefixBlocks = [];
+
   if (task.envContext !== false) {
     const envBlock = await resolveEnvContext(repoPath);
-    if (envBlock) prompt = `${envBlock}\n\n---\n\n${prompt}`;
+    if (envBlock) prefixBlocks.push(envBlock);
+  }
+
+  if (task.memoryContext !== false) {
+    const memBlock = buildMemoryPointerBlock({
+      memoryDir: MEMORY_DIR,
+      // 首次在某仓库干活时目录还不存在 —— 这时不给项目路径，块里会明说
+      // "本项目还没有条目"，Agent 收尾时自己建。
+      projectIndexFile: resolveProjectMemoryIndex(repoPath),
+      // 续聊轮不再重复讲捕获纪律：同一场对话里讲第二遍纯属噪音。
+      capture: !resumeSessionId,
+    }).block;
+    if (memBlock) prefixBlocks.push(memBlock);
+  }
+
+  if (prefixBlocks.length > 0) {
+    prompt = `${prefixBlocks.join('\n\n---\n\n')}\n\n---\n\n${prompt}`;
   }
 
   const jobId = genId();

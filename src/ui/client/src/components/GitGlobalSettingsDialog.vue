@@ -72,6 +72,15 @@
         >
           <span>{{ $t('@42BB9:编辑器设置') }}</span>
         </div>
+        <!-- 记忆库：懒加载 —— 点进来才拉，否则打开设置弹窗就多一次无用请求。
+             与「编辑配置」tab 同一套约定（见 onClickConfigTab）。 -->
+        <div
+          class="tab-item"
+          :class="{ active: activeTab === 'memory' }"
+          @click="onClickMemoryTab"
+        >
+          <span>{{ $t('@42BB9:记忆库') }}</span>
+        </div>
       </div>
 
       <!-- 右侧内容区域 -->
@@ -689,6 +698,24 @@
             </div>
           </div>
         </div>
+
+        <!-- 记忆库面板：浏览 / 展开看正文 / 单条与批量删除。
+             没有需要「保存」的设置项（全是即时操作），所以刻意不给 hasChanges 加分支 ——
+             那样 footer 的「保存设置」按钮天然不出现（v-if="hasChanges"），行为是对的。
+             v-show 是本文件所有 panel 的既有约定；数据靠 onClickMemoryTab 懒加载。 -->
+        <div v-show="activeTab === 'memory'" class="settings-panel">
+          <div class="info-section">
+            <div class="info-card">
+              <div class="info-content">
+                <p class="info-title">{{ $t('@42BB9:跨轮记忆') }}</p>
+                <p class="info-desc">
+                  {{ $t('@42BB9:智能体在派发任务时会把这里当成"经验库"：开工前查、收尾时按四问自检记一条。') }}
+                </p>
+              </div>
+            </div>
+          </div>
+          <MemoryPanel ref="memoryPanelRef" />
+        </div>
       </div>
     </div>
     
@@ -728,6 +755,7 @@ import {
   type NotifyPermission
 } from '@/utils/taskNotify'
 import TaskExecutorIcon from './TaskExecutorIcon.vue'
+import MemoryPanel from './MemoryPanel.vue'
 import SvgIcon from './SvgIcon/index.vue'
 import { type SupportLocale } from '@/locales'
 import { AddModelForm } from 'ai-model-form/client'
@@ -780,7 +808,7 @@ async function onMarkdownThemeChange(value: string) {
   await configStore.setMarkdownTheme(value)
 }
 
-export type SettingsTab = 'general' | 'ai-models' | 'git' | 'commit' | 'config' | 'editor'
+export type SettingsTab = 'general' | 'ai-models' | 'git' | 'commit' | 'config' | 'editor' | 'memory'
 
 const props = defineProps<{
   modelValue: boolean
@@ -1464,6 +1492,25 @@ async function onClickConfigTab() {
   } catch {
     ElMessage.error($t('@42BB9:加载配置失败'))
   }
+}
+
+/**
+ * 点击「记忆库」tab：首次进来才拉数据。
+ *
+ * 为什么不像别的 tab 那样直接 `activeTab = 'memory'`：panel 用的是 v-show
+ * （本文件既有约定），意味着**打开设置弹窗时它就已经挂载了**。不懒加载的话，
+ * 用户只是来改个主题，也会顺带触发一次 /api/memory/scopes。
+ * 与「编辑配置」tab 的 onClickConfigTab 同一套理由与写法。
+ */
+const memoryPanelRef = ref<{ reload?: () => Promise<void> } | null>(null)
+let memoryTabLoaded = false
+function onClickMemoryTab() {
+  activeTab.value = 'memory'
+  if (memoryTabLoaded) return
+  memoryTabLoaded = true
+  // 组件自己 onMounted 就会 load 一次；这里只补一次"第二次点进来"的刷新，
+  // 让用户在别处（比如任务跑完写了新经验）切回来能看到最新的
+  nextTick(() => { memoryPanelRef.value?.reload?.() })
 }
 
 // 保存配置 JSON

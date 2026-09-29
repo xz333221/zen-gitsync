@@ -108,6 +108,7 @@ import {
   canonicalProjectPath,
 } from './projectRegistry.js';
 import { buildEnvContextBlock } from './envContext.js';
+import { ensureMemoryStore } from '../../../../memory/store.js';
 import { createJobSettledRefresher } from '../aiContext/jobRefresh.js';
 import {
   createDispatcher,
@@ -1158,6 +1159,23 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
   });
 
   /**
+   * 铺一次记忆库种子（幂等，only-if-missing）。
+   *
+   * **为什么在这里而不是 taskRunner 每次派发时**：目录不存在时若每次派发都尝试
+   * 铺，等于把"有没有记忆"绑在"这次有没有干活"上；而且首次铺种子的 IO 抖动会
+   * 落在派发的关键路径上。注册路由时铺一次，语义是"工作台起来了，记忆库就位"。
+   *
+   * 失败只记日志不抛：记忆库铺不出来不该让整个工作台起不来
+   * （与上面 resolveEnvContext 同一原则）。真正注入时 taskRunner 拿不到项目索引
+   * 会自动降级成"只有全局那层"，Agent 照样能用。
+   */
+  ensureMemoryStore()
+    .then(({ created }) => {
+      if (created.length) logger.info(`[workbench] 已铺记忆库种子: ${created.join(', ')}`);
+    })
+    .catch((err) => logger.warn('[workbench] 铺记忆库种子失败，记忆功能降级:', err?.message || err));
+
+  /**
    * 「工作台任务执行结束」→ 定向刷新快照。
    *
    * 挂在 jobStore 的事件总线上（本层已经在消费同一条总线做 SSE 广播）。
@@ -1165,8 +1183,7 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
    *
    * `bus.on` 前先 `off` 掉上一个：bus 是模块级单例，重复注册（例如同一进程里
    * 再次装配路由）会让同一次 job 结束被刷好几遍。
-   */
-  if (jobSettledHandler) bus.off('event', jobSettledHandler);
+   */  if (jobSettledHandler) bus.off('event', jobSettledHandler);
   jobSettledHandler = createJobSettledRefresher({
     getSnapshotter: getAiContextSnapshotter,
     onError: (err) => logger.warn('[workbench] 任务结束后刷新工作区快照失败:', err?.message || err),

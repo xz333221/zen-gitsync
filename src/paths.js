@@ -88,6 +88,24 @@ export const AI_MCP_FILE = path.join(DATA_DIR, 'ai', 'mcp.json');
 // 别人的 git 历史;同一台机器上多个 g ui 实例共用一份就够了。
 export const AI_CONTEXT_DIR = path.join(DATA_DIR, 'ai-context');
 
+// ── 跨会话「记忆库」(2026-09-29 新增) ─────────────────────────
+// 每个项目的长期经验:索引进上下文、正文按需读。目录形状与 aiContext 同构
+// (一份 INDEX + 若干分块),理由也一样 —— 让 Agent 只读它要的那一块。
+//
+// 为什么放 DATA_DIR 而不是项目里:同 aiContext,这是**本机派生数据**,
+// 不该污染任何仓库、不该进别人的 git 历史。
+//
+// 写入方不是服务端而是**被派发的 Agent 自己**(它有文件工具):服务端只在
+// prompt 里给一段指针(见 routes/workbench/memoryContext.js),Agent 读完索引
+// 自己决定要不要读正文。服务端只负责"目录不存在时铺一份种子"。
+export const MEMORY_DIR = path.join(DATA_DIR, 'memory');
+// 全局索引:项目清单 + 跨项目主题词。**唯一默认进上下文的东西**
+export const MEMORY_INDEX_FILE = path.join(MEMORY_DIR, 'INDEX.md');
+// 跨项目经验正文(本机环境 / 通用坑)。≤40 行,按需读
+export const MEMORY_GLOBAL_FILE = path.join(MEMORY_DIR, 'GLOBAL.md');
+// 每仓库一个子目录,按 projects/<slug>/ 分,与 aiContext 的分块思路一致
+export const MEMORY_PROJECTS_DIR = path.join(MEMORY_DIR, 'projects');
+
 // ── 工作台 / 会话 / 缓存 ──────────────────────────────────────
 export const WORKBENCH_IMAGES_DIR = path.join(DATA_DIR, 'workbench-images');
 // 智能体对话的非图片附件:前端把字节传上来后落在这里,只把绝对路径给模型(见

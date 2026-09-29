@@ -448,6 +448,27 @@ zen-gitsync/                                    [根: 配置文件 + 顶层脚�
 6. `routes/workbench/dispatchInstruction.js` (派发唯一实现) + `src/cli/ai/tools.js` 的 `dispatch_task` (定义) +
    `routes/workbench/agentRoutes.js` (按 `allowDispatch` 决定注不注入那件工具)
 
+### 改跨轮记忆 (Memory, 2026-09-29 新增)
+派发任务时给智能体一份"本机经验库"的指针，让它开工前查、收尾时记。
+1. `src/memory/store.js` — 路径层：slug 生成、幂等铺种子(`ensureMemoryStore`)、读索引
+2. `src/memory/templates.js` — 种子文件内容(**only-if-missing**，永不覆盖用户写的东西)
+3. `src/memory/library.js` — 浏览/删除层：列 scope、列条目、读正文、删条目(连带清索引行)
+4. `routes/workbench/memoryContext.js` — **纯函数** `buildMemoryPointerBlock`(拼 prompt 块，不碰 IO)
+5. `routes/workbench/taskRunner.js` — 注入点：`runSingleSubtask` 里 `prefixBlocks`，
+   顺序 = [环境上下文 → 记忆指针 → 任务正文]，开关 `task.memoryContext !== false`
+6. `routes/memory.js` — 面板接口（`registerMemoryRoutes({app})`，注册在 `server/index.js`）
+7. `client/components/MemoryPanel.vue` — 设置里的「记忆库」面板
+8. 探针 `npm run verify:memory-context` / `verify:memory-panel`（都支持 `--reverse`）
+
+⚠️ 四条硬约束，改这块时别破坏：
+- **只写 `~/.zen-gitsync/memory/`**，一个字节都不碰用户工作区或第三方工具配置目录
+  (`~/.claude` / `~/.codex` / `~/.config/opencode`)，探针 I 组专门守这条
+- **只有索引进 prompt，正文按需读**。把 `INDEX.md` 全文塞进去 = 每次派发都为
+  所有不相关历史经验付 token（这正是这个功能要解决的问题本身）
+- 记忆块必须拼在**任务正文之前**。放末尾等于把"背景"讲成"当前任务"（探针 B 组）
+- **前端只传 `{scope, file}`，永不传路径**。路径由服务端从 scope 重拼（结构性防越界，
+  比 `mindmap.js` 那种"前端传 path + 双重校验"更省一层心）；全局两篇不可删
+
 ### 改可视化流程编排 (Flow)
 1. `components/flow/FlowOrchestrationWorkspace.vue` (画布，节点类型注册)
 2. `components/flow/NodeConfigPanel.vue` (节点配置)
@@ -464,7 +485,7 @@ zen-gitsync/                                    [根: 配置文件 + 顶层脚�
 3. 命名空间复用文件内已有前缀(规则见 `i18n-check.md`)
 
 ### 发版
-1. `MEMORY.md` → `feedback_release_must_use_npm_run_release.md`(强制 `npm run release`)
+1. `~/.zen-gitsync/memory/RULES.md` → 记忆库规范（权威版，发版纪律见记忆库本身）
 2. `scripts/release.js`(build + push + npm publish 完整链路)
 
 ---

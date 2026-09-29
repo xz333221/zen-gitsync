@@ -20,10 +20,15 @@ const { join, relative, sep, resolve } = require('path')
 const { spawn } = require('child_process')
 
 const ROOT = join(__dirname, '..')
+// ⚠️ 这是**显式枚举**，不是通配。新增一个放测试的目录必须手动加一行 ——
+// 漏了不会报错，只是那份测试永远不跑（src/memory 就是这么悄悄漏掉的：
+// 两份测试文件静静躺在仓库里，npm test 的文件数一动不动）。
+// 加新目录时顺手确认一句：`node scripts/run-tests.cjs --list | grep <你的文件>`。
 const SCAN_DIRS = [
   join(ROOT, 'test'),
   join(ROOT, 'src', 'utils'),
   join(ROOT, 'src', 'cli'),
+  join(ROOT, 'src', 'memory'),
   join(ROOT, 'src', 'ui', 'server'),
 ]
 const PATTERNS = /\.(test|spec)\.(mjs|js|ts)$/

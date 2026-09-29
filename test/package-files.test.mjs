@@ -196,4 +196,9 @@ test('CLI 运行时模块都在发布物里', () => {
   for (const f of ['src/paths.js', 'src/fsAtomic.js', 'src/configSplit.js', 'src/dataDirMigration.js']) {
     assert.ok(shipped.has(f), `${f} 不在 package.json#files 里 —— 发布后全局 g ui 会 ERR_MODULE_NOT_FOUND`)
   }
+  // 记忆库(2026-09-29):store.js / templates.js 是**运行时**依赖(工作台注册路由时
+  // 就会 import),漏了的话装完第一次开工作台就整个起不来。
+  for (const f of ['src/memory/store.js', 'src/memory/templates.js']) {
+    assert.ok(shipped.has(f), `${f} 不在 package.json#files 里 —— 发布后记忆功能会 ERR_MODULE_NOT_FOUND`)
+  }
 })

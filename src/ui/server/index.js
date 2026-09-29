@@ -52,6 +52,7 @@ import { registerCodeAnalysisRoutes } from './routes/codeAnalysis.js';
 import { registerInstancesRoutes } from './routes/instances.js';
 import { registerMonitorRoutes } from './routes/monitor.js';
 import { registerMindmapRoutes } from './routes/mindmap.js';
+import { registerMemoryRoutes } from './routes/memory.js';
 import { registerAgentRoutes } from './routes/workbench/agentRoutes.js';
 import { createWorkspaceSnapshotter } from './routes/aiContext/wiring.js';
 import { createInstanceRegistry, getRegistryPath } from './utils/instanceRegistry.js';
@@ -477,6 +478,9 @@ async function startUIServer(noOpen = false, savePort = false) {
 
   // 思维导图：.mindmap.json 文件的列/读/写/建/删/重命名
   registerMindmapRoutes({ app });
+
+  // 记忆库：跨轮经验的浏览 / 读正文 / 删条目（设置 → 记忆库面板）
+  registerMemoryRoutes({ app });
 
   // 智能体：Web 端 AI 编码助手（含工具调用 + 会话持久化）
   // 快照生成器在上面已经建好（要走同一个实例），这里注入进去复用。

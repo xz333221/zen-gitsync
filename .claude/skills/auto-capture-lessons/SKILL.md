@@ -45,7 +45,7 @@ description: zen-gitsync 专属经验沉淀 skill。每次响应结束前自检�
 |---------|---------|---------|
 | **跨多个工作流/组件通用的工程经验** | 新建或追加到 `.claude/skills/<name>/SKILL.md` | "preview 启好但浏览器走的是 backend 生产 bundle"、"vue-tsc 要 cd 到 client 目录" |
 | **项目特定的事实/约定/陷阱** | `.claude/rules/` 或项目内 `docs/` | "Job 状态字段是 running/pending/done 不是 active"、"pre 块最大 64KB 截断" |
-| **用户偏好 / 协作风格 / AI 行为习惯** | `~/.claude/projects/<proj>/memory/*.md` + `MEMORY.md` | "用户希望先看 computed style 再看 snapshot"、"用户偏好短响应不带总结" |
+| **用户偏好 / 协作风格 / AI 行为习惯** | 全局记忆系统 `~/.zen-gitsync/memory/`（见 2c） | "用户希望先看 computed style 再看 snapshot"、"用户偏好短响应不带总结" |
 
 ### 选择位置时的判定
 
@@ -110,20 +110,23 @@ description: <一句话定位 + 适用触发词>
 
 只在经验**会反复踩**、且**查文档查不到**时写。已经在文档里写过的事实不要重复。
 
-### 2c. 写入 memory
+### 2c. 写入全局记忆系统
 
-memory 系统的两类经验:
+⚠️ **2026-09-29 起不再用 `~/.claude/projects/<proj>/memory/`。** 记忆真源已迁到
+`~/.zen-gitsync/memory/`,规范见该目录 `RULES.md`,落盘流程走全局 `memory-capture` skill
+(`~/.claude/skills/memory-capture/SKILL.md`)。本节只做分流。
 
-- **feedback**:用户对 Claude 行为的具体纠正或确认(如"用户不喜欢响应末尾加总结")。
-  - 文件名:`feedback_<topic>.md`
-  - body 结构:规则 + **Why:** + **How to apply:**
-- **project**:项目背景、决策原因、deadline、stakeholder(如"v2.13 重构是为了配合 mobile 团队发版")。
-  - 文件名:`project_<topic>.md`
-  - body 结构:事实 + **Why:** + **How to apply:**
+| 经验性质 | 落点 |
+|---------|------|
+| 跨项目通用(本机环境、沙箱边界、通用坑) | `~/.zen-gitsync/memory/GLOBAL.md` |
+| 只跟本仓有关的项目事实/约定/陷阱 | `~/.zen-gitsync/memory/projects/<slug>/INDEX.md` + `lessons/<topic>.md` |
+| 用户偏好 / 协作风格 | 同上,文件名用 `user-preference-<topic>.md` |
 
 写入流程:
-1. 用 Write 写独立的 memory 文件(每个经验一个文件)
-2. 同时追加一行到 `MEMORY.md` 作为索引(不写内容到 MEMORY.md)
+1. **先 glob + grep 现有 `lessons/*.md`**,同主题必须追加,不新建近似重复文件
+2. 写 lesson(**≤25 行**):`# 坑是什么` / 现象根因 / `**How to apply:**`
+3. **同步在对应 `INDEX.md` 加一行** `- [标题](lessons/<file>.md) — ≤100 字摘要` —— 没索引的记忆等于不存在
+4. 收尾只说一两句"已沉淀到 X",**不展开写了什么**,不阻塞主任务
 
 ---
 
@@ -170,8 +173,8 @@ memory 系统的两类经验:
 **判定**:对 Claude 行为的主观约束,跨所有任务。
 
 **执行**:
-- Write `~/.claude/projects/<proj>/memory/feedback_no_trailing_summary.md`
-- 追加一行到 `MEMORY.md`
+- Write `~/.zen-gitsync/memory/projects/<slug>/lessons/user-preference-no-trailing-summary.md`
+- 追加一行到同目录 `INDEX.md`
 
 **告知**:已记到 memory,以后不再加
 
@@ -194,6 +197,6 @@ memory 系统的两类经验:
 | 把 commit message 复述到 skill | commit message 已经是历史,skill 是给将来的 |
 | 写"今天遇到了 X 终于解决" | 这是日记,不是经验。写"X 的根因是 Y,以后先查 Y" |
 | 把多个不相关的教训塞进一个 skill | 一个 skill 一个主题,方便后续检索 |
-| 写到 skill 但不更新 MEMORY.md / index | 写在角落里的经验等于没写 |
+| 写到 skill 但不更新 INDEX.md | 写在角落里的经验等于没写 |
 | 写了之后不验证 skill 真的会被加载 | 写到 `.claude/skills/` 但 description 写得模糊 → Claude 不会触发 |
 | 在响应**开头**就沉淀 | 沉淀是收尾,主任务先做完 |
