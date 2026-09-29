@@ -220,6 +220,12 @@ export function buildLiveActivity(job, now = Date.now()) {
     /** 本轮执行器（claude | opencode | codex）。老记录没有这个字段 → 空串 */
     agent: jobAgent(job),
     startedAt: job.startedAt || null,
+    /**
+     * 子进程 PID。原来只有左栏那个「执行监控」面板会显示它，面板去掉之后
+     * 卡片就是唯一的落点 —— 真要手动 kill 或排查僵尸 claude 进程时，
+     * 这是卡片上唯一能指认"到底是哪个进程"的字段。
+     */
+    pid: job.pid || null,
     elapsedMs: Number.isFinite(started) ? Math.max(0, now - started) : 0,
     /** 见 taskRunner 的 MAX_TOOL_CALLS：超上限的调用不再入数组，所以这是"至少这么多次" */
     toolCallCount: Array.isArray(job.toolCalls) ? job.toolCalls.length : 0,

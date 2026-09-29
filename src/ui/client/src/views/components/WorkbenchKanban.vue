@@ -288,6 +288,13 @@ function liveSummary(live: BoardTaskLive): string {
                 <span v-if="t.live.toolCallCount" :title="t.live.toolMix || ''">
                   {{ $t('@WORKBENCH:工具 {n} 次', { n: t.live.toolCallCount }) }}
                 </span>
+                <!--
+                  PID：左栏那个「执行监控」面板去掉了，它的字段里只有这一个卡片上没有，
+                  所以并到这一行来（面板其余字段卡片本来就都有，且比它更全）。
+                  不走 $t：PID 是中英文都这么写的通用缩写，没有可翻译的余地。
+                  放静默之前：静默是"它可能卡住了"的信号，该留在行尾最显眼。
+                -->
+                <span v-if="t.live.pid" class="kb-card__live-pid">PID {{ t.live.pid }}</span>
                 <!-- 静默只在**显然静默**时才有值（服务端有阈值），所以这里不用再过滤 -->
                 <span v-if="typeof t.live.silentMs === 'number'" class="kb-card__live-silent">
                   {{ $t('@WORKBENCH:静默 {elapsed}', { elapsed: formatDurationMs(t.live.silentMs) }) }}

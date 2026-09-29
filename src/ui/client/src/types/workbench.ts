@@ -192,6 +192,8 @@ export interface BoardTaskLive {
   /** 本轮执行器（claude | opencode | codex）；老记录为空串 */
   agent: string
   startedAt: string | null
+  /** 子进程 PID（卡片元信息行显示）；认不出 → null */
+  pid: number | null
   elapsedMs: number
   /** 工具调用次数（受服务端上限截断，含义是"至少这么多次"） */
   toolCallCount: number

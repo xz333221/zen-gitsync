@@ -16,7 +16,8 @@
 <!--
   多项目编排台（L1）· 三栏骨架。
 
-  · 左：项目列表 + 执行监控（跨项目一览，正在跑的永远排最前）
+  · 左：项目列表（它下面原来还有一块「执行监控」，2026-09-29 删掉：列的项目 / 标题 /
+    已运行时长与中间「进行中」卡片完全重合，唯一增量 PID 已并到卡片元信息行）
   · 中：选中项目的任务看板（「全部项目」时是全局视图）
   · 右：主 Agent 控制台（活动流 + 项目概览 + 指令派发）
 
@@ -43,7 +44,6 @@ import { useToolsStore } from '@/stores/toolsStore'
 import { useWorkbenchProjects } from '@/composables/useWorkbenchProjects'
 import { useOrchestrator } from '@/composables/useOrchestrator'
 import WorkbenchProjectPanel from './WorkbenchProjectPanel.vue'
-import WorkbenchAgentPanel from './WorkbenchAgentPanel.vue'
 import WorkbenchKanban from './WorkbenchKanban.vue'
 import OrchestratorConsole from './OrchestratorConsole.vue'
 import WorkbenchDefaultPromptDialog from './WorkbenchDefaultPromptDialog.vue'
@@ -237,15 +237,6 @@ const RIGHT_W_MAX = 900
 const LEFT_W_SHARE = 0.26
 const RIGHT_W_SHARE = 0.46
 
-// ── 执行监控的高度（左栏内部的横向分隔条）──────────────────────────────
-// 左栏是"项目列表 + 执行监控"两段：列表撑满剩余空间，监控按内容自适应、上限 42%。
-// 任务并行跑起来时一个监控卡片就有三四行，42% 常常只够露一行半 —— 所以也给它一个
-// 能拖的分隔条。语义和两侧栏的宽度分隔条完全一致（没拖过 = null = 交给 CSS）。
-const AGENT_H_MIN = 120
-const AGENT_H_MAX = 560
-/** 最多占视口高度的一半：剩下那一半无论如何留给项目列表，否则列表会缩成一条 */
-const AGENT_H_SHARE = 0.5
-
 /**
  * 和响应式媒体查询的关系：**没拖过 = 完全交给媒体查询**（layout 里是 null，
  * 一个内联变量都不写）；拖过一次，这个宽度就是用户的显式选择 —— 内联变量优先级
@@ -256,8 +247,6 @@ const layout = reactive({
   /** null = 没手动调过，宽度走 CSS 里的媒体查询默认值 */
   left: null as number | null,
   right: null as number | null,
-  /** null = 没手动调过，高度走 WorkbenchAgentPanel 里的 max-height: 42% */
-  agentH: null as number | null,
   /** 宽屏下的手动折叠（窄屏的左栏开合走下面的 leftDrawerOpen，两套状态不混用） */
   leftCollapsed: false,
   rightCollapsed: false,
@@ -270,7 +259,6 @@ function readLayout() {
     const o = JSON.parse(raw) as Partial<typeof layout>
     if (typeof o.left === 'number' && Number.isFinite(o.left)) layout.left = o.left
     if (typeof o.right === 'number' && Number.isFinite(o.right)) layout.right = o.right
-    if (typeof o.agentH === 'number' && Number.isFinite(o.agentH)) layout.agentH = o.agentH
     layout.leftCollapsed = o.leftCollapsed === true
     layout.rightCollapsed = o.rightCollapsed === true
   } catch {
@@ -285,10 +273,8 @@ function saveLayout() {
 
 // ── 视口档位：和下面的媒体查询断点一一对应，只用来决定"拖拽 / 折叠要不要生效" ──
 const viewportW = ref(typeof window === 'undefined' ? 1920 : window.innerWidth)
-const viewportH = ref(typeof window === 'undefined' ? 1080 : window.innerHeight)
 function onWindowResize() {
   viewportW.value = window.innerWidth
-  viewportH.value = window.innerHeight
 }
 /** ≤1024：左栏变成浮层抽屉，宽度不吃看板的空间，也不该用分隔条拖 */
 const isNarrow = computed(() => viewportW.value <= 1024)
@@ -304,16 +290,6 @@ function clampWidth(side: 'left' | 'right', raw: number): number {
   return Math.round(Math.min(Math.max(raw, min), Math.max(min, cap)))
 }
 
-/**
- * 执行监控高度的夹取。用**视口高度**当上限的近似而不是实测左栏高度：
- * 和上面的宽度同一个理由 —— 不想为了几个像素的精确度挂一个 ResizeObserver，
- * 视口高度已经能保证"监控不会顶到底、项目列表还剩得下一屏"。
- */
-function clampAgentH(raw: number): number {
-  const cap = Math.min(AGENT_H_MAX, viewportH.value * AGENT_H_SHARE)
-  return Math.round(Math.min(Math.max(raw, AGENT_H_MIN), Math.max(AGENT_H_MIN, cap)))
-}
-
 /** 内联到 .board 的 CSS 变量：值为 null 就不写，让媒体查询的默认值生效 */
 const boardStyle = computed<Record<string, string>>(() => {
   const s: Record<string, string> = {}
@@ -323,21 +299,9 @@ const boardStyle = computed<Record<string, string>>(() => {
   return s
 })
 
-/**
- * 内联到 .board__left 的 CSS 变量。挂在左栏而不是 .board 上：
- * 这个高度只对左栏内部有意义，挂外层会让"谁在读它"变得难查。
- * 变量本身由 WorkbenchAgentPanel 的 .agents 消费（height / max-height 都读它）。
- */
-const leftStyle = computed<Record<string, string>>(() => {
-  const s: Record<string, string> = {}
-  if (layout.agentH != null) s['--wb-agents-h'] = clampAgentH(layout.agentH) + 'px'
-  return s
-})
-
 const colsRef = ref<HTMLElement | null>(null)
-const leftRef = ref<HTMLElement | null>(null)
-/** 正在拖的分隔条：只为给它自己加高亮、给容器关掉宽度过渡。'agents' = 左栏内的横向分隔条 */
-const dragging = ref<'left' | 'right' | 'agents' | null>(null)
+/** 正在拖的分隔条：只为给它自己加高亮、给容器关掉宽度过渡 */
+const dragging = ref<'left' | 'right' | null>(null)
 
 function panelEl(side: 'left' | 'right'): HTMLElement | null {
   return colsRef.value?.querySelector(side === 'left' ? '.board__left' : '.oc') as HTMLElement | null
@@ -378,37 +342,6 @@ function onSplitterMouseDown(side: 'left' | 'right', e: MouseEvent) {
 /** 双击分隔条：清掉手动宽度，回到媒体查询给的默认值 */
 function onSplitterDblClick(side: 'left' | 'right') {
   layout[side] = null
-  saveLayout()
-}
-
-/** 执行监控面板本身。起点高度同样从 DOM 量：没拖过时它是"内容多高就多高" */
-function agentEl(): HTMLElement | null {
-  return leftRef.value?.querySelector('.agents') as HTMLElement | null
-}
-
-/**
- * 左栏内横向分隔条：上下拖动改执行监控的高度。
- * 分隔条在监控面板**上方**，所以鼠标往上拖（clientY 变小）才是变高，方向和纵向坐标相反。
- */
-function onAgentSplitterMouseDown(e: MouseEvent) {
-  const start = agentEl()
-  if (!start) return
-  e.preventDefault()
-  const startY = e.clientY
-  const startH = start.getBoundingClientRect().height
-  dragging.value = 'agents'
-  document.body.style.userSelect = 'none'
-  document.body.style.cursor = 'row-resize'
-  const onMove = (ev: MouseEvent) => {
-    layout.agentH = clampAgentH(startH + (startY - ev.clientY))
-  }
-  window.addEventListener('mousemove', onMove)
-  window.addEventListener('mouseup', () => endDrag(onMove), { once: true })
-}
-
-/** 双击横向分隔条：清掉手动高度，回到"内容自适应 + 42% 上限" */
-function onAgentSplitterDblClick() {
-  layout.agentH = null
   saveLayout()
 }
 
@@ -672,10 +605,8 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
       />
 
       <aside
-        ref="leftRef"
         class="board__left"
         :class="{ 'is-collapsed': leftHidden }"
-        :style="leftStyle"
         @keydown.esc="onLeftEsc"
       >
         <WorkbenchProjectPanel
@@ -684,19 +615,6 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
           :loading="loading"
           @select="onSelectProject"
         />
-
-        <!-- 项目列表 / 执行监控之间的横向分隔条：上下拖动改监控高度，双击恢复默认。
-             这条同时也画出两段之间的那条 1px 分隔线（原来挂在 .agents 的 border-top 上）。 -->
-        <div
-          class="board__splitter board__splitter--h"
-          role="separator"
-          aria-orientation="horizontal"
-          :title="$t('@WORKBENCH:上下拖动调整执行监控高度，双击恢复默认')"
-          @mousedown="onAgentSplitterMouseDown"
-          @dblclick="onAgentSplitterDblClick"
-        />
-
-        <WorkbenchAgentPanel :running="running" />
       </aside>
 
       <!-- 左栏分隔条：左栏收起 / 窄屏抽屉模式下不占位（不渲染 / 媒体查询里 display:none） -->
@@ -950,27 +868,6 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   background: var(--color-primary);
 }
 
-/* 横向分隔条（左栏内部的"项目列表 / 执行监控"之间）。
-   和纵向那两条的差别只有一处：它**常态就画线**。原来这条线是 .agents 的 border-top，
-   挪到这儿之后线还是那条线，只是顺带变成了能拖的命中区（5px，线居中）。
-   纵向那两条常态隐形是因为它们两侧都是满高的面板，多两条竖线反而脏；
-   这一段本来就有一条横线，多画一条才是多余。 */
-.board__splitter--h {
-  flex: 0 0 5px;
-  cursor: row-resize;
-}
-.board__splitter--h::after {
-  top: 2px;
-  bottom: auto;
-  left: 0;
-  width: auto;
-  height: 1px;
-  background: var(--border-color);
-}
-.board__splitter--h:hover::after,
-.board__splitter--h:active::after {
-  background: var(--color-primary);
-}
 .board__main {
   display: flex;
   flex-direction: column;

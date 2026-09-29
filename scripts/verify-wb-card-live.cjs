@@ -2,7 +2,7 @@
  * 看板「进行中」卡片显示任务状态的验证（最近思考 / 工具调用 / 最新回复 / 已运行 / 静默）。
  *
  * 验收契约（改这块时别破坏）：
- *   A 正在跑的任务卡片上有活动区，四行各就各位：元信息（执行器 / 已运行 / 工具 N 次）
+ *   A 正在跑的任务卡片上有活动区，四行各就各位：元信息（执行器 / 已运行 / 工具 N 次 / PID）
  *     → 最近一次工具调用 → 最近思考 → 最新回复；每一行的文字与后端给的事实**逐字一致**
  *   B 没有内容的那一行整行不渲染（思考 / 回复都可能为空）—— 不写"暂无"
  *   C 元信息行在没有任何正文时仍然渲染（刚起来的任务不是空白卡片，至少能看到"已运行 3 秒"）
@@ -214,6 +214,10 @@ async function main() {
       norm(card.meta).includes(norm(target.live.agent)) && /已运行|Running for/.test(card.meta), norm(card.meta))
     check('A3 元信息行的工具次数与后端一致',
       !target.live.toolCallCount || norm(card.meta).includes(`${target.live.toolCallCount}`), norm(card.meta))
+    // 左栏那个「执行监控」面板已删（2026-09-29）：它的字段里只有 PID 是卡片上没有的，
+    // 所以并到这一行来。断言按"后端有 pid 就必须显示"写 —— 老记录没 pid 时也不该凭空造一个。
+    check('A3b 元信息行按后端的 pid 显示 PID',
+      !target.live.pid || norm(card.meta).includes(`PID ${target.live.pid}`), norm(card.meta))
 
     const toolLine = card.lines.find(l => l.tool)
     const thoughtLine = card.lines.find(l => l.thought)
