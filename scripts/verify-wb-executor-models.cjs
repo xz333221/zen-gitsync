@@ -319,6 +319,18 @@ async function main() {
     check('C3 选项 title 是模型 + 服务商（claude 是别名 + 代理地址）',
       opts.options.some(o => o.modelTitle === `${FIXTURE.claude.name} · ${FIXTURE.claude.detail} · ${FIXTURE.claude.provider}`),
       JSON.stringify(opts.options.map(o => o.modelTitle)))
+    // 模型名被 CSS 截掉的话，显示出来的是 `opencode-go/space-bunny-…` —— 比不显示还糟
+    // （看着像坏了，也没告诉用户到底用的什么）。设置弹窗空间宽绰，这里不允许截断。
+    const fit = await page.evaluate(() => {
+      const dd = Array.from(document.querySelectorAll('.el-select-dropdown'))
+        .find(d => d.offsetParent !== null)
+      if (!dd) return null
+      return Array.from(dd.querySelectorAll('.executor-option__model'))
+        .map(el => ({ text: el.textContent.trim(), scroll: el.scrollWidth, client: el.clientWidth }))
+    })
+    check('C7 设置下拉里的模型名完整显示，没被 CSS 截断',
+      !!fit && fit.length > 0 && fit.every(m => m.scroll <= m.client + 1),
+      JSON.stringify(fit))
 
     // ── G 切换执行器 → 那行跟着换（三个分支各走一遍）───────────────────
     // G1/G2：两处来源都没有 → 如实说"未在配置中指定"

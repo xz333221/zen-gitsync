@@ -127,7 +127,15 @@
               <div class="setting-row">
                 <label class="setting-label">{{ $t('@42BB9:任务执行器') }}</label>
                 <div class="project-toggle">
-                  <el-select v-model="tempTaskExecutor" class="modern-input" size="default">
+                  <!-- fit-input-width=false：下拉宽度跟着**内容**走。默认跟输入框等宽，
+                       而这个选项里要同时放「产品名 + 模型名」，等宽会把模型名截成
+                       `opencode-go/space-bunny-…`（实测），等于白显示 -->
+                  <el-select
+                    v-model="tempTaskExecutor"
+                    class="modern-input"
+                    size="default"
+                    :fit-input-width="false"
+                  >
                     <el-option
                       v-for="opt in TASK_EXECUTOR_OPTIONS"
                       :key="opt.id"
@@ -2296,12 +2304,12 @@ html.dark .label-icon {
 }
 
 /* 选项里那个模型名：承载信息的元文字，用 --text-meta 而不是 --text-tertiary
-   （后者是对比度不达 AA 的装饰档，只配给状态点/图标用） */
+   （后者是对比度不达 AA 的装饰档，只配给状态点/图标用）。
+   这里**不设 max-width** —— 设置弹窗有大把横向空间，配合 fit-input-width=false
+   让它完整显示；模型名截成 `opencode-go/space-bunny-…` 等于白显示
+   （窄栏那两处 picker 才需要截断，见各自的 max-width） */
 .executor-option__model {
-  max-width: 15em;
-  overflow: hidden;
   white-space: nowrap;
-  text-overflow: ellipsis;
   font-size: var(--font-size-xs);
   color: var(--text-meta);
 }
