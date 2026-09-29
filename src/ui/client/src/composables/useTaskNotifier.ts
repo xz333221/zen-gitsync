@@ -27,11 +27,17 @@
 //   - 页面在前台 → 应用内 toast（看得见，不必再弹系统窗口）
 //   - 页面在后台 / 别的窗口 → 系统通知（否则等于没提示）
 // 权限被拒时系统通知发不出去，会退回 toast 兜一手。
+//
+// 2026-09-29 起额外"叮"一声（见 utils/taskSound）：
+//   声音和"页面在不在前台"无关 —— 系统通知自带的那点动静经常被用户关掉/系统静音，
+//   而且是"人得先注意到通知中心"的被动提示；一声提示音是人不用看屏幕也能知道的信号。
+//   所以它在下面这层"前台/后台"分流之前就响，不参与二选一。
 
 import { ElMessage } from 'element-plus'
 import { $t } from '@/lang/static'
 import { useConfigStore } from '@stores/configStore'
 import { notifySystem, shouldUseSystemNotification } from '@/utils/taskNotify'
+import { playFinishSound } from '@/utils/taskSound'
 
 export type JobFinishKind = 'done' | 'error' | 'cancelled'
 
@@ -102,6 +108,10 @@ export function useTaskNotifier() {
     const name = jobNoticeTitle(job)
     const detail = jobNoticeDetail(job)
     const tag = `zen-gitsync-job-${job.id || ''}`
+    // 先出声：这一句跟"页面在不在前台"没关系，必须在下面二选一之前，
+    // 否则用户切到别的窗口时（恰恰是主场景）只能指望系统通知那点动静。
+    // 被自动播放策略拦下/环境不支持都只是返回 false，不用管。
+    playFinishSound(kind)
     if (shouldUseSystemNotification()) {
       let sent = false
       if (kind === 'done') {

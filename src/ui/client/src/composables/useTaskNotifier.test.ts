@@ -25,6 +25,17 @@ vi.mock('@/utils/taskNotify', () => ({
   },
 }))
 
+// 提示音在这里只记"响了哪种"，真实的 Audio 行为在 utils/taskSound.test.ts 里测。
+// 不 mock 的话 jsdom 会为每次 play()/currentTime 赋值吐一堆 "Not implemented" 噪音。
+const snd = vi.hoisted(() => ({ played: [] as string[] }))
+
+vi.mock('@/utils/taskSound', () => ({
+  playFinishSound: (kind: string) => {
+    snd.played.push(kind)
+    return true
+  },
+}))
+
 import { ElMessage } from 'element-plus'
 import {
   useTaskNotifier,
@@ -74,6 +85,7 @@ beforeEach(() => {
   sys.useSystem = false
   sys.canSend = true
   sys.sent = []
+  snd.played = []
   vi.stubGlobal('EventSource', FakeEventSource)
   vi.clearAllMocks()
 })
@@ -314,6 +326,67 @@ describe('useTaskNotifier 提示决策', () => {
     state.notifyEnabled = false
     es.frame('job:update', { id: 'j1', title: 't / t', status: 'done' })
     expect(successCalls()).toHaveLength(0)
+  })
+})
+
+describe('useTaskNotifier 提示音', () => {
+  it('正常跑完"叮"一声 done，出错响 error', () => {
+    state.notifyEnabled = true
+    const { es } = connect()
+    es.frame('job:update', runningJob('a'))
+    es.frame('job:update', { id: 'a', title: '任务A / 任务A', status: 'done' })
+    es.frame('job:update', runningJob('b'))
+    es.frame('job:update', { id: 'b', title: '任务B / 任务B', status: 'error', error: 'boom' })
+    expect(snd.played).toEqual(['done', 'error'])
+  })
+
+  it('三种终态都会问一次 taskSound；"哪个不响"由 taskSound 的音源映射决定', () => {
+    // cancelled 照样传下去，是因为"停不停止响"属于音源映射（SOUND_SRC.cancelled = ''），
+    // 不该在 composable 里再抄一份判断 —— 两边各写一遍迟早会走岔。
+    // playFinishSound('cancelled') 返回 false 且不创建 Audio，见 utils/taskSound.test.ts。
+    state.notifyEnabled = true
+    const { es } = connect()
+    es.frame('job:update', runningJob('c'))
+    es.frame('job:update', { id: 'c', title: '任务C / 任务C', status: 'cancelled' })
+    expect(snd.played).toEqual(['cancelled'])
+  })
+
+  it('页面在前台也响 —— 声音不参与「前台 / 后台」二选一，那是系统通知的分流', () => {
+    state.notifyEnabled = true
+    sys.useSystem = false
+    const { es } = connect()
+    es.frame('job:update', runningJob('j1'))
+    es.frame('job:update', { id: 'j1', title: 't / t', status: 'done' })
+    expect(snd.played).toEqual(['done'])
+    expect(successCalls()).toHaveLength(1)
+  })
+
+  it('系统通知权限被拒、退回应用内提示时，声音照样响', () => {
+    state.notifyEnabled = true
+    sys.useSystem = true
+    sys.canSend = false
+    const { es } = connect()
+    es.frame('job:update', runningJob('j1'))
+    es.frame('job:update', { id: 'j1', title: 't / t', status: 'done' })
+    expect(snd.played).toEqual(['done'])
+  })
+
+  it('总开关关着时一声都不响（声音不能绕开开关自己偷偷放）', () => {
+    state.notifyEnabled = false
+    const { es } = connect()
+    es.frame('job:update', runningJob('j1'))
+    es.frame('job:update', { id: 'j1', title: 't / t', status: 'done' })
+    expect(snd.played).toEqual([])
+  })
+
+  it('重复的终态帧只响一次，hello 快照里的历史 job 一声不响', () => {
+    state.notifyEnabled = true
+    const { es } = connect()
+    es.frame('hello', { jobs: [{ id: 'old', title: 't / t', status: 'done' }] })
+    es.frame('job:update', runningJob('j1'))
+    es.frame('job:update', { id: 'j1', title: 't / t', status: 'done' })
+    es.frame('job:update', { id: 'j1', title: 't / t', status: 'done' })
+    expect(snd.played).toEqual(['done'])
   })
 })
 

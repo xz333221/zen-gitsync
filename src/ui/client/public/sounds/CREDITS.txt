@@ -1,0 +1,32 @@
+任务结束提示音 —— 音源与许可
+================================
+
+本目录下的两个 wav 取自 Kenney《Interface Sounds》音效包，许可为
+Creative Commons Zero (CC0 1.0) —— 公共领域，可自由用于个人 / 教育 / 商业项目，
+**无需署名**（这里保留出处仅作为溯源记录）。
+
+    原包页面：https://kenney.nl/assets/interface-sounds
+    许可全文：https://creativecommons.org/publicdomain/zero/1.0/
+    本目录文件的来源镜像：https://github.com/Calinou/kenney-interface-sounds
+                          （Kenney 原包的 ogg → wav 无损转封装，Godot 用）
+
+文件对应关系
+------------
+
+    task-done.wav   ← confirmation_001.wav   0.29s  44.1kHz 单声道 16bit  任务正常跑完
+    task-error.wav  ← error_005.wav          0.52s  44.1kHz 单声道 16bit  任务执行出错
+
+为什么选 CC0
+------------
+
+本仓库以 Apache-2.0 发布到 npm，构建产物里会带上 public/ 下的全部资源。
+带署名条款（CC BY）、相同方式共享（CC BY-SA）或"禁止再分发原始文件"条款
+（Mixkit / Pixabay / Envato 系）的音源混进发行包都会造成许可证污染 ——
+CC0 是唯一零负担的选择。
+
+换一个音色
+----------
+
+上面那个 GitHub 镜像里有 100 个同许可的音效（click / confirmation / glass /
+error / toggle / maximize 等），直接下载覆盖同名文件即可，代码侧不需要改动。
+想换路径或改成别的音源，改 src/ui/client/src/utils/taskSound.ts 里的 SOUND_SRC。

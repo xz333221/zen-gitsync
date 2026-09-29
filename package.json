@@ -42,6 +42,7 @@
     "verify:wb-progress-report": "node scripts/verify-wb-progress-report.cjs",
     "verify:wb-card-live": "node scripts/verify-wb-card-live.cjs",
     "verify:wb-card-reply": "node scripts/verify-wb-card-reply.cjs",
+    "verify:wb-task-sound": "node scripts/verify-wb-task-sound.cjs",
     "verify:wb-proj-branch": "node scripts/verify-workbench-proj-branch.cjs",
     "verify:wb-proj-filter": "node scripts/verify-wb-proj-filter.cjs",
     "verify:wb-panel-resize": "node scripts/verify-wb-panel-resize.cjs",

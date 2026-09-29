@@ -392,7 +392,7 @@ A dedicated view for running coding agents across one or many projects. Every ta
 | Live log | The "执行日志 / Execution log" panel **opens by default** and auto-scrolls, showing accumulated `stdout` + `stderr` (last 64 KB rendered client-side; the server keeps up to 100 MB per job) |
 | Live status | Task status (pending / running / done / error / cancelled) and PID stream in real time over SSE |
 | Tool-call stream | The model's tool calls are rendered inline in the conversation flow, so you can follow what the agent actually did |
-| Finish notice | When a run finishes or fails you get an in-app toast while the page is in the foreground, and a system notification when it is not — so you can be looking at another view or window and still be told |
+| Finish notice | When a run finishes or fails you get a chime (a distinct tone for done vs. error; stopping on purpose stays silent) plus an in-app toast while the page is in the foreground, and a system notification when it is not — so you can be looking at another view or window and still be told. Sounds are CC0 assets under `public/sounds/`; see `CREDITS.txt` there to swap in another tone |
 | Cross-view indicator | While any Workbench task is running, a pulsing dot appears on the Workbench icon in the Activity Bar so you can see job state from the Git or Editor view |
 | Execution log manager (dialog) | The "Execution logs" button in the workbench top bar opens a dialog with the list / filter / batch delete / clear / retention-policy UI (defaults: 500 records, 256 MB); the task execution view stays mounted so no work-in-progress state is dropped |
 | Continue chat | After a task reaches a done / error / cancelled state, a follow-up composer appears; sending a message resumes the previous session (`claude --resume <session_id>` for Claude Code, `--session` for OpenCode, `codex exec resume <thread_id>` for Codex), and each new turn stacks into the same chat-style flow |
@@ -1054,7 +1054,7 @@ Activity Bar 第四个视图，在 GUI 内直接浏览并编辑项目文件：
 | 实时日志 | 「执行日志」面板**默认展开**，方便随时回看上次执行结果；面板内自动滚到底，展示累积的 stdout / stderr（客户端渲染最近 64 KB，服务端单个 job 最多保留 100 MB 输出） |
 | 实时状态 | 任务状态（pending / running / done / error / cancelled）和 PID 通过 SSE 实时推送 |
 | 工具调用流 | 模型的工具调用直接渲染在对话流里，能看清智能体具体做了什么 |
-| 结束提示 | 任务结束或报错时：页面在前台弹应用内提示，页面在后台/别的窗口发系统通知，切到别的视图也不会漏掉结果 |
+| 结束提示 | 任务结束或报错时响一声提示音（完成 / 出错各一种音色，主动停止不响），同时页面在前台弹应用内提示、页面在后台/别的窗口发系统通知，切到别的视图也不会漏掉结果。音源是 CC0 资源（`public/sounds/`），换音色见同目录 `CREDITS.txt` |
 | 跨视图指示 | 任意任务运行中时，Activity Bar 上的工作台图标会显示脉动小圆点；切换到 Git 或编辑器视图也能看到运行状态 |
 | 执行日志管理（弹窗） | 顶部「执行日志」按钮唤起弹窗：列表 / 过滤 / 批量删除 / 清空 / 保留策略全部可在此一次性管理（默认保留 500 条、256 MB）；弹窗关闭后任务执行视图常驻，避免切换时不必要的卸载 |
 | 继续对话 | 任务进入终态（done / error / cancelled）后出现续聊输入框；发送续聊消息会用 `claude --resume <session_id>`（Claude Code）、`--session`（OpenCode）或 `codex exec resume <thread_id>`（Codex）续接上一轮会话，**新一轮 = 新 job**，多轮纵向堆叠成对话流 |
