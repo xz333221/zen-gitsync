@@ -22,9 +22,14 @@
 
   选择本身是**全局共享**的（utils/taskExecutor 的 localStorage），不是本组件的私有状态：
   看板卡片的「执行」按钮、这里的下拉，切了互相跟手 —— 历史行为，别改成组件内部状态。
+
+  下拉项右侧显示**该执行器当前配置的模型**：工作台派任务不传 --model，模型跟随各 CLI
+  的配置文件，"这个执行器现在用什么模型"在界面上别处都看不到（数据来自只读探测，
+  见 stores/toolsStore 的 executorModel* ）。按钮上不加模型名 —— 那个 pill 只有 22px 高，
+  挤进第二段文字会把整行布局带跑；要看当前模型把鼠标停在按钮上，title 里有。
 -->
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { ArrowDown, Check } from '@element-plus/icons-vue'
 import { $t } from '@/lang/static'
 import TaskExecutorIcon from '@components/TaskExecutorIcon.vue'
@@ -44,6 +49,23 @@ const props = defineProps<{
 }>()
 
 const toolsStore = useToolsStore()
+
+// 进页面就拉一次模型；store 内部有 TTL 缓存 + 并发去重，本组件在多处实例化也只请求一次
+onMounted(() => { void toolsStore.fetchExecutorModels() })
+
+/** 下拉项右侧的模型名。还没探测到 / 该 CLI 没配模型时的两种空值由 store 解释 */
+function modelText(id: TaskExecutorId): string {
+  return toolsStore.executorModelText(id)
+}
+
+/** 模型 + 次要信息（别名 / 服务商），title 用 */
+function modelTitle(id: TaskExecutorId): string {
+  return [modelText(id), toolsStore.executorModelDetail(id)].filter(Boolean).join(' · ')
+}
+
+/** 主按钮 title：入口自己的说明 + 当前模型，不进下拉也知道这活是哪个模型跑的 */
+const btnTitle = computed(() => [props.title, modelTitle(model.value)].filter(Boolean).join(' · '))
+
 const availability = computed<Record<TaskExecutorId, boolean>>(() => ({
   claude: toolsStore.claudeAvailable,
   opencode: toolsStore.opencodeAvailable,
@@ -72,7 +94,7 @@ if (viable.value && !availability.value[model.value]) pick(viable.value)
     <button
       type="button"
       class="tep__btn"
-      :title="props.title"
+      :title="btnTitle"
       :aria-label="$t('@WORKBENCH:任务执行器')"
     >
       <TaskExecutorIcon :executor="model" class="tep__btn-icon" />
@@ -90,6 +112,11 @@ if (viable.value && !availability.value[model.value]) pick(viable.value)
           <span class="tep__item">
             <TaskExecutorIcon :executor="opt.id" class="tep__item-icon" />
             <span class="tep__item-name">{{ opt.name }}</span>
+            <span
+              v-if="modelText(opt.id)"
+              class="tep__item-model"
+              :title="modelTitle(opt.id)"
+            >{{ modelText(opt.id) }}</span>
             <el-icon v-if="model === opt.id" class="tep__item-check"><Check /></el-icon>
             <span v-else-if="!availability[opt.id]" class="tep__item-missing">{{ $t('@42BB9:未安装') }}</span>
           </span>
@@ -133,6 +160,16 @@ if (viable.value && !availability.value[model.value]) pick(viable.value)
 }
 .tep__item-icon { font-size: var(--font-size-base); flex: none; }
 .tep__item-name { flex: 1; }
+/* 当前模型：承载信息的元文字，不是装饰档（--text-tertiary 那种对比度不达 AA） */
+.tep__item-model {
+  flex: none;
+  max-width: 15em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--font-size-xs);
+  color: var(--text-meta);
+}
 .tep__item-check { color: var(--color-primary); font-size: var(--font-size-sm); }
 .tep__item-missing { font-size: var(--font-size-xs); color: var(--text-tertiary, var(--text-secondary)); }
 </style>

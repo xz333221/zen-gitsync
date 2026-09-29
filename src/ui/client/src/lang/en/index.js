@@ -892,6 +892,8 @@ export default {
   '@42BB9:任务执行器': 'Task executor',
   '@42BB9:工作台执行任务时使用的本地 CLI；模型跟随各自 CLI 的自身配置': 'Local CLI used by the workbench to run tasks; models follow each CLI\'s own configuration',
   '@42BB9:未安装': 'Not installed',
+  '@42BB9:未在配置中指定': 'Not specified in config',
+  '@42BB9:当前模型：{model}': 'Current model: {model}',
   '@42BB9:主题': 'Theme',
   '@42BB9:浅色': 'Light',
   '@42BB9:深色': 'Dark',

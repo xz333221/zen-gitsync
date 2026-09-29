@@ -948,6 +948,9 @@ onMounted(async () => {
   await pruneBlankTasks()
   connectSSE()
   window.addEventListener('beforeunload', onBeforeUnloadPersist)
+  // 执行器的当前模型（下拉项右侧要显示）。App 里 startPolling 也会拉一次，
+  // 两边都调不重复请求：store 内部有并发去重 + 10 分钟 TTL
+  void toolsStore.fetchExecutorModels()
 })
 onBeforeUnmount(() => {
   disconnectSSE()
@@ -1013,6 +1016,16 @@ function pickExecutor(id: TaskExecutorId) {
 
 function executorLabel(id: TaskExecutorId): string {
   return taskExecutorName(id)
+}
+
+/** 该执行器当前配置的模型（下拉项右侧）。空串 = 还没探测到，渲染时整块跳过 */
+function executorModelText(id: TaskExecutorId): string {
+  return toolsStore.executorModelText(id)
+}
+
+/** 模型 + 次要信息（CLI 别名 / 服务商），title 用 */
+function executorModelTitle(id: TaskExecutorId): string {
+  return [executorModelText(id), toolsStore.executorModelDetail(id)].filter(Boolean).join(' · ')
 }
 
 // 任务连续对话流的助手名/头像：跟随最近一轮 job 实际用的执行器。
@@ -1158,7 +1171,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
             @command="pickExecutor"
           >
             {{ $t('@WORKBENCH:执行任务') }}
-            <span class="wb-executor-split__hint">
+            <span class="wb-executor-split__hint" :title="executorModelTitle(selectedTaskExecutor)">
               <TaskExecutorIcon :executor="selectedTaskExecutor" class="wb-executor-split__hint-icon" />
               {{ executorLabel(selectedTaskExecutor) }}
             </span>
@@ -1173,6 +1186,11 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
                   <span class="wb-executor-item">
                     <TaskExecutorIcon :executor="opt.id" class="wb-executor-item__icon" />
                     <span class="wb-executor-item__name">{{ opt.name }}</span>
+                    <span
+                      v-if="executorModelText(opt.id)"
+                      class="wb-executor-item__model"
+                      :title="executorModelTitle(opt.id)"
+                    >{{ executorModelText(opt.id) }}</span>
                     <el-icon v-if="selectedTaskExecutor === opt.id" class="wb-executor-item__check"><Check /></el-icon>
                     <span v-else-if="!executorAvailability[opt.id]" class="wb-executor-item__missing">{{ $t('@42BB9:未安装') }}</span>
                   </span>
@@ -2296,6 +2314,16 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-executor-item__missing {
   font-size: var(--font-size-xs);
   color: var(--text-secondary, var(--el-text-color-secondary));
+}
+/* 当前模型：承载信息的元文字（不用 --text-tertiary，那档对比度不够） */
+.wb-executor-item__model {
+  flex: none;
+  max-width: 15em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--font-size-xs);
+  color: var(--text-meta);
 }
 .wb-no-claude-hint__icon { font-size: var(--font-size-base); opacity: 0.9; }
 .wb-no-claude-hint__text { letter-spacing: -0.05px; }

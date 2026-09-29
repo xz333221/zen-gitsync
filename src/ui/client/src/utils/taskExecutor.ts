@@ -26,6 +26,41 @@ export const TASK_EXECUTOR_OPTIONS: TaskExecutorOption[] = [
   { id: 'codex', name: 'Codex' },
 ]
 
+// ── 执行器当前配置的模型（展示口径）─────────────────────────────────────────
+//
+// 为什么这里只有类型、没有取数逻辑：取数要发请求 + 缓存 + 定时刷新，那套东西
+// 归「本机 CLI 探测」那一个 store（stores/toolsStore），本文件保持纯展示口径 ——
+// 它被 agentEngine.test.ts 用相对路径直接 import，不该因为一个类型声明就把
+// fetch / i18n 拉进单测环境。
+
+/**
+ * 某个执行器当前配置的模型。字段来自服务端只读探测
+ * （src/ui/server/routes/workbench/executorModels.js，读三个 CLI 的配置文件）。
+ */
+export interface ExecutorModelInfo {
+  /**
+   * 给人看的名字。claude 场景下这是**别名背后真实模型**（本机是 deepseek-v4.1-flash），
+   * 不是 CLI 认识的别名 —— 用户看到 claude-sonnet-5 会以为在用官方模型。
+   */
+  name: string
+  /** 次要信息（claude 的 CLI 别名）。进 title 用；没有则 null */
+  detail: string | null
+  /** 服务商名或 base_url；没有则 null */
+  provider: string | null
+}
+
+/**
+ * 模型展示的**三态**。
+ *
+ * 为什么必须区分 unknown 与 unset：探测请求还没回来时就把界面写成「未在配置中指定」
+ * 是在撒谎 —— 用户会以为"我确实没配"，而事实只是"还没问到"。unknown 一律不渲染，
+ * 等结果到了再决定说哪一句。
+ */
+export type ExecutorModelState =
+  | { status: 'unknown' }
+  | { status: 'unset' }
+  | { status: 'set'; info: ExecutorModelInfo }
+
 /** 收口校验：新加执行器只改 TASK_EXECUTOR_OPTIONS，各处的 isValid 跟着走 */
 export function isTaskExecutorId(value: unknown): value is TaskExecutorId {
   return TASK_EXECUTOR_OPTIONS.some(o => o.id === value)

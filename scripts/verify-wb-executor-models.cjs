@@ -1,0 +1,442 @@
+/**
+ * 「这个执行器现在实际在用什么模型」在界面上看得见的验证。
+ *
+ * 为什么要有这个：工作台派任务**一律不传 --model**，模型完全跟随 claude / codex /
+ * opencode 各自的配置文件。这条设计本身是对的，但副作用是界面上一个模型都看不到 ——
+ * 用户想确认"这活到底是哪个模型跑的"只能去翻三个不同格式的配置文件。这次把
+ * "读三个配置文件"收口成一个只读接口（server: routes/workbench/executorModels.js）
+ * 并在三处展示。这个脚本验的就是**展示这一层**真的成立。
+ *
+ * 验收契约（改这块时别破坏）：
+ *   A 接口本身可用：/api/workbench/executor-models 返回三个执行器的模型，
+ *     claude 这种"别名两层"的要**两个名字都在**（别名背后那个才是真花钱的模型）
+ *   B 设置弹窗（通用设置）：选中执行器下方直接给出「当前模型：xxx（别名 · 服务商）」
+ *   C 下拉项右侧标出该执行器的模型（主 Agent 控制台 / 工作台执行按钮 / 设置里共三处）
+ *   D 工作台执行按钮的 title 与下拉同口径（不开下拉也知道这活谁跑）
+ *   E **三处对同一个执行器给出的模型文案必须一字不差** —— 三处各写一份措辞是这类
+ *     "同一个事实在多处展示"最典型的腐坏方式
+ *   F **没探测到 ≠ 没配置**：接口失败时一律不显示，绝不说"未在配置中指定" ——
+ *     请求还没回来就替用户下结论（"你没配"）是在撒谎，而用户会信
+ *   G 切换执行器时那行跟着换；配置里没写模型的那个显示「未在配置中指定」而不编一个名字
+ *   H 页面无 console / page 错误
+ *
+ * 两段式：前半段 route 拦截注入**构造数据**（覆盖 有别名 / 只有模型名 / 没配 三态），
+ * 后半段把接口打成失败（500）重载，验 F。
+ * 拦截而不是用运行中的后端回数据，是为了让"没配"和"探测失败"这两个分支**一定**
+ * 覆盖到 —— 真实机器上 opencode 恰好没配，但 claude 的两层别名是环境相关的。
+ * A 组仍然打真实后端：它验的是"路由真的挂上了"，用构造数据等于自己验自己。
+ *
+ * 前置：vite dev 在 5544；后端 5545 活着（提供 projects 等其余接口的真实响应）。
+ * ⚠️ 后端必须是**加载了新路由**的进程：A 组会如实报 404。改完服务端记得重启
+ *    （本仓库的 nodemon 偶发 watch 失灵，touch 文件不一定能拉起子进程）。
+ * 用法：node scripts/verify-wb-executor-models.cjs
+ * 退出码：0 全通过，1 有失败项，2 前置不足。
+ */
+const fs = require('node:fs')
+const path = require('node:path')
+
+// playwright 装在 src/ui/client 下，这里把它的 node_modules 挂进解析路径，脚本可独立运行
+module.paths.unshift(path.resolve(__dirname, '../src/ui/client/node_modules'))
+const { chromium } = require('playwright')
+
+const BASE = process.env.ZEN_BASE || 'http://localhost:5544'
+const API = process.env.ZEN_API || 'http://127.0.0.1:5545'
+const CHROME = process.env.ZEN_CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe'
+
+/**
+ * 注入的模型 fixture。三种状态各来一条，一个用例覆盖全部分支：
+ *   claude   —— 别名两层齐全（CLI 别名 + 背后真实模型 + 代理地址）。日常最可能命中的形态
+ *   codex    —— 只有模型名 + 服务商，没有第二层
+ *   opencode —— 配置里没写模型（真实机器上就是这个样子），走「未在配置中指定」
+ */
+const FIXTURE = {
+  claude: { name: 'deepseek-v4.1-flash', detail: 'claude-sonnet-5[1M]', provider: 'http://127.0.0.1:15721' },
+  codex: { name: 'gpt-6-astra', detail: null, provider: 'kakouai' },
+  opencode: null,
+}
+/** 与前端 i18n（@42BB9:未在配置中指定 / 当前模型：{model}）同一份口径 */
+const UNSET_TEXT = '未在配置中指定'
+
+const results = []
+const consoleErrors = []
+const pageErrors = []
+
+function check(name, ok, extra = '') {
+  results.push({ name, ok, extra })
+  console.log(`${ok ? '  PASS' : '  FAIL'}  ${name}${extra ? '  :: ' + extra : ''}`)
+}
+const log = (...a) => console.log('[verify]', ...a)
+const sleep = (ms) => new Promise(r => setTimeout(r, ms))
+/** DOM 里的空白（模板缩进 / 换行）不该影响"文字对不对"的判断 */
+const norm = (s) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim()
+
+/** 进工作台（点活动栏 + 等三栏板子出来） */
+async function openWorkbench(page) {
+  await page.waitForSelector('.activity-bar', { timeout: 20000 })
+  await page.locator('.activity-btn[aria-label^="工作台"]').first().click()
+  await page.waitForSelector('.board', { timeout: 15000 })
+  await page.locator('.proj-item--all').first().click()
+  await sleep(900)
+}
+
+/**
+ * 打开「用户设置」弹窗并停在通用设置（默认就是 general）。
+ *
+ * ⚠️ 等 `.executor-option` 用 **attached** 而不是可见：el-option 的内容渲染在
+ * select 的弹出层里，**没展开 select 时它存在但不可见** —— 等 visible 会一直超时
+ * （第一版就是这么假的）。这里只需要它"已经渲染"，可见性由后面真去展开 select 时验。
+ */
+async function openSettings(page) {
+  await page.locator('button[aria-label="用户设置"]').first().click()
+  await page.waitForSelector('.executor-option', { state: 'attached', timeout: 8000 })
+  // 弹窗打开时会强制重探一次模型（force），等那次请求回来
+  await sleep(900)
+}
+
+/**
+ * 「任务执行器」那一行的 select。
+ * 弹窗里有好几个 el-select（外观 / 界面语言 / 任务执行器），只能靠 label 关联定位 ——
+ * 按顺序取第 N 个会在将来有人往上面插一个新的下拉时静默错位。
+ */
+function executorSelect(page) {
+  return page.locator('.setting-row')
+    .filter({ has: page.locator('.setting-label', { hasText: /任务执行器|Task executor/ }) })
+    .locator('.el-select')
+    .first()
+}
+
+/** 展开后**可见**的那个 select 弹出层（同一页可能并存多个隐藏的 popper） */
+const visibleSelectDropdown = (page) => page.locator('.el-select-dropdown:visible').last()
+
+/**
+ * 在设置里把任务执行器切成指定的一项。
+ *
+ * ⚠️ 先看弹出层是不是已经开着再决定要不要点 —— select 的 trigger 是 toggle 语义，
+ * 已经展开时再点一次是**收起**（第一版就是这么超时的：前面读选项时没关，
+ * 这里又点了一下，于是永远等不到可见的下拉）。
+ */
+async function pickExecutor(page, text) {
+  if (!(await visibleSelectDropdown(page).count())) {
+    await executorSelect(page).click()
+    await sleep(450)
+  }
+  await visibleSelectDropdown(page).locator('.el-select-dropdown__item')
+    .filter({ hasText: text }).first().click()
+  await sleep(500)
+}
+
+/**
+ * 读「设置 → 任务执行器」那块的两个展示位：
+ *   line   —— 下方的「当前模型：…（…）」整行（v-if 未渲染时 found=false）
+ *   detail —— 行里的括号部分
+ */
+const readSettingsExecutor = (page) => page.evaluate(() => {
+  const line = document.querySelector('.executor-model-line')
+  return {
+    found: !!line,
+    text: line ? line.textContent.replace(/\s+/g, ' ').trim() : '',
+    detail: line && line.querySelector('.executor-model-line__detail')
+      ? line.querySelector('.executor-model-line__detail').textContent.replace(/\s+/g, ' ').trim()
+      : null,
+  }
+})
+
+/** 读 el-select 展开后的选项：每个执行器的名字 + 右侧模型文案 + title */
+const readSettingsOptions = (page) => page.evaluate(() => {
+  const dropdown = Array.from(document.querySelectorAll('.el-select-dropdown'))
+    .find(d => d.offsetParent !== null)
+  if (!dropdown) return { found: false, options: [] }
+  return {
+    found: true,
+    options: Array.from(dropdown.querySelectorAll('.executor-option')).map(el => ({
+      text: el.textContent.replace(/\s+/g, ' ').trim(),
+      model: el.querySelector('.executor-option__model')
+        ? el.querySelector('.executor-option__model').textContent.replace(/\s+/g, ' ').trim()
+        : null,
+      modelTitle: el.querySelector('.executor-option__model')
+        ? el.querySelector('.executor-option__model').getAttribute('title')
+        : null,
+    })),
+  }
+})
+
+/**
+ * 读某个执行器下拉（root = .tep 是主 Agent 控制台那个，.wb-executor-split 是工作台的）。
+ *
+ * ⚠️ 这里跑在 page.evaluate 里，**不能用 Playwright 的 `:visible` 伪类**（浏览器不认，
+ * 直接抛非法选择器）；可见性在 DOM 侧用 offsetParent 判。`.tep` 有 v-show 双实例，
+ * 必须挑可见的那个，否则读到的是藏起来那份（按钮 title 会是 null）。
+ */
+const readDropdown = (page, rootSel, itemSel, modelSel) => page.evaluate(({ root, item, model }) => {
+  const menu = Array.from(document.querySelectorAll('.el-dropdown-menu'))
+    .find(m => m.offsetParent !== null)
+  const roots = Array.from(document.querySelectorAll(root))
+  const rootEl = roots.find(el => el.offsetParent !== null) || roots[0]
+  if (!menu || !rootEl) return { found: false, items: [], btnTitle: rootEl ? rootEl.getAttribute('title') : null }
+  return {
+    found: true,
+    btnTitle: rootEl.getAttribute('title'),
+    items: Array.from(menu.querySelectorAll(item)).map(el => ({
+      text: el.textContent.replace(/\s+/g, ' ').trim(),
+      model: el.querySelector(model)
+        ? el.querySelector(model).textContent.replace(/\s+/g, ' ').trim()
+        : null,
+      modelTitle: el.querySelector(model) ? el.querySelector(model).getAttribute('title') : null,
+    })),
+  }
+}, { root: rootSel, item: itemSel, model: modelSel })
+
+async function main() {
+  // ── A 接口本身（打真实后端，验路由真的挂上了）────────────────────────
+  let apiModels = null
+  try {
+    const resp = await fetch(`${API}/api/workbench/executor-models`)
+    const body = await resp.json().catch(() => null)
+    check('A1 接口可用：GET /api/workbench/executor-models 返回 success',
+      resp.status === 200 && !!body && body.success === true,
+      `status=${resp.status}${resp.status === 404 ? '（后端跑的是旧代码，重启它）' : ''}`)
+    apiModels = body && body.models ? body.models : null
+  } catch (err) {
+    check('A1 接口可用：GET /api/workbench/executor-models 返回 success', false, err.message)
+  }
+  check('A2 接口返回三个执行器的 key（与 TASK_EXECUTOR_OPTIONS 对齐）',
+    !!apiModels && ['claude', 'codex', 'opencode'].every(k => k in apiModels),
+    JSON.stringify(apiModels))
+  // claude 的别名两层是这套机制存在的理由：只报 CLI 别名等于没报
+  check('A3 claude 这类"别名两层"的形态：模型名与服务商都带出来（有则 name≠detail）',
+    !!apiModels && !apiModels.claude
+      || (typeof apiModels.claude.name === 'string' && !!apiModels.claude.name),
+    JSON.stringify(apiModels && apiModels.claude))
+
+  const browser = await chromium.launch({
+    headless: true,
+    executablePath: fs.existsSync(CHROME) ? CHROME : undefined,
+    args: ['--no-sandbox'],
+  })
+  const page = await (await browser.newContext({ viewport: { width: 2000, height: 1274 } })).newPage()
+  page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()) })
+  page.on('pageerror', (e) => pageErrors.push(String(e)))
+
+  let shot = null
+  try {
+    await page.addInitScript(() => {
+      try {
+        // 「全部项目」视图：否则色标/任务会被项目过滤掉，合成任务看不见（历史假红原因）
+        localStorage.setItem('wb.boardProject.v1', '')
+        localStorage.setItem('wb.boardView.v1', 'kanban')
+        // 右栏固定指令模式：模式里才有 TaskExecutorPicker（对话模式那个要等引擎起来）
+        localStorage.setItem('wb.ocMode.v2', 'command')
+      } catch { /* 隐私模式 */ }
+    })
+    await page.route('**/api/workbench/executor-models*', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, checkedAt: new Date().toISOString(), models: FIXTURE }),
+      })
+    })
+    // 三个执行器都判"已安装"：否则下拉项被置灰、picker 还会自作主张回落到别的值
+    await page.route('**/api/check-tools*', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true, platform: 'win32',
+          vscode: true, claude: true, codex: true, opencode: true, kimi: false, zcode: false, dsh: false,
+          installers: {}, versions: {},
+        }),
+      })
+    })
+    // 一条合成任务：工作台的「执行」split button 要**选中任务**才出现。
+    // ⚠️ 两个接口都要给：看板卡片来自 /api/workbench/projects（要 decorate 过的），
+    // 而「任务执行」弹窗左列的任务清单来自 /api/workbench/tasks（原始形状）。
+    // 只喂前一个的话，点开卡片后左列里没有这条任务可选（第一版就是这么卡住的）。
+    const registry = await import(require('node:url').pathToFileURL(
+      path.resolve(__dirname, '../src/ui/server/routes/workbench/projectRegistry.js')
+    ).href)
+    const now = Date.now()
+    const live = await fetch(`${API}/api/workbench/projects`).then(r => r.json()).catch(() => ({ projects: [], currentProjectPath: '' }))
+    const synthTask = {
+      id: 'synth-em-task',
+      title: '【合成】执行器模型展示',
+      desc: '',
+      // 弹窗左列按项目分组 → 必须挂在当前项目下才看得见
+      projectPath: live.currentProjectPath || 'D:\\ws\\zen-gitsync',
+      createdAt: new Date(now - 60000).toISOString(),
+      promptId: '',
+    }
+    const synthCard = registry.decorateTaskForBoard(synthTask, [], { now })
+    await page.route('**/api/workbench/tasks*', (route) => {
+      if (route.request().method() !== 'GET') {
+        // 点任务会触发自动保存（POST），放它过去会真的写用户的 tasks.json
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true }) })
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, tasks: [synthTask] }),
+      })
+    })
+    await page.route('**/api/workbench/projects*', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, projects: live.projects, tasks: [synthCard], currentProjectPath: live.currentProjectPath }),
+      })
+    })
+
+    await page.goto(BASE, { waitUntil: 'domcontentloaded' })
+    await openWorkbench(page)
+
+    // ── B 设置弹窗：那一行「当前模型：…」 ────────────────────────────────
+    await openSettings(page)
+    let line = await readSettingsExecutor(page)
+    check('B1 设置 → 任务执行器下方给出「当前模型：<模型名>」',
+      line.found && line.text.includes(FIXTURE.claude.name), JSON.stringify(line))
+    check('B2 同一行里带出次要信息（CLI 别名 · 服务商），不用点开配置文件',
+      !!line.detail && line.detail.includes(FIXTURE.claude.detail) && line.detail.includes(FIXTURE.claude.provider),
+      String(line.detail))
+
+    // 下拉选项右侧的模型名
+    await executorSelect(page).click()
+    await sleep(500)
+    let opts = await readSettingsOptions(page)
+    check('C1 设置下拉：每个执行器右侧标出它当前用的模型',
+      opts.found && opts.options.some(o => o.model === FIXTURE.claude.name),
+      JSON.stringify(opts.options.map(o => `${o.text}|${o.model}`)))
+    check('C2 设置下拉：配置里没写模型的那个显示「未在配置中指定」，不编一个名字',
+      opts.options.some(o => o.model === UNSET_TEXT && o.text.includes('OpenCode')),
+      JSON.stringify(opts.options.map(o => `${o.text}|${o.model}`)))
+    check('C3 选项 title 是模型 + 服务商（codex 只有服务商，没有第二层别名）',
+      opts.options.some(o => o.modelTitle === `${FIXTURE.codex.name} · ${FIXTURE.codex.provider}`),
+      JSON.stringify(opts.options.map(o => o.modelTitle)))
+
+    // ── G 切换执行器 → 那行跟着换（尤其"没配"这个分支）─────────────────
+    await pickExecutor(page, 'OpenCode')
+    line = await readSettingsExecutor(page)
+    check('G1 切到没配模型的执行器：那行改说「未在配置中指定」',
+      line.found && line.text.includes(UNSET_TEXT), JSON.stringify(line))
+    check('G2 没配时不显示空的括号（detail 段整块不渲染）',
+      line.detail === null, JSON.stringify(line.detail))
+
+    // 切回 claude，后面 E 组要拿它跟另外两处比对
+    await pickExecutor(page, 'Claude Code')
+    line = await readSettingsExecutor(page)
+    check('G3 切回来恢复（同一份数据驱动，不是记了一份快照）',
+      line.found && line.text.includes(FIXTURE.claude.name), JSON.stringify(line))
+    const settingsText = line.text
+    // 存证：设置弹窗里那一行实际长什么样（这条比任何断言都直观）
+    shot = path.resolve(__dirname, '../tmp-verify-wb-executor-models-settings.png')
+    await page.locator('.el-dialog').first().screenshot({ path: shot })
+    log('截图:', shot)
+    // 关闭设置弹窗（后面要点工作台里的控件）。
+    // ⚠️ 必须限定在页脚里：`.dialog-cancel-btn` 这个类在「编辑器」tab 里还有个
+    // 「打开系统配置文件」按钮，取 first 会点到那个不可见的（第一版就是这么超时的）
+    await page.locator('.user-settings-footer .dialog-cancel-btn').first().click()
+    await sleep(700)
+
+    // ── C/E 主 Agent 控制台的 picker：按钮 title + 下拉项 ──────────────
+    // （放在打开「任务执行」弹窗之前做：那个弹窗是 overlay，会把右栏的点击吃掉）
+    // ⚠️ `.tep` 在 DOM 里有**两个**（指令模式派发栏 / 对话模式各一份，v-show 切换），
+    // 不过滤可见性会取到那个藏起来的（第一版就是这么超时的）
+    const picker = page.locator('.tep:visible').first()
+    await picker.waitFor({ state: 'visible', timeout: 10000 })
+    await sleep(400)
+    const pickerBtnTitle = await picker.locator('> .tep__btn').first().getAttribute('title')
+    check('E1 控制台执行器按钮的 title 带出当前模型',
+      !!pickerBtnTitle && pickerBtnTitle.includes(FIXTURE.claude.name), String(pickerBtnTitle))
+    await picker.locator('> .tep__btn').first().click()
+    await sleep(500)
+    const pickerDrop = await readDropdown(page, '.tep', '.tep__item', '.tep__item-model')
+    check('C4 控制台下拉：每个执行器右侧标出模型',
+      pickerDrop.found && pickerDrop.items.some(i => i.model === FIXTURE.claude.name),
+      JSON.stringify(pickerDrop.items.map(i => `${i.text}|${i.model}`)))
+    check('C5 控制台下拉：没配的那个同样显示「未在配置中指定」',
+      pickerDrop.items.some(i => i.model === UNSET_TEXT), JSON.stringify(pickerDrop.items.map(i => i.model)))
+    await page.keyboard.press('Escape')
+    await sleep(400)
+
+    // ── D 工作台执行按钮（split button）的下拉与 title ──────────────────
+    // 点看板卡片 → 开「任务执行」弹窗 → 左列选中任务 → 工具栏才出现执行按钮
+    await page.locator('.kb-card[data-task-id="synth-em-task"]').first().click()
+    await page.waitForSelector('.wb-sidebar', { timeout: 10000 })
+    await page.locator('.wb-sidebar .wb-task-list').getByText('【合成】执行器模型展示').first().click()
+    await page.waitForSelector('.wb-executor-split', { timeout: 10000 })
+    await sleep(500)
+    const splitHintTitle = await page.locator('.wb-executor-split__hint').first().getAttribute('title')
+    check('D1 执行按钮的 title 带出当前模型（悬停就知道这活谁跑）',
+      !!splitHintTitle && splitHintTitle.includes(FIXTURE.claude.name), String(splitHintTitle))
+    await page.locator('.wb-executor-split button').last().click()
+    await sleep(500)
+    const wbDrop = await readDropdown(page, '.wb-executor-split', '.wb-executor-item', '.wb-executor-item__model')
+    check('D2 执行按钮下拉：每个执行器右侧标出模型',
+      wbDrop.found && wbDrop.items.some(i => i.model === FIXTURE.claude.name),
+      JSON.stringify(wbDrop.items.map(i => `${i.text}|${i.model}`)))
+    shot = path.resolve(__dirname, '../tmp-verify-wb-executor-models-dropdown.png')
+    await page.screenshot({ path: shot })
+    log('截图:', shot)
+    // 关掉这个下拉（点空白处），否则下面读菜单会读到同一个
+    await page.keyboard.press('Escape')
+    await sleep(400)
+
+    // ── E 三处文案一致性 ────────────────────────────────────────────────
+    // 设置行是「当前模型：xxx（…）」的整行，另外两处只有名字 —— 取"是否都含同一个模型名"
+    // 之外，还要把三处的**模型名本身**抽出来比：三处各写一份措辞是这里最容易腐坏的地方。
+    const pickerModelText = (pickerDrop.items.find(i => i.text.includes('Claude Code')) || {}).model
+    const wbModelText = (wbDrop.items.find(i => i.text.includes('Claude Code')) || {}).model
+    check('E2 三处对同一个执行器给出的模型文案一字不差',
+      !!pickerModelText && pickerModelText === wbModelText && settingsText.includes(pickerModelText),
+      `设置=${JSON.stringify(settingsText)} 下拉=${JSON.stringify(pickerModelText)} 工作台=${JSON.stringify(wbModelText)}`)
+    check('E3 picker 与工作台按钮的 title 用同一份「模型 · 别名 · 服务商」口径（picker 只是多带一句入口说明）',
+      // picker 的 title 是「这个下拉是干嘛的 · 模型信息」，工作台那条只有模型信息 ——
+      // 所以比"后者是前者的后缀"，而不是比全等
+      !!splitHintTitle
+        && splitHintTitle === `${FIXTURE.claude.name} · ${FIXTURE.claude.detail} · ${FIXTURE.claude.provider}`
+        && !!pickerBtnTitle && pickerBtnTitle.endsWith(splitHintTitle),
+      `picker="${pickerBtnTitle}" hint="${splitHintTitle}"`)
+
+    shot = path.resolve(__dirname, '../tmp-verify-wb-executor-models.png')
+    await page.screenshot({ path: shot })
+    log('截图:', shot)
+
+    // ── F 探测失败时"不撒谎" ────────────────────────────────────────────
+    // 关键断言：unknown（还没问到）与 unset（确实没配）必须显示成不同的东西。
+    // 探测失败时若显示「未在配置中指定」，用户会以为是自己没配 → 去翻配置文件白折腾。
+    await page.unroute('**/api/workbench/executor-models*')
+    await page.route('**/api/workbench/executor-models*', (route) => {
+      route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ success: false }) })
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await openWorkbench(page)
+    await openSettings(page)
+    const failLine = await readSettingsExecutor(page)
+    check('F1 探测失败时设置里那行整块不渲染（不说"未在配置中指定"）',
+      !failLine.found, JSON.stringify(failLine))
+    await executorSelect(page).click()
+    await sleep(500)
+    const failOpts = await readSettingsOptions(page)
+    check('F2 探测失败时下拉项也不显示任何模型文案（含"未在配置中指定"）',
+      failOpts.found && failOpts.options.length > 0
+        && failOpts.options.every(o => o.model === null && !o.text.includes(UNSET_TEXT)),
+      JSON.stringify(failOpts.options.map(o => `${o.text}|${o.model}`)))
+    await page.keyboard.press('Escape')
+
+    // F 组故意把接口打成 500，浏览器会因此记一条 "Failed to load resource" 的
+    // console error —— 那是我们**自己制造的**、也正是 F 组要验的场景，不算页面缺陷。
+    // 页面真实的 JS 报错（异常、警告）照样算。
+    const realErrors = consoleErrors.filter(t => !/Failed to load resource/i.test(t))
+    check('H1 页面无 console / page 错误',
+      realErrors.length === 0 && pageErrors.length === 0,
+      [...realErrors, ...pageErrors].slice(0, 3).join(' | '))
+  } finally {
+    // 只关自己起的这个浏览器实例（不用 taskkill /IM —— 那会连带关掉用户的浏览器）
+    await browser.close()
+  }
+
+  const failed = results.filter(r => !r.ok)
+  console.log(`\n[verify] ${results.length - failed.length}/${results.length} 通过`)
+  for (const f of failed) console.log(`  FAIL  ${f.name}  :: ${f.extra}`)
+  process.exit(failed.length ? 1 : 0)
+}
+
+main().catch((err) => { console.error('[verify] 异常退出:', err); process.exit(1) })

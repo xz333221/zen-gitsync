@@ -129,6 +129,7 @@ import {
   buildRunningFacts,
   generateProgressReport,
 } from './progressReport.js';
+import { detectExecutorModels, formatExecutorModel } from './executorModels.js';
 
 /**
  * 「任务结束 → 刷快照」的监听器。存成模块级的，是为了在重复装配路由时
@@ -1495,6 +1496,31 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
     } catch {
       throw new HttpError(404, '文件已丢失');
     }
+  }));
+
+  // ════════════════════════════════════════════════════════════════════════
+  // §20. 执行器模型探测（只读）
+  // ════════════════════════════════════════════════════════════════════════
+  /**
+   * 「这三个执行器现在实际在用什么模型」。
+   *
+   * 为什么需要这个端点：工作台派任务**一律不传 --model**（见 executorModels.js 的
+   * 长注释），模型完全跟随各自 CLI 的配置文件。副作用是界面上一个执行器的模型都
+   * 看不到 —— 用户想确认"这活到底是哪个模型跑的"只能去翻三个不同格式的配置文件。
+   * 这个端点把那件事收口到一次请求里。
+   *
+   * 无参数、服务端不算缓存：三个文件都很小，每次实读比让前端踩脏缓存划算；
+   * 前端那边（stores/toolsStore）自己按分钟级 TTL + 并发去重压请求频率。
+   * 返回值里某项为 null = 那个 CLI 没在配置里写模型，前端照实显示「未在配置中指定」。
+   * key 恒为 claude / codex / opencode 三个，与 TASK_EXECUTOR_OPTIONS 对齐。
+   */
+  app.get('/api/workbench/executor-models', asyncRoute(async (_req, res) => {
+    const detected = await detectExecutorModels();
+    const models = {};
+    for (const [executor, info] of Object.entries(detected)) {
+      models[executor] = formatExecutorModel(info);
+    }
+    res.json({ success: true, checkedAt: nowIso(), models });
   }));
 
   // 暂存区兜底清理：粘了图却没派发就关页面的痕迹，不该永久占着磁盘。

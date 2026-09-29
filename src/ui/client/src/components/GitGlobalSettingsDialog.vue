@@ -138,11 +138,21 @@
                       <span class="executor-option">
                         <TaskExecutorIcon :executor="opt.id" class="executor-option__icon" />
                         {{ opt.name }}
+                        <span
+                          v-if="toolsStore.executorModelText(opt.id)"
+                          class="executor-option__model"
+                          :title="optionExecutorModelTitle(opt.id)"
+                        >{{ toolsStore.executorModelText(opt.id) }}</span>
                         <span v-if="!toolsStore.isToolAvailable(opt.id)" class="executor-option__missing">{{ $t('@42BB9:未安装') }}</span>
                       </span>
                     </el-option>
                   </el-select>
                   <span class="setting-hint-block">{{ $t('@42BB9:工作台执行任务时使用的本地 CLI；模型跟随各自 CLI 的自身配置') }}</span>
+                  <!-- 当前模型：把"模型跟随各自 CLI 的自身配置"这句话落到实处 -->
+                  <span v-if="selectedExecutorModelText" class="setting-hint-block executor-model-line">
+                    {{ $t('@42BB9:当前模型：{model}', { model: selectedExecutorModelText }) }}
+                    <span v-if="selectedExecutorModelDetail" class="executor-model-line__detail">（{{ selectedExecutorModelDetail }}）</span>
+                  </span>
                 </div>
               </div>
 
@@ -779,6 +789,19 @@ const tempTheme = ref<'light' | 'dark' | 'auto'>('light')
 const tempLocale = ref<SupportLocale>('zh-CN')
 // 任务执行器（全局默认值；工作台执行按钮旁的临时切换不归这里管）
 const tempTaskExecutor = ref<TaskExecutorId>('claude')
+
+// 选中执行器**当前配置的模型**（跟随 tempTaskExecutor：切换下拉立即看到对应的模型）。
+// 空串 = 还没探测到 —— 那种情况整块不渲染，不能先说"未在配置中指定"（理由见 toolsStore）。
+// 这份数据是这页最要紧的一处展示：模型跟随各 CLI 的配置文件、
+// 不传 --model，在这个弹窗外别处都看不到。
+const selectedExecutorModelText = computed(() => toolsStore.executorModelText(tempTaskExecutor.value))
+const selectedExecutorModelDetail = computed(() => toolsStore.executorModelDetail(tempTaskExecutor.value))
+
+/** 下拉选项右侧的模型名 + 次要信息，拼成该选项的 title */
+function optionExecutorModelTitle(id: TaskExecutorId): string {
+  return [toolsStore.executorModelText(id), toolsStore.executorModelDetail(id)].filter(Boolean).join(' · ')
+}
+
 // 任务执行结束提示开关（全局，默认开）
 const tempNotifyOnTaskDone = ref(false)
 // 任务完成提示音开关（全局，默认开）。从属于上面的总开关：总开关关着时置灰不可点，
@@ -963,6 +986,10 @@ watch(() => props.modelValue, async (val) => {
     // 另一个 g ui 实例(独立进程)改过的全局配置(AI 模型/主题等),
     // 本页面 configStore 里还是启动时的旧快照,不刷新就看不到对方的修改。
     await configStore.loadConfig(true)
+
+    // 执行器模型同理强制重探：用户很可能刚改过 CLI 配置文件就想回来确认生效，
+    // 走 TTL 缓存会显示改之前的模型名（那正是"看不到"的老问题）
+    void toolsStore.fetchExecutorModels(true)
 
     // 打开时加载数据
     tempUserName.value = gitStore.userName
@@ -2265,6 +2292,26 @@ html.dark .label-icon {
 .executor-option__missing {
   margin-left: auto;
   font-size: var(--font-size-xs);
+  color: var(--el-text-color-secondary);
+}
+
+/* 选项里那个模型名：承载信息的元文字，用 --text-meta 而不是 --text-tertiary
+   （后者是对比度不达 AA 的装饰档，只配给状态点/图标用） */
+.executor-option__model {
+  max-width: 15em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--font-size-xs);
+  color: var(--text-meta);
+}
+
+/* 「当前模型：xxx（别名 · 服务商）」—— 事实值，比上一条说明文字实一档 */
+.executor-model-line {
+  font-weight: 500;
+}
+.executor-model-line__detail {
+  font-weight: 400;
   color: var(--el-text-color-secondary);
 }
 
