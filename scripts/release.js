@@ -832,13 +832,10 @@ async function stopRunningInstances({ quiet = false } = {}) {
   return stopped
 }
 
-// npm 的失败输出里出现这些字样 = Windows 文件占用,不是"registry 还没同步"。
-// 这两类失败的处理方式相反:文件占用要"再杀一轮 + 强删旧目录",registry 滞后只能等。
-const LOCKED_FILE_PATTERN = /EPERM|EBUSY|ENOTEMPTY|operation not permitted|Failed to remove/i
-
-function looksLikeFileLock(output) {
-  return LOCKED_FILE_PATTERN.test(String(output || ''))
-}
+// "文件占用"的判定不再用整串正则扫输出(v2.17.25 教训:npm warn cleanup 的
+// EPERM 是删旧目录的噪声,registry 还没就绪(E404)的每一轮都带它,整串扫会把
+// "只能等"误判成"要动手")。统一走 classifyInstallError() 的归类短码:
+// 只有 npm 自己裁决为 EPERM(EBUSY 已并入)才走"再杀一轮 + 强删旧目录"。
 
 // 手动强删旧的全局包目录。fs.rm 自带 Windows 重试(EBUSY/EPERM/ENOTEMPTY 退避重试),
 // 比 npm 自己那层浅清理更能啃下被占的目录。
@@ -931,8 +928,9 @@ async function selfUpdateGlobal(version) {
         errorTally.set(code, (errorTally.get(code) || 0) + 1)
         console.log(chalk.yellow(`  ✗ [${code}] ${summarizeInstallError(res.output)}`))
         // 文件占用和"registry 还没同步"是两类失败:前者要再杀一轮 + 强删旧目录,
-        // 后者只能等。混在一起会让前者白等满整个窗口。日志里的 [短码] 就是分类结果。
-        if (looksLikeFileLock(res.output)) {
+        // 后者只能等。混在一起会让前者白等满整个窗口。日志里的 [短码] 就是分类结果,
+        // 也是这里唯一的分支依据(不许再整串扫输出,warn 噪声会误判)。
+        if (code === 'EPERM') {
           console.log(chalk.yellow('  检测到文件占用(Windows 常见):再停一轮实例 + 强制清旧全局目录'))
           if (!KEEP_INSTANCES) await stopRunningInstances({ quiet: true })
           await forceRemoveGlobalPackage()
@@ -1045,7 +1043,7 @@ async function selfUpdateGlobal(version) {
     ))
   }
   if (lastOutput) console.error(chalk.gray(lastOutput))
-  if (looksLikeFileLock(lastOutput)) {
+  if (classifyInstallError(lastOutput) === 'EPERM') {
     console.error(chalk.yellow(
       '看起来是文件被占(不是 registry 滞后):关掉所有 UI 实例 / 编辑器后重试,\n'
       + '必要时手动删掉全局包目录再装(注意会短暂失去全局命令)。'

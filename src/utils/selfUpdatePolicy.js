@@ -105,19 +105,41 @@ export function nextPollIntervalMs({ elapsedMs, fastWindowMs, fastIntervalMs, sl
  * 与"EPERM(文件被占)"分不清 —— 两者的处理方式完全相反(一个只能等,一个要杀实例)。
  * 汇总成 `E404 ×8 / ETARGET ×2` 这样一行,下一次事故就不用再靠猜。
  *
+ * v2.17.25 实测教训(优先级为什么长这样):registry 还没就绪(E404)的每一轮
+ * 输出里都附带 `npm warn cleanup Failed to remove ... EPERM` —— 那是 npm 删旧
+ * 全局目录没删干净的动作噪声,不是失败根因。按旧的"EPERM 子串优先"判法被
+ * 误判成文件占用,导致每轮反复停实例 + 强删全局目录。所以:
+ *   ① npm 自己报了 `npm error code <CODE>` 行 → 以它为最终裁决;
+ *   ② 没有 code 行 → 只在 **error 行**里找文件占用类(warn 行永远不算);
+ *   ③ 还没有 → 才对全文兜底(兼容只截到 warn cleanup 的残缺输出)。
+ *
  * @param {string} output - npm install 的 stdout+stderr
- * @returns {string} E404 | ETARGET | EPERM | EBUSY | ENOTFOUND | ETIMEDOUT | ENETUNREACH | '其他'
+ * @returns {string} E404 | ETARGET | EPERM | ENOTFOUND | ETIMEDOUT | ENETUNREACH | 其他 | npm 原生未识别短码
  */
 export function classifyInstallError(output) {
   const s = String(output || '')
   if (!s) return '其他'
-  // 顺序有讲究:E404 / ETARGET 是"registry 还没就绪",EPERM / EBUSY 是"文件被占",
-  // 两类混在一起时优先报前者(它是自更新这一段的主题),但两者都会各自计数。
-  if (/EPERM|EBUSY|operation not permitted|Failed to remove/i.test(s)) return 'EPERM'
+  // ① npm 的裁决码行,如 `npm error code E404`
+  const codeLine = s.match(/^\s*npm (?:error|ERR!) code ([A-Z0-9_]+)\b/m)
+  if (codeLine) return normalizeErrCode(codeLine[1])
+  // ② error 行里的文件占用类(warn 行不算 —— 那是清理噪声)
+  const errorLines = s.split(/\r?\n/).filter((l) => /^\s*npm (?:error|ERR!)/.test(l))
+  if (errorLines.some((l) => /EPERM|EBUSY|operation not permitted|Failed to remove/i.test(l))) return 'EPERM'
+  // ③ 全文兜底:registry 类优先(它是自更新这一段的主题),文件占用类殿后
   if (/\bETARGET\b/.test(s)) return 'ETARGET'
   if (/\bE404\b|404 Not Found/i.test(s)) return 'E404'
   if (/\bENOTFOUND\b/.test(s)) return 'ENOTFOUND'
   if (/\bETIMEDOUT\b|timed out/i.test(s)) return 'ETIMEDOUT'
   if (/\bENETUNREACH\b|ECONNRESET|ECONNREFUSED/i.test(s)) return 'ENETUNREACH'
+  if (/EPERM|EBUSY|operation not permitted|Failed to remove/i.test(s)) return 'EPERM'
   return '其他'
+}
+
+// npm 原生错误码 → 本脚本的对账短码。EBUSY 与 EPERM 同属"文件被占"一类
+// (处置完全相同:杀实例 + 清目录),合并进同一个桶方便 errorTally 汇总;
+// 没见过的码原样返回,别硬塞 —— 归错桶比归不出来更误导。
+function normalizeErrCode(code) {
+  if (code === 'EBUSY') return 'EPERM'
+  if (code === 'ECONNRESET' || code === 'ECONNREFUSED') return 'ENETUNREACH'
+  return code
 }

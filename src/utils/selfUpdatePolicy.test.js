@@ -189,6 +189,24 @@ test('classifyInstallError: EPERM / EBUSY → 文件被占(和"还没就绪"完�
   assert.equal(classifyInstallError('npm error EBUSY: resource busy or locked'), 'EPERM')
 })
 
+test('classifyInstallError: npm 的 code 行是最终裁决(v2.17.25 实测回归)', () => {
+  // v2.17.25 真实形态:registry 还没就绪(E404)的每一轮都附带 npm warn cleanup EPERM
+  // (删旧全局目录的噪声)。旧判法按"EPERM 子串优先"误判成文件占用,
+  // 导致每轮反复停实例 + 强删全局目录。有 code 行时必须以它为准。
+  const notReady = [
+    'npm warn cleanup Failed to remove some directories: EPERM',
+    'npm error code E404',
+    'npm error 404 Not Found - GET https://registry.npmjs.org/zen-gitsync/-/zen-gitsync-2.17.25.tgz - Not found',
+  ].join('\n')
+  assert.equal(classifyInstallError(notReady), 'E404')
+  // npm 自己裁决成文件占用 → 才允许走"杀实例 + 清目录"
+  assert.equal(classifyInstallError('npm error code EPERM\nnpm error rename EPERM: operation not permitted'), 'EPERM')
+  // EBUSY 与 EPERM 同属"文件被占",归进同一个桶
+  assert.equal(classifyInstallError('npm error code EBUSY\nnpm error resource busy or locked'), 'EPERM')
+  // 没见过的码原样返回,不硬塞进既有短码
+  assert.equal(classifyInstallError('npm error code EAI_AGAIN\nnpm error getaddrinfo EAI_AGAIN'), 'EAI_AGAIN')
+})
+
 test('classifyInstallError: 网络类与空输入不炸,各有短码', () => {
   assert.equal(classifyInstallError('npm error code ENOTFOUND registry.npmjs.org'), 'ENOTFOUND')
   assert.equal(classifyInstallError('npm error code ETIMEDOUT'), 'ETIMEDOUT')
@@ -198,7 +216,8 @@ test('classifyInstallError: 网络类与空输入不炸,各有短码', () => {
   assert.equal(classifyInstallError('some unknown failure'), '其他')
 })
 
-test('classifyInstallError: 两类同时出现时优先报文件占用(它是唯一要"动手"的那类)', () => {
-  const mixed = 'npm error code E404\nnpm error EPERM: operation not permitted'
+test('classifyInstallError: 无 code 行时,error 行里的文件占用类仍优先于 registry 类', () => {
+  // 两条都是 error 行、又没有裁决 code 行 → 文件占用是唯一要"动手"的那类,优先报
+  const mixed = 'npm error E404 Not Found - GET https://...\nnpm error EPERM: operation not permitted'
   assert.equal(classifyInstallError(mixed), 'EPERM')
 })
