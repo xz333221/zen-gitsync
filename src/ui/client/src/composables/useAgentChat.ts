@@ -16,6 +16,7 @@ import { parsePlanArgs, planProgress } from 'zen-ai-chat-ui'
 import { $t } from '@/lang/static'
 import { useConfigStore } from '@/stores/configStore'
 import { useAgentActivityStore } from '@/stores/agentActivity'
+import { announceAgentTurn, type AgentTurnKind } from '@/utils/agentTurnNotify'
 import {
   getSelectedAgentEngine,
   setSelectedAgentEngine,
@@ -898,6 +899,11 @@ export function useAgentChat() {
         ElMessage.error(assistantMsg.error || $t('@AGENT:对话失败'))
       }
     } finally {
+      // 收尾提示的两个判据必须**在**清 pendingQuestion 之前取：模型 ask_user 时这一轮
+      // 并没有结束（SSE 还挂着等回答，见服务端 agentRoutes 的 pendingInteractions），
+      // 弹"已完成"是骗人。下面紧接着就把 pendingQuestion 清成 null 了。
+      const awaitingAnswer = Boolean(run.pendingQuestion)
+      const turnKind: AgentTurnKind = assistantMsg.status === 'error' ? 'error' : 'done'
       // 销号放在最前面、且不看 nonce：这一轮请求**确实**已经结束了（正常 / 出错 / 中止
       // 都走到这里），而同一会话的新一轮有它自己的令牌，不该由我这一轮的收尾去动它。
       agentActivity.end(turnToken)
@@ -906,6 +912,18 @@ export function useAgentChat() {
         run.pendingQuestion = null
         run.answeringQuestion = false
         run.abortController = null
+        // 提示音 / 系统通知 / toast 的分流见 utils/agentTurnNotify。
+        // 用户自己按的停止不问（人就在页面上点的那一下）；出错那条 catch 里已经弹过
+        // ElMessage.error，所以 alreadyToast 传 true，不让同一条错误在页面上弹两遍。
+        if (!stoppedByUser && !awaitingAnswer) {
+          announceAgentTurn({
+            kind: turnKind,
+            title: run.title,
+            detail: turnKind === 'error' ? (assistantMsg.error || assistantMsg.content) : assistantMsg.content,
+            tag: `zen-gitsync-agent-${streamSessionId || run.key}`,
+            alreadyToast: turnKind === 'error'
+          })
+        }
       }
       // 清掉乐观徽章；成功路径的 loadSessions() 会拉到服务端真实数据，
       // 中止/出错路径靠这一步兜底，避免左栏一直显示"正在生成中..."

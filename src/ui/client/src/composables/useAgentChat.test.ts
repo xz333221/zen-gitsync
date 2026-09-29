@@ -25,6 +25,16 @@ import { useConfigStore } from '@/stores/configStore'
 import { useAgentActivityStore } from '@/stores/agentActivity'
 import { convertSessionToMessages, useAgentChat } from './useAgentChat'
 
+// 提示链路单独测（utils/agentTurnNotify.test.ts），这里只守"什么该提示、什么不该提示"
+const notice = vi.hoisted(() => ({ calls: [] as any[] }))
+
+vi.mock('@/utils/agentTurnNotify', () => ({
+  announceAgentTurn: (opts: any) => {
+    notice.calls.push(opts)
+    return true
+  },
+}))
+
 interface SseStream {
   stream: ReadableStream<Uint8Array>
   send: (obj: Record<string, unknown>) => void
@@ -84,6 +94,7 @@ describe('useAgentChat parallel sessions', () => {
 
   beforeEach(() => {
     chatStreams = []
+    notice.calls = []
     setActivePinia(createPinia())
     const store = useConfigStore()
     store.setCurrentDirectory('C:/proj')
@@ -496,6 +507,94 @@ describe('useAgentChat parallel sessions', () => {
     await p
     await flush()
     expect(activity.runningCount).toBe(0)
+  })
+
+  // ── 轮次结束提示 ──────────────────────────────────────────────────────
+  // 守的是"什么时候该提示"：跑完一轮要提示，人自己按的停止不提示，
+  // 模型 ask_user 在等你回答时这一轮**还没结束**，更不能提示。
+  test('一轮正常跑完 → 提示一次，带上会话标题与最后一行输出', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const p = chat.sendMessage('改一下')
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    chatStreams[0].send({ type: 'content', delta: '先看文件\n\n改完了' })
+    chatStreams[0].send({ type: 'done', content: '先看文件\n\n改完了' })
+    chatStreams[0].close()
+    await p
+    await flush()
+
+    expect(notice.calls).toHaveLength(1)
+    expect(notice.calls[0].kind).toBe('done')
+    expect(notice.calls[0].title).toBe('会话 A')
+    // 原文整段交出去，"取最后一行 + 截断"是 agentTurnNotify 内部的活（那边单独测）
+    expect(notice.calls[0].detail).toBe('先看文件\n\n改完了')
+    // 出错那条 catch 里已经弹过 ElMessage.error，完成这条没有"已提示过"的重复
+    expect(notice.calls[0].alreadyToast).toBe(false)
+  })
+
+  test('用户自己按的停止不提示（人就在页面上点的那一下）', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const p = chat.sendMessage('先别跑')
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    await flush()
+
+    chat.stop()
+    chatStreams[0].error(new DOMException('aborted', 'AbortError'))
+    await p
+    await flush()
+
+    expect(notice.calls).toHaveLength(0)
+  })
+
+  test('模型在等用户回答（ask_user）时不提示 —— 这一轮还没结束', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const p = chat.sendMessage('你选一个')
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    chatStreams[0].send({
+      type: 'ask_user',
+      interactionId: 'i1',
+      question: '选哪个',
+      options: ['A', 'B'],
+      allowFreeText: true,
+      multiple: false
+    })
+    chatStreams[0].close()
+    await p
+    await flush()
+
+    // 这一轮没收尾（服务端 SSE 还挂着等回答），只是没人提示
+    expect(notice.calls).toHaveLength(0)
+  })
+
+  test('出错：提示里标 error，并声明"应用内已提示过"（不弹第二遍）', async () => {
+    vi.spyOn(ElMessage, 'error').mockImplementation(() => ({} as any))
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const p = chat.sendMessage('跑一下')
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    chatStreams[0].send({ type: 'error', error: '模型不可用' })
+    chatStreams[0].close()
+    await p
+    await flush()
+
+    expect(notice.calls).toHaveLength(1)
+    expect(notice.calls[0].kind).toBe('error')
+    expect(notice.calls[0].detail).toBe('模型不可用')
+    expect(notice.calls[0].alreadyToast).toBe(true)
   })
 })
 
