@@ -177,12 +177,12 @@
                 </div>
               </div>
 
-              <!-- 任务执行结束提示：跑完一个任务时给个动静（页面在后台发系统通知） -->
+              <!-- 任务 / 对话执行结束提示：跑完一个任务或一轮对话时给个动静（页面在后台发系统通知） -->
               <div class="setting-row">
-                <label class="setting-label">{{ $t('@42BB9:任务完成提示') }}</label>
+                <label class="setting-label">{{ $t('@42BB9:任务与对话完成提示') }}</label>
                 <div class="project-toggle">
                   <el-switch v-model="tempNotifyOnTaskDone" @change="onNotifyToggleChange" />
-                  <span class="setting-hint-block notify-hint">{{ $t('@42BB9:任务执行结束时提醒我：页面在后台发系统通知，在前台弹应用内提示') }}</span>
+                  <span class="setting-hint-block notify-hint">{{ $t('@42BB9:任务或对话结束时提醒我：页面在后台发系统通知，在前台弹应用内提示') }}</span>
                   <span v-if="notifyPermissionState === 'denied'" class="setting-hint-block notify-hint notify-hint--warn">
                     {{ $t('@42BB9:浏览器已拒绝通知权限，只能在页面内提示（可在浏览器地址栏的站点设置里恢复）') }}
                   </span>
@@ -197,7 +197,7 @@
                       <span class="notify-sub__label">{{ $t('@42BB9:提示音') }}</span>
                     </div>
                     <span class="setting-hint-block notify-hint notify-sub__hint">
-                      {{ $t('@42BB9:任务跑完或出错各响一声（主动停止不响）；上面的总开关关着时也不会有声音') }}
+                      {{ $t('@42BB9:任务或对话跑完、出错各响一声（主动停止不响）；上面的总开关关着时也不会有声音') }}
                     </span>
                   </div>
                 </div>

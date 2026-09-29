@@ -909,17 +909,19 @@ export default {
   '@42BB9:语言': 'Language',
   '@42BB9:界面语言': 'Interface Language',
   '@42BB9:通用设置已保存': 'General settings saved',
-  // Task finished notice (global toggle, on by default). Browser notification permission
-  // is requested on the first in-page user gesture (see App.vue), and also when the toggle is switched on.
-  '@42BB9:任务完成提示': 'Task finished notice',
-  '@42BB9:任务执行结束时提醒我：页面在后台发系统通知，在前台弹应用内提示': 'Notify me when a task finishes: a system notification when the page is in the background, an in-app toast when it is focused',
+  // Task / chat finished notice (global toggle, on by default). Two trigger sources share it:
+  // workbench job terminal frames (useTaskNotifier) and a chat turn wrapping up
+  // (utils/agentTurnNotify). Browser notification permission is requested on the first
+  // in-page user gesture (see App.vue), and also when the toggle is switched on.
+  '@42BB9:任务与对话完成提示': 'Task and chat finished notice',
+  '@42BB9:任务或对话结束时提醒我：页面在后台发系统通知，在前台弹应用内提示': 'Notify me when a task or a chat turn finishes: a system notification when the page is in the background, an in-app toast when it is focused',
   '@42BB9:浏览器已拒绝通知权限，只能在页面内提示（可在浏览器地址栏的站点设置里恢复）': 'The browser has denied notification permission, so only in-app toasts will show (restore it in the site settings of the address bar)',
   '@42BB9:当前环境不支持系统通知，只能在页面内提示': 'This environment does not support system notifications, so only in-app toasts will show',
   '@42BB9:浏览器已拒绝通知权限，将只在页面内提示': 'The browser has denied notification permission, so only in-app toasts will show',
   // Sound cue (sub-option of the switch above): some want the notice but no noise,
   // others want the chime without notification cards.
   '@42BB9:提示音': 'Sound cue',
-  '@42BB9:任务跑完或出错各响一声（主动停止不响）；上面的总开关关着时也不会有声音': 'A chime on completion or failure (silent when you stop a run yourself); muted while the switch above is off',
+  '@42BB9:任务或对话跑完、出错各响一声（主动停止不响）；上面的总开关关着时也不会有声音': 'A chime when a task or a chat turn completes or fails (silent when you stop a run yourself); muted while the switch above is off',
   '@42BB9:编辑配置': 'Edit Config',
   '@42BB9:编辑当前项目的配置文件': 'Edit current project configuration file',
   '@42BB9:直接编辑 JSON，支持所有配置项': 'Edit JSON directly, all config keys supported',
