@@ -11,6 +11,10 @@
  *   E 总开关（notifyOnTaskDone）关着时一声都不响
  *   F hello 快照里的历史 job 不响（页面刚打开看到的一堆"已完成"是老账）
  *   G 页面无 console / page 错误
+ *   H 提示音开关（notifySoundOnTaskDone）关着时一个音源都不碰，但**提示照旧**
+ *     —— 通知与声音是两个独立的键，关掉一个不该把另一个也带走
+ *   I 设置 → 通用设置里的提示音开关：配置能读进 UI、总开关关掉时它置灰、
+ *     单独改它时保存的 payload 只带这一个键（不顺手动总开关）
  *
  * 为什么用 route 拦截 /api/workbench/events 喂合成帧，而不是真跑一个任务：
  *   真跑一次 CLI 要几十秒且结果不可控（可能失败、可能超时），而这里要验的是
@@ -138,15 +142,31 @@ async function waitFrames(page, n, timeout = 12000) {
 }
 
 /**
- * 开一个页面并装上拦截。notifyOnTaskDone 由参数决定，不读用户真实配置。
+ * 等所有已创建的音源解码出元数据（readyState ≥ 2）。
+ * 别用固定 sleep：机器忙一下（典型是 vite 在 restart）就会看到 readyState=0 而假失败 ——
+ * 这个用例要验的是"文件能不能解码"，不是"1.2 秒内能不能解码"。
+ */
+async function waitDecoded(page, timeout = 10000) {
+  const t0 = Date.now()
+  while (Date.now() - t0 < timeout) {
+    const ready = await page.evaluate(() =>
+      (window.__soundLog || []).length > 0 && window.__soundLog.every(r => r.el.readyState >= 2))
+    if (ready) return true
+    await sleep(200)
+  }
+  return false
+}
+
+/**
+ * 开一个页面并装上拦截。两个开关由参数决定，不读用户真实配置。
  *
  * ⚠️ sseDelayMs 不是随便加的等待，是这条用例能不能验到东西的前提：
  *   开关是**每次事件实时读** configStore 的（见 useTaskNotifier.handleJob），
- *   而 configStore 里那个 ref 的初始值就是 true。SSE 在页面刚打开时就建连、
- *   合成帧立刻到达的话，读到的是"还没加载完"的初始值而不是被拦成 false 的配置，
- *   于是"开关关着"这条场景根本验不到（会假失败）。让帧晚一点到，配置先落地。
+ *   而 configStore 里那两个 ref 的初始值都是 true。SSE 在页面刚打开时就建连、
+ *   合成帧立刻到达的话，读到的是"还没加载完"的初始值而不是被拦掉的配置，
+ *   于是"开关关着"这类场景根本验不到（会假失败）。让帧晚一点到，配置先落地。
  */
-async function openPage(browser, notifyOnTaskDone, sseDelayMs = 2500) {
+async function openPage(browser, switches, sseDelayMs = 2500) {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } })
   const page = await ctx.newPage()
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()) })
@@ -166,15 +186,16 @@ async function openPage(browser, notifyOnTaskDone, sseDelayMs = 2500) {
     })
   })
 
-  // 拦配置：把开关钉死，避免用例结果取决于用户当前设置
+  // 拦配置：把两个开关钉死，避免用例结果取决于用户当前设置
   await page.route('**/api/config/getConfig*', async (route) => {
     try {
       const resp = await route.fetch()
       const cfg = await resp.json()
-      cfg.notifyOnTaskDone = notifyOnTaskDone
+      cfg.notifyOnTaskDone = switches.notifyOnTaskDone
+      cfg.notifySoundOnTaskDone = switches.notifySoundOnTaskDone
       await route.fulfill({ response: resp, json: cfg })
     } catch {
-      await route.fulfill({ json: { notifyOnTaskDone } })
+      await route.fulfill({ json: switches })
     }
   })
 
@@ -182,6 +203,87 @@ async function openPage(browser, notifyOnTaskDone, sseDelayMs = 2500) {
   // 等 configStore 加载完（开关是实时读的，配置没到位时读到的是默认值）
   await sleep(1500)
   return { ctx, page }
+}
+
+/** 数页面上的应用内提示条（证明"提示照旧"，与"有没有出声"是两件事） */
+function countToasts(page) {
+  return page.evaluate(() => document.querySelectorAll('.el-message').length)
+}
+
+// ── 设置对话框（场景 4）────────────────────────────────────────────────
+const labelRe = (zh, en) => new RegExp(`${zh}|${en}`, 'i')
+
+/** 打开 设置 → 通用设置（通用是默认 tab，不用切） */
+async function openSettingsGeneral(page) {
+  const clicked = await page.evaluate((src) => {
+    const re = new RegExp(src, 'i')
+    const btn = [...document.querySelectorAll('button[aria-label]')]
+      .find(b => re.test(b.getAttribute('aria-label') || ''))
+    if (!btn) return false
+    btn.click()
+    return true
+  }, labelRe('用户设置', 'user settings').source)
+  if (!clicked) return false
+  await page.waitForSelector('.user-settings-dialog .settings-tabs', { timeout: 10000 }).catch(() => {})
+  // loading 遮罩会吃掉点击，等它退场
+  await page.locator('.user-settings-dialog .el-loading-mask').waitFor({ state: 'detached', timeout: 8000 }).catch(() => {})
+  await sleep(300)
+  return true
+}
+
+/**
+ * 读「任务完成提示」那一行里的两个开关。
+ * 总开关 = 行里第一个（直接的）el-switch；提示音开关 = .notify-sub 里的那个。
+ */
+function readNotifyRow(page) {
+  return page.evaluate((src) => {
+    const re = new RegExp(src, 'i')
+    const row = [...document.querySelectorAll('.user-settings-dialog .setting-row')]
+      .find(r => re.test(r.querySelector('.setting-label')?.textContent || ''))
+    if (!row) return null
+    const state = (sw) => {
+      if (!sw) return null
+      const aria = sw.getAttribute('aria-checked')
+      return {
+        on: aria ? aria === 'true' : sw.classList.contains('is-checked'),
+        disabled: sw.classList.contains('is-disabled'),
+      }
+    }
+    const sub = row.querySelector('.notify-sub')
+    const subStyle = sub ? getComputedStyle(sub) : null
+    return {
+      master: state(row.querySelector('.el-switch')),
+      sound: state(sub ? sub.querySelector('.el-switch') : null),
+      hasSub: !!sub,
+      subLabel: (sub?.querySelector('.notify-sub__label')?.textContent || '').trim(),
+      // 从属视觉：左侧竖线 + 缩进。数值 > 0 才算"看起来是子选项"
+      borderLeft: subStyle ? parseFloat(subStyle.borderLeftWidth) || 0 : 0,
+      paddingLeft: subStyle ? parseFloat(subStyle.paddingLeft) || 0 : 0,
+    }
+  }, labelRe('任务完成提示', 'task finished notice').source)
+}
+
+/** 拨动提示音开关（.notify-sub 里那个） */
+function toggleSoundSwitch(page) {
+  return page.evaluate((src) => {
+    const re = new RegExp(src, 'i')
+    const row = [...document.querySelectorAll('.user-settings-dialog .setting-row')]
+      .find(r => re.test(r.querySelector('.setting-label')?.textContent || ''))
+    const sw = row?.querySelector('.notify-sub .el-switch')
+    if (!sw) return false
+    ;(sw.querySelector('.el-switch__core') || sw).click()
+    return true
+  }, labelRe('任务完成提示', 'task finished notice').source)
+}
+
+/** 点保存（按钮只在有改动时渲染） */
+function clickSave(page) {
+  return page.evaluate(() => {
+    const btn = document.querySelector('.user-settings-dialog .dialog-confirm-btn')
+    if (!btn) return false
+    btn.click()
+    return true
+  })
 }
 
 async function main() {
@@ -194,14 +296,14 @@ async function main() {
   })
 
   try {
-    // ── 场景 1：开关打开 ──────────────────────────────────────────────
-    const { ctx, page } = await openPage(browser, true)
+    // ── 场景 1：两个开关都开 ──────────────────────────────────────────
+    const { ctx, page } = await openPage(browser, { notifyOnTaskDone: true, notifySoundOnTaskDone: true })
     try {
       const got = await waitSoundCount(page, 2)
       check('A0 状态跃迁后确实发起了播放', got, `soundLog=${JSON.stringify((await readSoundLog(page)).map(r => r.src))}`)
 
-      // 给解码留点时间（readyState 是异步推进的）
-      await sleep(1200)
+      // 等元数据解出来（异步推进，别用固定 sleep，见 waitDecoded）
+      const decoded = await waitDecoded(page)
       const soundLog = await readSoundLog(page)
       const srcs = [...new Set(soundLog.map(r => r.src))].sort()
 
@@ -212,6 +314,8 @@ async function main() {
 
       const done = soundLog.find(r => r.src === DONE_SRC)
       const err = soundLog.find(r => r.src === ERROR_SRC)
+      check('D0 两个音源都解出了元数据（前置：没解出来下面的时长断言没意义）', decoded,
+        soundLog.map(r => `${r.src}:${r.readyState}`).join(', '))
       check('D1 done 音源在真实浏览器里解码成功（readyState ≥ 2）',
         !!done && done.readyState >= 2 && done.mediaError === 0,
         done ? `readyState=${done.readyState} mediaError=${done.mediaError}` : 'missing')
@@ -220,9 +324,17 @@ async function main() {
       check('D3 error 音源解码成功且时长约 0.52s',
         !!err && err.readyState >= 2 && err.duration > 0.4 && err.duration < 0.7,
         err ? `readyState=${err.readyState} duration=${err.duration.toFixed(3)}` : 'missing')
+      // play() 的 Promise 是解码推进后才 settle 的，等它落地再判（同样别用固定 sleep）
+      for (let i = 0; i < 25; i++) {
+        const s = await readSoundLog(page)
+        const d = s.find(r => r.src === DONE_SRC)
+        if (!d || d.playResolved || d.playError) break
+        await sleep(200)
+      }
+      const settled = (await readSoundLog(page)).find(r => r.src === DONE_SRC)
       check('D4 play() 真的播出去了（未被自动播放策略拦下）',
-        !!done && done.plays > 0 && done.playResolved && !done.playError,
-        done ? `plays=${done.plays} resolved=${done.playResolved} err=${done.playError}` : 'missing')
+        !!settled && settled.plays > 0 && settled.playResolved && !settled.playError,
+        settled ? `plays=${settled.plays} resolved=${settled.playResolved} err=${settled.playError}` : 'missing')
 
       // 关掉页面之前留一张全景图，证明应用本身是正常起来的（不是"白屏但探针有值"）
       const shot = path.resolve(__dirname, '../tmp-verify-wb-task-sound.png')
@@ -238,7 +350,7 @@ async function main() {
     // ── 场景 2：总开关关掉 ────────────────────────────────────────────
     consoleErrors.length = 0
     pageErrors.length = 0
-    const { ctx: ctx2, page: page2 } = await openPage(browser, false)
+    const { ctx: ctx2, page: page2 } = await openPage(browser, { notifyOnTaskDone: false, notifySoundOnTaskDone: true })
     try {
       // 先证明帧确实送到了（否则"没响"可能只是还没到），再多等一小会儿防止竞态，
       // 这时候一个音源都不该被创建
@@ -250,6 +362,86 @@ async function main() {
         JSON.stringify(off.map(r => r.src)))
     } finally {
       await ctx2.close()
+    }
+
+    // ── 场景 3：总开关开、提示音关（通知与声音是两个独立的键）──────────
+    consoleErrors.length = 0
+    pageErrors.length = 0
+    const { ctx: ctx3, page: page3 } = await openPage(browser, { notifyOnTaskDone: true, notifySoundOnTaskDone: false })
+    try {
+      const frames = await waitFrames(page3, FRAMES.length)
+      await sleep(1000)
+      const off = await readSoundLog(page3)
+      const toasts = await countToasts(page3)
+      check('H1 合成帧确实被页面收下（负向用例的前置事实）', frames >= FRAMES.length, `frames=${frames}/${FRAMES.length}`)
+      check('H2 只关提示音时一个音源都不碰', off.length === 0, JSON.stringify(off.map(r => r.src)))
+      // 这一条才是"两个键互相独立"的证据：声音没了，提示还在
+      check('H3 提示照旧弹出（关声音没把通知一起带走）', toasts > 0, `toasts=${toasts}`)
+    } finally {
+      await ctx3.close()
+    }
+
+    // ── 场景 4：设置 → 通用设置里的提示音开关 ──────────────────────────
+    // 4a：配置里提示音关着、总开关开着 → UI 上提示音开关应该是关的且可点
+    consoleErrors.length = 0
+    pageErrors.length = 0
+    const { ctx: ctx4, page: page4 } = await openPage(browser, { notifyOnTaskDone: true, notifySoundOnTaskDone: false })
+    try {
+      // ⚠️ 拦掉保存：对话框的保存会 POST 到真实后端，而 ~/.zen-gitsync/config.json
+      // 是**用户全局共享**的，验证脚本绝不能顺手把用户的开关改掉。这里只截获
+      // payload 做断言，"后端能不能正确落盘"由 verify-config-split.mjs 在沙箱里覆盖。
+      const saved = []
+      await page4.route('**/api/config/save-general-settings', async (route) => {
+        try { saved.push(route.request().postDataJSON()) } catch { saved.push(null) }
+        await route.fulfill({ json: { success: true } })
+      })
+
+      const opened = await openSettingsGeneral(page4)
+      check('I1 前置 设置对话框打开（通用设置）', opened)
+      if (!opened) throw new Error('设置对话框打不开，后续无法验证')
+
+      const row = await readNotifyRow(page4)
+      check('I2 提示音是「任务完成提示」行里的子选项（缩进 + 左侧竖线，不是平级）',
+        !!row?.hasSub && row.borderLeft > 0 && row.paddingLeft > 0,
+        JSON.stringify({ hasSub: row?.hasSub, borderLeft: row?.borderLeft, paddingLeft: row?.paddingLeft }))
+      check('I3 子开关有自己的标签', /提示音|sound cue/i.test(row?.subLabel || ''), row?.subLabel)
+      check('I4 ★ 配置里关着 → UI 上提示音开关就是关的（配置读进了 UI）', row?.sound?.on === false,
+        JSON.stringify(row?.sound))
+      check('I5 总开关开着时提示音开关可点（没被置灰）',
+        row?.master?.on === true && row?.sound?.disabled === false,
+        JSON.stringify({ master: row?.master, sound: row?.sound }))
+
+      // 打开提示音 → 保存，看前端发出去的 payload
+      await toggleSoundSwitch(page4)
+      await sleep(300)
+      const afterToggle = await readNotifyRow(page4)
+      check('I6 拨动后 UI 状态跟着变（开关确实受控，不是画上去的）', afterToggle?.sound?.on === true,
+        JSON.stringify(afterToggle?.sound))
+      const shotSettings = path.resolve(__dirname, '../tmp-verify-wb-task-sound-settings.png')
+      await page4.locator('.user-settings-dialog').screenshot({ path: shotSettings }).catch(() => {})
+      log('设置截图:', shotSettings)
+
+      const clickedSave = await clickSave(page4)
+      await sleep(600)
+      check('I7 保存按钮出现并被点到（只改提示音也构成 hasChanges）', clickedSave)
+      check('I8 ★ 保存 payload 只带提示音这一个键（不顺手动总开关）',
+        saved.length === 1 && saved[0]?.notifySoundOnTaskDone === true && saved[0]?.notifyOnTaskDone === undefined,
+        JSON.stringify(saved))
+    } finally {
+      await ctx4.close()
+    }
+
+    // 4b：总开关关着 → 提示音开关置灰（从属关系在 UI 上看得见）
+    const { ctx: ctx5, page: page5 } = await openPage(browser, { notifyOnTaskDone: false, notifySoundOnTaskDone: true })
+    try {
+      const opened = await openSettingsGeneral(page5)
+      check('I9 前置 第二个页面的设置也能打开', opened)
+      const row = await readNotifyRow(page5)
+      check('I10 ★ 总开关关着时提示音开关置灰（子选项跟着失效，一眼看得出来）',
+        row?.master?.on === false && row?.sound?.disabled === true,
+        JSON.stringify({ master: row?.master, sound: row?.sound }))
+    } finally {
+      await ctx5.close()
     }
 
     check('G1 页面无 console / page 错误', consoleErrors.length === 0 && pageErrors.length === 0,

@@ -98,6 +98,19 @@ export function normalizeNotifyOnTaskDone(value) {
   return typeof value === 'boolean' ? value : null;
 }
 
+/**
+ * 规范化「任务完成提示音」开关。语义与 normalizeNotifyOnTaskDone 完全一致
+ * （只收布尔值，`'false'` 这种字符串不当真值用 —— 理由同上）。
+ *
+ * 为什么和总开关分开成两个键：有人要"发系统通知但别出声"（开会 / 图书馆 / 夜里），
+ * 也有人反过来只要"叮"一声、不想要通知卡片和权限询问。合成一个开关两边都别扭。
+ * 从属关系在消费端：总开关关着时整个提示链路都不走，提示音自然也不会响
+ * （见 useTaskNotifier.announce 的调用点）。
+ */
+export function normalizeNotifySoundOnTaskDone(value) {
+  return typeof value === 'boolean' ? value : null;
+}
+
 // 默认配置
 const defaultConfig = {
   defaultCommitMessage: "submit",
@@ -153,6 +166,11 @@ const defaultConfig = {
   // 默认关等于大部分人永远不知道有它；浏览器通知权限在页面内首次点击时自动申请
   // （见 App.vue 的 onUserGestureForNotifyPermission），所以默认开不会静默失效。
   notifyOnTaskDone: true,
+  // 任务完成提示音（全局，默认开）：跑完 / 出错误各响一声，主动停止不响。
+  // 从属于上面的 notifyOnTaskDone —— 总开关关着时整条提示链路都不走，声音也不会响。
+  // 单独一个键是为了"要通知但别出声"和"要声音但不要通知卡片"这两种人都能配。
+  // 音源是 CC0 资源（src/ui/client/public/sounds/），见同目录 CREDITS.txt。
+  notifySoundOnTaskDone: true,
   // UI 状态（跨项目共享，存到顶层 ui 对象）
   // 之前散落在 localStorage，因随机端口启动而失效，迁到文件持久化
   ui: {
@@ -474,7 +492,9 @@ async function loadConfig() {
       aiMaxToolIterations: normalizeAiMaxToolIterations(raw.aiMaxToolIterations)
         ?? defaultConfig.aiMaxToolIterations,
       taskExecutor: normalizeTaskExecutor(raw.taskExecutor) ?? defaultConfig.taskExecutor,
-      notifyOnTaskDone: normalizeNotifyOnTaskDone(raw.notifyOnTaskDone) ?? defaultConfig.notifyOnTaskDone
+      notifyOnTaskDone: normalizeNotifyOnTaskDone(raw.notifyOnTaskDone) ?? defaultConfig.notifyOnTaskDone,
+      notifySoundOnTaskDone: normalizeNotifySoundOnTaskDone(raw.notifySoundOnTaskDone)
+        ?? defaultConfig.notifySoundOnTaskDone
     };
   }
 
@@ -494,7 +514,9 @@ async function loadConfig() {
       ?? defaultConfig.aiMaxToolIterations,
     taskExecutor: normalizeTaskExecutor(raw?.taskExecutor) ?? defaultConfig.taskExecutor,
     // 同 taskExecutor：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
-    notifyOnTaskDone: normalizeNotifyOnTaskDone(raw?.notifyOnTaskDone) ?? defaultConfig.notifyOnTaskDone
+    notifyOnTaskDone: normalizeNotifyOnTaskDone(raw?.notifyOnTaskDone) ?? defaultConfig.notifyOnTaskDone,
+    notifySoundOnTaskDone: normalizeNotifySoundOnTaskDone(raw?.notifySoundOnTaskDone)
+      ?? defaultConfig.notifySoundOnTaskDone
   };
 }
 
@@ -542,7 +564,7 @@ async function saveConfig(config) {
 
   // 分离全局设置和项目设置
   // models / ui 也是全局配置（跨项目共享），和 theme/locale 一样存到顶层
-  const { theme, locale, models, ui, aiMaxToolIterations, taskExecutor, notifyOnTaskDone, ...projectConfig } = config;
+  const { theme, locale, models, ui, aiMaxToolIterations, taskExecutor, notifyOnTaskDone, notifySoundOnTaskDone, ...projectConfig } = config;
 
   // 保存全局设置到根级别
   if (theme !== undefined) {
@@ -571,6 +593,10 @@ async function saveConfig(config) {
   const normalizedNotify = normalizeNotifyOnTaskDone(notifyOnTaskDone);
   if (normalizedNotify !== null) {
     raw.notifyOnTaskDone = normalizedNotify;
+  }
+  const normalizedNotifySound = normalizeNotifySoundOnTaskDone(notifySoundOnTaskDone);
+  if (normalizedNotifySound !== null) {
+    raw.notifySoundOnTaskDone = normalizedNotifySound;
   }
 
   // 写入当前项目配置（在 defaultConfig 基础上合并，但不清空顶层其它键）
@@ -771,6 +797,11 @@ export default {
   TASK_EXECUTORS,
   // 任务执行结束提示开关规范化(同上)
   normalizeNotifyOnTaskDone,
+  // 任务完成提示音开关规范化(同上)。⚠️ 新增规范化函数务必同步加进这个对象字面量 ——
+  // server 侧 `import config from '../../config.js'` 拿的是**这个默认导出对象**，
+  // 只在下面 `export {}` 里命名导出是不够的：漏加会变成 undefined 调用 → 路由 500，
+  // 而且因为有 try/catch 兜底，前端只会看到"保存失败"，不知道是哪个函数缺了。
+  normalizeNotifySoundOnTaskDone,
 };
 
 // 命名导出 — 用于测试与外部复用

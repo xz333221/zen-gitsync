@@ -212,6 +212,10 @@ export const useConfigStore = defineStore('config', () => {
   // 默认关等于没几个人知道它存在。浏览器通知权限在页面内首次点击时自动申请一次（见 App.vue），
   // 用户拒绝后系统通知发不出去，会退回应用内提示（见 useTaskNotifier）。
   const notifyOnTaskDone = ref(true)
+  // 任务完成提示音（全局配置，默认开）。从属于 notifyOnTaskDone：总开关关着时整条
+  // 提示链路都不走，提示音自然也不会响（见 useTaskNotifier.handleJob 的读取点）。
+  // 单独一个键，是为了"要通知但别出声"和"要声音但不要通知卡片"这两种人都能配。
+  const notifySoundOnTaskDone = ref(true)
 
   // ============================================================
   // UI 状态（持久化到 ~/.zen-gitsync/config.json 的顶层 ui 字段）
@@ -503,6 +507,10 @@ export const useConfigStore = defineStore('config', () => {
       // 任务执行结束提示开关（缺省 false —— 老配置里没有这个字段）
       if (typeof configData.notifyOnTaskDone === 'boolean') {
         notifyOnTaskDone.value = configData.notifyOnTaskDone
+      }
+      // 任务完成提示音开关（老配置里没有这个字段 → 保持默认开）
+      if (typeof configData.notifySoundOnTaskDone === 'boolean') {
+        notifySoundOnTaskDone.value = configData.notifySoundOnTaskDone
       }
 
       // 加载通用设置
@@ -1535,7 +1543,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 保存通用设置
-  async function saveGeneralSettings(settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: TaskExecutorId, notifyOnTaskDone?: boolean }) {
+  async function saveGeneralSettings(settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: TaskExecutorId, notifyOnTaskDone?: boolean, notifySoundOnTaskDone?: boolean }) {
     try {
       const response = await fetch('/api/config/save-general-settings', {
         method: 'POST',
@@ -1564,6 +1572,9 @@ export const useConfigStore = defineStore('config', () => {
         if (typeof settings.notifyOnTaskDone === 'boolean') {
           notifyOnTaskDone.value = settings.notifyOnTaskDone
         }
+        if (typeof settings.notifySoundOnTaskDone === 'boolean') {
+          notifySoundOnTaskDone.value = settings.notifySoundOnTaskDone
+        }
         return true
       } else {
         ElMessage.error(`保存通用设置失败: ${result.error}`)
@@ -1581,6 +1592,7 @@ export const useConfigStore = defineStore('config', () => {
     aiMaxToolIterations,
     taskExecutor,
     notifyOnTaskDone,
+    notifySoundOnTaskDone,
     defaultCommitMessage,
     descriptionTemplates,
     scopeTemplates,

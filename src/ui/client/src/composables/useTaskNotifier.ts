@@ -103,15 +103,20 @@ export function useTaskNotifier() {
   /** jobId → 上一次看到的状态。只做跃迁判定，不缓存 job 本体 */
   const lastStatus = new Map<string, string>()
 
-  /** 发一条提示。系统通知发不出去（权限被拒 / 不支持）时退回应用内 toast */
-  function announce(kind: JobFinishKind, job: Record<string, any>) {
+  /**
+   * 发一条提示。系统通知发不出去（权限被拒 / 不支持）时退回应用内 toast。
+   *
+   * withSound 由调用点从配置里读好传进来（见 handleJob），不在这里再读一次 store ——
+   * 「总开关 + 提示音开关」是一对要一起判的配置，分成两处读容易只更新一处。
+   */
+  function announce(kind: JobFinishKind, job: Record<string, any>, withSound: boolean) {
     const name = jobNoticeTitle(job)
     const detail = jobNoticeDetail(job)
     const tag = `zen-gitsync-job-${job.id || ''}`
     // 先出声：这一句跟"页面在不在前台"没关系，必须在下面二选一之前，
     // 否则用户切到别的窗口时（恰恰是主场景）只能指望系统通知那点动静。
     // 被自动播放策略拦下/环境不支持都只是返回 false，不用管。
-    playFinishSound(kind)
+    if (withSound) playFinishSound(kind)
     if (shouldUseSystemNotification()) {
       let sent = false
       if (kind === 'done') {
@@ -138,9 +143,15 @@ export function useTaskNotifier() {
     if (!kind) return
     // 开关在 config.json（全局），每次读实时值：用户在设置里关掉后立刻生效
     let enabled = false
-    try { enabled = !!useConfigStore().notifyOnTaskDone } catch { enabled = false }
+    let sound = false
+    try {
+      const store = useConfigStore()
+      enabled = !!store.notifyOnTaskDone
+      sound = !!store.notifySoundOnTaskDone
+    } catch { enabled = false; sound = false }
+    // 总开关关着 = 整条提示链路都不走，提示音也不响（提示音是从属于它的子开关）
     if (!enabled) return
-    announce(kind, job)
+    announce(kind, job, sound)
   }
 
   function handleRaw(evt: string, payload: any) {

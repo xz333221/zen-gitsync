@@ -6,13 +6,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // vi.hoisted：mock 工厂会在 import 期就执行，直接用普通 let 会撞 TDZ
-const state = vi.hoisted(() => ({ notifyEnabled: false }))
+const state = vi.hoisted(() => ({ notifyEnabled: false, soundEnabled: true }))
 const sys = vi.hoisted(() => ({ useSystem: false, canSend: true, sent: [] as any[] }))
 
 vi.mock('@stores/configStore', () => ({
   useConfigStore: () => ({
     get notifyOnTaskDone() {
       return state.notifyEnabled
+    },
+    get notifySoundOnTaskDone() {
+      return state.soundEnabled
     },
   }),
 }))
@@ -82,6 +85,7 @@ const runningJob = (id: string, title = '写代码 / 写代码') => ({ id, title
 beforeEach(() => {
   FakeEventSource.instances = []
   state.notifyEnabled = false
+  state.soundEnabled = true
   sys.useSystem = false
   sys.canSend = true
   sys.sent = []
@@ -371,12 +375,36 @@ describe('useTaskNotifier 提示音', () => {
     expect(snd.played).toEqual(['done'])
   })
 
-  it('总开关关着时一声都不响（声音不能绕开开关自己偷偷放）', () => {
+  it('总开关关着时一声都不响 —— 提示音开关开着也不行（它从属于总开关）', () => {
     state.notifyEnabled = false
+    state.soundEnabled = true
     const { es } = connect()
     es.frame('job:update', runningJob('j1'))
     es.frame('job:update', { id: 'j1', title: 't / t', status: 'done' })
     expect(snd.played).toEqual([])
+    expect(successCalls()).toHaveLength(0)
+  })
+
+  it('提示音开关关着时只弹提示、不出声（通知与声音是两个独立的键）', () => {
+    state.notifyEnabled = true
+    state.soundEnabled = false
+    sys.useSystem = false
+    const { es } = connect()
+    es.frame('job:update', runningJob('j1'))
+    es.frame('job:update', { id: 'j1', title: 't / t', status: 'done' })
+    expect(snd.played).toEqual([])
+    expect(successCalls()).toHaveLength(1)
+  })
+
+  it('提示音开关也是实时读的：任务跑的过程中关掉，结束时就不响了', () => {
+    state.notifyEnabled = true
+    state.soundEnabled = true
+    const { es } = connect()
+    es.frame('job:update', runningJob('j1'))
+    state.soundEnabled = false
+    es.frame('job:update', { id: 'j1', title: 't / t', status: 'done' })
+    expect(snd.played).toEqual([])
+    expect(successCalls()).toHaveLength(1)
   })
 
   it('重复的终态帧只响一次，hello 快照里的历史 job 一声不响', () => {

@@ -989,7 +989,7 @@ export function registerConfigRoutes({
   // 保存通用设置（主题、语言、工作台任务执行器、任务完成提示）
   app.post('/api/config/save-general-settings', express.json(), async (req, res) => {
     try {
-      const { theme, locale, taskExecutor, notifyOnTaskDone } = req.body
+      const { theme, locale, taskExecutor, notifyOnTaskDone, notifySoundOnTaskDone } = req.body
 
       // 读取原始配置以保留项目设置
       const rawConfig = await configManager.readRawConfigFile()
@@ -1015,13 +1015,22 @@ export function registerConfigRoutes({
       if (normalizedNotify !== null) {
         rawConfig.notifyOnTaskDone = normalizedNotify
       }
+      // 任务完成提示音开关（全局，默认开）。同上：非布尔值静默忽略。
+      // 它从属于 notifyOnTaskDone —— 这里不替前端做联动（关总开关时不顺带清掉这个），
+      // 两个键各自保留用户的选择，联动只在消费端（useTaskNotifier）。这样用户
+      // 临时关掉总开关再打开，提示音设置还在，不用重设一遍。
+      const normalizedNotifySound = configManager.normalizeNotifySoundOnTaskDone(notifySoundOnTaskDone)
+      if (normalizedNotifySound !== null) {
+        rawConfig.notifySoundOnTaskDone = normalizedNotifySound
+      }
 
       // 直接写入原始配置，避免覆盖项目设置
       await configManager.writeRawConfigFile(rawConfig)
       res.json({
         success: true,
         taskExecutor: normalizedExecutor || undefined,
-        notifyOnTaskDone: normalizedNotify ?? undefined
+        notifyOnTaskDone: normalizedNotify ?? undefined,
+        notifySoundOnTaskDone: normalizedNotifySound ?? undefined
       })
     } catch (error) {
       res.status(500).json({ success: false, error: error.message })

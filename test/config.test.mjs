@@ -63,7 +63,7 @@ after(async () => {
 const configMod = await import(pathToFileURL(path.join(projectRoot, 'src/config.js')).href)
 // 注意:saveConfig / loadConfig 等业务函数挂在 default export 上;
 // ConfigWriteError / normalizeProjectPath 是命名导出(用于测试与复用)
-const { normalizeProjectPath, ConfigWriteError, normalizeAiMaxToolIterations, normalizeNotifyOnTaskDone } = configMod
+const { normalizeProjectPath, ConfigWriteError, normalizeAiMaxToolIterations, normalizeNotifyOnTaskDone, normalizeNotifySoundOnTaskDone } = configMod
 const { saveConfig } = configMod.default
 
 // 直接读沙箱磁盘上的 config.json：比走 loadConfig 更能暴露"写入位置不对"
@@ -181,6 +181,69 @@ test('notifyOnTaskDone: 非法值不落盘，保留磁盘旧值', async () => {
   await saveConfig({ defaultCommitMessage: 'test', notifyOnTaskDone: true })
   await saveConfig({ defaultCommitMessage: 'test', notifyOnTaskDone: 'false' })
   assert.equal((await readRawConfig()).notifyOnTaskDone, true, '非法值应被忽略，而不是覆盖成 true')
+})
+
+// ========== notifySoundOnTaskDone(任务完成提示音开关) ==========
+// 与 notifyOnTaskDone 同构的一套契约：它是后者的子选项，但**独立存一个顶层键**，
+// 所以歧义路径（非法值、项目配置污染）必须各自验一遍，不能靠"同上"带过。
+
+test('normalizeNotifySoundOnTaskDone: 只接受布尔值', () => {
+  assert.equal(normalizeNotifySoundOnTaskDone(true), true)
+  assert.equal(normalizeNotifySoundOnTaskDone(false), false)
+})
+
+test('normalizeNotifySoundOnTaskDone: 非布尔值一律 null', () => {
+  for (const bad of [undefined, null, 0, 1, '', 'true', 'false', {}, [], NaN]) {
+    assert.equal(normalizeNotifySoundOnTaskDone(bad), null, `${JSON.stringify(bad)} 应返回 null`)
+  }
+})
+
+test('notifySoundOnTaskDone: 默认开启', async () => {
+  const cfg = await configMod.default.loadConfig()
+  assert.equal(cfg.notifySoundOnTaskDone, true, '新装/未设置时应为开')
+})
+
+test('notifySoundOnTaskDone: 存成顶层全局键，且能读回/能关掉', async () => {
+  await saveConfig({ defaultCommitMessage: 'test', notifySoundOnTaskDone: false })
+  assert.equal((await readRawConfig()).notifySoundOnTaskDone, false, '应写在 config.json 顶层')
+
+  await saveConfig({ defaultCommitMessage: 'test', notifySoundOnTaskDone: true })
+  assert.equal((await readRawConfig()).notifySoundOnTaskDone, true, '开回来应落盘为 true')
+  assert.equal(
+    (await configMod.default.loadConfig()).notifySoundOnTaskDone,
+    true,
+    'loadConfig 应读回顶层值'
+  )
+})
+
+test('notifySoundOnTaskDone: 非法值不落盘，保留磁盘旧值', async () => {
+  await saveConfig({ defaultCommitMessage: 'test', notifySoundOnTaskDone: false })
+  await saveConfig({ defaultCommitMessage: 'test', notifySoundOnTaskDone: 'false' })
+  assert.equal((await readRawConfig()).notifySoundOnTaskDone, false, "非法值 'false' 不该被当成真值写进去")
+})
+
+test('notifySoundOnTaskDone: 两个开关互不干扰（改一个不动另一个）', async () => {
+  await saveConfig({ defaultCommitMessage: 'test', notifyOnTaskDone: true, notifySoundOnTaskDone: true })
+  await saveConfig({ defaultCommitMessage: 'test', notifySoundOnTaskDone: false })
+  const raw = await readRawConfig()
+  assert.equal(raw.notifySoundOnTaskDone, false, '提示音应被关掉')
+  assert.equal(raw.notifyOnTaskDone, true, '总开关不该被顺手改动')
+})
+
+test('默认导出对象必须包含路由要用的规范化函数（漏加 = undefined 调用 → 路由 500）', () => {
+  // src/ui/server 是 `import config from '../../config.js'`，拿的是**默认导出的对象字面量**；
+  // 只在命名导出里加函数是不够的。2026-09-29 加提示音开关时正是漏了这一步：
+  // 路由里 configManager.normalizeNotifySoundOnTaskDone(...) 变成 undefined 调用，
+  // 被 try/catch 兜成 500，前端只看到"保存失败"，查了半天。
+  // 这个断言专门钉住这一类漏加（新增规范化函数时把它加进下面的名单即可）。
+  for (const name of [
+    'normalizeAiMaxToolIterations',
+    'normalizeTaskExecutor',
+    'normalizeNotifyOnTaskDone',
+    'normalizeNotifySoundOnTaskDone'
+  ]) {
+    assert.equal(typeof configMod.default[name], 'function', `默认导出缺少 ${name}`)
+  }
 })
 
 // ========== saveConfig 错误契约(MAINT-4 修复回归) ==========

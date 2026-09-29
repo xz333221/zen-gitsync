@@ -906,6 +906,10 @@ export default {
   '@42BB9:浏览器已拒绝通知权限，只能在页面内提示（可在浏览器地址栏的站点设置里恢复）': 'The browser has denied notification permission, so only in-app toasts will show (restore it in the site settings of the address bar)',
   '@42BB9:当前环境不支持系统通知，只能在页面内提示': 'This environment does not support system notifications, so only in-app toasts will show',
   '@42BB9:浏览器已拒绝通知权限，将只在页面内提示': 'The browser has denied notification permission, so only in-app toasts will show',
+  // Sound cue (sub-option of the switch above): some want the notice but no noise,
+  // others want the chime without notification cards.
+  '@42BB9:提示音': 'Sound cue',
+  '@42BB9:任务跑完或出错各响一声（主动停止不响）；上面的总开关关着时也不会有声音': 'A chime on completion or failure (silent when you stop a run yourself); muted while the switch above is off',
   '@42BB9:编辑配置': 'Edit Config',
   '@42BB9:编辑当前项目的配置文件': 'Edit current project configuration file',
   '@42BB9:直接编辑 JSON，支持所有配置项': 'Edit JSON directly, all config keys supported',

@@ -166,6 +166,23 @@ const env = { ...process.env, PORT: String(PORT), ZEN_PERF: '0', USERPROFILE: sa
 delete env.HOMEDRIVE
 delete env.HOMEPATH
 
+// ⚠️ server 启动时会把**自己监听的端口**写进 cwd 下的 `.port` 和
+// `src/ui/client/.env.local`（见 src/ui/server/utils/createSavePortToFile.js）。
+// 而这里 spawn 的 cwd 是仓库根 —— 于是沙箱 server 会用自己那个端口（5601）覆盖掉
+// **正在跑的 dev server** 写下的真实端口；进程退出后残留一个指向死端口的 .env.local，
+// 下一次起 vite 就 proxy 到不存在的后端（表现为"改前端代码没 HMR / 接口全
+// ECONNREFUSED"这类假故障，本仓库为此查过好几次）。
+// 本脚本号称"绝不触碰真实 home"，但这两个文件不在 HOME 下，是它唯一的非沙箱副作用，
+// 所以跑完必须原样还回去（不是"改回去成 5545"，而是恢复到运行前的字节）。
+const portFiles = [
+  path.join(projectRoot, '.port'),
+  path.join(projectRoot, 'src', 'ui', 'client', '.env.local')
+]
+const portFileBackup = new Map()
+for (const f of portFiles) {
+  try { portFileBackup.set(f, await fs.readFile(f, 'utf-8')) } catch { portFileBackup.set(f, null) }
+}
+
 const child = spawn(process.execPath, ['server.js', '--no-open'], {
   cwd: projectRoot, env, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -251,9 +268,10 @@ try {
   const light = await post('/api/config/save-general-settings', {
     theme: targetTheme,
     locale: fixtureRaw.locale || 'zh-CN',
-    // 顺带带上一个全局开关：它必须是"顶层全局键"，
+    // 顺带带上两个全局开关：它们必须是"顶层全局键"，
     // 一旦被当成项目级字段写进 projects/<fileId>.json，下面 dProjects 就会非空。
     notifyOnTaskDone: true,
+    notifySoundOnTaskDone: false,
   })
   const lightMs = Date.now() - t0
   check(light.status === 200 && light.json?.success === true, `save-general-settings 应 200,实际 ${light.status}`)
@@ -291,6 +309,28 @@ try {
   check(badNotify.status === 200, `非法 notifyOnTaskDone 不应报错,实际 ${badNotify.status}`)
   const afterBad = JSON.parse(await fs.readFile(configFile, 'utf-8'))
   check(afterBad.notifyOnTaskDone === true, `非法值应被忽略并保留磁盘旧值(true),实际 ${JSON.stringify(afterBad.notifyOnTaskDone)}`)
+
+  // 提示音开关（总开关的子选项，但独立存一个顶层键）走同一套契约
+  check(afterRaw.notifySoundOnTaskDone === false, `notifySoundOnTaskDone 应写进顶层全局键,实际 ${JSON.stringify(afterRaw.notifySoundOnTaskDone)}`)
+  const pollutedSound = Object.entries(afterRaw.projects || {})
+    .filter(([, p]) => p && typeof p === 'object' && 'notifySoundOnTaskDone' in p)
+    .map(([k]) => k)
+  check(
+    pollutedSound.length === 0,
+    `notifySoundOnTaskDone 是全局设置,不该出现在项目配置里: ${pollutedSound.join(', ')}`
+  )
+  check(reread?.notifySoundOnTaskDone === false, `GET /api/config/getConfig 应读回 notifySoundOnTaskDone=false,实际 ${JSON.stringify(reread?.notifySoundOnTaskDone)}`)
+
+  // 开回来（证明这个键真的可双向写），再拿非法值撞一次
+  await post('/api/config/save-general-settings', { notifySoundOnTaskDone: true })
+  const afterSoundOn = JSON.parse(await fs.readFile(configFile, 'utf-8'))
+  check(afterSoundOn.notifySoundOnTaskDone === true, `提示音应能开回来,实际 ${JSON.stringify(afterSoundOn.notifySoundOnTaskDone)}`)
+  check(afterSoundOn.notifyOnTaskDone === true, `写提示音不该顺手改动总开关,实际 ${JSON.stringify(afterSoundOn.notifyOnTaskDone)}`)
+
+  const badSound = await post('/api/config/save-general-settings', { notifySoundOnTaskDone: 'false' })
+  check(badSound.status === 200, `非法 notifySoundOnTaskDone 不应报错,实际 ${badSound.status}`)
+  const afterBadSound = JSON.parse(await fs.readFile(configFile, 'utf-8'))
+  check(afterBadSound.notifySoundOnTaskDone === true, `非法值应被忽略并保留磁盘旧值(true),实际 ${JSON.stringify(afterBadSound.notifySoundOnTaskDone)}`)
 
   // ── 3) 新增画布:只多出一个画布文件 ──────────────────────────
   const beforeOrch2 = await snapshotTree(orchRoot)
@@ -336,6 +376,13 @@ try {
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
   } catch { /* ignore */ }
   await new Promise((r) => setTimeout(r, 300))
+  // 把 dev server 的端口文件原样还回去（原因见 portFileBackup 那段注释）
+  for (const [f, content] of portFileBackup) {
+    try {
+      if (content === null) await fs.rm(f, { force: true })
+      else await fs.writeFile(f, content, 'utf-8')
+    } catch { /* ignore */ }
+  }
   try { await fs.rm(sandbox, { recursive: true, force: true }) } catch { /* ignore */ }
 }
 

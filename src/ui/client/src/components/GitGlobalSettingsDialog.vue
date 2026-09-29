@@ -158,6 +158,17 @@
                   <span v-else-if="notifyPermissionState === 'unsupported'" class="setting-hint-block notify-hint notify-hint--warn">
                     {{ $t('@42BB9:当前环境不支持系统通知，只能在页面内提示') }}
                   </span>
+
+                  <!-- 提示音：总开关的子选项。缩进 + 左侧竖线表达从属关系，总开关关掉时置灰 -->
+                  <div class="notify-sub">
+                    <div class="notify-sub__head">
+                      <el-switch v-model="tempNotifySoundOnTaskDone" size="small" :disabled="!tempNotifyOnTaskDone" />
+                      <span class="notify-sub__label">{{ $t('@42BB9:提示音') }}</span>
+                    </div>
+                    <span class="setting-hint-block notify-hint notify-sub__hint">
+                      {{ $t('@42BB9:任务跑完或出错各响一声（主动停止不响）；上面的总开关关着时也不会有声音') }}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -770,6 +781,9 @@ const tempLocale = ref<SupportLocale>('zh-CN')
 const tempTaskExecutor = ref<TaskExecutorId>('claude')
 // 任务执行结束提示开关（全局，默认开）
 const tempNotifyOnTaskDone = ref(false)
+// 任务完成提示音开关（全局，默认开）。从属于上面的总开关：总开关关着时置灰不可点，
+// 但值本身留着（后端也各自存一个键）—— 用户临时关掉总开关再打开，提示音设置还在。
+const tempNotifySoundOnTaskDone = ref(true)
 // 只读镜像，用来在开关下方如实展示"系统通知到底能不能发出去"：
 // 权限已拒 / 环境不支持时，光看开关是不知道的，用户会以为开了却没动静。
 const notifyPermissionState = ref<NotifyPermission>('default')
@@ -829,7 +843,7 @@ const editingModelInitial = computed(() => {
 const hasChanges = computed(() => {
   if (activeTab.value === 'config') return true
   if (activeTab.value === 'general') {
-    return tempTheme.value !== initTheme || tempLocale.value !== initLocale || tempTaskExecutor.value !== initTaskExecutor || tempNotifyOnTaskDone.value !== initNotifyOnTaskDone || editingModelId.value !== undefined
+    return tempTheme.value !== initTheme || tempLocale.value !== initLocale || tempTaskExecutor.value !== initTaskExecutor || tempNotifyOnTaskDone.value !== initNotifyOnTaskDone || tempNotifySoundOnTaskDone.value !== initNotifySoundOnTaskDone || editingModelId.value !== undefined
   }
   if (activeTab.value === 'git') {
     return (
@@ -939,6 +953,7 @@ let initTheme: 'light' | 'dark' | 'auto' = 'light'
 let initLocale: SupportLocale = 'zh-CN'
 let initTaskExecutor: TaskExecutorId = 'claude'
 let initNotifyOnTaskDone = false
+let initNotifySoundOnTaskDone = true
 
 // 同步 v-model
 watch(() => props.modelValue, async (val) => {
@@ -959,6 +974,7 @@ watch(() => props.modelValue, async (val) => {
     tempLocale.value = configStore.locale
     tempTaskExecutor.value = configStore.taskExecutor
     tempNotifyOnTaskDone.value = configStore.notifyOnTaskDone
+    tempNotifySoundOnTaskDone.value = configStore.notifySoundOnTaskDone
     // 每次打开都重读权限：用户可能在浏览器地址栏里改过，或上一次授权弹窗刚被关掉
     notifyPermissionState.value = notificationPermission()
     // 资源管理器右键菜单状态：可能在别的实例里加过/删过，同样每次打开重读
@@ -996,6 +1012,7 @@ watch(() => props.modelValue, async (val) => {
     initLocale = tempLocale.value
     initTaskExecutor = tempTaskExecutor.value
     initNotifyOnTaskDone = tempNotifyOnTaskDone.value
+    initNotifySoundOnTaskDone = tempNotifySoundOnTaskDone.value
   }
 }, { immediate: true })
 
@@ -1208,7 +1225,7 @@ async function saveGlobalGitConfigs() {
 
 // 保存通用设置
 async function saveGeneralSettings() {
-  const settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: TaskExecutorId, notifyOnTaskDone?: boolean } = {}
+  const settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: TaskExecutorId, notifyOnTaskDone?: boolean, notifySoundOnTaskDone?: boolean } = {}
 
   // 保存主题设置（如果与初始值不同或需要强制保存）
   if (tempTheme.value !== initTheme) {
@@ -1235,8 +1252,14 @@ async function saveGeneralSettings() {
     initNotifyOnTaskDone = tempNotifyOnTaskDone.value
   }
 
+  // 保存提示音开关（如果与初始值不同）
+  if (tempNotifySoundOnTaskDone.value !== initNotifySoundOnTaskDone) {
+    settings.notifySoundOnTaskDone = tempNotifySoundOnTaskDone.value
+    initNotifySoundOnTaskDone = tempNotifySoundOnTaskDone.value
+  }
+
   // 只要有设置项就保存（包括主题或语言）
-  if (settings.theme !== undefined || settings.locale !== undefined || settings.taskExecutor !== undefined || settings.notifyOnTaskDone !== undefined) {
+  if (settings.theme !== undefined || settings.locale !== undefined || settings.taskExecutor !== undefined || settings.notifyOnTaskDone !== undefined || settings.notifySoundOnTaskDone !== undefined) {
     const saved = await configStore.saveGeneralSettings(settings)
     if (saved) {
       ElMessage.success($t('@42BB9:通用设置已保存'))
@@ -1729,6 +1752,29 @@ async function openSystemConfigFile() {
 }
 .notify-hint--warn {
   color: var(--el-color-warning);
+}
+/* 提示音是「任务完成提示」的子选项：左侧竖线 + 缩进表达从属关系，别让它看起来和
+   总开关平级 —— 平级的两个开关会让人以为"关了总开关声音还在"（实际不会响）。 */
+.notify-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+  padding-left: var(--spacing-sm);
+  border-left: 2px solid var(--el-border-color);
+}
+.notify-sub__head {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+.notify-sub__label {
+  font-size: var(--font-size-xs);
+  color: var(--el-text-color-regular);
+}
+/* 置灰时连说明一起降透明度，让"现在不生效"一眼看得出来 */
+.notify-sub:has(.el-switch.is-disabled) .notify-sub__hint {
+  opacity: 0.6;
 }
 .ai-iterations-input {
   width: 140px;
