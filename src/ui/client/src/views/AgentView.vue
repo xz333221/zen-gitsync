@@ -112,6 +112,13 @@ const currentSessionTitle = computed(
   () => conversationItems.value.find(i => i.id === currentSessionId.value)?.title || $t('@AGENT:对话')
 )
 
+// ── 欢迎区品牌图标 ─────────────────────────────────────
+// 组件库把欢迎区 logo 写死成内联 SVG（没有 prop / 插槽可换），只能把那个 div
+// 改造成图片盒子，背景图走这里。SVG 被 vite 内联成 data URI，而它内部含单引号
+// （xmlns='...'），所以外层必须用**双引号**包 url() —— 用单引号会被 data URI
+// 里的第一个单引号截断，整条 background 声明作废（实测 bgImage=none，图标空白）。
+const welcomeAvatarStyle = { '--welcome-avatar': `url("${AGENT_ASSISTANT_AVATAR}")` }
+
 // ── 预设问题 ──────────────────────────────────────────────
 const presetQuestions = computed(() => [
   { id: 'p1', label: $t('@AGENT:查看项目结构'), prompt: $t('@AGENT:prompt_p1') },
@@ -313,7 +320,10 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
               会**向上**跑出 .acu-chat，盖到刚加的返回条上（把返回条的点击也一起吃掉，
               e2e 实测就是这个症状）。宿主的 overflow:hidden 把它裁在自己这一格里。
             -->
-            <div class="agent-chat-host">
+            <div
+              class="agent-chat-host"
+              :style="welcomeAvatarStyle"
+            >
               <!-- 加载中 -->
               <div v-if="sessionLoading" class="chat-loading">
                 <el-icon class="is-loading" :size="32"><Loading /></el-icon>
@@ -561,13 +571,38 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   background: transparent;
 }
 
-/* ── 欢迎区预设卡片：把落单的第 5 张拉满整行 ────────────────
-   预设共 5 条（presetQuestions），而 zen-ai-chat-ui 的 .acu-welcome-grid
-   是 2 列网格 → 排成 2+2+1，末行右侧空一格，看起来像漏了一张卡。
-   让最后一张（奇数序号时）跨两列收尾，网格不再有空洞，也不用凑内容。
-   （选择器带 .acu-welcome-grid 是为了盖过库里的 [data-v-*] 作用域样式） */
-:deep(.acu-welcome-grid > .acu-preset-q:last-child:nth-child(odd)) {
-  grid-column: 1 / -1;
+/* ── 欢迎区大图标：换成 g ai 标识 ────────────────────────────────
+   zen-ai-chat-ui 的 WelcomeScreen 把 logo 写死成一串内联 SVG（三颗闪光星），
+   没有 prop / 插槽可换（dist 里 slots 出现 0 次），所以只能盖样式：
+   藏掉它自带的 <svg>，把 div 本身当图片盒子，背景图走 AGENT_ASSISTANT_AVATAR
+   （与消息气泡里的助手头像同一张，模板上用 --welcome-avatar 传进来）。
+   同样因为图标自带底色，那层 primary-soft 圆底 + 描边要去掉，不然会露出灰圈。 */
+.agent-chat-host :deep(.acu-welcome-logo) {
+  width: 56px;
+  height: 56px;
+  background: var(--welcome-avatar) center / 46px 46px no-repeat;
+  box-shadow: none;
+}
+.agent-chat-host :deep(.acu-welcome-logo > svg) {
+  display: none;
+}
+
+/* ── 欢迎区预设卡片：末行自动铺满，不留孤零零的一张 ────────────────
+   库里 .acu-welcome-grid 是 grid + repeat(auto-fit, minmax(280px, 1fr))，列数随面板
+   宽度浮动（920px 上限下宽面板是 3 列）。5 条落进 3 列 = 3 + 1 + 1，而原来那条
+   ":last-child 跨满整行"的规则会让落单的第 4 张留在第 2 行、第 5 张独占第 3 行拉满
+   —— 排出来是「3 + 1 + 整行」，第 2 行右侧空两格，看着像漏了两张卡（实测症状）。
+
+   改成 flex 换行：每张卡 flex-grow:1，于是**每一行**（含末行）都按行均分整行宽度，
+   末行剩几张就分几份。宽面板 3+2、窄面板 2+2+1、单列，任何宽度下都不会留空洞，
+   也不需要再写 nth-child 特例（预设条数变了也不会排歪）。 */
+.agent-chat-host :deep(.acu-welcome-grid) {
+  display: flex;
+  flex-wrap: wrap;
+}
+.agent-chat-host :deep(.acu-welcome-grid > .acu-preset-q) {
+  flex: 1 1 260px;
+  min-width: 0;
 }
 
 /* ── 暗色主题适配 ───────────────────────────────── */
