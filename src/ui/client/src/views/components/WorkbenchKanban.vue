@@ -32,8 +32,8 @@
 import { computed, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { Search } from '@element-plus/icons-vue'
-import type { BoardTask, TaskColumn } from '@/types/workbench'
-import { relativeTimeFromIso } from '@/utils/relativeTime'
+import type { BoardTask, BoardTaskLive, TaskColumn } from '@/types/workbench'
+import { formatDurationMs, relativeTimeFromIso } from '@/utils/relativeTime'
 
 const props = defineProps<{
   tasks: BoardTask[]
@@ -140,6 +140,17 @@ function projectLabel(t: BoardTask): string {
 function hasError(t: BoardTask): boolean {
   return t.lastJobStatus === 'error'
 }
+
+/**
+ * 列表视图那一行状态摘要（看板视图是分行显示，这里只放得下一行）。
+ * 优先级与卡片相反：列表行窄，先给**最新的回复**——"它刚说了什么"最能回答
+ * "跑到哪了"；没写过正文的任务才退到思考，再退到最近一次工具调用。
+ */
+function liveSummary(live: BoardTaskLive): string {
+  const elapsed = $t('@WORKBENCH:已运行 {elapsed}', { elapsed: formatDurationMs(live.elapsedMs) })
+  const text = live.lastLine || live.lastThought || live.lastTool
+  return text ? `${elapsed} · ${text}` : elapsed
+}
 </script>
 
 <template>
@@ -212,6 +223,40 @@ function hasError(t: BoardTask): boolean {
 
             <p v-if="showProjectLabel && projectLabel(t)" class="kb-card__project">{{ projectLabel(t) }}</p>
 
+            <!--
+              正在跑的任务：把"现在在干嘛"直接写在卡片上。
+              在此之前卡片只有右上角一个圆点 —— 一次跑二十分钟的任务，
+              用户盯着看只知道"还在跑"，是在改代码还是卡住了完全看不出来，
+              只能点进编辑器翻输出。服务端随卡片一起把事实摘要发过来
+              （decorateTaskForBoard 的 live，与右栏进度报告同一份实现）。
+              证据顺序沿用进度报告面板：工具调用（正在做什么）→ 思考（为什么）
+              → 最新回复；每一行没有内容就整行不渲染，不写"暂无"。
+            -->
+            <div v-if="t.live" class="kb-card__live">
+              <p class="kb-card__live-meta">
+                <span v-if="t.live.agent" class="kb-card__live-agent">{{ t.live.agent }}</span>
+                <span>{{ $t('@WORKBENCH:已运行 {elapsed}', { elapsed: formatDurationMs(t.live.elapsedMs) }) }}</span>
+                <!-- 次数看总数，鼠标停上去看分布：119 次里 118 次都是 Bash，
+                     和"改了三处代码"是完全不同的两件事 -->
+                <span v-if="t.live.toolCallCount" :title="t.live.toolMix || ''">
+                  {{ $t('@WORKBENCH:工具 {n} 次', { n: t.live.toolCallCount }) }}
+                </span>
+                <!-- 静默只在**显然静默**时才有值（服务端有阈值），所以这里不用再过滤 -->
+                <span v-if="typeof t.live.silentMs === 'number'" class="kb-card__live-silent">
+                  {{ $t('@WORKBENCH:静默 {elapsed}', { elapsed: formatDurationMs(t.live.silentMs) }) }}
+                </span>
+              </p>
+              <p v-if="t.live.lastTool" class="kb-card__live-line is-tool" :title="t.live.lastTool">
+                {{ t.live.lastTool }}
+              </p>
+              <p v-if="t.live.lastThought" class="kb-card__live-line is-thought" :title="t.live.lastThought">
+                <span class="kb-card__live-tag">{{ $t('@WORKBENCH:最近思考') }}</span>{{ t.live.lastThought }}
+              </p>
+              <p v-if="t.live.lastLine" class="kb-card__live-line" :title="t.live.lastLine">
+                <span class="kb-card__live-tag">{{ $t('@WORKBENCH:最新回复') }}</span>{{ t.live.lastLine }}
+              </p>
+            </div>
+
             <div class="kb-card__actions">
               <button
                 v-if="t.runningJobs === 0"
@@ -281,6 +326,14 @@ function hasError(t: BoardTask): boolean {
             <td class="kb-table__td">
               <span class="kb-table__name">{{ cardTitle(t) || $t('@WORKBENCH:未命名任务') }}</span>
               <span v-if="showProjectLabel && projectLabel(t)" class="kb-table__project">{{ projectLabel(t) }}</span>
+              <!-- 状态列的"进行中"太粗，跑起来之后一眼看不出进度：这里补一行
+                   最新回复 / 思考 / 工具（与卡片上的 live 同一份数据） -->
+              <span v-if="t.live" class="kb-table__live">
+                {{ liveSummary(t.live) }}
+                <span v-if="typeof t.live.silentMs === 'number'" class="kb-table__live-silent">
+                  {{ $t('@WORKBENCH:静默 {elapsed}', { elapsed: formatDurationMs(t.live.silentMs) }) }}
+                </span>
+              </span>
             </td>
             <td class="kb-table__td">
               <span class="kb-table__status" :class="'is-' + t.column">
@@ -518,6 +571,57 @@ function hasError(t: BoardTask): boolean {
   text-overflow: ellipsis;
 }
 
+/* ── 卡片上的「现在在干嘛」（只在任务正在跑时出现） ──
+   与任务标题之间用一条浅虚线隔开：上面是"这是什么任务"，下面是"它现在怎么样了"。
+   视觉口径刻意与右栏进度报告面板的 .rpt__* 一致（同一批事实，两处看起来该是一回事） */
+.kb-card__live {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-color-light);
+  min-width: 0;
+}
+.kb-card__live-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.kb-card__live-agent { color: var(--text-secondary); }
+/* 静默：卡片上最接近"可能卡住了"的信号，用告警色 */
+.kb-card__live-silent { color: var(--color-warning); }
+.kb-card__live-line {
+  margin: 3px 0 0;
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+/* 工具行只给一行：它是"正在做什么"的标签（`Edit src/App.vue`），
+   折成两行会被读成一句内容，而它本来不是 */
+.kb-card__live-line.is-tool {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+}
+/* 思考那行比工具行**亮一档**并带左侧竖线 —— 多数任务一句正文都不写，
+   它是"它在干嘛"最直接的证据，不该和工具名一样灰 */
+.kb-card__live-line.is-thought {
+  color: var(--text-secondary);
+  padding-left: 6px;
+  border-left: 2px solid var(--border-color-light);
+}
+.kb-card__live-tag {
+  margin-right: 4px;
+  color: var(--text-tertiary);
+}
+
 /* hover 才出现的操作组：绝对定位不占位，空闲时连点击也一起让开
    （否则隐形的按钮会吞掉本该落到卡片的点击） */
 .kb-card__actions {
@@ -556,7 +660,11 @@ function hasError(t: BoardTask): boolean {
 .kb-card:hover .kb-card__title,
 .kb-card:focus-within .kb-card__title,
 .kb-card:hover .kb-card__project,
-.kb-card:focus-within .kb-card__project {
+.kb-card:focus-within .kb-card__project,
+/* 活动区同理：它渲染在哪一行取决于哪个字段有值（工具 / 思考 / 回复 / 只有时长），
+   所以对**最后渲染出来的那个孩子**渐隐，而不是逐个类名去猜 */
+.kb-card:hover .kb-card__live > :last-child,
+.kb-card:focus-within .kb-card__live > :last-child {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 80px), transparent calc(100% - 64px));
   mask-image: linear-gradient(to right, #000 calc(100% - 80px), transparent calc(100% - 64px));
 }
@@ -669,6 +777,17 @@ function hasError(t: BoardTask): boolean {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }
+/* 进行中那一行的"跑到哪了"：与任务名同一格，占满剩余宽度后省略号收尾 */
+.kb-table__live {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kb-table__live-silent { margin-left: 6px; color: var(--color-warning); }
 .kb-table__status {
   font-size: var(--font-size-xs);
   padding: 1px 6px;

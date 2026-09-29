@@ -231,6 +231,40 @@ test('decorateTaskForBoard: lastJobEndedAt 取最近一条 job 的结束时间�
   assert.equal(decorateTaskForBoard(base, running).lastJobEndedAt, '2026-02-01T00:00:00Z');
 });
 
+// ── 卡片上的「现在在干嘛」（live） ──────────────────────────────────
+// 卡片过去只有一个"进行中"的圆点，跑二十分钟的任务看不出是在改代码还是卡住了。
+// 这几条守的是：摘要有值、值是真话、没在跑时必须是 null。
+
+test('decorateTaskForBoard: 正在跑的任务带上 live（思考 / 工具 / 最新回复 / 时长）', () => {
+  const base = { id: 't1', title: '标题', desc: '', createdAt: '2026-02-01T00:00:00Z' };
+  const running = [{
+    ...job('j9', 't1', 'running', '2026-02-01T00:00:00Z'),
+    agent: 'claude',
+    thinking: '先看锁的写法',
+    output: '读完了 login.ts',
+    toolCalls: [{ name: 'Read', argsPreview: 'src/login.ts' }],
+    lastActivityAt: '2026-02-01T00:09:00Z',
+  }];
+  const now = Date.parse('2026-02-01T00:10:00Z');
+
+  const card = decorateTaskForBoard(base, running, { now });
+  assert.equal(card.live.agent, 'claude');
+  assert.equal(card.live.elapsedMs, 10 * 60 * 1000);
+  assert.equal(card.live.lastTool, 'Read src/login.ts');
+  assert.equal(card.live.lastThought, '先看锁的写法');
+  assert.equal(card.live.lastLine, '读完了 login.ts');
+  // 静默 1 分钟：到阈值才给值（阈值见 jobActivity.SILENT_NOTABLE_MS）
+  assert.equal(card.live.silentMs, 60 * 1000);
+});
+
+test('decorateTaskForBoard: 没有在跑的 job 时 live 是 null（前端据此不渲染活动区）', () => {
+  const base = { id: 't1', title: '', desc: '', createdAt: '2025-12-31T00:00:00Z' };
+  assert.equal(decorateTaskForBoard(base, []).live, null);
+  assert.equal(decorateTaskForBoard(base, [
+    job('j1', 't1', 'done', '2026-01-01T00:00:00Z', '2026-01-01T00:10:00Z'),
+  ]).live, null);
+});
+
 // ── 编排状态与活动流 ────────────────────────────────────────────────
 
 test('normalizeOrchestrator: 缺字段/脏数据都要能起来', () => {

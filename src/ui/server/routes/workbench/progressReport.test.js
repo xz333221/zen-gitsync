@@ -26,20 +26,16 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 import {
-  tailLine,
-  describeLastTool,
-  describeToolMix,
-  silentMsOf,
   buildRunningFacts,
   buildReportPrompt,
   formatDuration,
   generateProgressReport,
   MAX_FACT_TASKS,
-  TOOL_MIX_WINDOW,
-  SILENT_NOTABLE_MS,
   SYSTEM_PROMPT_ZH,
   SYSTEM_PROMPT_EN,
 } from './progressReport.js';
+// 这两个常量随 tailLine / describeToolMix 一起搬到了 jobActivity.js（定义处即引用处）
+import { TOOL_MIX_WINDOW, SILENT_NOTABLE_MS } from './jobActivity.js';
 import {
   PROGRESS_REPORT_INTERVALS_MS,
   DEFAULT_PROGRESS_REPORT_INTERVAL_MS,
@@ -66,89 +62,6 @@ function runningJob(over = {}) {
 
 const NOW = Date.parse('2026-09-28T10:01:00.000Z'); // 距 startedAt 正好 60 秒
 
-// ── tailLine ────────────────────────────────────────────────────────────
-
-test('tailLine 取最后一行有效文本，跳过末尾空行', () => {
-  assert.equal(tailLine('第一行\n第二行\n\n   \n'), '第二行');
-});
-
-test('tailLine 把行内空白折成一个空格（多行输出里的缩进不该原样进 prompt）', () => {
-  assert.equal(tailLine('a\n   正在   编辑\t文件   '), '正在 编辑 文件');
-});
-
-test('tailLine 截断超长行，且空 / 非字符串一律返回空串', () => {
-  assert.equal(tailLine('x'.repeat(500)).length, 160);
-  assert.equal(tailLine(''), '');
-  assert.equal(tailLine(null), '');
-  assert.equal(tailLine(undefined), '');
-});
-
-// ── describeLastTool ────────────────────────────────────────────────────
-
-test('describeLastTool 取最后一次带名字的调用，优先用 argsPreview', () => {
-  const calls = [
-    { name: 'Read', argsPreview: 'a.ts', arguments: '{"file_path":"a.ts"}' },
-    { name: 'Edit', argsPreview: 'b.ts', arguments: '{"file_path":"b.ts"}' },
-  ];
-  assert.equal(describeLastTool(calls), 'Edit b.ts');
-});
-
-test('describeLastTool 跳过没有名字的尾部记录（老数据 / 半截记录）', () => {
-  const calls = [{ name: 'Bash', argsPreview: 'npm test' }, { id: 'anon-1' }];
-  assert.equal(describeLastTool(calls), 'Bash npm test');
-});
-
-test('describeLastTool 没有 argsPreview 时退回 arguments；两者都没有就只给工具名', () => {
-  assert.equal(describeLastTool([{ name: 'Bash', arguments: 'ls -la' }]), 'Bash ls -la');
-  assert.equal(describeLastTool([{ name: 'Bash' }]), 'Bash');
-  assert.equal(describeLastTool([]), '');
-  assert.equal(describeLastTool(null), '');
-});
-
-// ── describeToolMix / silentMsOf ────────────────────────────────────────
-
-test('describeToolMix 给出最近几次调用的分布，多的在前', () => {
-  const calls = [
-    { name: 'Bash' }, { name: 'Read' }, { name: 'Bash' },
-    { name: 'Read' }, { name: 'Bash' }, { name: 'Edit' },
-  ];
-  assert.equal(describeToolMix(calls), 'Bash×3 · Read×2 · Edit');
-});
-
-test('describeToolMix 只看最近 TOOL_MIX_WINDOW 次 —— 早先的模式早被淹没了', () => {
-  // 先 30 次 Edit，再 20 次 Read：窗口内只有 Read，分布里不该冒出 Edit
-  const calls = [
-    ...Array.from({ length: 30 }, () => ({ name: 'Edit' })),
-    ...Array.from({ length: TOOL_MIX_WINDOW }, () => ({ name: 'Read' })),
-  ];
-  assert.equal(describeToolMix(calls), `Read×${TOOL_MIX_WINDOW}`);
-});
-
-test('describeToolMix 跳过没有名字的记录，但它们不占窗口名额', () => {
-  const calls = [
-    { name: 'Bash' },
-    ...Array.from({ length: TOOL_MIX_WINDOW }, () => ({ id: 'anon-1' })),
-  ];
-  assert.equal(describeToolMix(calls), 'Bash');
-});
-
-test('describeToolMix 没有调用时给空串（调用方据此不显示这一行）', () => {
-  assert.equal(describeToolMix([]), '');
-  assert.equal(describeToolMix(null), '');
-  assert.equal(describeToolMix(undefined), '');
-});
-
-test('silentMsOf 到阈值才算静默，不到 / 没这个字段一律 null', () => {
-  const at = '2026-09-28T10:00:00.000Z';
-  const base = Date.parse(at);
-  const job = { lastActivityAt: at };
-  assert.equal(silentMsOf(job, base + SILENT_NOTABLE_MS), SILENT_NOTABLE_MS);
-  assert.equal(silentMsOf(job, base + SILENT_NOTABLE_MS - 1), null);
-  // 老记录 / 别的实例上的旧版进程没有这个字段：给 null，而不是编一个 0
-  assert.equal(silentMsOf({}, base), null);
-  assert.equal(silentMsOf({ lastActivityAt: '不是时间' }, base), null);
-  assert.equal(silentMsOf(null, base), null);
-});
 
 // ── buildRunningFacts ───────────────────────────────────────────────────
 

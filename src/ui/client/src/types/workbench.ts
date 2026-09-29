@@ -178,6 +178,35 @@ export interface ProjectSummary {
   stats: ProjectStats
 }
 
+/**
+ * 「这轮执行现在在干嘛」—— 卡片上那几行事实摘要在前端的形态。
+ * 全部由服务端 jobActivity.pickLiveActivity 抽好（与进度报告的事实同一份实现），
+ * 前端只负责显示，不在这里二次加工（加工一遍就会和右栏报告里的说法对不上）。
+ *
+ * 空串 = 该任务还没有对应内容（例如一句正文都没写过的任务 lastLine 是空的），
+ * 前端据此**不渲染那一行**，而不是显示"暂无"。
+ */
+export interface BoardTaskLive {
+  jobId: string
+  status: JobStatus | ''
+  /** 本轮执行器（claude | opencode | codex）；老记录为空串 */
+  agent: string
+  startedAt: string | null
+  elapsedMs: number
+  /** 工具调用次数（受服务端上限截断，含义是"至少这么多次"） */
+  toolCallCount: number
+  /** 最近一次工具调用的一句话（`Edit src/App.vue`）；空串 = 还没调过工具 */
+  lastTool: string
+  /** 最近若干次调用的名字分布（`Bash×14 · Read×5`），鼠标停上去看 */
+  toolMix: string
+  /** 最近一段思考 —— 多数任务不写正文，它是"它在干嘛"最直接的证据 */
+  lastThought: string
+  /** 最新的回复（正文最后一行），空串 = 这轮还没写过正文 */
+  lastLine: string
+  /** 已经多久没动静了；null = 不到阈值（阈值见服务端 SILENT_NOTABLE_MS） */
+  silentMs: number | null
+}
+
 /** 看板卡片：任务的精简形态 */
 export interface BoardTask {
   id: string
@@ -187,6 +216,8 @@ export interface BoardTask {
   column: TaskColumn
   attachmentCount: number
   runningJobs: number
+  /** 正在跑时的活动摘要（思考 / 工具 / 最新回复 / 时长）；没在跑时为 null */
+  live?: BoardTaskLive | null
   lastJobStatus: string | null
   /** 最近一条 job 的结束时间（= 这张卡片跑完的时刻），从没执行过时为 null */
   lastJobEndedAt: string | null

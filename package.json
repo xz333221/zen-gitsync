@@ -40,6 +40,7 @@
     "verify:wb-live-jobs": "node scripts/verify-wb-live-jobs.mjs",
     "verify:wb-overview": "node scripts/verify-workbench-overview.cjs",
     "verify:wb-progress-report": "node scripts/verify-wb-progress-report.cjs",
+    "verify:wb-card-live": "node scripts/verify-wb-card-live.cjs",
     "verify:wb-proj-branch": "node scripts/verify-workbench-proj-branch.cjs",
     "verify:wb-proj-filter": "node scripts/verify-wb-proj-filter.cjs",
     "verify:wb-panel-resize": "node scripts/verify-wb-panel-resize.cjs",

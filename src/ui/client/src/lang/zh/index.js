@@ -2391,6 +2391,7 @@ export default {
   '@WORKBENCH:工具 {n} 次': '工具 {n} 次',
   '@WORKBENCH:静默 {elapsed}': '静默 {elapsed}',
   '@WORKBENCH:最近思考': '思考',
+  '@WORKBENCH:最新回复': '回复',
   '@WORKBENCH:暂无进度报告': '暂无进度报告',
   '@WORKBENCH:历史报告': '历史报告',
   '@WORKBENCH:当时没有任务在执行': '当时没有任务在执行',

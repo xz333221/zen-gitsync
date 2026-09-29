@@ -2381,6 +2381,7 @@ export default {
   '@WORKBENCH:工具 {n} 次': '{n} tool calls',
   '@WORKBENCH:静默 {elapsed}': 'Silent for {elapsed}',
   '@WORKBENCH:最近思考': 'Thinking',
+  '@WORKBENCH:最新回复': 'Reply',
   '@WORKBENCH:暂无进度报告': 'No progress reports yet',
   '@WORKBENCH:历史报告': 'History',
   '@WORKBENCH:当时没有任务在执行': 'No tasks were running',

@@ -34,6 +34,7 @@
 //   - Git 状态复用 utils/directoryGitState.js 的批量探测（带并发上限 + TTL 缓存 + 超时）。
 
 import { probeDirectoryGitStates } from '../../utils/directoryGitState.js';
+import { pickLiveActivity } from './jobActivity.js';
 
 /** 看板列，数组顺序即列顺序 */
 export const TASK_COLUMNS = ['todo', 'doing', 'done'];
@@ -298,8 +299,17 @@ export async function listProjects({
   });
 }
 
-/** 看板任务卡需要的精简字段（完整任务体在 /api/workbench/tasks，这里只给卡片用得到的） */
-export function decorateTaskForBoard(task, jobsForTask = []) {
+/**
+ * 看板任务卡需要的精简字段（完整任务体在 /api/workbench/tasks，这里只给卡片用得到的）。
+ *
+ * `live`（2026-09-29 补）是「这轮执行现在在干嘛」的一行事实摘要：最近思考、最近一次工具
+ * 调用、最新回复、已运行多久、静默多久。在此之前卡片上只有"进行中"三个字 —— 一次跑
+ * 二十分钟的任务，用户盯着它看不出是在改代码还是卡住了，只能点进编辑器翻输出。
+ *
+ * 字段全部由 jobActivity.pickLiveActivity 抽好（与进度报告同一份实现），这里只负责挂上去；
+ * 任务没有在跑的 job 时是 null，前端据此不渲染活动区。
+ */
+export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now() } = {}) {
   const jobs = Array.isArray(jobsForTask) ? jobsForTask : [];
   const last = latestJob(jobs);
   return {
@@ -310,6 +320,8 @@ export function decorateTaskForBoard(task, jobsForTask = []) {
     column: deriveTaskColumn(task, jobs),
     attachmentCount: Array.isArray(task.attachments) ? task.attachments.length : 0,
     runningJobs: jobs.filter(j => j && (j.status === 'running' || j.status === 'pending')).length,
+    /** 正在跑时的活动摘要；没有在跑 → null */
+    live: pickLiveActivity(jobs, now),
     lastJobStatus: last ? last.status : null,
     // 最近一条 job 的结束时间 = 这张卡片"跑完"的时刻。
     // 看板的「已完成」列要按完成时间倒序排（最新完成的在最上边），而 updatedAt 撑不起这个排序：
