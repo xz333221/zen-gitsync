@@ -40,6 +40,7 @@
 import { spawn, execFile } from 'child_process';
 import { logger } from './shared.js';
 import { engineLabel } from './agentEngines.js';
+import { isPlanToolName } from '../../../../cli/ai/tools.js';
 import {
   createToolCallTracker,
   createClaudeEventHandler,
@@ -181,7 +182,11 @@ export async function runExternalTurn({
       const id = u.id || '';
       if (id && !announced.has(id)) {
         announced.add(id);
-        send({ type: 'tool_call_start', toolCallId: id, name: u.name, argsPreview: u.argsPreview || '' });
+        // 计划类工具额外带完整参数：外部引擎里 claude 的 TodoWrite / opencode 的
+        // todowrite 就是计划，前端要靠原始 steps 渲染清单，而 argsPreview 是摘要。
+        // 只给计划类发全文，与内置 g ai 那条链路（agentChat.js）保持同一口径。
+        const planArgs = isPlanToolName(u.name) ? (u.arguments || '') : undefined;
+        send({ type: 'tool_call_start', toolCallId: id, name: u.name, argsPreview: u.argsPreview || '', arguments: planArgs });
       }
       if (u.status !== 'running') {
         send({
