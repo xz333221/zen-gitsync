@@ -27,6 +27,7 @@ import assert from 'node:assert/strict';
 
 import {
   tailLine,
+  tailExcerpt,
   describeLastTool,
   describeToolMix,
   silentMsOf,
@@ -51,6 +52,56 @@ test('tailLine 截断超长行，且空 / 非字符串一律返回空串', () =>
   assert.equal(tailLine(''), '');
   assert.equal(tailLine(null), '');
   assert.equal(tailLine(undefined), '');
+});
+
+// ── tailExcerpt（跑完之后卡片上那段「最后说了什么」） ──────────────────────
+// 这段摘录要回答的是"这条已完成的任务，是不是其实在等我回话"，所以断言的重心是
+// **结尾那句必须还在**：模型收尾时那句「要 push 吗？」被截掉的话，这个功能就白做了。
+
+test('tailExcerpt 取尾部一段，压平成一行并去掉 markdown 标记', () => {
+  const out = '## 改动\n\n- **新增** `lastReply` 字段\n- 卡片上显示最后回复\n\n要 push 吗？';
+  // 标题 / 列表标记 / ** / 反引号都只是噪声；卡片上没有富文本，留着一堆符号没法读
+  assert.equal(tailExcerpt(out), '改动 新增 lastReply 字段 卡片上显示最后回复 要 push 吗？');
+});
+
+test('tailExcerpt 丢掉表格行与分隔线（压成一行后只剩一堆竖线）', () => {
+  const out = '## 验证\n\n| 项 | 结果 |\n|---|---|\n| vue-tsc | 0 错误 |\n\n已提交。要 push 吗？';
+  assert.equal(tailExcerpt(out), '验证 已提交。要 push 吗？');
+});
+
+test('tailExcerpt 真截断过才加 …（结尾那句永远保留）', () => {
+  const long = `${'前'.repeat(300)}收尾那句：要 push 吗？`;
+  const got = tailExcerpt(long);
+  assert.ok(got.startsWith('…'), '从中间开始就该有 … 标记');
+  assert.ok(got.endsWith('要 push 吗？'), '结尾那句不能被截掉 —— CSS 截的是尾巴，这是它被截的原因');
+  // 上限按"去掉 … 之后"算：… 不计入 100 字的预算
+  assert.equal(got.length, 101);
+});
+
+test('tailExcerpt 没截断就不加 …（… 是"这句话从中间开始"的标记，不能乱标）', () => {
+  assert.equal(tailExcerpt('你好！有什么可以帮你的？'), '你好！有什么可以帮你的？');
+  // 短输出连第一行一起保留：窗口没切，第一行是完整的一句，不是半截
+  assert.equal(tailExcerpt('你好！\n\n需要的话我可以读本机的看板文件。'), '你好！ 需要的话我可以读本机的看板文件。');
+});
+
+test('tailExcerpt 窗口起点落在半句中间时从下一个整行开始（摘录不以半句开头）', () => {
+  const out = `${'前'.repeat(5000)}\n完整的一行\n要 push 吗？`;
+  // 5000 字 > REPLY_WINDOW_CHARS：被切掉的首行本就是半句，丢掉而不是拼进来
+  assert.equal(tailExcerpt(out), '完整的一行 要 push 吗？');
+});
+
+test('tailExcerpt 单行超长输出也能给出尾部（窗口里没有换行可退）', () => {
+  const got = tailExcerpt(`${'字'.repeat(5000)}要 push 吗？`);
+  assert.ok(got.startsWith('…'));
+  assert.ok(got.endsWith('要 push 吗？'));
+});
+
+test('tailExcerpt 空输出 / 脏值 / 全是表格噪声时给空串（前端据此不渲染这一段）', () => {
+  assert.equal(tailExcerpt(''), '');
+  assert.equal(tailExcerpt(null), '');
+  assert.equal(tailExcerpt(undefined), '');
+  assert.equal(tailExcerpt('   \n\n   '), '');
+  assert.equal(tailExcerpt('|---|---|\n| a | b |'), '');
 });
 
 // ── describeLastTool ────────────────────────────────────────────────────

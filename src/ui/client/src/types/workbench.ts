@@ -218,6 +218,11 @@ export interface BoardTask {
   runningJobs: number
   /** 正在跑时的活动摘要（思考 / 工具 / 最新回复 / 时长）；没在跑时为 null */
   live?: BoardTaskLive | null
+  /**
+   * 跑完之后留下的「最后说了什么」（最近一条 job 的正文摘录，已压平并截断）。
+   * 与 live 互斥：有 job 在跑时恒为 null；从没跑过 / 那次没写正文时是空串。
+   */
+  lastReply?: string | null
   lastJobStatus: string | null
   /** 最近一条 job 的结束时间（= 这张卡片跑完的时刻），从没执行过时为 null */
   lastJobEndedAt: string | null

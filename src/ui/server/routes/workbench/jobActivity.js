@@ -54,6 +54,74 @@ export function tailLine(output) {
 }
 
 /**
+ * 「最后回复」摘录最多多少字。
+ *
+ * 100 是按"卡片上放得下多少"倒推的：卡片宽 200–500px、字号 var(--font-size-xs)，
+ * 一行约 25–35 个汉字、卡片最多显示 3 行（.kb-card__reply 的 line-clamp），
+ * 于是 2000px 宽的窗口（本机实测）刚好整段显示得完；窗口更窄时尾部会被 CSS 截掉
+ * 几个字（`…` 是诚实的标记，完整摘录在悬停提示里）。
+ *
+ * 这个数**不能再小**：截断的是头部，而模型收尾那句反问（「要 push 吗？」）常常落在
+ * 倒数第 80–100 字之间 —— 给 80 字就会把它整句丢掉，反而是这个功能最不该丢的东西。
+ * 也不能再大：多出来的部分只会被 CSS 从尾巴切掉，白白把有用的开头挤出去。
+ */
+export const MAX_REPLY_CHARS = 100;
+
+/**
+ * 摘录前先切的尾部窗口。
+ *
+ * 为什么要先切窗口再分行：单条 job 的 output 上限是 100MB（taskRunner 的 MAX_OUTPUT），
+ * 而看板是 5s 轮询一次、每次都要给几十张卡片算这个字段 —— 对着整份输出 split 一遍是
+ * 白白烧 CPU（切片是 O(1) 的 SlicedString，split 不是）。4000 字符足够覆盖一整段收尾。
+ */
+export const REPLY_WINDOW_CHARS = 4000;
+
+/** 纯装饰行（表格分隔线 / 水平线），留着只是噪声 */
+const DECOR_LINE = /^\s*[|:\-\s=]+\s*$/;
+/** Markdown 表格行（`| 项 | 结果 |`）：压成一行文字后只剩一堆竖线，整行丢掉 */
+const TABLE_LINE = /^\s*\|.*\|\s*$/;
+/** 行首的标题 / 列表 / 引用标记 —— 压平成一句话之后它们不再是结构，只是噪声 */
+const LINE_MARKER = /^\s*(?:#{1,6}\s+|[-*+]\s+|>\s*)/;
+/** 行内强调与行内代码的标记。**不**去掉 `_`：它会命中 snake_case 的标识符 */
+const INLINE_MARKER = /\*\*|`/g;
+
+/**
+ * 从执行输出里摘出「最后说了什么」—— 看板「已完成」卡片上那一行。
+ *
+ * 与 tailLine 的分工：tailLine 是**正在跑**时用的，只要最新那一句（"它现在在干嘛"）；
+ * 这里是**跑完之后**用的，要一小段（"它最后交代了什么"）。后者才是"这任务是不是真完了"
+ * 的证据 —— 模型经常在收尾时反问一句「要 push 吗？」，只看标题的话，用户根本不知道
+ * 这条已经完成的任务其实在等他一句话。
+ *
+ * 三条规矩：
+ *   1. 只取**尾部**：一段回复的重点在收尾，不在开头；
+ *   2. 丢掉表格行、行首标记、`**`/反引号，压平成一句话（卡片上没有富文本，留着只是噪声）；
+ *   3. 真截断过才在前面加 `…`（没截就不加，`…` 是"这句话从中间开始"的诚实标记）。
+ */
+export function tailExcerpt(output, { maxChars = MAX_REPLY_CHARS, windowChars = REPLY_WINDOW_CHARS } = {}) {
+  const raw = typeof output === 'string' ? output : '';
+  if (!raw) return '';
+
+  // 窗口起点多半落在半句话中间：从窗口内的第一个换行之后开始取，摘录才不会以半句开头。
+  // 窗口内一个换行都没有（单行超长输出）时只能整段用，此时下面的截断会补上 `…`。
+  // 没切窗口（输出本来就短）时不动第一行 —— 那是完整的一句，不是半截。
+  const cutWindow = raw.length > windowChars;
+  const windowed = cutWindow ? raw.slice(-windowChars) : raw;
+  const body = cutWindow ? windowed.slice(windowed.indexOf('\n') + 1) : windowed;
+
+  const flat = body
+    .split('\n')
+    .filter(line => !DECOR_LINE.test(line) && !TABLE_LINE.test(line))
+    .map(line => line.replace(LINE_MARKER, '').replace(INLINE_MARKER, '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join(' ');
+
+  if (!flat) return '';
+  // 从尾部取：上面已经说明过为什么宁丢开头不丢结尾
+  return flat.length > maxChars ? `…${flat.slice(-maxChars).trim()}` : flat;
+}
+
+/**
  * 最近一次工具调用的一句话描述（如 `Edit src/ui/client/src/App.vue`）。
  * 从后往前找：数组里最后一条未必带 name（老数据 / 半截记录），跳过它们而不是返回空。
  */
@@ -177,6 +245,7 @@ export function pickLiveActivity(jobsForTask, now = Date.now()) {
 
 export const __testables = {
   tailLine,
+  tailExcerpt,
   describeLastTool,
   describeToolMix,
   silentMsOf,

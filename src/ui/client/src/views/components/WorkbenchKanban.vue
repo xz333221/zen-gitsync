@@ -257,6 +257,19 @@ function liveSummary(live: BoardTaskLive): string {
               </p>
             </div>
 
+            <!--
+              已经跑完的任务：留下"它最后说了什么"。
+              卡片过去只有标题 + 时间，而模型收尾时常常反问一句「要 push 吗？」——
+              这类任务看着是完成了，其实在等用户回话，用户却只能点进去翻日志才知道。
+              live 覆盖不到这一段：它只在 running 时有值、跑完就消失，恰好把最有信息量的
+              收尾丢掉（服务端 decorateTaskForBoard 的 lastReply，与这里二选一）。
+              样式沿用 live 里「思考」那行的竖线 —— 同一个含义（这是它说的原话）；
+              不加标签：卡片窄，一行放不下 4 个字的标签还挤掉正文。
+            -->
+            <p v-else-if="t.lastReply" class="kb-card__reply" :title="t.lastReply">
+              {{ t.lastReply }}
+            </p>
+
             <div class="kb-card__actions">
               <button
                 v-if="t.runningJobs === 0"
@@ -333,6 +346,11 @@ function liveSummary(live: BoardTaskLive): string {
                 <span v-if="typeof t.live.silentMs === 'number'" class="kb-table__live-silent">
                   {{ $t('@WORKBENCH:静默 {elapsed}', { elapsed: formatDurationMs(t.live.silentMs) }) }}
                 </span>
+              </span>
+              <!-- 跑完的任务同理给一行"最后说了什么"：列表视图与看板卡片是同一批任务的
+                   两种画法，一边有、一边没有会让人以为是两份数据 -->
+              <span v-else-if="t.lastReply" class="kb-table__live kb-table__live--reply">
+                {{ t.lastReply }}
               </span>
             </td>
             <td class="kb-table__td">
@@ -622,6 +640,29 @@ function liveSummary(live: BoardTaskLive): string {
   color: var(--text-tertiary);
 }
 
+/* ── 跑完之后留下的「最后说了什么」（只在没有 job 在跑时出现） ──
+   与 .kb-card__live 的分工：那个答"现在在干嘛"（实时，跑完就消失），这个答"它最后
+   交代了什么"（跑完才出现）。分隔线与引用竖线都沿用 live 那一套（虚线分区块、
+   竖线标"这是它说的原话"），两处看起来该是一回事。
+   截 3 行：摘录长度是按这 3 行的容量定的（服务端 MAX_REPLY_CHARS = 100），
+   宽一点的窗口整段看得见，窄窗口会从尾巴切掉几个字 —— 切到的是收尾那句话的末几个字，
+   不是它整句话；完整摘录在悬停提示里。竖线不算在 clamp 内，但它只有 2px。 */
+.kb-card__reply {
+  margin: 6px 0 0;
+  padding: 6px 0 0 6px;
+  border-top: 1px dashed var(--border-color-light);
+  border-left: 2px solid var(--border-color-light);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
 /* hover 才出现的操作组：绝对定位不占位，空闲时连点击也一起让开
    （否则隐形的按钮会吞掉本该落到卡片的点击） */
 .kb-card__actions {
@@ -664,7 +705,10 @@ function liveSummary(live: BoardTaskLive): string {
 /* 活动区同理：它渲染在哪一行取决于哪个字段有值（工具 / 思考 / 回复 / 只有时长），
    所以对**最后渲染出来的那个孩子**渐隐，而不是逐个类名去猜 */
 .kb-card:hover .kb-card__live > :last-child,
-.kb-card:focus-within .kb-card__live > :last-child {
+.kb-card:focus-within .kb-card__live > :last-child,
+/* 「最后回复」是卡片的最后一块，操作组正压在它右下角 */
+.kb-card:hover .kb-card__reply,
+.kb-card:focus-within .kb-card__reply {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 80px), transparent calc(100% - 64px));
   mask-image: linear-gradient(to right, #000 calc(100% - 80px), transparent calc(100% - 64px));
 }
@@ -788,6 +832,12 @@ function liveSummary(live: BoardTaskLive): string {
   text-overflow: ellipsis;
 }
 .kb-table__live-silent { margin-left: 6px; color: var(--color-warning); }
+/* 「最后回复」在列表行里用同一根引用竖线（与看板卡片的 .kb-card__reply 同一个含义） */
+.kb-table__live--reply {
+  padding-left: 6px;
+  border-left: 2px solid var(--border-color-light);
+  color: var(--text-secondary);
+}
 .kb-table__status {
   font-size: var(--font-size-xs);
   padding: 1px 6px;

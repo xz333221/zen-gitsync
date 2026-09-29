@@ -265,6 +265,44 @@ test('decorateTaskForBoard: 没有在跑的 job 时 live 是 null（前端据此
   ]).live, null);
 });
 
+// ── 卡片上的「最后说了什么」（lastReply） ──────────────────────────────
+// 已完成列过去只有标题 + 时间，而模型收尾时常反问「要 push 吗？」—— 这类任务看着完成了、
+// 其实在等用户回话。这几条守的是：跑完要有摘录、在跑时不能有（与 live 互斥）、
+// 没产出过正文时不能拿别的 job 的旧话顶上。
+
+test('decorateTaskForBoard: 跑完的任务带上 lastReply（最近一条 job 的正文尾部）', () => {
+  const base = { id: 't1', title: '标题', desc: '', createdAt: '2026-01-01T00:00:00Z' };
+  const jobs = [
+    { ...job('j1', 't1', 'done', '2026-01-01T00:00:00Z', '2026-01-01T00:10:00Z'), output: '先看了一遍' },
+    { ...job('j2', 't1', 'done', '2026-01-03T00:00:00Z', '2026-01-03T00:20:00Z'), output: '已经改好了。要 push 吗？' },
+  ];
+  assert.equal(decorateTaskForBoard(base, jobs).lastReply, '已经改好了。要 push 吗？');
+});
+
+test('decorateTaskForBoard: 有 job 在跑时 lastReply 是 null（与 live 互斥，卡片上不留两段相似的话）', () => {
+  const base = { id: 't1', title: '', desc: '', createdAt: '2026-01-01T00:00:00Z' };
+  const running = [
+    { ...job('j1', 't1', 'done', '2026-01-01T00:00:00Z', '2026-01-01T00:10:00Z'), output: '上一轮的收尾' },
+    { ...job('j2', 't1', 'running', '2026-02-01T00:00:00Z'), output: '这一轮刚开始' },
+  ];
+  const card = decorateTaskForBoard(base, running, { now: Date.parse('2026-02-01T00:01:00Z') });
+  assert.equal(card.live.lastLine, '这一轮刚开始');
+  assert.equal(card.lastReply, null);
+});
+
+test('decorateTaskForBoard: 没跑过 / 那次没写正文时 lastReply 是空串（不拿上一条 job 的旧话顶）', () => {
+  const base = { id: 't1', title: '', desc: '', createdAt: '2026-01-01T00:00:00Z' };
+  assert.equal(decorateTaskForBoard(base, []).lastReply, '');
+  assert.equal(decorateTaskForBoard(base, [
+    job('j1', 't1', 'done', '2026-01-01T00:00:00Z', '2026-01-01T00:10:00Z'),
+  ]).lastReply, '');
+  // 最近一条（j2）没产出正文：宁可空着，也不能把 j1 的话当成这次的结果摆出来
+  assert.equal(decorateTaskForBoard(base, [
+    { ...job('j1', 't1', 'done', '2026-01-01T00:00:00Z', '2026-01-01T00:10:00Z'), output: '上一轮说的' },
+    job('j2', 't1', 'error', '2026-01-03T00:00:00Z', '2026-01-03T00:00:05Z'),
+  ]).lastReply, '');
+});
+
 // ── 编排状态与活动流 ────────────────────────────────────────────────
 
 test('normalizeOrchestrator: 缺字段/脏数据都要能起来', () => {

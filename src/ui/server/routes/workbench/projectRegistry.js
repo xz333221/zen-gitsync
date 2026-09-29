@@ -34,7 +34,7 @@
 //   - Git 状态复用 utils/directoryGitState.js 的批量探测（带并发上限 + TTL 缓存 + 超时）。
 
 import { probeDirectoryGitStates } from '../../utils/directoryGitState.js';
-import { pickLiveActivity } from './jobActivity.js';
+import { pickLiveActivity, tailExcerpt } from './jobActivity.js';
 
 /** 看板列，数组顺序即列顺序 */
 export const TASK_COLUMNS = ['todo', 'doing', 'done'];
@@ -308,10 +308,18 @@ export async function listProjects({
  *
  * 字段全部由 jobActivity.pickLiveActivity 抽好（与进度报告同一份实现），这里只负责挂上去；
  * 任务没有在跑的 job 时是 null，前端据此不渲染活动区。
+ *
+ * `lastReply`（2026-09-29 补）是**跑完之后**卡片上留的那一小段「最后说了什么」。
+ * 起因：已完成列只有标题 + 时间，而模型常在收尾时反问「要 push 吗？」—— 这类任务
+ * 看着"完成了"，实际在等用户一句话，用户却只能点进去翻日志才知道。live 帮不上忙：
+ * 它只在 running 时才有值，跑完就消失，恰恰把最有信息量的那段收尾丢掉了。
+ * 两条互斥：有 job 在跑就只给 live（活动区自己会显示"最新回复"），跑完了才给 lastReply，
+ * 免得同一张卡片上出现"最新回复"和"最后回复"两段相似但不同时刻的话。
  */
 export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now() } = {}) {
   const jobs = Array.isArray(jobsForTask) ? jobsForTask : [];
   const last = latestJob(jobs);
+  const live = pickLiveActivity(jobs, now);
   return {
     id: task.id,
     title: task.title || '',
@@ -321,7 +329,13 @@ export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now() 
     attachmentCount: Array.isArray(task.attachments) ? task.attachments.length : 0,
     runningJobs: jobs.filter(j => j && (j.status === 'running' || j.status === 'pending')).length,
     /** 正在跑时的活动摘要；没有在跑 → null */
-    live: pickLiveActivity(jobs, now),
+    live,
+    /**
+     * 最近一条 job 的正文摘录（"它最后说了什么"）；有 job 在跑时恒为 null，从没跑过 → ''。
+     * 取 `last` 而不是"最近一条有输出的 job"：那次执行要是没产出正文，宁可空着，
+     * 也不能把上一次的旧话当成这次的结果摆出来。
+     */
+    lastReply: live ? null : tailExcerpt(last ? last.output : ''),
     lastJobStatus: last ? last.status : null,
     // 最近一条 job 的结束时间 = 这张卡片"跑完"的时刻。
     // 看板的「已完成」列要按完成时间倒序排（最新完成的在最上边），而 updatedAt 撑不起这个排序：
