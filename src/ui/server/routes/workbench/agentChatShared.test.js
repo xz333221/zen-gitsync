@@ -179,3 +179,52 @@ test('400 且正文提到 tool/function 时提示换模型,而不是甩网关 JS
   assert.match(error.error, /不支持 function calling/)
   assert.match(error.error, /换用支持工具调用的模型/)
 })
+
+// ── 计划工具的透传契约 ──────────────────────────────────────
+// 前端要拿原始 steps 渲染计划清单，而它拿到的是 argsPreview（截断过的摘要）——
+// 摘要里拆不出步骤，所以服务端必须为计划类工具额外带一份完整 arguments。
+// 这条钉死了「只给计划类发全文」的口径：多发会让 write_file 的 content
+// 几十 KB 灌进 SSE，少发则前端永远退化成普通工具块。
+test('计划类工具的 tool_call_start 带完整 arguments,其他工具不带', async () => {
+  const planArgs = JSON.stringify({
+    steps: [
+      { content: '读代码', status: 'completed' },
+      { content: '改代码', status: 'in_progress' }
+    ],
+    explanation: '先改库再改宿主'
+  })
+  const round = [
+    sse([event({
+      choices: [{ delta: { tool_calls: [
+        { index: 0, id: 'p1', function: { name: 'update_plan', arguments: planArgs } },
+        { index: 1, id: 'p2', function: { name: 'write_file', arguments: JSON.stringify({ path: 'a.js', content: 'x'.repeat(50) }) } }
+      ] } }, { finish_reason: 'tool_calls' }],
+    }), 'data: [DONE]\n\n']),
+    okStream(),
+  ]
+  let turn = 0
+  const session = newSession('ag-sandbox-plan', withSystem())
+
+  const { events } = await runWeb({
+    session,
+    userMessage: '把这个功能做出来',
+    respond: () => round[turn++] || okStream(),
+  })
+
+  const starts = events.filter(e => e.type === 'tool_call_start')
+  assert.equal(starts.length, 2)
+  const planStart = starts.find(e => e.name === 'update_plan')
+  const writeStart = starts.find(e => e.name === 'write_file')
+
+  // 计划：全文必须一字不差地带到前端（前端靠它渲染清单）
+  assert.equal(planStart.arguments, planArgs)
+  assert.match(planStart.argsPreview, /1\/2|1 完成/)
+  // 其他工具：只给摘要，不灌全文
+  assert.equal(writeStart.arguments, undefined)
+
+  const planResult = events.find(e => e.type === 'tool_result' && e.name === 'update_plan')
+  assert.match(planResult.result, /计划已更新/)
+  // 计划也要进会话记录 —— 重新打开会话时前端靠历史里的 arguments 复原清单
+  const assistantWithPlan = session.messages.find(m => m.role === 'assistant' && m.tool_calls?.some(t => t.function.name === 'update_plan'))
+  assert.equal(assistantWithPlan.tool_calls[0].function.arguments, planArgs)
+})
