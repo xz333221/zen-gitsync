@@ -23,6 +23,7 @@ import stringWidth from 'string-width'
 import {
   stripAnsi, truncateDisplay, summarizeToolArgs,
   createAssistantWriter, printToolHeader, printToolResult, startSpinner,
+  renderPlan, afterTool,
   formatDuration, wrapTerminalText, renderTurnSummary,
   filterSlashCommands, renderSlashHintBody, parseKeyForSlashHint, SLASH_COMMANDS,
   renderSelectableListBody, parseKeyForSelectableList,
@@ -75,6 +76,56 @@ test('summarizeToolArgs: 其余工具的摘要格式', () => {
   assert.equal(summarizeToolArgs('edit_file', { path: 'a.js' }), 'a.js')
   assert.equal(summarizeToolArgs('list_files', {}), '. depth=2')
   assert.equal(summarizeToolArgs('search_text', { pattern: 'foo', path: 'src' }), '/foo/ src')
+})
+
+// ── update_plan 的摘要与清单 ────────────────────────────────
+test('summarizeToolArgs: update_plan 给进度摘要而不是 JSON', () => {
+  assert.equal(
+    summarizeToolArgs('update_plan', {
+      steps: [{ content: 'A', status: 'completed' }, { content: 'B', status: 'in_progress' }, { content: 'C' }],
+      explanation: '切宿主'
+    }),
+    '3 步(1 完成 / 1 进行中 / 1 待办) — 切宿主'
+  )
+  // 没有 explanation 时不留悬空的破折号
+  assert.equal(summarizeToolArgs('update_plan', { steps: [{ content: 'A' }] }), '1 步(0 完成 / 1 待办)')
+})
+
+test('renderPlan: 三态三种符号，进度写在标题行，空计划不渲染', () => {
+  const block = renderPlan({
+    steps: [
+      { content: '读代码', status: 'completed' },
+      { content: '改代码', status: 'in_progress' },
+      { content: '验证' }
+    ],
+    explanation: '先改库'
+  }, { width: 60 })
+  assert.match(stripAnsi(block), /1 完成 \/ 1 进行中 \/ 1 待办/)
+  assert.match(stripAnsi(block), /先改库/)
+  assert.match(stripAnsi(block), /│ ✓ 读代码/)
+  assert.match(stripAnsi(block), /│ ▶ 改代码/)
+  assert.match(stripAnsi(block), /│ ○ 验证/)
+  // 空计划(收尾)不该在界面上留一个空壳
+  assert.equal(renderPlan({ steps: [] }, { width: 60 }), '')
+  assert.equal(renderPlan({}, { width: 60 }), '')
+})
+
+test('renderPlan: 窄终端下换行仍带槽线与缩进', () => {
+  const block = stripAnsi(renderPlan({ steps: [{ content: 'x'.repeat(60), status: 'in_progress' }] }, { width: 24 }))
+  const rows = block.trimEnd().split('\n')
+  assert.ok(rows.length > 2)
+  assert.ok(rows.slice(1).every(row => row.startsWith('  │ ')))
+})
+
+test('afterTool: 只对 update_plan 画清单，工具失败时不画', () => {
+  let out = ''
+  const write = (s) => { out += s }
+  afterTool('read_file', { path: 'a.js' }, 'ok', { locale: 'zh-CN', write })
+  assert.equal(out, '')
+  afterTool('update_plan', { steps: [{ content: 'A' }] }, '错误: 不对', { locale: 'zh-CN', write })
+  assert.equal(out, '')
+  afterTool('update_plan', { steps: [{ content: 'A' }] }, '计划已更新', { locale: 'zh-CN', write })
+  assert.match(stripAnsi(out), /│ ○ A/)
 })
 
 test('summarizeToolArgs: 超长命令截断到 120 字符', () => {

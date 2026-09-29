@@ -11,6 +11,8 @@ import type { ChatMessage, ToolCall, ChatAttachment, SelectedFile } from 'zen-ai
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { uid } from 'zen-ai-chat-ui'
 import { extractThinkSegments } from 'zen-ai-chat-ui'
+// 计划类工具的预览与渲染判定统一走组件库那份解析（浏览器端与服务端各有一份是刻意的边界）
+import { parsePlanArgs, planProgress } from 'zen-ai-chat-ui'
 import { $t } from '@/lang/static'
 import { useConfigStore } from '@/stores/configStore'
 import {
@@ -224,6 +226,14 @@ function summarizeToolArgs(name: string, argsStr: string): string {
       case 'edit_file': return String(args.path || '')
       case 'list_files': return String(args.path || '.')
       case 'search_text': return String(args.pattern || '')
+      case 'update_plan': {
+        // 计划类:预览用「完成数/总数」而不是 JSON —— 摘要行的定位就是"扫一眼"
+        const steps = parsePlanArgs(argsStr, 'update_plan')
+        if (!steps) return ''
+        const { total, done } = planProgress(steps)
+        const why = String(args.explanation || '').replace(/\s+/g, ' ').trim()
+        return [`${done}/${total}`, why].filter(Boolean).join(' — ').slice(0, 200)
+      }
       default: return JSON.stringify(args).slice(0, 200)
     }
   } catch {
@@ -776,7 +786,10 @@ export function useAgentChat() {
                 id: evt.toolCallId || uid(),
                 name: evt.name || '',
                 argsPreview: evt.argsPreview || '',
-                arguments: evt.argsPreview || '',
+                // 计划类工具服务端会额外发完整 arguments(见 agentChat.js 的
+                // tool_call_start 注释);拿不到就退回摘要,组件那边会自己判断
+                // 能不能解析出步骤 —— 摘要解析不出计划,就退回普通工具块
+                arguments: evt.arguments || evt.argsPreview || '',
                 status: 'running',
                 result: ''
               })

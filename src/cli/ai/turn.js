@@ -119,6 +119,9 @@ export async function runAgentTurn(state, userText, t, images = [], dependencies
             try { output = await execute(name, args, { ...state.ctx, signal: state.abortController?.signal }) }
             finally { toolSpinner.stop(); stats.toolsMs += performance.now() - toolStart }
             ui.printToolResult(output, undefined, performance.now() - toolStart, { full: state.fullTools, locale: state.locale })
+            // 工具级的收尾渲染(目前只有 update_plan 画计划清单)。
+            // 走钩子而不是在这里写 if (name === 'x'):再加工具时这一行不用动。
+            ui.afterTool?.(name, args, output, { locale: state.locale })
           } else ui.printToolResult(output)
         }
         state.messages.push({ role: 'tool', tool_call_id: tc.id, name, content: output })

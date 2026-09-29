@@ -196,6 +196,46 @@ export const TOOL_DEFINITIONS = [
   {
     type: 'function',
     function: {
+      name: 'update_plan',
+      description: '维护当前任务的执行计划(任务清单):把复杂任务拆成 3-8 个可核对的步骤,并随进展实时更新状态。'
+        + '什么时候用:任务需要多步(改代码/排查/调研)时**先调用一次**把步骤列出来,让用户在你动手前就知道你要做什么、怎么验收;'
+        + '之后每完成一步、或发现计划不对就再调一次更新状态。'
+        + '规则:① steps 是**完整**的当前计划(不是增量),每次都把没做完的步骤一起带上,顺序即执行顺序;'
+        + '② 同一时刻最多一个 in_progress —— 真正并行的事拆成先后两步写;'
+        + '③ 状态只能 pending → in_progress → completed,别跳回;'
+        + '④ 做完一步就更新一次,别攒到最后一次性刷;步骤完成后再把计划删空(传空 steps)表示收尾。'
+        + '这个工具只是给人看的进度板,不承担任何副作用:它不会改文件、不会执行命令。',
+      parameters: {
+        type: 'object',
+        properties: {
+          steps: {
+            type: 'array',
+            description: '完整计划步骤列表(覆盖上一版)。顺序即执行顺序,3-8 条为宜,上限 20 条。',
+            items: {
+              type: 'object',
+              properties: {
+                content: { type: 'string', description: '这一步要做什么(祈使句、可核对,别写"处理相关问题"这种空话)' },
+                status: {
+                  type: 'string',
+                  enum: ['pending', 'in_progress', 'completed'],
+                  description: '状态:已完成 / 进行中 / 待办。同一时刻最多一个 in_progress',
+                },
+              },
+              required: ['content'],
+            },
+          },
+          explanation: {
+            type: 'string',
+            description: '这次调整的一句话说明(如"库侧已完成,现在切宿主")。会显示在计划清单上方;首次列计划时写清整体思路。',
+          },
+        },
+        required: ['steps'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'ask_user',
       description: 'Pause the current task and ask the user for a decision or missing information. Use this when the next step depends on the user. Prefer options for a small fixed set of choices; allow free text when an open answer is useful.',
       parameters: {
@@ -664,6 +704,79 @@ async function toolAskUser(args, ctx) {
   return ctx.askUser({ question, options, allowFreeText, multiple })
 }
 
+// update_plan 是个**纯展示**工具:它不改文件、不执行命令,只回一句确认。
+// 归一化在这里做完(而不是散给各端):CLI / 控制台 / Web 面板三处都拿同一份
+// 计划,谁渲染都别再自己解析一遍模型给的原始 JSON。
+const MAX_PLAN_STEPS = 20
+const MAX_PLAN_EXPLANATION = 600
+
+const PLAN_STATUS_ALIASES = new Map([
+  ['completed', 'completed'], ['complete', 'completed'], ['done', 'completed'], ['finished', 'completed'],
+  ['in_progress', 'in_progress'], ['inprogress', 'in_progress'], ['in-progress', 'in_progress'],
+  ['active', 'in_progress'], ['doing', 'in_progress'], ['running', 'in_progress'],
+  ['pending', 'pending'], ['todo', 'pending'], ['not_started', 'pending'],
+])
+
+// 归一化后的计划类工具名。归一化 = 小写 + 去掉分隔符,于是 update_plan /
+// updatePlan / update-plan 落到同一个键上。
+// 前端组件库(zen-ai-chat-ui)里另有一份同名判定 —— 浏览器端不能反过来依赖
+// 这个 Node 模块,两边各留一份是刻意的边界,不是重复代码。
+const PLAN_TOOL_NAMES = new Set([
+  'updateplan', 'writetodos', 'todowrite', 'todotrite', 'todorewrite', 'createplan', 'setplan', 'plan'
+])
+
+/** 这个工具名是不是计划类 */
+export function isPlanToolName(name) {
+  return PLAN_TOOL_NAMES.has(String(name || '').toLowerCase().replace(/[^a-z]/g, ''))
+}
+
+/** 计划步骤归一化:接受 content/text/title/task,状态词收敛成 pending/in_progress/completed */
+export function normalizePlanSteps(raw) {
+  const list = Array.isArray(raw) ? raw : []
+  const steps = []
+  for (const item of list.slice(0, MAX_PLAN_STEPS)) {
+    const obj = typeof item === 'string' ? { content: item } : item
+    if (!obj || typeof obj !== 'object') continue
+    const content = String(obj.content ?? obj.text ?? obj.title ?? obj.task ?? '').replace(/\s+/g, ' ').trim()
+    if (!content) continue
+    const rawStatus = String(obj.status ?? obj.state ?? '').trim().toLowerCase()
+    steps.push({
+      content: content.slice(0, 200),
+      status: PLAN_STATUS_ALIASES.get(rawStatus) || 'pending'
+    })
+  }
+  return steps
+}
+
+/** 计划状态摘要:`3 步(1 完成 / 1 进行中 / 1 待办)` */
+export function summarizePlan(steps) {
+  const list = Array.isArray(steps) ? steps : []
+  if (!list.length) return '0 步'
+  const done = list.filter(s => s.status === 'completed').length
+  const active = list.filter(s => s.status === 'in_progress').length
+  const pending = list.length - done - active
+  const parts = [`${done} 完成`]
+  if (active) parts.push(`${active} 进行中`)
+  if (pending) parts.push(`${pending} 待办`)
+  return `${list.length} 步(${parts.join(' / ')})`
+}
+
+async function toolUpdatePlan(args) {
+  const rawSteps = args.steps ?? args.todos ?? args.plan
+  if (rawSteps !== undefined && !Array.isArray(rawSteps)) {
+    return '错误: update_plan 的 steps 必须是数组，形如 [{"content":"做 X","status":"pending"}]。'
+  }
+  const steps = normalizePlanSteps(rawSteps)
+  const explanation = String(args.explanation ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_PLAN_EXPLANATION)
+  if (Array.isArray(rawSteps) && rawSteps.length && !steps.length) {
+    return '错误: 每一步都要有 content(一句话说明这一步做什么);请重发完整 steps。'
+  }
+  // 不存任何全局状态:计划是**当前快照**,天然能从这轮 tool_call 的参数复原。
+  // 终端画清单(Web 面板渲染清单)都直接读参数,谁都不用维护第二份真相。
+  if (!steps.length) return '计划已清空(任务收尾)。'
+  return `计划已更新:${summarizePlan(steps)}${explanation ? ` —— ${explanation}` : ''}`
+}
+
 // dispatch_task 与 list_projects 同一条边界：工具的**定义**在这里（CLI 与 Web 共用
 // 这份表），而"派到哪儿、怎么建任务、用哪个执行器"全是 GUI 侧的事。
 // 由 GUI 侧(workbench/agentRoutes.js)把实现注入 ctx.dispatchTask —— 注入的时机还带
@@ -702,6 +815,7 @@ const TOOL_HANDLERS = {
   list_files: toolListFiles,
   search_text: toolSearchText,
   list_projects: toolListProjects,
+  update_plan: toolUpdatePlan,
   ask_user: toolAskUser,
   dispatch_task: toolDispatchTask,
 }

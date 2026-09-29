@@ -88,6 +88,7 @@
           :show-avatar="true"
           :theme="configStore.theme"
           :tool-calls-config="{ group: true, collapseThreshold: 2 }"
+          :plan-config="{ labels: { title: $t('@AGENT:计划'), raw: $t('@AGENT:原始参数') } }"
           :show-input="false"
         />
       </div>

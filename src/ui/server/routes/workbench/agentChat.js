@@ -21,7 +21,10 @@
 //   - { type: 'meta', sessionId, isNew, title }
 //   - { type: 'thinking', delta }          — 推理过程增量
 //   - { type: 'content', delta }           — 正文增量
-//   - { type: 'tool_call_start', toolCallId, name, argsPreview }
+//   - { type: 'tool_call_start', toolCallId, name, argsPreview, arguments }
+//       arguments 只在计划类工具(update_plan 等)上出现:前端要拿原始 steps 渲染
+//       计划清单,argsPreview 是截断过的摘要拆不出步骤。其他工具不带全文,免得
+//       write_file 那种几十 KB 的 content 灌进 SSE。
 //   - { type: 'tool_output', toolCallId, chunk }       — 命令执行中的增量输出(仅展示)
 //   - { type: 'tool_result', toolCallId, name, result }
 //   - { type: 'ask_user', interactionId, question, options, allowFreeText, multiple }
@@ -33,7 +36,7 @@ import os from 'os';
 import { logger } from './shared.js';
 
 // 从 CLI 侧导入工具定义、执行器与 LLM 传输层（同一 monorepo，路径可达）
-import { TOOL_DEFINITIONS, executeTool } from '../../../../cli/ai/tools.js';
+import { TOOL_DEFINITIONS, executeTool, normalizePlanSteps, summarizePlan, isPlanToolName } from '../../../../cli/ai/tools.js';
 import { prepareRequestMessages } from '../../../../cli/ai/context.js';
 import { streamChatOnce } from '../../../../cli/ai/transport.js';
 import { checkDangerousCommand } from '../../../../cli/ai/safety.js';
@@ -131,6 +134,15 @@ ${isWin ? `- 当前是 Windows,以下 Unix 命令**不存在**,用了必定报"�
 - run_command 默认就在工作目录执行,不要再加 cd 前缀;默认超时 120 秒,长任务加大 timeout_seconds(最大 600)
 - 命令在 ${shellDesc} 下执行,注意语法兼容
 
+# 任务计划(多步任务必用)
+- 任务需要多步时(改代码、排查、调研、多文件改动),**动手之前**先调一次 update_plan,把要做的事
+  拆成 3-8 个可核对的步骤,让用户在你改任何东西之前就知道范围和验收标准
+- 单步小事(读个文件、答一个问题)不要列计划,那是噪音
+- 每次都传**完整**的当前计划(不是增量),顺序即执行顺序;同一时刻最多一个 in_progress
+- 完成一步就更新一次状态,别攒到最后一次性刷;计划与实际不符时直接改计划,不要硬着头皮往下走
+- 全部做完后把 steps 传空表示收尾
+- update_plan 只是给人看的进度板,不要为了"更新计划"去改文件或跑命令
+
 # 与用户交互
 - 需要向用户确认、提问或汇报重要决策时,直接用普通文本输出
 - 需要暂停当前任务并等待用户决定或补充信息时,调用 ask_user,不要猜测或只在普通文本里提问
@@ -212,6 +224,17 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 - git operations via run_command
 - run_command defaults to the working directory; default timeout 120s, max 600s
 - When the task must pause for a decision or missing detail, call ask_user and wait for the user's answer. The user may attach images to a message; they arrive as image_url parts in the user message. If the current model rejects images (no vision support), tell the user to switch to a vision-capable model
+
+# Task plan (required for multi-step work)
+- When a task takes several steps (code changes, debugging, research, multi-file edits), call update_plan
+  **before touching anything**: break it into 3-8 verifiable steps so the user knows the scope and the
+  acceptance criteria before you modify a single file
+- Do not plan single trivial actions (read one file, answer one question) — that is noise
+- Always send the **complete** current plan (not a delta), in execution order; at most one in_progress
+- Update the status right after finishing a step instead of batching everything at the end; when the
+  plan no longer matches reality, rewrite the plan instead of pushing ahead
+- Send an empty steps list once everything is done
+- update_plan is a progress board for humans: never edit files or run commands just to "update the plan"
 
 # Output
 - Your text output is displayed in the user's Web UI
@@ -384,7 +407,11 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
 
       // 工具参数预览(给前端展示)
       const argsPreview = summarizeArgs(name, args);
-      send({ type: 'tool_call_start', toolCallId, name, argsPreview });
+      // 计划类工具额外发**完整参数**:前端要拿原始 steps 渲染清单,而 argsPreview
+      // 是截断过的摘要,拆不出步骤。只给计划类工具发完整参数 ——
+      // write_file 的 content 可能几十 KB,为它开一路全文等于给 SSE 带宽找麻烦。
+      const rawArgsForClient = isPlanToolName(name) ? rawArgs : undefined;
+      send({ type: 'tool_call_start', toolCallId, name, argsPreview, arguments: rawArgsForClient });
 
       const toolCtx = {
         ...ctx,
@@ -430,6 +457,11 @@ function summarizeArgs(name, args) {
         return String(args.path || '.');
       case 'search_text':
         return String(args.pattern || '');
+      case 'update_plan': {
+        const steps = normalizePlanSteps(args.steps ?? args.todos ?? args.plan);
+        const why = String(args.explanation || '').replace(/\s+/g, ' ').trim();
+        return [summarizePlan(steps), why].filter(Boolean).join(' — ').slice(0, 200);
+      }
       default:
         return JSON.stringify(args).slice(0, 200);
     }

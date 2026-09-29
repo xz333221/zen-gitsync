@@ -180,6 +180,7 @@ onBeforeUnmount(() => {
       :question="pendingQuestion"
       :question-submitting="answeringQuestion"
       :question-labels="questionLabels"
+      :plan-config="{ labels: { title: $t('@AGENT:计划'), raw: $t('@AGENT:原始参数') } }"
       @send="onSend"
       @select="onSelectPreset"
       @stop="stop"

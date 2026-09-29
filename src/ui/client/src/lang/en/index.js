@@ -2642,6 +2642,8 @@ export default {
   '@AGENT:加载会话中...': 'Loading session...',
   '@AGENT:返回会话列表': 'Back to conversations',
   '@AGENT:智能体助手': 'AI Agent',
+  '@AGENT:计划': 'Plan',
+  '@AGENT:原始参数': 'Raw arguments',
   '@AGENT:我可以帮你阅读代码、执行命令、修改文件。选择下方话题或直接输入你的问题。': 'I can help you read code, run commands, and modify files. Choose a topic below or type your question.',
   '@AGENT:正在生成中...': 'Generating...',
   '@AGENT:输入消息，Enter 发送': 'Type a message, press Enter to send',

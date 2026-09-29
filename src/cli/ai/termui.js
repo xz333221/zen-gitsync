@@ -32,6 +32,7 @@ import ora from 'ora'
 import stringWidth from 'string-width'
 import { stripVTControlCharacters } from 'node:util'
 import { boxenAdaptive } from '../ui.js'
+import { normalizePlanSteps, summarizePlan } from './tools.js'
 
 // ──────────────────────────────────────────────
 // 常量
@@ -680,6 +681,11 @@ export function summarizeToolArgs(name, args, { chars = '字符' } = {}) {
       return clamp(`${args?.path || '.'} depth=${args?.depth || 2}`)
     case 'search_text':
       return clamp(`/${args?.pattern || ''}/ ${args?.path || '.'}`)
+    case 'update_plan': {
+      const steps = normalizePlanSteps(args?.steps ?? args?.todos ?? args?.plan)
+      const why = clamp(args?.explanation)
+      return clamp([summarizePlan(steps), why].filter(Boolean).join(' — '), 100)
+    }
     default:
       return clamp(JSON.stringify(args ?? {}))
   }
@@ -689,7 +695,7 @@ export function summarizeToolArgs(name, args, { chars = '字符' } = {}) {
 export function printToolHeader(name, summary, write = (s) => process.stdout.write(s), { locale = 'zh-CN' } = {}) {
   // ▶ 保留青色作为工具执行的标识色;name 用白色加粗与下方结果区分;
   // summary 用浅灰(#a0aec0)— dim 在黑底下太暗看不清,浅灰可读且仍比 name 低调
-  const labels = { run_command: '执行命令', read_file: '读取文件', write_file: '写入文件', edit_file: '修改文件', list_files: '浏览目录', search_text: '搜索内容' }
+  const labels = { run_command: '执行命令', read_file: '读取文件', write_file: '写入文件', edit_file: '修改文件', list_files: '浏览目录', search_text: '搜索内容', update_plan: '更新计划' }
   const rows = wrapTerminalText(summary || '', Math.max(16, Math.min(100, termWidth() - 6)))
   const label = String(locale).startsWith('en') ? name : labels[name] || name
   write('\n' + chalk.cyan('▸ ') + chalk.bold.white(label) + (label !== name ? chalk.gray(`  ${name}`) : '') + '\n')
@@ -739,6 +745,69 @@ export function printToolResult(result, write = (s) => process.stdout.write(s), 
 }
 
 // ──────────────────────────────────────────────
+// 计划清单(update_plan)
+// ──────────────────────────────────────────────
+//
+// 计划在终端里不能只回一句「已更新 3 步」:那等于什么也没说,用户看不到"现在到哪了"。
+// 所以这里把步骤画成清单,并且**每次调用都重画全量**——计划是当前快照,不是增量日志。
+//
+// 槽线沿用 printToolResult 的 `  │ `,让计划块和其他工具结果在同一列里对齐。
+
+/** 计划步骤的符号与配色(纯函数,便于单测) */
+function planStepGlyph(step) {
+  if (step.status === 'completed') return { mark: '✓', markColor: chalk.hex('#10b981'), text: chalk.hex('#74747e') }
+  if (step.status === 'in_progress') return { mark: '▶', markColor: chalk.hex('#3b82f6'), text: chalk.white }
+  return { mark: '○', markColor: chalk.hex('#55555f'), text: chalk.hex('#a5a5b0') }
+}
+
+/**
+ * 渲染计划清单(纯函数,便于单测)。
+ * @returns {string} 以 \n 结尾的整块文本
+ */
+export function renderPlan(args, { locale = 'zh-CN', width = Math.min(100, termWidth() - 6) } = {}) {
+  const steps = normalizePlanSteps(args?.steps ?? args?.todos ?? args?.plan)
+  if (!steps.length) return ''
+  const zh = !String(locale).startsWith('en')
+  const rows = []
+  rows.push(chalk.bold.white(zh ? '计划' : 'Plan') + chalk.hex('#74747e')(`  ${summarizePlan(steps)}`))
+
+  const why = String(args?.explanation ?? '').replace(/\s+/g, ' ').trim()
+  if (why) {
+    for (const row of wrapTerminalText(why, Math.max(16, width - 4))) {
+      rows.push(chalk.hex('#74747e')('    ' + row))
+    }
+  }
+
+  for (const step of steps) {
+    const { mark, markColor, text } = planStepGlyph(step)
+    // 首行带符号，其余行留 2 格缩进：窄终端下换行也不会跑回最左边
+    const lines = wrapTerminalText(step.content, Math.max(12, width - 4))
+    lines.forEach((row, i) => {
+      const prefix = i === 0 ? markColor(mark) + ' ' : '  '
+      rows.push(chalk.gray('  │ ') + prefix + text(row))
+    })
+  }
+  return rows.map(row => row).join('\n') + '\n'
+}
+
+/** 打印计划清单 */
+export function printPlan(args, write = (s) => process.stdout.write(s), { locale = 'zh-CN', width } = {}) {
+  const block = renderPlan(args, { locale, width })
+  if (block) write('\n' + block)
+}
+
+/**
+ * 工具执行完之后的收尾渲染钩子(turn.js 每执行一个工具都会调一次,可选)。
+ * 现在只有 update_plan 有话说;以后加工具继续在这里挂,别去改 turn.js。
+ */
+export function afterTool(name, args, output, { locale = 'zh-CN', write } = {}) {
+  if (name !== 'update_plan') return
+  // 已经失败就不用画计划了(画一份没生效的计划比不画更误导)
+  if (/^错误|^Error/.test(String(output || '').trim())) return
+  printPlan(args, write, { locale })
+}
+
+// ──────────────────────────────────────────────
 // 杂项状态行
 // ──────────────────────────────────────────────
 export const printOk = (s, write = (x) => process.stdout.write(x)) => write(chalk.green(s) + '\n')
@@ -768,6 +837,9 @@ export default {
   summarizeToolArgs,
   printToolHeader,
   printToolResult,
+  renderPlan,
+  printPlan,
+  afterTool,
   printTurnSummary,
   renderTurnSummary,
   wrapTerminalText,

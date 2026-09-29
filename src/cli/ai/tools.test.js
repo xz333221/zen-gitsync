@@ -19,7 +19,7 @@ import assert from 'node:assert/strict'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { TOOL_DEFINITIONS, executeTool, resolveCommandTimeout } from './tools.js'
+import { TOOL_DEFINITIONS, executeTool, resolveCommandTimeout, normalizePlanSteps, isPlanToolName } from './tools.js'
 
 let tmpDir
 const ctx = { cwd: null, onChild: null }
@@ -384,4 +384,68 @@ test('dispatch_task 在没有注入实现的入口给一句可照做的说明，
   assert.match(result, /不要重试/)
   assert.match(result, /不要假装/)
   assert.match(await executeTool('dispatch_task', {}, ctx), /需要非空的 text/)
+})
+
+// ── update_plan ────────────────────────────────────────────
+// 它是纯展示工具，但字段归一化有真实坑（模型会给 content/text/title、
+// 状态会给 in_progress/inProgress/done），归一化错了终端清单会静默少一格，
+// 所以这里把边界全钉住。
+test('update_plan schema：steps 必填，状态枚举只有三态', () => {
+  const definition = TOOL_DEFINITIONS.find(tool => tool.function.name === 'update_plan')
+  assert.ok(definition)
+  assert.deepEqual(definition.function.parameters.required, ['steps'])
+  const step = definition.function.parameters.properties.steps.items
+  assert.deepEqual(step.properties.status.enum, ['pending', 'in_progress', 'completed'])
+  assert.ok(definition.function.parameters.properties.explanation)
+})
+
+test('normalizePlanSteps：状态词与文案字段都收敛，脏数据丢弃', () => {
+  assert.deepEqual(normalizePlanSteps([
+    { content: '  A  ', status: 'done' },
+    { text: 'B', state: 'in-progress' },
+    { title: 'C' },
+    { content: 'D', status: 'weird-status' },
+    'E',
+    { content: '   ' },
+    null,
+    42
+  ]), [
+    { content: 'A', status: 'completed' },
+    { content: 'B', status: 'in_progress' },
+    { content: 'C', status: 'pending' },
+    { content: 'D', status: 'pending' },
+    { content: 'E', status: 'pending' }
+  ])
+  // 步数上限：模型跑偏时不至于把界面撑爆
+  assert.equal(normalizePlanSteps(Array.from({ length: 30 }, (_, i) => ({ content: `s${i}` }))).length, 20)
+  assert.deepEqual(normalizePlanSteps('不是数组'), [])
+})
+
+test('update_plan 回执带上进度摘要与说明', async () => {
+  const out = await executeTool('update_plan', {
+    steps: [
+      { content: '读代码', status: 'completed' },
+      { content: '改代码', status: 'in_progress' },
+      { content: '验证', status: 'pending' }
+    ],
+    explanation: '先改库再改宿主'
+  }, ctx)
+  assert.match(out, /计划已更新/)
+  assert.match(out, /3 步\(1 完成 \/ 1 进行中 \/ 1 待办\)/)
+  assert.match(out, /先改库再改宿主/)
+  // 收尾：空 steps = 计划清空，不该报"没有 content"
+  assert.match(await executeTool('update_plan', { steps: [] }, ctx), /计划已清空/)
+  // 脏参数要能被模型看懂错在哪
+  assert.match(await executeTool('update_plan', { steps: 'x' }, ctx), /必须是数组/)
+  assert.match(await executeTool('update_plan', { steps: [{ foo: 1 }] }, ctx), /都要有 content/)
+  // 没有步骤就不该带出"0 步"这种没意义的摘要
+  assert.doesNotMatch(await executeTool('update_plan', {}, ctx), /0 步/)
+})
+
+test('isPlanToolName：归一化后判定，update_plan 与 updatePlan 同义', () => {
+  assert.equal(isPlanToolName('update_plan'), true)
+  assert.equal(isPlanToolName('updatePlan'), true)
+  assert.equal(isPlanToolName('TodoWrite'), true)
+  assert.equal(isPlanToolName('read_file'), false)
+  assert.equal(isPlanToolName(''), false)
 })
