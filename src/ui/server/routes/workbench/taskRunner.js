@@ -935,6 +935,11 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
     // 保存 child 引用，供 cancel 接口调用 kill
     job.child = child;
     job.startedAt = nowIso();
+    // 最后一次产出的时刻（正文 / 思考 / 工具调用，见下面三处赋值）。
+    // 进度报告靠它说"已经 N 分钟没动静了" —— 光看工具调用次数看不出"卡住"，
+    // 次数多也可能是一小时前那一批。起跑时先按开始时间记账，
+    // 这样"跑了 5 分钟一个事件都没出"本身就是可判定的静默。
+    job.lastActivityAt = job.startedAt;
     job.status = 'running';
     publish('job:update', job);
 
@@ -952,6 +957,7 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
     // 追加正文（尾部截断保底 + 增量推送给前端）
     const appendOutput = (text) => {
       if (!text) return;
+      job.lastActivityAt = nowIso();
       const prevLen = job.output.length;
       job.output = (job.output + text).slice(-MAX_OUTPUT);
       const delta = job.output.slice(prevLen);
@@ -968,6 +974,7 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
     };
     const appendThinking = (text) => {
       if (!text) return;
+      job.lastActivityAt = nowIso();
       const prevLen = job.thinking.length;
       job.thinking = (job.thinking + text).slice(-MAX_THINKING);
       thinkingBatch += job.thinking.slice(prevLen);
@@ -976,6 +983,8 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
     // 工具调用：写进 job.toolCalls（随 job 落盘），并按批推 job:toolcalls 给前端。
     // 收口（把没收尾的调用标终态）在 finally 里做，见下方 toolTracker.seal()。
     toolTracker = createToolCallTracker(job, (updates) => {
+      // 工具调用也算"有产出"：一次 Bash 跑十分钟不吐字，中间不该被判成静默
+      job.lastActivityAt = nowIso();
       publish('job:toolcalls', { id: job.id, updates });
     });
 

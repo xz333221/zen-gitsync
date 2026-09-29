@@ -308,6 +308,20 @@ export interface ProgressReportFact {
   lastTool: string
   /** 最近一行模型输出，'' = 还没有 */
   lastLine: string
+  /**
+   * 最近 N 次工具调用的名字分布（`Bash×14 · Read×5`），'' = 还没调过工具。
+   *
+   * 只报"最近一次"看不出 119 次里 118 次在干同一件事，报告就只能写
+   * "无法判断是在改代码还是反复读文件"（2026-09-29 补）。
+   */
+  toolMix?: string
+  /** 最近一段思考（`job.thinking` 的尾行），'' = 该轮没有思考块 / 老记录没有这个字段 */
+  lastThought?: string
+  /**
+   * 距最后一次产出（正文 / 思考 / 工具调用）多久，null = 不到阈值 / 老记录没有这个字段。
+   * 阈值见服务端 SILENT_NOTABLE_MS —— 这里记的是"显然静默了"，不是精确的空闲时长。
+   */
+  silentMs?: number | null
 }
 
 /** 报告生成失败的原因码。'' = 成功；正文由前端 $t() 渲染，服务端只给码 */

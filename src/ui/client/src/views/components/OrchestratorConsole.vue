@@ -583,12 +583,24 @@ const gitSummary = computed(() => {
                 <span v-if="t.projectName" class="rpt__project">{{ t.projectName }}</span>
                 <span>{{ $t('@WORKBENCH:已运行 {elapsed}', { elapsed: formatDurationMs(t.elapsedMs) }) }}</span>
                 <span v-if="t.agent" class="rpt__agent">{{ t.agent }}</span>
-                <span v-if="t.toolCallCount">{{ $t('@WORKBENCH:工具 {n} 次', { n: t.toolCallCount }) }}</span>
+                <!-- 次数看总数，鼠标停上去看**分布** —— 119 次里 118 次都是 Bash
+                     和"改了三处代码"，是完全不同的两件事，而一行放不下分布 -->
+                <span v-if="t.toolCallCount" :title="t.toolMix || ''">
+                  {{ $t('@WORKBENCH:工具 {n} 次', { n: t.toolCallCount }) }}
+                </span>
+                <!-- 静默只在**显然静默**时才有值（服务端有阈值），所以这里不用再过滤 -->
+                <span v-if="typeof t.silentMs === 'number'" class="rpt__silent">
+                  {{ $t('@WORKBENCH:静默 {elapsed}', { elapsed: formatDurationMs(t.silentMs) }) }}
+                </span>
               </p>
-              <!-- 先给工具调用，再给最后一行输出：前者是"正在做什么"（更准），
-                   后者是"最近说了什么"（可能已经过去一会儿了） -->
+              <!-- 证据按可靠程度排：工具调用（正在做什么）→ 思考（为什么这么做）→ 正文。
+                   思考这一行是 2026-09-29 补的：很多任务一句正文都不写，只靠工具调用
+                   根本看不出它在干嘛，而它的思考当时就在库里 -->
               <p v-if="t.lastTool" class="rpt__line" :title="t.lastTool">{{ t.lastTool }}</p>
-              <p v-else-if="t.lastLine" class="rpt__line" :title="t.lastLine">{{ t.lastLine }}</p>
+              <p v-if="t.lastThought" class="rpt__line is-thought" :title="t.lastThought">
+                <span class="rpt__thought-tag">{{ $t('@WORKBENCH:最近思考') }}</span>{{ t.lastThought }}
+              </p>
+              <p v-if="t.lastLine" class="rpt__line" :title="t.lastLine">{{ t.lastLine }}</p>
             </li>
           </ul>
         </li>
@@ -1068,6 +1080,8 @@ const gitSummary = computed(() => {
   font-variant-numeric: tabular-nums;
 }
 .rpt__project { color: var(--text-secondary); }
+/* 静默：报告里说"可能卡住了"时，用户能在这行上核到依据 */
+.rpt__silent { color: var(--color-warning); }
 .rpt__line {
   margin: 2px 0 0;
   font-size: var(--font-size-xs);
@@ -1079,6 +1093,17 @@ const gitSummary = computed(() => {
   line-clamp: 2;
   -webkit-box-orient: vertical;
   word-break: break-word;
+}
+/* 思考那一行要比工具行**亮一档**：它是"它在干嘛"最直接的证据，
+   而工具行只说明"它动了哪个文件"。左边一道细线让三种证据一眼分得开 */
+.rpt__line.is-thought {
+  color: var(--text-secondary);
+  padding-left: 6px;
+  border-left: 2px solid var(--border-color-light);
+}
+.rpt__thought-tag {
+  margin-right: 4px;
+  color: var(--text-tertiary);
 }
 
 /* ── 历史报告 ─────────────────────────────────────────── */

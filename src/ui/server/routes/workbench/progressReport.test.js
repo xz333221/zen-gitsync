@@ -28,11 +28,15 @@ import { readFile } from 'node:fs/promises';
 import {
   tailLine,
   describeLastTool,
+  describeToolMix,
+  silentMsOf,
   buildRunningFacts,
   buildReportPrompt,
   formatDuration,
   generateProgressReport,
   MAX_FACT_TASKS,
+  TOOL_MIX_WINDOW,
+  SILENT_NOTABLE_MS,
   SYSTEM_PROMPT_ZH,
   SYSTEM_PROMPT_EN,
 } from './progressReport.js';
@@ -101,6 +105,51 @@ test('describeLastTool 没有 argsPreview 时退回 arguments；两者都没有�
   assert.equal(describeLastTool(null), '');
 });
 
+// ── describeToolMix / silentMsOf ────────────────────────────────────────
+
+test('describeToolMix 给出最近几次调用的分布，多的在前', () => {
+  const calls = [
+    { name: 'Bash' }, { name: 'Read' }, { name: 'Bash' },
+    { name: 'Read' }, { name: 'Bash' }, { name: 'Edit' },
+  ];
+  assert.equal(describeToolMix(calls), 'Bash×3 · Read×2 · Edit');
+});
+
+test('describeToolMix 只看最近 TOOL_MIX_WINDOW 次 —— 早先的模式早被淹没了', () => {
+  // 先 30 次 Edit，再 20 次 Read：窗口内只有 Read，分布里不该冒出 Edit
+  const calls = [
+    ...Array.from({ length: 30 }, () => ({ name: 'Edit' })),
+    ...Array.from({ length: TOOL_MIX_WINDOW }, () => ({ name: 'Read' })),
+  ];
+  assert.equal(describeToolMix(calls), `Read×${TOOL_MIX_WINDOW}`);
+});
+
+test('describeToolMix 跳过没有名字的记录，但它们不占窗口名额', () => {
+  const calls = [
+    { name: 'Bash' },
+    ...Array.from({ length: TOOL_MIX_WINDOW }, () => ({ id: 'anon-1' })),
+  ];
+  assert.equal(describeToolMix(calls), 'Bash');
+});
+
+test('describeToolMix 没有调用时给空串（调用方据此不显示这一行）', () => {
+  assert.equal(describeToolMix([]), '');
+  assert.equal(describeToolMix(null), '');
+  assert.equal(describeToolMix(undefined), '');
+});
+
+test('silentMsOf 到阈值才算静默，不到 / 没这个字段一律 null', () => {
+  const at = '2026-09-28T10:00:00.000Z';
+  const base = Date.parse(at);
+  const job = { lastActivityAt: at };
+  assert.equal(silentMsOf(job, base + SILENT_NOTABLE_MS), SILENT_NOTABLE_MS);
+  assert.equal(silentMsOf(job, base + SILENT_NOTABLE_MS - 1), null);
+  // 老记录 / 别的实例上的旧版进程没有这个字段：给 null，而不是编一个 0
+  assert.equal(silentMsOf({}, base), null);
+  assert.equal(silentMsOf({ lastActivityAt: '不是时间' }, base), null);
+  assert.equal(silentMsOf(null, base), null);
+});
+
 // ── buildRunningFacts ───────────────────────────────────────────────────
 
 test('buildRunningFacts 只挑 running / pending，终态 job 一律不进报告', () => {
@@ -149,8 +198,23 @@ test('buildRunningFacts 带上项目名 / 执行器 / 工具调用与最后一�
   );
 });
 
-test('buildRunningFacts 跑得最久的排最前（用户最可能想知道哪个卡住了）', () => {
-  const jobs = [
+test('buildRunningFacts 带上思考 / 工具分布 / 静默（只看输出看不出这些）', () => {
+  const facts = buildRunningFacts({
+    jobs: [runningJob({
+      output: '',
+      thinking: '先看目录结构\n再确认 index.js 里的路由注册顺序',
+      toolCalls: [{ name: 'Bash' }, { name: 'Bash' }, { name: 'Read' }],
+      lastActivityAt: '2026-09-28T09:55:00.000Z', // 距 NOW 6 分钟
+    })],
+    tasks: TASKS,
+    now: NOW,
+  });
+  assert.equal(facts[0].lastThought, '再确认 index.js 里的路由注册顺序');
+  assert.equal(facts[0].toolMix, 'Bash×2 · Read');
+  assert.equal(facts[0].silentMs, 6 * 60 * 1000);
+});
+
+test('buildRunningFacts 跑得最久的排最前（用户最可能想知道哪个卡住了）', () => {  const jobs = [
     runningJob({ id: 'j-new', taskId: 't2', startedAt: '2026-09-28T10:00:50.000Z' }),
     runningJob({ id: 'j-old', taskId: 't1', startedAt: '2026-09-28T09:30:00.000Z' }),
   ];
@@ -207,6 +271,52 @@ test('任务没有输出时 prompt 里写「暂无」，而不是留一块空白
     now: NOW,
   });
   assert.ok(buildReportPrompt(facts, 'zh').includes('（暂无）'));
+});
+
+/**
+ * 回归：真实报告里出现过"最新输出为空，无法判断是在改代码还是反复读文件"，
+ * 而那句话说的那个任务**思考一直在产出**（2026-09-29，截图那条）。
+ * 思考不进 prompt，模型只能靠"输出是空的"猜 —— 这条钉住"思考必须喂进去"。
+ */
+test('一句正文都没写、只有工具调用与思考的任务：prompt 里读得到它的思考', () => {
+  const facts = buildRunningFacts({
+    jobs: [runningJob({
+      output: '',
+      thinking: '用户在问工具调用的收起为什么不起作用\n先从 useWorkbenchSimpleConversation 查起',
+      toolCalls: Array.from({ length: 119 }, () => ({ name: 'Bash' })),
+      lastActivityAt: '2026-09-28T09:52:00.000Z', // 距 NOW 9 分钟
+    })],
+    tasks: TASKS,
+    now: NOW,
+  });
+  const prompt = buildReportPrompt(facts, 'zh');
+  assert.ok(prompt.includes('先从 useWorkbenchSimpleConversation 查起'));
+  assert.ok(prompt.includes('最近思考'));
+  // 119 次调用全在 Bash —— 报告要能看出"在原地打转"，而不是只知道调了很多次
+  // （分布是最近 20 次窗口内的计数，所以写 20 不写 119）
+  assert.ok(prompt.includes('Bash×20'));
+  assert.ok(prompt.includes('静默：9 分 0 秒'));
+  // 依据不足时的不许编造那条还在
+  assert.ok(prompt.includes('不要编造'));
+});
+
+test('英文模板同样给思考 / 工具分布 / 静默', () => {
+  const facts = buildRunningFacts({
+    jobs: [runningJob({
+      output: '',
+      thinking: 'check the collapse handler first',
+      toolCalls: [{ name: 'Bash' }, { name: 'Bash' }],
+      lastActivityAt: '2026-09-28T10:01:00.000Z',
+    })],
+    tasks: TASKS,
+    now: NOW + SILENT_NOTABLE_MS,
+  });
+  const prompt = buildReportPrompt(facts, 'en-US');
+  assert.ok(prompt.includes('Latest thinking:'));
+  assert.ok(prompt.includes('check the collapse handler first'));
+  assert.ok(prompt.includes('Tool mix (last'));
+  assert.ok(prompt.includes('Bash×2'));
+  assert.ok(prompt.includes('Silent for: 1m 0s'));
 });
 
 // ── generateProgressReport ──────────────────────────────────────────────
@@ -308,8 +418,12 @@ test('流被中断（超时）→ LLM_TIMEOUT，而不是当成一句空汇报',
 test('system prompt 两种语言都要求忽略任务输出里的指令', () => {
   assert.ok(SYSTEM_PROMPT_ZH.includes('不可信数据'));
   assert.ok(SYSTEM_PROMPT_ZH.includes('忽略'));
+  // 思考也是另一个模型写的话、也进了 prompt —— 不可信数据的清单必须带上它，
+  // 漏了就等于"思考里写的指令可以照做"（2026-09-29 补思考时同步改的）
+  assert.ok(SYSTEM_PROMPT_ZH.includes('思考'));
   assert.ok(SYSTEM_PROMPT_EN.includes('untrusted data'));
   assert.ok(SYSTEM_PROMPT_EN.includes('ignore'));
+  assert.ok(SYSTEM_PROMPT_EN.includes('task thinking'));
 });
 
 test('trigger 只认 auto，其余（含脏值）一律记成 manual', async () => {

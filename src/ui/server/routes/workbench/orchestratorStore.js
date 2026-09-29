@@ -344,6 +344,11 @@ function normalizeReport(raw) {
         toolCallCount: Number.isFinite(Number(t.toolCallCount)) ? Math.max(0, Math.floor(Number(t.toolCallCount))) : 0,
         lastTool: typeof t.lastTool === 'string' ? t.lastTool : '',
         lastLine: typeof t.lastLine === 'string' ? t.lastLine : '',
+        // 2026-09-29 补的三样：老记录里没有它们 —— 一律给"没有"（'' / null），
+        // 不要硬塞一个默认值冒充"当时它就是在思考 / 当时静默了 0 秒"
+        toolMix: typeof t.toolMix === 'string' ? t.toolMix : '',
+        lastThought: typeof t.lastThought === 'string' ? t.lastThought : '',
+        silentMs: Number.isFinite(Number(t.silentMs)) ? Math.max(0, Math.floor(Number(t.silentMs))) : null,
       })),
   };
 }

@@ -88,6 +88,9 @@ export function projectJob(j) {
     thinking: j.thinking || '',
     pid: j.pid || null,
     startedAt: j.startedAt || null,
+    // 最后一次产出的时刻。别的实例跑的任务，进度报告只能从这份文件上读它 ——
+    // 不过白名单就会变成"本实例的报告说得出静默多久，跨实例的报告永远说不出来"。
+    lastActivityAt: j.lastActivityAt || null,
     endedAt: j.endedAt || null,
     exitCode: typeof j.exitCode === 'number' ? j.exitCode : null,
     error: j.error || null,
