@@ -39,6 +39,7 @@ import { Search } from '@element-plus/icons-vue'
 import TaskExecutorIcon from '@/components/TaskExecutorIcon.vue'
 import type { BoardTask, BoardTaskLive, TaskColumn } from '@/types/workbench'
 import { taskExecutorName, type TaskExecutorId } from '@/utils/taskExecutor'
+import { projectTagStyle } from '@/utils/projectTag'
 import { formatDurationMs, relativeTimeFromIso } from '@/utils/relativeTime'
 
 const props = defineProps<{
@@ -136,6 +137,11 @@ function cardTitle(t: BoardTask): string {
   return (t.desc || '').replace(/\s+/g, ' ').trim()
 }
 
+/**
+ * 项目名。标签的颜色单走 projectTagStyle(t.projectPath) ——
+ * 名字给人读，色相给眼睛扫，两者都按任务上的原始 projectPath 取，
+ * 不在这里再引一次路径归一逻辑（两侧规则一分叉，颜色就会和名字对不上）。
+ */
 function projectLabel(t: BoardTask): string {
   return props.projectLabels[t.projectPath] || ''
 }
@@ -240,7 +246,20 @@ function liveSummary(live: BoardTaskLive): string {
 
             <p class="kb-card__title" :title="cardTitle(t)">{{ cardTitle(t) || $t('@WORKBENCH:未命名任务') }}</p>
 
-            <p v-if="showProjectLabel && projectLabel(t)" class="kb-card__project">{{ projectLabel(t) }}</p>
+            <!--
+              所属项目色标（只在「全部项目」视图渲染）。
+              外面这层 <p> 是全宽块、胶囊在里层 span：hover 的渐隐遮罩按元素自身宽度算
+              （100% - 80px，见下面 .kb-card:hover 那段），挂在 fit-content 的胶囊上
+              会把整枚胶囊吃进淡出段（第一版就是这样，鼠标一进卡片色标就没了）。
+              title 给完整路径：项目名可能重名（两个都叫 notebook），路径才是唯一答案。
+            -->
+            <p
+              v-if="showProjectLabel && projectLabel(t)"
+              class="kb-card__project"
+              :style="projectTagStyle(t.projectPath)"
+            >
+              <span class="kb-card__project-chip" :title="t.projectPath">{{ projectLabel(t) }}</span>
+            </p>
 
             <!--
               正在跑的任务：把"现在在干嘛"直接写在卡片上。
@@ -375,7 +394,14 @@ function liveSummary(live: BoardTaskLive): string {
           >
             <td class="kb-table__td">
               <span class="kb-table__name">{{ cardTitle(t) || $t('@WORKBENCH:未命名任务') }}</span>
-              <span v-if="showProjectLabel && projectLabel(t)" class="kb-table__project">{{ projectLabel(t) }}</span>
+              <!-- 项目色标：与看板卡片同一枚（见 .kb-card__project 的样式注释），
+                   列表视图是同一批任务的另一种画法，两处长得不一样会让人以为是两份数据 -->
+              <span
+                v-if="showProjectLabel && projectLabel(t)"
+                class="kb-table__project"
+                :style="projectTagStyle(t.projectPath)"
+                :title="t.projectPath"
+              >{{ projectLabel(t) }}</span>
               <!-- 状态列的"进行中"太粗，跑起来之后一眼看不出进度：这里补一行
                    最新回复 / 思考 / 工具（与卡片上的 live 同一份数据）。
                    执行器图标摆最前（与看板卡片同一个位置：整块执行事实的开头） -->
@@ -617,13 +643,66 @@ function liveSummary(live: BoardTaskLive): string {
   overflow: hidden;
   word-break: break-word;
 }
-.kb-card__project {
-  margin: 3px 0 0;
+/* ── 所属项目色标（看板卡片 + 列表行共用一套，视图为「全部项目」时才渲染） ──
+   原来只是一行灰字：扫一眼分不出哪几张卡是同一个项目的，而这正是它存在的理由。
+   现在是一枚胶囊 + 一个项目色圆点，色相由项目路径哈希给出（见 utils/projectTag.ts，
+   行内样式只塞一个 --tag-hue）。
+
+   三层颜色（底色 / 描边 / 文字）都由 color-mix 从同一个饱和色与**主题变量**混出来，
+   而不是浅色一套、深色再覆写一套：--surface-elevated 就是卡片底色（深浅主题各有一个），
+   混出来的标签天然"比卡片深一档"，两个主题都不用再挑第二组颜色 ——
+   大面积淡色底正是深色主题最容易挑歪的地方。
+
+   色相取值见 HUES 的注释：只占 140°–350° 半圈，避开卡片已经在用的报错红 / 运行橙。 */
+.kb-card__project-chip,
+.kb-table__project {
+  /* 色相从行内样式来（卡片那处挂在外面那层全宽块上，靠继承到达胶囊）。
+     兜底写在 var() 的第二参**而不是**这里再声明一次 --tag-hue：在胶囊自己身上声明
+     会盖掉从父级继承来的值（第一版就这么写的，结果 62 枚色标全是同一个兜底蓝）。 */
+  --tag-ink: hsl(var(--tag-hue, 200) 62% 44%);
+  display: inline-block;
+  max-width: 100%;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--tag-ink) 24%, var(--surface-elevated));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--tag-ink) 9%, var(--surface-elevated));
+  color: color-mix(in srgb, var(--tag-ink) 62%, var(--text-primary));
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  line-height: 16px;
+  /* 胶囊靠 ellipsis 收尾而不是裁断：项目名长的（notebook2026）要能看出被截了 */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* 圆点用 ::before 而不是真节点：胶囊上的 text-overflow 只对**文本**生效，
+   多一个盒子就得再多管一次它的收缩；伪元素不参与这个账 */
+.kb-card__project-chip::before,
+.kb-table__project::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--tag-ink);
+  vertical-align: 1px;   /* 11px 正文里的小圆点，压着基线会显低 */
+}
+/* 卡片里独占一行：外面是全宽块，只作为 hover 渐隐遮罩的载体（见 .kb-card:hover 那段）。
+   用 flex 而不是 block/inline-block：胶囊是 overflow:hidden 的 inline-block，
+   按 CSS 规定它的基线是**下边缘**而不是文字基线，于是块级父级的行盒会按
+   "胶囊整高(18) + strut 的下沉部"算成 22px —— 色标下面平白多 4px 空白（实测）。
+   flex 容器没有 strut 这套账，高度就是胶囊自己的 18px。 */
+.kb-card__project {
+  display: flex;
+  margin: 4px 0 0;
+}
+/* 列表行里要与任务名同行（.kb-table__name 是 inline）：
+   抬 1px 是把胶囊的**文字基线**与同行任务名的基线对齐后做的光学微调——
+   胶囊上下各多 3px 边框/内边距，纯基线对齐时看着略低。
+   （卡片那处不加：胶囊独占一行，抬它只会让行盒高出 21px、底下平白多 3px 空白。） */
+.kb-table__project {
+  margin-left: 6px;
+  vertical-align: 1px;
 }
 
 /* ── 卡片上的「现在在干嘛」（只在任务正在跑时出现） ──
@@ -907,11 +986,7 @@ function liveSummary(live: BoardTaskLive): string {
 }
 .kb-table__td--num { font-variant-numeric: tabular-nums; }
 .kb-table__name { color: var(--text-primary); }
-.kb-table__project {
-  margin-left: 6px;
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-}
+/* .kb-table__project 的样式与卡片那枚共用，见上方 .kb-card__project-chip 一段 */
 /* 进行中那一行的"跑到哪了"：与任务名同一格，占满剩余宽度后省略号收尾 */
 .kb-table__live {
   display: block;
