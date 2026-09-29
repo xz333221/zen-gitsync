@@ -381,12 +381,15 @@ function reportBrief(r: ProgressReport): string {
   const text = String(r.text || '').replace(/\s+/g, ' ').trim()
   if (text) return text.length > 42 ? text.slice(0, 42) + '…' : text
   if (r.errorCode) return $t(reportErrorKey(r.errorCode))
+  // 服务端已经不再产生"当时没有任务在跑"的空报告了（runProgressReport 不生成、
+  // readReports 过滤掉），这一句是渲染层的兜底：面板不认字段来源，脏数据也得有字，
+  // 不能白成一行（与 orchestratorStore.normalizeReport 的口径一致）
   return $t('@WORKBENCH:当时没有任务在执行')
 }
 
 /**
  * 没有正文时卡片上那句说明。
- * 三种情况的实话各不相同，不能都写成"暂无"：没任务 / 模型挂了 / 正文为空。
+ * 实话各不相同，不能都写成"暂无"：模型挂了 / 正文为空 /（老数据）当时没任务在跑。
  */
 function reportNotice(r: ProgressReport): string {
   if (r.errorCode) return $t(reportErrorKey(r.errorCode))

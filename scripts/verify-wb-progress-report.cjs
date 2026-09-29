@@ -7,9 +7,12 @@
  *   P2 间隔下拉的档位与服务端白名单一致，且当前值 = 服务端下发的值
  *   P3 改间隔真的落盘：POST /report-interval 带上的值 = 选中的值，
  *      刷新后仍是它（不是只改了本地 ref）—— 跑完恢复原值，别改用户的设置
- *   P4 点「立即报告」→ 真打接口 → 面板上出现一张**手动**的报告卡片；
- *      没有任务在跑时那句话必须说实话（不能装作有进度）
- *   P5 这一份真的进了服务端历史：GET /orchestrator/reports 里能看到它
+ *   P4 点「立即报告」→ 真打接口 → 面板上出现一张**手动**的报告卡片。
+ *      有任务在跑：生成并落盘；**没有任务在跑：不生成、不落盘**，只给一句明确回应（toast）。
+ *      空报告不进历史是 2026-09-29 用户反馈的结果 —— 那种记录零信息量，还占历史格子
+ *   P5 落盘的那份字段齐全；接口与面板的历史里**都没有空报告**（本次反馈的直接目的）；
+ *      另外把「服务端不给报告」那一条桩出来，单独验前端的回应（真实环境里
+ *      "恰好没有任务在跑"不可控，见 P5e/P5f）
  *   P6 两份以上时出现历史区，点其中一条能把上面那张换掉（选中态跟着走）
  *   P7 无 JS 运行时异常 / 无控制台错误
  *   P8 截图存证
@@ -71,8 +74,32 @@ async function readPanel(page) {
   })
 }
 
-/** 切到工作台 -> 「指令」模式 */
-async function openCommandMode(page) {
+/**
+ * 读当前挂着的 ElMessage 提示文案（多条拼一起，调用方用正则判）。
+ * 没有提示是正常情况 —— 等不到就返回空串，不抛。
+ */
+async function readToast(page, timeout = 4000) {
+  try {
+    await page.waitForSelector('.el-message', { state: 'visible', timeout })
+  } catch {
+    return ''
+  }
+  return page.evaluate(() => Array.from(document.querySelectorAll('.el-message'))
+    .map(el => (el.querySelector('.el-message__content')?.textContent || el.textContent || '').trim())
+    .join(' | '))
+}
+
+/**
+ * 清掉当前挂着的提示。读 toast 之前先清一次，免得读到上一步残留的那条
+ * （ElMessage 默认活 3 秒，交叉的两步之间会撞上）。
+ */
+async function clearToasts(page) {
+  await page.evaluate(() => {
+    document.querySelectorAll('.el-message').forEach(el => el.remove())
+  })
+}
+
+/** 切到工作台 -> 「指令」模式 */async function openCommandMode(page) {
   await page.waitForSelector('.activity-bar', { timeout: 30000 })
   await page.locator('.activity-btn[aria-label^="工作台"]').first().click()
   await page.waitForSelector('.oc', { timeout: 30000 })
@@ -142,72 +169,134 @@ async function main() {
     // 几分钟前那份自动报告）。判据必须是「服务端多了一份 manual」。因此先数一遍再点。
     const before = await getJson('/api/workbench/orchestrator/reports')
     const beforeManual = (before?.reports || []).filter(r => r.trigger === 'manual').length
+    const runningNow = ((await getJson('/api/workbench/orchestrator'))?.running || []).length
+    log('点之前：在跑的任务', runningNow, '个 | 历史里的手动报告', beforeManual, '份')
 
+    await clearToasts(page)
     await page.click('.oc__report-run')
+    // toast 只活三秒上下，必须在轮询之前读 —— 没有任务在跑时，服务端立刻返回，
+    // 这一句就是"点这一下"的全部回应
+    const toast = await readToast(page)
+
     let mine = null
-    for (let i = 0; i < 45; i++) {
-      const now = await getJson('/api/workbench/orchestrator/reports')
-      const manual = (now?.reports || []).filter(r => r.trigger === 'manual')
-      if (manual.length > beforeManual) { mine = manual[0]; break }
-      await sleep(2000)
-    }
-    check('P4a 点「立即报告」真的生成了一份并落盘',
-      !!mine, `manual: ${beforeManual} -> ${(await getJson('/api/workbench/orchestrator/reports'))?.reports?.filter(r => r.trigger === 'manual').length}`)
-    if (!mine) throw new Error('没生成出报告，后面的断言没有意义')
-
-    // 面板自己把这份换上来（本地插入，不必等 30s 的报告轮询）
-    let shown = { trigger: '' }
-    for (let i = 0; i < 15; i++) {
-      shown = await readPanel(page)
-      if (shown.trigger === '手动') break
-      await sleep(1000)
-    }
-    check('P4b 面板上换成了刚点出来的那一份（标「手动」）', shown.trigger === '手动', `trigger="${shown.trigger}"`)
-    check('P4c 卡片头上的任务数 = 生成时那批（不是拿现在的时钟另算）',
-      shown.count.includes(String(mine.tasks.length)), `count="${shown.count}" tasks=${mine.tasks.length}`)
-
-    if (mine.tasks.length === 0) {
-      check('P4d 没有任务在跑时那句话说实话（不编进度）',
-        shown.notice.includes('没有任务在执行') && !shown.text, `notice="${shown.notice}" text="${shown.text.slice(0, 40)}"`)
+    if (runningNow > 0) {
+      for (let i = 0; i < 45; i++) {
+        const now = await getJson('/api/workbench/orchestrator/reports')
+        const manual = (now?.reports || []).filter(r => r.trigger === 'manual')
+        if (manual.length > beforeManual) { mine = manual[0]; break }
+        await sleep(2000)
+      }
+      check('P4a 有任务在跑时，点「立即报告」生成了一份并落盘',
+        !!mine, `manual: ${beforeManual} -> ${(await getJson('/api/workbench/orchestrator/reports'))?.reports?.filter(r => r.trigger === 'manual').length}`)
+      if (!mine) throw new Error('没生成出报告，后面的断言没有意义')
     } else {
+      // 没有任务在跑：**不生成、不落盘** —— 往历史里记一条"当时没有任务在执行"，
+      // 用户回头翻的时候零信息量（2026-09-29 反馈：这种空报告两两重复还占着历史）
+      await sleep(3000)
+      const afterManual = ((await getJson('/api/workbench/orchestrator/reports'))?.reports || [])
+        .filter(r => r.trigger === 'manual').length
+      check('P4a 没有任务在跑时不落盘空报告（历史份数不变）',
+        afterManual === beforeManual, `manual: ${beforeManual} -> ${afterManual}`)
+      check('P4b 点完给了一句明确回应（不是静默无反应）',
+        /没有正在执行的任务/.test(toast), `toast="${toast}"`)
+    }
+
+    if (mine) {
+      // 面板自己把这份换上来（本地插入，不必等 30s 的报告轮询）
+      let shown = { trigger: '' }
+      for (let i = 0; i < 15; i++) {
+        shown = await readPanel(page)
+        if (shown.trigger === '手动') break
+        await sleep(1000)
+      }
+      check('P4c 面板上换成了刚点出来的那一份（标「手动」）', shown.trigger === '手动', `trigger="${shown.trigger}"`)
+      check('P4d 卡片头上的任务数 = 生成时那批（不是拿现在的时钟另算）',
+        shown.count.includes(String(mine.tasks.length)), `count="${shown.count}" tasks=${mine.tasks.length}`)
       // 有任务在跑：要么有正文，要么明说为什么没有（没配模型 / 生成失败）
-      check('P4d 有任务在跑时给正文，或说清为什么没有',
+      check('P4e 有任务在跑时给正文，或说清为什么没有',
         mine.text.length > 0 || mine.errorCode !== '',
         `text=${mine.text.length}字 errorCode="${mine.errorCode}"`)
-      check('P4e 事实快照里带着当时的项目与任务标题',
+      check('P4f 事实快照里带着当时的任务标题与项目',
         mine.tasks.every(t => typeof t.taskTitle === 'string' && typeof t.elapsedMs === 'number'),
         JSON.stringify(mine.tasks[0] || {}).slice(0, 160))
     }
 
-    /* ══ P5 落盘的那份长什么样 ══ */
-    check('P5a 记录字段齐全（trigger / at / tasks / errorCode）',
-      mine.trigger === 'manual' && typeof mine.at === 'string' && Array.isArray(mine.tasks)
-        && ['', 'NO_MODEL', 'LLM_TIMEOUT', 'LLM_FAILED'].includes(mine.errorCode || ''),
-      `trigger=${mine.trigger} at=${mine.at} errorCode="${mine.errorCode}"`)
-    check('P5b 事实快照存的是**时长**（elapsedMs），不是一对会随历史一起变大的起止时间',
-      mine.tasks.every(t => Number.isFinite(t.elapsedMs) && t.elapsedMs >= 0
-        // 有 startedAt 的必须算出正数时长 —— 全是 0 说明这个字段根本没被算过
-        && (!t.startedAt || t.elapsedMs > 0)),
-      JSON.stringify(mine.tasks.map(t => ({ startedAt: t.startedAt, elapsedMs: t.elapsedMs }))))
+    /* ══ P5 历史里不该再有"当时没有任务在执行"的空报告 ══ */
+    // 本次修改的直接目的：空报告既不落盘，也不在面板上露脸
+    const hist = await getJson('/api/workbench/orchestrator/reports')
+    const empties = (hist?.reports || []).filter(r => !r.tasks.length)
+    check('P5a 接口返回的历史里没有空报告', empties.length === 0,
+      `空报告 ${empties.length} 条 / 共 ${(hist?.reports || []).length} 条`)
+    const sums = await page.$$eval('.oc__history-item .oc__history-sum',
+      els => els.map(e => (e.textContent || '').trim()))
+    check('P5b 面板的历史列表里也没有这种行', !sums.some(t => t.includes('当时没有任务在执行')),
+      sums.join(' / ').slice(0, 240))
+
+    if (mine) {
+      /* ══ P5c 落盘的那份长什么样 ══ */
+      check('P5c 记录字段齐全（trigger / at / tasks / errorCode）',
+        mine.trigger === 'manual' && typeof mine.at === 'string' && Array.isArray(mine.tasks)
+          && ['', 'NO_MODEL', 'LLM_TIMEOUT', 'LLM_FAILED'].includes(mine.errorCode || ''),
+        `trigger=${mine.trigger} at=${mine.at} errorCode="${mine.errorCode}"`)
+      check('P5d 事实快照存的是**时长**（elapsedMs），不是一对会随历史一起变大的起止时间',
+        mine.tasks.every(t => Number.isFinite(t.elapsedMs) && t.elapsedMs >= 0
+          // 有 startedAt 的必须算出正数时长 —— 全是 0 说明这个字段根本没被算过
+          && (!t.startedAt || t.elapsedMs > 0)),
+        JSON.stringify(mine.tasks.map(t => ({ startedAt: t.startedAt, elapsedMs: t.elapsedMs }))))
+    }
+
+    /* ══ P5e 服务端说"没有任务在跑"（report: null）时，面板必须给一句回应 ══ */
+    // 真实环境里"没有任务在跑"的时刻不可控，所以这一条把 POST 桩掉，单独验前端那半条链路：
+    // report 为 null 时必须弹一句实话。静默无反应正是用户"再点一下"、
+    // 于是历史里出现重复记录的起点
+    const apiCountBeforeStub = ((await getJson('/api/workbench/orchestrator/reports'))?.reports || []).length
+    await page.route('**/api/workbench/orchestrator/report', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, report: null }),
+    }))
+    await clearToasts(page)
+    await page.click('.oc__report-run')
+    const stubToast = await readToast(page)
+    check('P5e 没有任务在跑（服务端不给报告）时弹一句实话',
+      /没有正在执行的任务/.test(stubToast), `toast="${stubToast}"`)
+    const apiCountAfterStub = ((await getJson('/api/workbench/orchestrator/reports'))?.reports || []).length
+    check('P5f 桩掉的那一下没有在服务端留下任何记录',
+      apiCountAfterStub === apiCountBeforeStub, `${apiCountBeforeStub} -> ${apiCountAfterStub}`)
+    await page.unroute('**/api/workbench/orchestrator/report')
 
     /* ══ P6 历史区 + 选中态 ══ */
-    // 再造一份，凑到两份以上
-    await page.click('.oc__report-run')
-    let historyCount = 0
-    for (let i = 0; i < 45; i++) {
-      historyCount = (await readPanel(page)).historyCount
-      if (historyCount >= 2) break
-      await sleep(2000)
+    let historyCount = (await readPanel(page)).historyCount
+    // 只有一份时再造一份凑出历史区。⚠️ 先等过服务端的去重窗口（10s）：窗口里内容一样的
+    // 第二份会被合并掉（连点两下只留一份，见 orchestratorStore.appendReport），
+    // 那不是这里要测的东西 —— 等过窗口再点才是新的一份
+    if (runningNow > 0 && historyCount < 2) {
+      await sleep(11000)
+      await page.click('.oc__report-run')
+      for (let i = 0; i < 45; i++) {
+        historyCount = (await readPanel(page)).historyCount
+        if (historyCount >= 2) break
+        await sleep(2000)
+      }
     }
-    check('P6a 两份以上时出现历史区', historyCount >= 2, `items=${historyCount}`)
-    m = await readPanel(page)
-    const beforeIndex = m.historyActiveIndex
-    await page.locator('.oc__history-item').last().click()
-    await sleep(400)
-    m = await readPanel(page)
-    check('P6b 点历史里的一条能把上面那张换掉（选中态跟着走）',
-      m.historyActiveIndex === m.historyCount - 1 && m.historyActiveIndex !== beforeIndex,
-      `activeIndex ${beforeIndex} -> ${m.historyActiveIndex} / items=${m.historyCount}`)
+    const apiCount = ((await getJson('/api/workbench/orchestrator/reports'))?.reports || []).length
+    check('P6a 历史区的出现与接口返回的份数对齐（>1 份才出现）',
+      (historyCount > 0) === (apiCount > 1), `dom=${historyCount} api=${apiCount}`)
+    if (historyCount >= 2) {
+      m = await readPanel(page)
+      const beforeIndex = m.historyActiveIndex
+      await page.locator('.oc__history-item').last().click()
+      await sleep(400)
+      m = await readPanel(page)
+      check('P6b 点历史里的一条能把上面那张换掉（选中态跟着走）',
+        m.historyActiveIndex === m.historyCount - 1 && m.historyActiveIndex !== beforeIndex,
+        `activeIndex ${beforeIndex} -> ${m.historyActiveIndex} / items=${m.historyCount}`)
+    } else {
+      // 没有任务在跑时本脚本不再造空报告，历史可能本来就凑不出两份 —— 明说是环境问题，
+      // 不装作通过
+      check('P6b 点历史里的一条能把上面那张换掉（选中态跟着走）', false,
+        `历史只有 ${historyCount} 份（没任务在跑时不会再多造），先手动攒够两份再跑本脚本`)
+    }
 
     /* ══ P7 无异常 ══ */
     check('P7a 无 JS 运行时异常', pageErrors.length === 0, pageErrors.join(' | ').slice(0, 300))

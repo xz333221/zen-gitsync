@@ -348,21 +348,67 @@ function normalizeReport(raw) {
   };
 }
 
-/** 读报告历史（新的在前）。文件缺失 / 损坏一律当"还没有报告"，不抛错 */
+/**
+ * 读报告历史（新的在前）。文件缺失 / 损坏一律当"还没有报告"，不抛错。
+ *
+ * **没有事实的报告不算报告**：那是一条"当时什么都没在跑"的空记录，对回头翻历史的人
+ * 零信息量，却要占掉上限 20 条里的一格，把真正有用的挤出去（用户 2026-09-29 的原话：
+ * "这种没有在执行的就不用展示了"）。
+ *
+ * 写入侧已经不再产生它们（见 routes/workbench/index.js 的 runProgressReport），
+ * 这里再挡一次是因为：老版本进程 / 另一个实例写进同一份文件的空报告，
+ * 在读取方看来同样得当成不存在 —— 面板只认这个函数给的清单。
+ * 另外 appendReport 是拿本函数的返回值重写整个文件的，所以历史遗留的空报告
+ * 会在下一次落盘时被真正从磁盘上清掉。
+ */
 export async function readReports() {
   const data = await readJson(ORCHESTRATOR_REPORTS_FILE, null);
   const list = data && Array.isArray(data.reports) ? data.reports : [];
   return list
     .map(normalizeReport)
+    .filter(r => r.tasks.length > 0)
     .sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')))
     .slice(0, MAX_PROGRESS_REPORTS);
 }
 
-/** 追加一份报告（新的在前），超出上限的旧报告直接丢掉 */
+/** 两份报告"说的是同一件事"吗：同一批任务 + 同一段正文 + 同一种失败 */
+function sameReport(a, b) {
+  if (!a || !b) return false;
+  if (a.trigger !== b.trigger || a.text !== b.text) return false;
+  if (a.errorCode !== b.errorCode || a.errorDetail !== b.errorDetail) return false;
+  if (a.tasks.length !== b.tasks.length) return false;
+  return a.tasks.every((t, i) => (t.taskId || '') === (b.tasks[i].taskId || '')
+    && (t.taskTitle || '') === (b.tasks[i].taskTitle || ''));
+}
+
+/**
+ * 追加一份报告（新的在前），超出上限的旧报告直接丢掉。
+ *
+ * 窗口期内**内容一样的**只留第一份。为什么需要它：没有正文的报告（没配模型 = NO_MODEL）
+ * 是逐字节相同的 —— 「立即报告」连点两下、或两个实例各点一下，历史里就会出现两条
+ * 一模一样的记录（真实数据：2026-09-28T15:44:08.161 与 .226 两条 manual / tasks=0）。
+ * 前端那个"生成中"的防抖挡不住这种点击：空报告不叫模型，本机往返几十毫秒就返回了，
+ * 第二次点击落在防抖释放之后。
+ *
+ * 判据刻意**不含**时长 / 工具次数 / 最近输出这些每份报告都会变的字段 ——
+ * 带上它们就永远"不算重复"，等于没做这个检查。
+ */
+const REPORT_DEDUPE_WINDOW_MS = 10 * 1000;
+
+/** @returns {Promise<object>} 落盘的那一份；被判为重复时返回已在历史里的头部那条 */
 export async function appendReport(entry) {
   return serialize(async () => {
     const report = normalizeReport({ id: genId(), at: nowIso(), ...entry });
     const existing = await readReports();
+    const head = existing[0];
+    const headAt = Date.parse((head && head.at) || '');
+    if (head && Number.isFinite(headAt)
+      && Date.now() - headAt < REPORT_DEDUPE_WINDOW_MS
+      && sameReport(head, report)) {
+      // 不落盘。返回头部那条而不是 null：调用方（runProgressReport）要拿它广播，
+      // 前端本来就在展示它，等于"你看到的就是刚生成的"
+      return head;
+    }
     const reports = [report, ...existing].slice(0, MAX_PROGRESS_REPORTS);
     await writeJson(ORCHESTRATOR_REPORTS_FILE, { version: 1, reports });
     return report;

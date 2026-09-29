@@ -313,7 +313,14 @@ export interface ProgressReportFact {
 /** 报告生成失败的原因码。'' = 成功；正文由前端 $t() 渲染，服务端只给码 */
 export type ProgressReportErrorCode = '' | 'NO_MODEL' | 'LLM_TIMEOUT' | 'LLM_FAILED'
 
-/** 一份进度报告：一段模型写的汇报 + 当时那批任务的事实 */
+/**
+ * 一份进度报告：一段模型写的汇报 + 当时那批任务的事实。
+ *
+ * 历史里**不会有 `tasks: []` 的那种** —— 没有任务在跑时服务端既不生成也不落盘
+ * （见 routes/workbench/index.js 的 runProgressReport、orchestratorStore 的 readReports），
+ * 所以正常流程里拿到的每一份都带事实。渲染层保留着"空事实"的分支，那是给脏数据兜底的，
+ * 不要指望它在正常流程里被走到。
+ */
 export interface ProgressReport {
   id: string
   at: string | null

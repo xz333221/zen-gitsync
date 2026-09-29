@@ -222,6 +222,10 @@ function fakeStream(deltas, { aborted = false, error = null } = {}) {
 
 const MODEL = { baseURL: 'http://x', model: 'm', apiKey: 'k' };
 
+// 注：本函数对"没任务在跑"依然能生成一条空事实记录，但**调用方已经不落盘它了** ——
+// routes/workbench/index.js 的 runProgressReport 在 facts 为空时直接 return null，
+// 历史里不会再出现"当时没有任务在执行"这种零信息量的记录（见 orchestratorStore 的
+// readReports 过滤 + orchestratorStore.progressReport.test.js）。
 test('没有任务在跑时**不叫模型**，报告就是一条空事实', async () => {
   let called = 0;
   const report = await generateProgressReport({

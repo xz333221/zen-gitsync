@@ -144,8 +144,10 @@ export function useOrchestrator() {
    * 语言按当前界面语言传给服务端 —— 自动报告那边读的是配置里的语言，
    * 手动这一下如果用户刚切了语言，以他眼前看到的界面为准更合理。
    *
-   * 服务端没有在跑的任务时也会返回一条"空事实"报告（不会叫模型）：
-   * 用户点这一下要的就是一个明确的"现在没有东西在跑"，返回 null 反而说不清。
+   * 服务端在没有任务在跑时返回 `report: null`（不生成、也不落盘一条空报告，
+   * 见 routes/workbench/index.js 的 runProgressReport）。这一下是用户主动点的，
+   * 必须有回应 —— 否则面板看不出任何变化，用户会以为按钮没生效、再点一下，
+   * 历史里就会出现重复记录。所以这里弹一句实话。
    */
   async function generateReport(): Promise<ProgressReport | null> {
     if (generatingReport.value) return null
@@ -161,9 +163,13 @@ export function useOrchestrator() {
         ElMessage.error(res?.error || $t('@WORKBENCH:生成进度报告失败'))
         return null
       }
+      if (!res.report) {
+        ElMessage.info($t('@WORKBENCH:当前没有正在执行的任务，没有可汇报的进度'))
+        return null
+      }
       // 就地把新报告插到最前，不再多打一次列表接口：这一份就是刚生成的那份
-      if (res.report) reports.value = [res.report, ...reports.value].slice(0, 20)
-      return res.report || null
+      reports.value = [res.report, ...reports.value].slice(0, 20)
+      return res.report
     } catch (err: any) {
       ElMessage.error($t('@WORKBENCH:网络错误: ') + (err?.message || err))
       return null

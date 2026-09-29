@@ -1274,10 +1274,15 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
   async function runProgressReport(trigger, { locale = '', intervalMs = 0 } = {}) {
     const facts = await collectRunningFacts();
 
-    // 没任务在跑时自动报告**静默跳过**：一条"什么都没发生"的报告每 10 分钟占一格，
-    // 只会把真正有用的那几条挤出历史（上限 20 条）。
-    // 手动「立即报告」不受此限 —— 那时用户要的就是"现在确实没有东西在跑"这句实话。
-    if (!facts.length && trigger === 'auto') return null;
+    // 没有任务在跑就**不生成报告**，自动与手动一视同仁。
+    //   · 自动：一条"什么都没发生"每 10 分钟占一格，只会把真正有用的挤出历史（上限 20 条）；
+    //   · 手动：用户点这一下是想知道"现在跑到哪一步了"，而此刻确实没有东西在跑 ——
+    //     前端弹一句"当前没有正在执行的任务"（useOrchestrator.generateReport）比往历史里
+    //     塞一条空记录有用：空记录回头翻的时候零信息量，还会把有用的挤出去。
+    //     （用户 2026-09-29 报的问题：历史里 4 条"当时没有任务在执行"两两重复，
+    //      点一下「立即报告」就多两条 —— 空报告本机几十毫秒返回，前端的防抖拦不住第二次点击。）
+    // 返回 null 是"这次不该报"的正常结果，不是错误。
+    if (!facts.length) return null;
     if (trigger === 'auto' && !(await claimReportSlot(intervalMs))) return null;
 
     const ctx = await readReportContext();
@@ -1312,8 +1317,12 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
   /**
    * 手动生成一份报告。body: { locale? }
    *
-   * 与自动报告共用同一条链路，只在两处不同：跳过"必须有任务在跑"的静默跳过、
-   * 不占用自动报告的间隔名额（否则用户点一下「立即报告」，下一次自动报告被推迟一整个间隔）。
+   * 与自动报告共用同一条链路，只在两处不同：
+   *   · 不占用自动报告的间隔名额（否则用户点一下「立即报告」，下一次自动报告被推迟一整个间隔）；
+   *   · 间隔窗口内**内容一样**的第二份不重复落盘（连点两下只留一份，见 appendReport）。
+   *
+   * 没有任务在跑时同样返回 `report: null` —— 这时前端弹一句"当前没有正在执行的任务"，
+   * 而不是往历史里记一条空报告（理由见 runProgressReport）。
    */
   app.post('/api/workbench/orchestrator/report', asyncRoute(async (req, res) => {
     const locale = typeof req.body?.locale === 'string' ? req.body.locale : '';
