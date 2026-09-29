@@ -476,6 +476,77 @@ async function copyTaskDesc(t: Task | null) {
 // 任务对话流（通 useWorkbenchSimpleConversation 合并 jobs → ChatMessage[]）
 const { simpleConversationMessages, simpleAllJobsFor, simpleJobFor, simpleJobState } = useWorkbenchSimpleConversation(jobs, selectedTask)
 
+// ── 打开任务时把对话流钉到最底部 ─────────────────────────────────────────────
+// 症状（2026-09-29 用户报）：从看板点开一条跑过的任务，对话区停在**最上面**那轮
+// （那条巨大的「运行环境」注入消息），得手动往下滚才能看到最新的回复。
+//
+// 根因（探针实测，不是猜）：zen-ai-chat-ui 的 MessageList 只在 onMounted 里滚一次底，
+// 而那一刻 el-dialog 的内容还没参与布局 —— 探针抓到那次 scrollTo 时
+// scrollHeight = 0、clientHeight = 0，等于空转。内容随后才长起来
+// （0 → 371 → 1573 → 2542，全在挂载后 ~500ms 内），而库里后续的"自动贴底"只挂在
+// 「消息条数 / 末条正文长度 / 末条思考长度」这类**字符串签名**上；markdown 异步高亮
+// （shiki）、工具调用分组折叠都是"签名没变、高度变了"，于是没人再滚第二次，视图留在顶部。
+//
+// 所以补一次 scrollToBottom 不够（只能滚到"当时"的底，之后内容还在长，照样停在半截）。
+// 这里用 ResizeObserver 盯住滚动容器 + 内容层，在整个收敛期里高度一变就补滚一次，
+// 直到窗口期结束，或者用户自己碰了滚动区（别把正在往回翻记录的人硬拽到底）。
+//
+// 观察的是 zen-ai-chat-ui 的内部类名 `.acu-message-list` —— 和本文件 CSS 里的
+// `:deep(.acu-message-list)` 是同一份依赖，库没暴露"列表滚动容器"的 ref，只能这样拿。
+const CHAT_PIN_WINDOW_MS = 3000
+/** 用户在收敛期里的滚动意图事件：一旦出现就撒手（程序化的 scrollTo 不会触发这些） */
+const CHAT_PIN_USER_EVENTS = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const
+
+const chatRef = ref<InstanceType<typeof ChatContainer> | null>(null)
+const chatWrapRef = ref<HTMLElement | null>(null)
+let chatPinRO: ResizeObserver | null = null
+let chatPinTimer: ReturnType<typeof setTimeout> | null = null
+let chatPinEl: HTMLElement | null = null
+
+/** 收工：停观察、拆定时器、摘用户意图监听（幂等，可重复调用） */
+function stopChatPin() {
+  if (chatPinRO) { chatPinRO.disconnect(); chatPinRO = null }
+  if (chatPinTimer !== null) { clearTimeout(chatPinTimer); chatPinTimer = null }
+  if (chatPinEl) {
+    for (const ev of CHAT_PIN_USER_EVENTS) chatPinEl.removeEventListener(ev, stopChatPin)
+    chatPinEl = null
+  }
+}
+
+/** 立即滚到底，并在收敛期里持续贴底 */
+function pinChatToBottom() {
+  stopChatPin()
+  const inst = chatRef.value
+  if (!inst) return
+  inst.scrollToBottom?.(false)
+  const list = chatWrapRef.value?.querySelector<HTMLElement>('.acu-message-list')
+  if (!list || typeof ResizeObserver === 'undefined') return
+  chatPinEl = list
+  for (const ev of CHAT_PIN_USER_EVENTS) list.addEventListener(ev, stopChatPin, { passive: true })
+  // 容器本身（0 → 有高度 = 弹窗布局就位）和内容层（正文异步长高）都要盯
+  chatPinRO = new ResizeObserver(() => chatRef.value?.scrollToBottom?.(false))
+  chatPinRO.observe(list)
+  if (list.firstElementChild) chatPinRO.observe(list.firstElementChild)
+  chatPinTimer = setTimeout(stopChatPin, CHAT_PIN_WINDOW_MS)
+}
+
+// ChatContainer 只在"这条任务真有对话记录"时才渲染（模板里那个 v-if），
+// 用它的渲染条件当 key：换任务、或 jobs 异步到货补上记录时，key 都会从 '' 跳到 taskId。
+const chatRenderKey = computed(() =>
+  editorOpen.value && selectedTask.value && simpleAllJobsFor(selectedTask.value).length > 0
+    ? selectedTask.value.id
+    : ''
+)
+
+watch(chatRenderKey, async (key) => {
+  stopChatPin()
+  if (!key) return
+  await nextTick()
+  pinChatToBottom()
+})
+
+onBeforeUnmount(stopChatPin)
+
 /**
  * 左侧任务条目"是否执行中"的统一判断。父组件传给 WorkbenchSidebar。
  * 一条任务 = 一次会话：查 jobs（subId = ${task.id}__simple 或 __rN 后缀），
@@ -1240,8 +1311,9 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
               </details>
               <!-- 任务对话流：所有轮次合并到单个 ChatContainer -->
               <template v-if="simpleAllJobsFor(selectedTask).length > 0">
-                <div class="wb-simple-chat-wrap">
+                <div class="wb-simple-chat-wrap" ref="chatWrapRef">
                   <ChatContainer
+                    ref="chatRef"
                     :key="selectedTask.id"
                     :messages="simpleConversationMessages"
                     :assistant-name="simpleAssistantLabel"
