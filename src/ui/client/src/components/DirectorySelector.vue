@@ -239,6 +239,8 @@ interface SimpleTool {
   name: string
   icon: string
   label: string
+  /** 存 key（不是译好的字符串）：权限档菜单项要按当前语言实时译，不能吃模块加载时那一份 */
+  labelKey: string
   action: () => void | Promise<void>
 }
 
@@ -254,10 +256,56 @@ const TOOL_ACTIONS: Record<SimpleToolId, () => void | Promise<void>> = {
   dsh: onOpenInDsh,
 }
 
+/**
+ * 「用 X 打开」的权限档位 —— 只有真有档位可分的工具才在这张表里。
+ *
+ * token 交给服务端解释（见 `fileOpen.js` 的 buildOpencodeArgs / buildCodexArgs）：
+ *   opencode: 'auto'     → `--auto`
+ *   codex:    'sandboxed' → `-a never -s workspace-write`（从不问，但命令仍在沙箱里）
+ *             'bypass'    → `--dangerously-bypass-approvals-and-sandbox`（免批准 + 免沙箱）
+ * 各家的档位 token 刻意**不统一** —— CLI 的语义本来就不一样，硬凑一个公共词只会让服务端
+ * 多一层没必要的映射。第一项恒为"默认权限"（不带 token），与各工具的左键行为一致。
+ */
+interface ToolPermissionTier {
+  /** 缺省 = 该工具的默认档（不带任何 flag），与左键走的是同一条路 */
+  mode?: string
+  hintKey: string
+  danger?: boolean
+}
+
+const TOOL_PERMISSION_TIERS: Partial<Record<SimpleToolId, ToolPermissionTier[]>> = {
+  opencode: [
+    { hintKey: '@67CE7:默认权限' },
+    { mode: 'auto', hintKey: '@67CE7:完全批准（--auto）', danger: true },
+  ],
+  codex: [
+    { hintKey: '@67CE7:默认权限' },
+    { mode: 'sandboxed', hintKey: '@67CE7:自动批准（沙箱内）' },
+    { mode: 'bypass', hintKey: '@67CE7:完全批准（免沙箱）', danger: true },
+  ],
+}
+
+function permissionTiersOf(id: SimpleToolId): ToolPermissionTier[] {
+  return TOOL_PERMISSION_TIERS[id] || []
+}
+
+/** 带权限档打开某个工具（下拉里的档位项走这里；左键走的是 action，即默认档） */
+const TOOL_MODE_ACTIONS: Partial<Record<SimpleToolId, (mode?: string) => void | Promise<void>>> = {
+  opencode: onOpenInOpencode,
+  codex: onOpenInCodex,
+}
+
+function pickToolMode(tool: SimpleTool, mode?: string) {
+  closeSimpleMenu()
+  const open = TOOL_MODE_ACTIONS[tool.id]
+  if (open) void runOrInstall(tool.id, () => open(mode))
+}
+
 const simpleTools: SimpleTool[] = OPEN_WITH_TOOLS.map((tool) => ({
   id: tool.id,
   name: tool.name,
   icon: tool.icon,
+  labelKey: tool.labelKey,
   label: $t(tool.labelKey),
   action: TOOL_ACTIONS[tool.id],
 }))
@@ -379,10 +427,12 @@ async function onOpenInClaudeCode(permissionMode?: string) {
 }
 
 // 用 Codex 打开当前目录
-async function onOpenInCodex() {
+// 用 Codex 打开当前目录
+// mode='sandboxed' → 自动批准但仍有沙箱；mode='bypass' → 完全批准（免批准 + 免沙箱）
+async function onOpenInCodex(mode?: string) {
   if (warnIfEmptyDirectory()) return;
   toastOpenResult(
-    await openPathWithTool('codex', currentDirectory.value),
+    await openPathWithTool('codex', currentDirectory.value, mode),
     '@67CE7:已用 Codex 打开目录',
     '@67CE7:打开失败: ',
   );
@@ -390,7 +440,7 @@ async function onOpenInCodex() {
 
 // 用 OpenCode 打开当前目录
 // mode='auto' → 走 opencode 的「完全批准」档（`--auto`：自动批准未被显式拒绝的权限）
-async function onOpenInOpencode(mode?: 'auto') {
+async function onOpenInOpencode(mode?: string) {
   if (warnIfEmptyDirectory()) return;
   toastOpenResult(
     await openPathWithTool('opencode', currentDirectory.value, mode),
@@ -421,13 +471,11 @@ function closeClaudeMenu() {
 }
 
 /**
- * opencode 的两档：默认（不带 flag）与 完全批准（`--auto`）。
- * 左键仍走默认档 —— opencode 默认就比 claude 松得多，不该让一次普通左键静默进入免批准。
+ * 顶栏 opencode / codex 右键菜单里的权限档位由 `TOOL_PERMISSION_TIERS` 驱动，
+ * 不在这里按工具写 if —— 各工具档位数本来就不一样（opencode 两档、codex 三档）。
+ * 顶栏所有工具的**左键仍是默认档**：opencode / codex 的默认档比 claude 松得多，
+ * 不该让一次普通左键静默进入免批准。
  */
-function pickOpencodeMode(mode: 'default' | 'auto') {
-  closeSimpleMenu()
-  void runOrInstall('opencode', () => onOpenInOpencode(mode === 'auto' ? 'auto' : undefined))
-}
 
 // ── 更新已安装的工具 ─────────────────────────────────────────────
 // 调 /api/update-tool,由服务端白名单决定实际命令(npm @latest / winget upgrade /
@@ -794,30 +842,23 @@ function onBrowserSelect(path: string) {
             </span>
           </template>
           <ul class="claude-menu" role="menu" :aria-label="tool.name">
-            <!-- opencode 有「完全批准」档（`--auto`），与 claude 那边对称地排在更新项之前。
-                 它只有两档（默认 / --auto），没有 claude 的中间档，所以这里就两项。 -->
-            <template v-if="tool.id === 'opencode'">
+            <!-- 有权限档的工具（opencode / codex）把档位项排在「更新」之前，中间隔一条
+                 分隔线：它们是"用什么权限打开"，跟下面"升级这个工具"不是一类事。
+                 档位来自 TOOL_PERMISSION_TIERS，别在这里按工具写 if。 -->
+            <template v-if="permissionTiersOf(tool.id).length">
               <li
+                v-for="tier in permissionTiersOf(tool.id)"
+                :key="tier.hintKey"
                 class="claude-menu__item"
+                :class="{ 'claude-menu__item--danger': tier.danger }"
                 role="menuitem"
                 tabindex="-1"
-                @click="pickOpencodeMode('default')"
-                @keydown.enter.prevent="pickOpencodeMode('default')"
-                @keydown.space.prevent="pickOpencodeMode('default')"
+                @click="pickToolMode(tool, tier.mode)"
+                @keydown.enter.prevent="pickToolMode(tool, tier.mode)"
+                @keydown.space.prevent="pickToolMode(tool, tier.mode)"
               >
-                <span class="claude-menu__label">{{ $t('@67CE7:用 OpenCode 打开') }}</span>
-                <span class="claude-menu__hint">{{ $t('@67CE7:默认权限') }}</span>
-              </li>
-              <li
-                class="claude-menu__item claude-menu__item--danger"
-                role="menuitem"
-                tabindex="-1"
-                @click="pickOpencodeMode('auto')"
-                @keydown.enter.prevent="pickOpencodeMode('auto')"
-                @keydown.space.prevent="pickOpencodeMode('auto')"
-              >
-                <span class="claude-menu__label">{{ $t('@67CE7:用 OpenCode 打开') }}</span>
-                <span class="claude-menu__hint">{{ $t('@67CE7:完全批准（--auto）') }}</span>
+                <span class="claude-menu__label">{{ $t(tool.labelKey) }}</span>
+                <span class="claude-menu__hint">{{ $t(tier.hintKey) }}</span>
               </li>
               <li class="claude-menu__sep" role="separator" />
             </template>

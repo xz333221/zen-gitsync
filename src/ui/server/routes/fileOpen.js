@@ -437,14 +437,46 @@ async function launchClaudeCode(dirPath, { permissionMode } = {}) {
   return launchInTerminal(dirPath, 'claude', cliArgs);
 }
 
-async function launchCodex(dirPath) {
-  // OpenAI Codex CLI - 无 permissionMode 参数(与 claude 不同)
+/**
+ * codex 的启动参数（按权限档位）。与 claude / opencode 的档位对应关系：
+ *
+ *   默认（不带 token）  → 一个 flag 都不加，跟随 `~/.codex/config.toml` 的
+ *                        approval / sandbox 设置
+ *   'sandboxed'        → `-a never -s workspace-write`：**从不问人，但命令仍在沙箱里跑**
+ *                        （写限工作区、默认无网络）。这是"不想被批准提示打断、又不想
+ *                        完全交出去"的那一档，语义上对应 claude 的「批准文件编辑」。
+ *   'bypass'           → `--dangerously-bypass-approvals-and-sandbox`：免批准 + 免沙箱。
+ *                        官方帮助原文 "Skip all confirmation prompts and execute commands
+ *                        without sandboxing. EXTREMELY DANGEROUS."。**完全批准**就是它。
+ *   'bypassPermissions'→ 同上。只为让调用方（顶栏菜单与编排台项目菜单）跟 claude 那档
+ *                        共用同一个字符串，不是第三种行为。
+ *
+ * ⚠️ codex 没有 claude 的 `--permission-mode`，两档都得自己拼 flag。
+ * ⚠️ 别只看 sandbox：本机 config.toml 写的是 `sandbox_mode = "danger-full-access"`，
+ *    也就是说这台机器的**默认档本来就没有沙箱**，完全批准档真正多出来的只是"不再弹批准"。
+ *
+ * 回归 `test/open-with-permission.test.mjs`（与 opencode 那份参数映射放一起验）。
+ */
+const CODEX_MODE_FLAGS = new Map([
+  ['sandboxed', ['-a', 'never', '-s', 'workspace-write']],
+  ['bypass', ['--dangerously-bypass-approvals-and-sandbox']],
+  ['bypassPermissions', ['--dangerously-bypass-approvals-and-sandbox']],
+]);
+
+export function buildCodexArgs(permissionMode) {
+  // Map.get 对非字符串返回 undefined → 未知 token 一律空数组，白名单式，不存在拼参数注入
+  return [...(CODEX_MODE_FLAGS.get(permissionMode) || [])];
+}
+
+async function launchCodex(dirPath, { permissionMode } = {}) {
+  // OpenAI Codex CLI - https://github.com/openai/codex
+  const cliArgs = buildCodexArgs(permissionMode);
   if (process.platform === 'win32') {
-    return spawnDetached('cmd.exe', ['/c', 'start', '""', 'codex'], {
+    return spawnDetached('cmd.exe', ['/c', 'start', '""', 'codex', ...cliArgs], {
       cwd: dirPath
     });
   }
-  return launchInTerminal(dirPath, 'codex');
+  return launchInTerminal(dirPath, 'codex', cliArgs);
 }
 
 /**
@@ -986,7 +1018,7 @@ export function registerFileOpenRoutes({
   // 用 Codex 打开目录
   app.post('/api/open-directory-with-codex', asyncRoute(async (req, res) => {
       try {
-        const { path: dirPath } = req.body || {};
+        const { path: dirPath, permissionMode } = req.body || {};
         if (!dirPath) {
           throw new HttpError(400, '目录路径不能为空');
         }
@@ -998,8 +1030,12 @@ export function registerFileOpenRoutes({
         }
 
         try {
-          await launchCodex(dirPath);
-          res.json({ success: true, message: '已用 Codex 打开目录' });
+          await launchCodex(dirPath, { permissionMode });
+          const codexArgs = buildCodexArgs(permissionMode);
+          const message = codexArgs.length
+            ? `已用 Codex 打开目录（${codexArgs.join(' ')}）`
+            : '已用 Codex 打开目录';
+          res.json({ success: true, message });
         } catch (error) {
           res.status(400).json({
             success: false,

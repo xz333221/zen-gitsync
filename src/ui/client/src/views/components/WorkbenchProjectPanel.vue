@@ -570,6 +570,35 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
                 <span class="proj-menu__icon"><svg-icon icon-class="opencode" /></span>
                 <span class="proj-menu__label">{{ $t('@67CE7:用 OpenCode 打开（完全批准）') }}</span>
               </li>
+
+              <!-- codex 天然有三档（默认档已在上面那条 v-for 里）：自动批准但仍有沙箱 →
+                   免批准 + 免沙箱。两档都单独成项，理由同 claude / opencode 那两项。 -->
+              <li
+                class="proj-menu__item"
+                :class="{ 'is-missing': toolMissing('codex') }"
+                role="menuitem"
+                tabindex="-1"
+                @click="openWithTool(p, 'codex', 'sandboxed')"
+                @keydown.enter.prevent="openWithTool(p, 'codex', 'sandboxed')"
+                @keydown.space.prevent="openWithTool(p, 'codex', 'sandboxed')"
+              >
+                <span class="proj-menu__icon"><svg-icon icon-class="codex" /></span>
+                <span class="proj-menu__label">{{ $t('@67CE7:用 Codex 打开（自动批准）') }}</span>
+                <span v-if="!toolMissing('codex')" class="proj-menu__hint">{{ $t('@67CE7:沙箱内') }}</span>
+                <span v-else class="proj-menu__hint">{{ $t('@67CE7:未安装') }}</span>
+              </li>
+              <li
+                class="proj-menu__item proj-menu__item--danger"
+                :class="{ 'is-missing': toolMissing('codex') }"
+                role="menuitem"
+                tabindex="-1"
+                @click="openWithTool(p, 'codex', 'bypass')"
+                @keydown.enter.prevent="openWithTool(p, 'codex', 'bypass')"
+                @keydown.space.prevent="openWithTool(p, 'codex', 'bypass')"
+              >
+                <span class="proj-menu__icon"><svg-icon icon-class="codex" /></span>
+                <span class="proj-menu__label">{{ $t('@67CE7:用 Codex 打开（完全批准）') }}</span>
+              </li>
             </ul>
           </el-popover>
         </div>
