@@ -239,27 +239,25 @@ function liveSummary(live: BoardTaskLive): string {
             @keydown.enter.prevent="emit('open-task', t)"
             @keydown.space.prevent="emit('open-task', t)"
           >
-            <div class="kb-card__row1">
-              <span v-if="t.runningJobs > 0" class="kb-card__running" aria-hidden="true" />
-              <span class="kb-card__time">{{ relativeTimeFromIso(cardTime(t)) }}</span>
-            </div>
-
-            <p class="kb-card__title" :title="cardTitle(t)">{{ cardTitle(t) || $t('@WORKBENCH:未命名任务') }}</p>
-
             <!--
-              所属项目色标（只在「全部项目」视图渲染）。
-              外面这层 <p> 是全宽块、胶囊在里层 span：hover 的渐隐遮罩按元素自身宽度算
-              （100% - 80px，见下面 .kb-card:hover 那段），挂在 fit-content 的胶囊上
-              会把整枚胶囊吃进淡出段（第一版就是这样，鼠标一进卡片色标就没了）。
+              首行 = 所属项目色标 + 标题 + 时间，三样同一行。
+              · 色标原先自己占一行（一枚 60px 的胶囊推着标题和活动区往下走），
+                现在跟标题并排：卡片窄，能省一行是一行。
+              · 进行中那枚黄点去掉了 —— "在跑"由列本身 + 卡片上的活动区表达，
+                再来一枚一闪一闪的圆点属于重复编码，而且它是这张卡上唯一的纯装饰动效。
+              · 标题不再单独占行，跟着一起上移。
               title 给完整路径：项目名可能重名（两个都叫 notebook），路径才是唯一答案。
             -->
-            <p
-              v-if="showProjectLabel && projectLabel(t)"
-              class="kb-card__project"
-              :style="projectTagStyle(t.projectPath)"
-            >
-              <span class="kb-card__project-chip" :title="t.projectPath">{{ projectLabel(t) }}</span>
-            </p>
+            <div class="kb-card__row1">
+              <span
+                v-if="showProjectLabel && projectLabel(t)"
+                class="kb-card__project-chip"
+                :style="projectTagStyle(t.projectPath)"
+                :title="t.projectPath"
+              >{{ projectLabel(t) }}</span>
+              <p class="kb-card__title" :title="cardTitle(t)">{{ cardTitle(t) || $t('@WORKBENCH:未命名任务') }}</p>
+              <span class="kb-card__time">{{ relativeTimeFromIso(cardTime(t)) }}</span>
+            </div>
 
             <!--
               正在跑的任务：把"现在在干嘛"直接写在卡片上。
@@ -401,7 +399,7 @@ function liveSummary(live: BoardTaskLive): string {
           >
             <td class="kb-table__td">
               <span class="kb-table__name">{{ cardTitle(t) || $t('@WORKBENCH:未命名任务') }}</span>
-              <!-- 项目色标：与看板卡片同一枚（见 .kb-card__project 的样式注释），
+              <!-- 项目色标：与看板卡片同一枚（见 .kb-card__project-chip 的样式注释），
                    列表视图是同一批任务的另一种画法，两处长得不一样会让人以为是两份数据 -->
               <span
                 v-if="showProjectLabel && projectLabel(t)"
@@ -462,7 +460,7 @@ function liveSummary(live: BoardTaskLive): string {
 .kb__toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
@@ -507,7 +505,7 @@ function liveSummary(live: BoardTaskLive): string {
   position: absolute;
   left: 7px;
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   pointer-events: none;
 }
 .kb__search-input {
@@ -527,7 +525,7 @@ function liveSummary(live: BoardTaskLive): string {
   box-shadow: var(--focus-ring-soft);
   width: 216px;
 }
-.kb__search-input::placeholder { color: var(--text-tertiary); }
+.kb__search-input::placeholder { color: var(--text-meta); }
 
 /* ── 看板列 ─────────────────────────────────────────── */
 .kb__columns {
@@ -548,8 +546,8 @@ function liveSummary(live: BoardTaskLive): string {
 .kb-col__head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 9px 10px 7px;
+  gap: 8px;
+  padding: 8px 12px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-color-light);
 }
@@ -576,14 +574,14 @@ function liveSummary(live: BoardTaskLive): string {
   min-width: 0;
 }
 .kb-col__count {
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  color: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
 .kb-col__list {
   list-style: none;
   margin: 0;
-  padding: 0 8px 10px;
+  padding: 0 12px 12px;
   overflow-y: auto;
   flex: 1 1 auto;
   min-height: 0;
@@ -592,8 +590,8 @@ function liveSummary(live: BoardTaskLive): string {
 /* ── 卡片：浮起表面 + 静息阴影，hover 抬升 ── */
 .kb-card {
   position: relative;
-  padding: 8px 10px;
-  margin-bottom: 6px;
+  padding: 12px;
+  margin-bottom: 8px;
   border: 1px solid var(--border-color-light);
   border-radius: var(--radius-lg);
   background: var(--surface-elevated);
@@ -619,41 +617,51 @@ function liveSummary(live: BoardTaskLive): string {
   background: color-mix(in srgb, var(--color-danger) 4%, var(--surface-elevated));
 }
 
+/* 首行：项目色标 + 标题 + 时间 —— 三者都是单行文本。
+   baseline 而不是 center：三者的盒子高度天生不同（胶囊 18px = 16px 行高 + 上下各 1px 边框、
+   标题 14px × 1.5 = 21px、时间是 11px 的默认行高），按 center 对的是**盒心**，
+   盒心对齐了、里面那行字却各偏几 px；按基线才是三行字站在同一条线上。 */
 .kb-card__row1 {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  align-items: baseline;
+  gap: 6px;
   min-width: 0;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-}
-.kb-card__running {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-warning);
-  box-shadow: var(--dot-glow-warning);
-  flex-shrink: 0;
-  animation: kb-pulse 1.4s ease-in-out infinite;
+  color: var(--text-meta);
 }
 .kb-card__time { margin-left: auto; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .kb-card__title {
   margin: 0;
-  font-size: var(--font-size-mid);
+  /* 与色标 / 时间同排（见 .kb-card__row1）：必须压掉 flex item 默认的 min-width: auto，
+     否则它"内容多宽就多宽"—— 色标缩不出省略号，时间也会被挤出卡片。
+
+     基准尺寸必须是 0 而不是 auto：basis: auto 时标题的基准 = 整段文字的 max-content
+     （一条任务标题动辄三四百 px），容器偏窄时负空间按「基准 × 收缩系数」分摊，
+     基准只有几十 px 的色标被连累缩成 "zen-g…"（实测最长那张只剩 "z…"）——
+     项目名是这枚胶囊存在的全部意义，缩掉它就白放在首行了。
+     basis: 0 让标题基准归零 → 负空间几乎全归标题承担，色标保住全宽，
+     标题在剩下的宽度里单行省略（见下面 white-space / text-overflow 那段）。 */
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: var(--font-size-base);
+  font-weight: 500;
   line-height: 1.5;
   color: var(--text-primary);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
+  /* 一行到底、超出打省略号（完整标题在原生提示里，见模板的 :title）。
+     原来折两行（-webkit-line-clamp: 2）：首行被色标 + 时间挤掉之后，第二行常年只有
+     小半行字，"折了却折不全"比直接省略更难扫读 —— 卡片的职责是"一眼认出是哪条"，
+     不是把标题读完；要读全文有右侧编辑器。 */
+  white-space: nowrap;
   overflow: hidden;
-  word-break: break-word;
+  text-overflow: ellipsis;
 }
 /* ── 所属项目色标（看板卡片 + 列表行共用一套，视图为「全部项目」时才渲染） ──
    原来只是一行灰字：扫一眼分不出哪几张卡是同一个项目的，而这正是它存在的理由。
-   现在是一枚胶囊 + 一个项目色圆点，色相由项目路径哈希给出（见 utils/projectTag.ts，
-   行内样式只塞一个 --tag-hue）。
+   现在是一枚胶囊，三层颜色全部由项目色相混出，色相由项目路径哈希给出
+   （见 utils/projectTag.ts，行内样式只塞一个 --tag-hue）。
+   胶囊左侧原来还点了一枚同色实心圆点，2026-09-29 去掉：色相已经由胶囊自己的
+   底色 / 描边 / 文字三层承载，再点一个圆点等于把同一个信号说两遍。
 
    三层颜色（底色 / 描边 / 文字）都由 color-mix 从同一个饱和色与**主题变量**混出来，
    而不是浅色一套、深色再覆写一套：--surface-elevated 就是卡片底色（深浅主题各有一个），
@@ -663,9 +671,9 @@ function liveSummary(live: BoardTaskLive): string {
    色相取值见 HUES 的注释：只占 140°–350° 半圈，避开卡片已经在用的报错红 / 运行橙。 */
 .kb-card__project-chip,
 .kb-table__project {
-  /* 色相从行内样式来（卡片那处挂在外面那层全宽块上，靠继承到达胶囊）。
-     兜底写在 var() 的第二参**而不是**这里再声明一次 --tag-hue：在胶囊自己身上声明
-     会盖掉从父级继承来的值（第一版就这么写的，结果 62 枚色标全是同一个兜底蓝）。 */
+  /* 色相从行内样式来（两处都直接挂在胶囊元素自己身上，见 projectTagStyle）。
+     兜底写在 var() 的第二参**而不是**这里再声明一次 --tag-hue：声明在这里会盖掉
+     内联样式塞进来的值（第一版就这么写的，结果 62 枚色标全是同一个兜底蓝）。 */
   --tag-ink: hsl(var(--tag-hue, 200) 62% 44%);
   display: inline-block;
   max-width: 100%;
@@ -681,32 +689,17 @@ function liveSummary(live: BoardTaskLive): string {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 圆点用 ::before 而不是真节点：胶囊上的 text-overflow 只对**文本**生效，
-   多一个盒子就得再多管一次它的收缩；伪元素不参与这个账 */
-.kb-card__project-chip::before,
-.kb-table__project::before {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-right: 5px;
-  border-radius: 50%;
-  background: var(--tag-ink);
-  vertical-align: 1px;   /* 11px 正文里的小圆点，压着基线会显低 */
-}
-/* 卡片里独占一行：外面是全宽块，只作为 hover 渐隐遮罩的载体（见 .kb-card:hover 那段）。
-   用 flex 而不是 block/inline-block：胶囊是 overflow:hidden 的 inline-block，
-   按 CSS 规定它的基线是**下边缘**而不是文字基线，于是块级父级的行盒会按
-   "胶囊整高(18) + strut 的下沉部"算成 22px —— 色标下面平白多 4px 空白（实测）。
-   flex 容器没有 strut 这套账，高度就是胶囊自己的 18px。 */
-.kb-card__project {
-  display: flex;
-  margin: 4px 0 0;
+/* 卡片里与色标同排（.kb-card__row1 是 flex 行）：项目名长的（flowdash-md-preview）要能
+   收缩出省略号而不是把时间挤出卡片。flex item 的 min-width 默认是 auto
+   （= 内容宽），不显式压到 0 就永远不缩 —— 胶囊自己的 max-width/ellipsis 全都不生效。
+   收缩只发生在胶囊身上：同行的 .kb-card__time 是 flex-shrink: 0。 */
+.kb-card__row1 .kb-card__project-chip {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 /* 列表行里要与任务名同行（.kb-table__name 是 inline）：
    抬 1px 是把胶囊的**文字基线**与同行任务名的基线对齐后做的光学微调——
-   胶囊上下各多 3px 边框/内边距，纯基线对齐时看着略低。
-   （卡片那处不加：胶囊独占一行，抬它只会让行盒高出 21px、底下平白多 3px 空白。） */
+   胶囊上下各多 3px 边框/内边距，纯基线对齐时看着略低。 */
 .kb-table__project {
   margin-left: 6px;
   vertical-align: 1px;
@@ -716,18 +709,18 @@ function liveSummary(live: BoardTaskLive): string {
    与任务标题之间用一条浅虚线隔开：上面是"这是什么任务"，下面是"它现在怎么样了"。
    视觉口径刻意与右栏进度报告面板的 .rpt__* 一致（同一批事实，两处看起来该是一回事） */
 .kb-card__live {
-  margin-top: 6px;
-  padding-top: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px dashed var(--border-color-light);
   min-width: 0;
 }
 .kb-card__live-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   margin: 0;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
 /**
@@ -752,7 +745,7 @@ function liveSummary(live: BoardTaskLive): string {
   align-items: center;
   flex: none;
   font-size: 12px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 /* 活动区那一行是 flex 行（gap: 6px），图标不用自己留间距；引文与列表行不是 flex，靠外边距推 */
@@ -779,10 +772,10 @@ function liveSummary(live: BoardTaskLive): string {
 /* 静默：卡片上最接近"可能卡住了"的信号，用告警色 */
 .kb-card__live-silent { color: var(--color-warning); }
 .kb-card__live-line {
-  margin: 3px 0 0;
+  margin: 4px 0 0;
   font-size: var(--font-size-xs);
   line-height: 1.5;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -805,7 +798,7 @@ function liveSummary(live: BoardTaskLive): string {
 }
 .kb-card__live-tag {
   margin-right: 4px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 /* ── 跑完之后留下的「最后说了什么」（只在没有 job 在跑时出现） ──
@@ -877,8 +870,6 @@ function liveSummary(live: BoardTaskLive): string {
  */
 .kb-card:hover .kb-card__title,
 .kb-card:focus-within .kb-card__title,
-.kb-card:hover .kb-card__project,
-.kb-card:focus-within .kb-card__project,
 /* 活动区同理：它渲染在哪一行取决于哪个字段有值（工具 / 思考 / 回复 / 只有时长），
    所以对**最后渲染出来的那个孩子**渐隐，而不是逐个类名去猜 */
 .kb-card:hover .kb-card__live > :last-child,
@@ -892,7 +883,7 @@ function liveSummary(live: BoardTaskLive): string {
 .kb-card__btn {
   border: none;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-xs);
   line-height: 18px;
   padding: 0 5px;
@@ -910,7 +901,7 @@ function liveSummary(live: BoardTaskLive): string {
   margin: 0 2px;
   text-align: center;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   list-style: none;
   border: 1px dashed var(--border-color-light);
   border-radius: var(--radius-lg);
@@ -934,7 +925,7 @@ function liveSummary(live: BoardTaskLive): string {
   padding: 5px 10px;
   font-size: var(--font-size-xs);
   line-height: 20px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   background: transparent;
   border: 1px dashed var(--border-color-medium);
   border-radius: var(--radius-lg);
@@ -972,7 +963,7 @@ function liveSummary(live: BoardTaskLive): string {
   padding: 7px 10px;
   font-size: var(--font-size-xs);
   font-weight: 500;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   background: var(--glass-bg);
   backdrop-filter: var(--glass-filter);
   -webkit-backdrop-filter: var(--glass-filter);
@@ -999,7 +990,7 @@ function liveSummary(live: BoardTaskLive): string {
   display: block;
   margin-top: 2px;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -1024,7 +1015,7 @@ function liveSummary(live: BoardTaskLive): string {
 .kb-table__empty {
   text-align: center;
   padding: 28px 10px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 /* ── 窄屏：三列竖排 ─────────────────────────────────── */

@@ -79,7 +79,7 @@ export function projectHue(seed: string): number {
  * 标签元素的行内样式：这里只给**色相**。
  *
  * 底色 / 描边 / 文字三层都留给 CSS 用 color-mix 按主题混（见 WorkbenchKanban.vue 的
- * .kb-card__project），这样深色主题不用再维护第二组颜色——多一组就要多一组"挑得对不对"。
+ * .kb-card__project-chip），这样深色主题不用再维护第二组颜色——多一组就要多一组"挑得对不对"。
  */
 export function projectTagStyle(seed: string): CSSProperties {
   return { '--tag-hue': String(projectHue(seed)) }

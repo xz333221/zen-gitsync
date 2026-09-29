@@ -41,6 +41,7 @@
     "verify:wb-overview": "node scripts/verify-workbench-overview.cjs",
     "verify:wb-progress-report": "node scripts/verify-wb-progress-report.cjs",
     "verify:wb-card-live": "node scripts/verify-wb-card-live.cjs",
+    "verify:wb-card-row1": "node scripts/verify-wb-card-row1.cjs",
     "verify:wb-card-reply": "node scripts/verify-wb-card-reply.cjs",
     "verify:wb-card-executor-icon": "node scripts/verify-wb-card-executor-icon.cjs",
     "verify:wb-task-sound": "node scripts/verify-wb-task-sound.cjs",
