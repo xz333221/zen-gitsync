@@ -5,7 +5,7 @@
  *   A 看板是**常驻底图** —— 它不再和编辑器二选一
  *   B 点看板卡片 -> **直接打开任务编辑器弹窗**，看板仍在（不再有中间的只读详情弹窗）
  *   C 关掉编辑器 -> 还在看板原处
- *   D 「新建开发任务」-> 新建弹窗，看板仍在
+ *   D 看板「待处理」列末尾的「新建任务」-> 新建弹窗，看板仍在
  *   E 创建成功 -> 成功提示 + 弹窗自动关 + 卡片直接落在看板上
  *   F 点卡片 -> 编辑器以**大弹窗**浮在看板上，看板仍在
  *   G 点「返回看板」-> 编辑器弹窗关闭，看板仍在
@@ -124,9 +124,10 @@ async function main() {
     check('C2 关闭后看板仍在', await boardVisible(page))
 
     // ── D 新建走弹窗 ─────────────────────────────────────────────────
-    await page.locator('.board__actions button', { hasText: '新建开发任务' }).first().click()
+    // 入口是看板「待处理」列末尾的幽灵项（顶栏那个「新建开发任务」按钮 2026-09-29 去掉了）
+    await page.locator('.kb-col__add-btn').first().click()
     const cdlg = await waitDialog(page, d => d.hasCreate)
-    check('D 「新建开发任务」打开新建弹窗', !!cdlg, cdlg ? `title="${cdlg.title}"` : '未出现新建弹窗')
+    check('D 「新建任务」打开新建弹窗', !!cdlg, cdlg ? `title="${cdlg.title}"` : '未出现新建弹窗')
     check('D2 新建弹窗打开时看板仍在', await boardVisible(page))
 
     // ── D3/D4 项目下拉口径 ───────────────────────────────────────────

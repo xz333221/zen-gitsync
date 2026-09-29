@@ -27,6 +27,10 @@
   （曾经这里先弹一个只读详情弹窗、再从里面点「打开编辑器」——那多出来的一跳，
    在编辑器还是独立页面时是为了保住看板位置；编辑器改成弹窗之后这个理由就不成立了，
    2026-09-20 去掉。执行 / 删除仍然留在卡片上，扫全局时就地处理的路子没变。）
+
+  工具条上只有一个搜索框：原来并排的「仅看报错」勾选框 2026-09-29 去掉——
+  "哪条任务报过错"卡片自己就有标记（.kb-card.has-error + 小红点），
+  真要筛也就少数几次，为此常驻一个勾选框占着工具条不划算。
 -->
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
@@ -65,7 +69,6 @@ watch(view, (v) => {
 })
 
 const search = ref('')
-const onlyErrors = ref(false)
 
 const COLUMNS: { key: TaskColumn; labelKey: string }[] = [
   { key: 'todo', labelKey: '@WORKBENCH:待处理' },
@@ -76,7 +79,6 @@ const COLUMNS: { key: TaskColumn; labelKey: string }[] = [
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
   return props.tasks.filter(t => {
-    if (onlyErrors.value && t.lastJobStatus !== 'error') return false
     if (!q) return true
     return (t.title || '').toLowerCase().includes(q) || (t.desc || '').toLowerCase().includes(q)
   })
@@ -176,10 +178,6 @@ function liveSummary(live: BoardTaskLive): string {
       </div>
 
       <div class="kb__filters">
-        <label class="kb__check" :title="$t('@WORKBENCH:只显示最近一次执行报错的任务')">
-          <input type="checkbox" v-model="onlyErrors" />
-          <span>{{ $t('@WORKBENCH:仅看报错') }}</span>
-        </label>
         <div class="kb__search">
           <el-icon class="kb__search-icon"><Search /></el-icon>
           <input
@@ -422,16 +420,6 @@ function liveSummary(live: BoardTaskLive): string {
   margin-left: auto;
   flex-wrap: wrap;
 }
-.kb__check {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  cursor: pointer;
-  user-select: none;
-}
-.kb__check input { cursor: pointer; }
 .kb__search { position: relative; display: inline-flex; align-items: center; }
 .kb__search-icon {
   position: absolute;

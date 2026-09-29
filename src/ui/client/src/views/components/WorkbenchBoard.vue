@@ -25,12 +25,17 @@
   看板需要的是"每几秒对齐一次全局快照"，5s 轮询 + 标签页隐藏时跳过就够，
   而且天然自愈（SSE 断了还要写重连逻辑，轮询下一次就自己好了）。
   Git 状态探测自带 15s TTL 缓存，轮询不会真的每 5s 起十几个 git 进程。
+
+  顶栏右侧原来并排着「刷新」和「新建开发任务」两个按钮，2026-09-29 都去掉：
+  · 刷新：5s 轮询 + 切回标签页立刻取一次，手动那一下几乎永远点不到"新"数据；
+  · 新建开发任务：看板「待处理」列末尾常驻一个「新建任务」，右栏调度台也能直接派发，
+    顶栏这个只是第三个入口，还把标题栏右侧占得满满的。
 -->
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, Fold, Expand } from '@element-plus/icons-vue'
+import { Fold, Expand } from '@element-plus/icons-vue'
 import type { Attachment, BoardTask, ProjectSummary, Task } from '@/types/workbench'
 import { canonicalProjectPath } from '@/utils/path'
 import { getSelectedTaskExecutor, type TaskExecutorId } from '@/utils/taskExecutor'
@@ -652,15 +657,6 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
           <strong class="board__stat-value">{{ headerStats.todayDone }}</strong>
         </span>
       </div>
-
-      <div class="board__actions">
-        <button type="button" class="board__icon-btn" :title="$t('@WORKBENCH:刷新')" :aria-label="$t('@WORKBENCH:刷新')" @click="refresh(false)">
-          <el-icon><Refresh /></el-icon>
-        </button>
-        <el-button type="primary" size="small" :icon="Plus" @click="onCreateClick">
-          {{ $t('@WORKBENCH:新建开发任务') }}
-        </el-button>
-      </div>
     </header>
 
     <div ref="colsRef" class="board__cols" :class="{ 'is-resizing': dragging !== null }">
@@ -885,13 +881,6 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
 }
 .board__stat-value.is-live { color: var(--color-warning); }
 
-.board__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  flex-shrink: 0;
-}
 /* 图标按钮只变颜色，不加底色/边框 */
 .board__icon-btn {
   border: none;
@@ -1123,6 +1112,5 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
     margin-left: 0;
     gap: 12px;
   }
-  .board__actions { margin-left: auto; }
 }
 </style>
