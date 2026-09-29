@@ -157,7 +157,11 @@
                   </el-select>
                   <span class="setting-hint-block">{{ $t('@42BB9:工作台执行任务时使用的本地 CLI；模型跟随各自 CLI 的自身配置') }}</span>
                   <!-- 当前模型：把"模型跟随各自 CLI 的自身配置"这句话落到实处 -->
-                  <span v-if="selectedExecutorModelText" class="setting-hint-block executor-model-line">
+                  <span
+                    v-if="selectedExecutorModelText"
+                    class="setting-hint-block executor-model-line"
+                    :title="$t('@42BB9:当前模型：{model}', { model: selectedExecutorModelLineTitle })"
+                  >
                     {{ $t('@42BB9:当前模型：{model}', { model: selectedExecutorModelText }) }}
                     <span v-if="selectedExecutorModelDetail" class="executor-model-line__detail">（{{ selectedExecutorModelDetail }}）</span>
                   </span>
@@ -804,6 +808,17 @@ const tempTaskExecutor = ref<TaskExecutorId>('claude')
 // 不传 --model，在这个弹窗外别处都看不到。
 const selectedExecutorModelText = computed(() => toolsStore.executorModelText(tempTaskExecutor.value))
 const selectedExecutorModelDetail = computed(() => toolsStore.executorModelDetail(tempTaskExecutor.value))
+/**
+ * 那行 hint 的完整文案（模型 + 括号里的别名/服务商）。
+ * 给 `:title` 用：正文允许换行、通常能全显，但窗口极窄时仍会被挤到超出容器，
+ * 悬停能看到完整值 —— 这是兜底，不是主要手段。
+ */
+const selectedExecutorModelLineTitle = computed(() =>
+  [
+    selectedExecutorModelText.value,
+    selectedExecutorModelDetail.value ? `（${selectedExecutorModelDetail.value}）` : '',
+  ].filter(Boolean).join(' ')
+)
 
 /** 下拉选项右侧的模型名 + 次要信息，拼成该选项的 title */
 function optionExecutorModelTitle(id: TaskExecutorId): string {
@@ -1785,6 +1800,15 @@ async function openSystemConfigFile() {
   text-overflow: clip;
   line-height: 1.5;
 }
+/* 「当前模型：xxx」这行第三个：它和上面两条不同 —— 上面是"说明"，这条是**事实值**。
+   单行截断会把模型名腰斩在 `opencode-go/space-bunn…`（实测），而那正是这行唯一的信息量，
+   截了等于没写。选项里的模型名（.executor-option__model）已经这么修过一次了。 */
+.project-toggle .setting-hint-block.executor-model-line {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.5;
+}
 .notify-hint--warn {
   color: var(--el-color-warning);
 }
@@ -2314,13 +2338,18 @@ html.dark .label-icon {
   color: var(--text-meta);
 }
 
-/* 「当前模型：xxx（别名 · 服务商）」—— 事实值，比上一条说明文字实一档 */
+/* 「当前模型：xxx（别名 · 服务商）」—— 事实值，比上一条说明文字实一档。
+   ⚠️ 它在 `.project-toggle` 里，会被那条「单行 + 省略号」的 hint 规则吃掉模型名；
+   允许换行的覆盖写在 `.notify-hint` 旁边（三条"别截断"的 hint 放一起），别在这重复。 */
 .executor-model-line {
   font-weight: 500;
 }
 .executor-model-line__detail {
   font-weight: 400;
   color: var(--el-text-color-secondary);
+  /* 括号里那段（别名 · 服务商 / CLI 内最近使用）整体换行，别断在括号中间 ——
+     窄列下 "（CLI 内最 / 近使用）" 这种断法比截断好不了多少 */
+  white-space: nowrap;
 }
 
 /* ---------------- Markdown 预览主题（全局唯一） ---------------- */

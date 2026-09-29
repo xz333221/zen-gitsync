@@ -19,7 +19,8 @@
  *     请求还没回来就替用户下结论（"你没配"）是在撒谎，而用户会信
  *   G 切换执行器时那行跟着换。三条分支各一遍：两处来源都没有的 → 「未在配置中指定」
  *     （不编一个名字）；**来源是 CLI 自身 state 的**（opencode 的 TUI 选择不写回配置）
- *     → 真实模型名 + 标出来源，否则用户看到模型名会先问"我配置里没写啊"
+ *     → 真实模型名 + 标出来源，否则用户看到模型名会先问"我配置里没写啊"；
+ *     以及那行**必须真的看得见**（G6 量几何：模型名被省略号腰斩等于没写）
  *   H 页面无 console / page 错误
  *
  * 两段式：前半段 route 拦截注入**构造数据**（覆盖 有别名 / 只有模型名 / 没配 三态），
@@ -32,7 +33,8 @@
  * ⚠️ 后端必须是**加载了新路由**的进程：A 组会如实报 404。改完服务端记得重启
  *    （本仓库的 nodemon 偶发 watch 失灵，touch 文件不一定能拉起子进程）。
  * 用法：node scripts/verify-wb-executor-models.cjs
- * 退出码：0 全通过，1 有失败项，2 前置不足。
+ *       node scripts/verify-wb-executor-models.cjs --reverse   （G6 的反证：必须翻红）
+ * 退出码：0 全通过（reverse 模式下 = G6 确实翻红且其余全绿），1 有失败项，2 前置不足。
  */
 const fs = require('node:fs')
 const path = require('node:path')
@@ -44,6 +46,13 @@ const { chromium } = require('playwright')
 const BASE = process.env.ZEN_BASE || 'http://localhost:5544'
 const API = process.env.ZEN_API || 'http://127.0.0.1:5545'
 const CHROME = process.env.ZEN_CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe'
+/**
+ * --reverse：反证模式。把「当前模型」那行**修复前**的样式（单行 + 省略号）打回去，
+ * G6 必须随之翻红。若打了回去 G6 还是绿的，说明这条断言恒真（量错了元素或量错了
+ * 属性），等于没验 —— 那种情况脚本自己判失败。
+ * 用法：node scripts/verify-wb-executor-models.cjs --reverse
+ */
+const REVERSE = process.argv.includes('--reverse')
 
 /**
  * 注入的模型 fixture。四种形态各来一条，一个用例覆盖全部分支：
@@ -141,12 +150,22 @@ async function pickExecutor(page, text) {
  */
 const readSettingsExecutor = (page) => page.evaluate(() => {
   const line = document.querySelector('.executor-model-line')
+  const cs = line ? getComputedStyle(line) : null
   return {
     found: !!line,
     text: line ? line.textContent.replace(/\s+/g, ' ').trim() : '',
     detail: line && line.querySelector('.executor-model-line__detail')
       ? line.querySelector('.executor-model-line__detail').textContent.replace(/\s+/g, ' ').trim()
       : null,
+    // 截断判据（G6 用）：这行是**事实值**，模型名被腰斩等于没写。
+    // 允许换行（white-space:normal）时内容自己折行，scrollWidth === clientWidth；
+    // 一旦被降级回「单行 + 省略号」，scrollWidth 会超出 clientWidth → 反证脚本据此翻红。
+    // ⚠️ 光看 textContent 是抓不到的（省略号是 CSS 画的，DOM 里文字还是全的）——
+    // 必须量几何，这也是"看起来对"和"真的看得见"的区别。
+    scroll: line ? line.scrollWidth : 0,
+    client: line ? line.clientWidth : 0,
+    whiteSpace: cs ? cs.whiteSpace : '',
+    title: line ? line.getAttribute('title') : null,
   }
 })
 
@@ -225,6 +244,32 @@ async function main() {
   const page = await (await browser.newContext({ viewport: { width: 2000, height: 1274 } })).newPage()
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()) })
   page.on('pageerror', (e) => pageErrors.push(String(e)))
+
+  // ── G6 的测量条件 + 反证注入 ─────────────────────────────────────────
+  // 两件事必须做，否则 G6 会变成恒真的假绿：
+  //  ① 把那一列压窄到 320px。探针视口 2000px 时这一列有 800px 宽，最长的模型名
+  //     （opencode，34 字符）也塞得下、压根不会溢出 —— 任何实现都是绿的。
+  //     320px 是实测窄窗口下这一列的真实宽度。这是**测量条件**，正反两个模式都注入，
+  //     所以它不能用来解释反证的红。
+  //  ② reverse 才注入修复前的样式（单行 + 省略号）。
+  // ⚠️ 都得 !important：组件样式是 scoped 的（编译后带 [data-v-xxx]，0,4,0），
+  //    裸类名（0,1,0）压不过它里的 `max-width: 100%` —— 那样"压窄了/打回去了"
+  //    只是假象，G6 照样绿，反证就成了自欺。
+  // 用 addInitScript 而不是 addStyleTag：后者只在当前文档有效，reload 就没了。
+  await page.addInitScript((reverse) => {
+    const put = () => {
+      const narrow = document.createElement('style')
+      narrow.textContent = '.executor-model-line{max-width:320px !important}'
+      document.head.appendChild(narrow)
+      if (!reverse) return
+      const old = document.createElement('style')
+      old.textContent = '.project-toggle .setting-hint-block.executor-model-line{'
+        + 'white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important}'
+      document.head.appendChild(old)
+    }
+    if (document.head) put()
+    else document.addEventListener('DOMContentLoaded', put)
+  }, REVERSE)
 
   let shot = null
   try {
@@ -350,6 +395,27 @@ async function main() {
     check('G5 括号里标出来源（CLI 内最近使用），不让用户以为是自己配的',
       !!line.detail && line.detail.includes(STATE_SOURCE_TEXT), String(line.detail))
 
+    // G6/G7：那行必须**真的看得见**。opencode 是三家名字最长的（34 字符），
+    // 它没被截断就代表另外两家也不会。这行被 `.project-toggle` 里那条
+    // 「单行 + 省略号」的 hint 规则截过（实测显示成 `opencode-go/space-bunn…`）——
+    // 而模型名正是这行唯一的信息量，截了等于没写。
+    // ⚠️ 光比 textContent 抓不到：省略号是 CSS 画的，DOM 里的文字还是全的。
+    //    所以 G6 量几何（scrollWidth vs clientWidth），并且按 addInitScript 里
+    //    写的窄列条件（320px）来量 —— 不然这条断言恒真。
+    check('G6 「当前模型」那行允许换行、模型名完整显示（没被省略号腰斩）',
+      line.found && line.whiteSpace === 'normal' && line.scroll <= line.client + 1
+        && line.client > 0,
+      JSON.stringify({ text: line.text, whiteSpace: line.whiteSpace, scroll: line.scroll, client: line.client }))
+    // 窗口再窄也可能超宽，title 是兜底（不是主要手段 —— 主要手段是上面那条换行）
+    check('G7 那行有 title 兜底，悬停能看到完整值',
+      !!line.title && line.title.includes(FIXTURE.opencode.name), String(line.title))
+    // 存证：最长的那家在这个窄列下换行后长什么样。断言只能证明"没溢出"，
+    // 看不出换行断在哪 —— 而这行好不好看全在断点上（模型名不能被拆成两行）。
+    const lineShot = path.resolve(__dirname,
+      `../tmp-verify-wb-executor-models-settings-opencode${REVERSE ? '-reverse' : ''}.png`)
+    await page.locator('.el-dialog').first().screenshot({ path: lineShot })
+    log('截图:', lineShot)
+
     // 切回 claude，后面 E 组要拿它跟另外两处比对
     await pickExecutor(page, 'Claude Code')
     line = await readSettingsExecutor(page)
@@ -357,7 +423,7 @@ async function main() {
       line.found && line.text.includes(FIXTURE.claude.name), JSON.stringify(line))
     const settingsText = line.text
     // 存证：设置弹窗里那一行实际长什么样（这条比任何断言都直观）
-    shot = path.resolve(__dirname, '../tmp-verify-wb-executor-models-settings.png')
+    shot = path.resolve(__dirname, `../tmp-verify-wb-executor-models-settings${REVERSE ? '-reverse' : ''}.png`)
     await page.locator('.el-dialog').first().screenshot({ path: shot })
     log('截图:', shot)
     // 关闭设置弹窗（后面要点工作台里的控件）。
@@ -469,6 +535,20 @@ async function main() {
   }
 
   const failed = results.filter(r => !r.ok)
+
+  // --reverse：只要求 G6 翻红。反向跑时别的断言仍须全绿 —— 那条 injected 样式
+  // 只该影响这一行，若把 C7/B/E 之类也带红了，说明它误伤了别处，同样算失败。
+  // 文件名也按模式分开，否则后跑的会覆盖先跑的，把"改前"的图当成"改后"看。
+  if (REVERSE) {
+    const g6 = results.find(r => r.name.startsWith('G6'))
+    const others = results.filter(r => !r.name.startsWith('G6'))
+    const othersFailed = others.filter(r => !r.ok)
+    console.log(`\n[verify] reverse 反证：G6 = ${g6 && g6.ok ? '绿（异常！断言恒真，等于没验）' : '红（符合预期）'}`)
+    console.log(`[verify] reverse 反证：其余 ${others.length - othersFailed.length}/${others.length} 通过`)
+    for (const f of othersFailed) console.log(`  FAIL  ${f.name}  :: ${f.extra}`)
+    process.exit(g6 && !g6.ok && othersFailed.length === 0 ? 0 : 1)
+  }
+
   console.log(`\n[verify] ${results.length - failed.length}/${results.length} 通过`)
   for (const f of failed) console.log(`  FAIL  ${f.name}  :: ${f.extra}`)
   process.exit(failed.length ? 1 : 0)
