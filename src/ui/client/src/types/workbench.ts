@@ -223,6 +223,12 @@ export interface BoardTask {
    * 与 live 互斥：有 job 在跑时恒为 null；从没跑过 / 那次没写正文时是空串。
    */
   lastReply?: string | null
+  /**
+   * 最近一条 job 用的执行器（`claude` | `opencode` | `codex`），卡片上的品牌图标按它取。
+   * 从没跑过 / 执行器认不出（老记录没写 agent 字段）时是空串 —— 空串不渲染图标，
+   * 而不是回落成某个默认品牌（猜错执行器比不显示更糟）。
+   */
+  lastJobAgent: string
   lastJobStatus: string | null
   /** 最近一条 job 的结束时间（= 这张卡片跑完的时刻），从没执行过时为 null */
   lastJobEndedAt: string | null

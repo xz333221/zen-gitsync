@@ -31,6 +31,7 @@ import {
   describeLastTool,
   describeToolMix,
   silentMsOf,
+  jobAgent,
   buildLiveActivity,
   pickLiveActivity,
   TOOL_MIX_WINDOW,
@@ -169,6 +170,30 @@ test('silentMsOf 到阈值才算静默，不到 / 没这个字段一律 null', (
   assert.equal(silentMsOf({}, base), null);
   assert.equal(silentMsOf({ lastActivityAt: '不是时间' }, base), null);
   assert.equal(silentMsOf(null, base), null);
+});
+
+// ── jobAgent（看板卡片上那个执行器图标该画谁） ────────────────────────────
+// 认不出时必须回空串，不能回落成某个品牌：卡片上画一个错的执行器标，
+// 用户会以为这条是 Claude 跑的，而它可能是 Codex —— 这比不画图标糟得多。
+
+test('jobAgent：认识的执行器原样返回', () => {
+  assert.equal(jobAgent({ agent: 'claude' }), 'claude');
+  assert.equal(jobAgent({ agent: 'opencode' }), 'opencode');
+  assert.equal(jobAgent({ agent: 'codex' }), 'codex');
+});
+
+test('jobAgent：大小写与首尾空白归一后再认（jobs.json 会被手工编辑）', () => {
+  assert.equal(jobAgent({ agent: ' Codex ' }), 'codex');
+  assert.equal(jobAgent({ agent: 'CLAUDE' }), 'claude');
+});
+
+test('jobAgent：认不出的一律空串，不猜', () => {
+  assert.equal(jobAgent({ agent: 'gemini' }), '');
+  assert.equal(jobAgent({ agent: '' }), '');
+  assert.equal(jobAgent({}), '');          // 老记录没有 agent 字段
+  assert.equal(jobAgent({ agent: 123 }), '');
+  assert.equal(jobAgent(null), '');
+  assert.equal(jobAgent(undefined), '');
 });
 
 // ── buildLiveActivity ───────────────────────────────────────────────────

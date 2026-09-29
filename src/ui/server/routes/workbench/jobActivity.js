@@ -184,6 +184,25 @@ export function isLiveJob(job) {
 }
 
 /**
+ * 本轮跑的是哪个执行器（`claude` | `opencode` | `codex`）。
+ *
+ * 只在**认出是已知执行器**时才回值：job.agent 来自 jobs.json（会被手工编辑、也读过
+ * 别实例写的旧记录），回一个前端不认识的字符串只会让卡片上的图标位空着或显示错品牌。
+ * 认不出 → 空串，调用方据此不渲染图标，而不是回落成"猜一个 claude"——
+ * 猜错的执行器比不显示更糟。
+ *
+ * 这里**刻意不 import taskRunner 的 TASK_EXECUTORS**：taskRunner 拉起进程、依赖一堆
+ * 运行时模块，而本模块被 projectRegistry（5s 轮询的看板）直接引用，没必要为了三个
+ * 字符串把整条执行链拖进来。新增执行器时这里和 taskRunner 一起改。
+ */
+const KNOWN_EXECUTORS = ['claude', 'opencode', 'codex'];
+
+export function jobAgent(job) {
+  const v = job && typeof job.agent === 'string' ? job.agent.trim().toLowerCase() : '';
+  return KNOWN_EXECUTORS.includes(v) ? v : '';
+}
+
+/**
  * 单条 job → 卡片 / 报告可用的活动摘要。非 running/pending 返回 null（调用方据此不显示）。
  *
  * 时间戳用**毫秒时长**（elapsedMs / silentMs）而不是 ISO：
@@ -199,7 +218,7 @@ export function buildLiveActivity(job, now = Date.now()) {
     jobId: job.id || '',
     status: job.status,
     /** 本轮执行器（claude | opencode | codex）。老记录没有这个字段 → 空串 */
-    agent: typeof job.agent === 'string' ? job.agent : '',
+    agent: jobAgent(job),
     startedAt: job.startedAt || null,
     elapsedMs: Number.isFinite(started) ? Math.max(0, now - started) : 0,
     /** 见 taskRunner 的 MAX_TOOL_CALLS：超上限的调用不再入数组，所以这是"至少这么多次" */
@@ -249,6 +268,7 @@ export const __testables = {
   describeLastTool,
   describeToolMix,
   silentMsOf,
+  jobAgent,
   buildLiveActivity,
   pickLiveActivity,
 };

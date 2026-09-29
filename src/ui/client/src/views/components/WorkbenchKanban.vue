@@ -36,7 +36,9 @@
 import { computed, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { Search } from '@element-plus/icons-vue'
+import TaskExecutorIcon from '@/components/TaskExecutorIcon.vue'
 import type { BoardTask, BoardTaskLive, TaskColumn } from '@/types/workbench'
+import { taskExecutorName, type TaskExecutorId } from '@/utils/taskExecutor'
 import { formatDurationMs, relativeTimeFromIso } from '@/utils/relativeTime'
 
 const props = defineProps<{
@@ -144,9 +146,27 @@ function hasError(t: BoardTask): boolean {
 }
 
 /**
+ * 卡片上那个品牌图标该画谁：**在跑时以 live.agent 为准**，没在跑才看最近一条 job 的 agent。
+ *
+ * 两个字段本来就有分工（live 跑完即消失、lastJobAgent 是历史事实），正常情况下同源；
+ * 但"同一个任务连点两次执行、换了执行器"这类场景下，跑着的那条和最新落盘的那条可能不是同一条
+ * （pickLiveActivity 挑的是"最近有动静的"，latestJob 挑的是"启动最晚的"）。
+ * 正在跑的那条才是用户此刻要看的，所以 live 优先。
+ *
+ * 空串 = 认不出（老记录没写 agent 字段）→ 不渲染图标，而不是回落成某个品牌：
+ * 猜错的执行器比不显示更糟（与后端 jobAgent 同一口径）。
+ */
+function cardAgent(t: BoardTask): string {
+  return t.live?.agent || t.lastJobAgent || ''
+}
+
+/**
  * 列表视图那一行状态摘要（看板视图是分行显示，这里只放得下一行）。
  * 优先级与卡片相反：列表行窄，先给**最新的回复**——"它刚说了什么"最能回答
  * "跑到哪了"；没写过正文的任务才退到思考，再退到最近一次工具调用。
+ *
+ * 执行器图标不进这个字符串：它要渲染成图标而不是字符（拼进来只会得到一串会被
+ * text-overflow 截断的文本），由模板摆在整行最前，这里只管文本口径。
  */
 function liveSummary(live: BoardTaskLive): string {
   const elapsed = $t('@WORKBENCH:已运行 {elapsed}', { elapsed: formatDurationMs(live.elapsedMs) })
@@ -206,6 +226,7 @@ function liveSummary(live: BoardTaskLive): string {
             :key="t.id"
             class="kb-card"
             :class="{ 'is-running': t.runningJobs > 0, 'has-error': hasError(t) }"
+            :data-task-id="t.id"
             role="button"
             tabindex="0"
             @click="emit('open-task', t)"
@@ -232,7 +253,16 @@ function liveSummary(live: BoardTaskLive): string {
             -->
             <div v-if="t.live" class="kb-card__live">
               <p class="kb-card__live-meta">
-                <span v-if="t.live.agent" class="kb-card__live-agent">{{ t.live.agent }}</span>
+                <!-- 执行器只留图标 + 悬停提示：卡片这一行本来就窄（已运行 x 分 y 秒 · 工具 n 次），
+                     再钉一个 "Claude Code" 文本会把工具次数挤到第二行去。
+                     v-if 挡住的是"认不出"（老记录没写 agent 字段）——那时宁可不画 -->
+                <span
+                  v-if="cardAgent(t)"
+                  class="kb-card__live-agent"
+                  :title="taskExecutorName(cardAgent(t))"
+                >
+                  <TaskExecutorIcon :executor="cardAgent(t) as TaskExecutorId" class="kb-card__live-agent-icon" />
+                </span>
                 <span>{{ $t('@WORKBENCH:已运行 {elapsed}', { elapsed: formatDurationMs(t.live.elapsedMs) }) }}</span>
                 <!-- 次数看总数，鼠标停上去看分布：119 次里 118 次都是 Bash，
                      和"改了三处代码"是完全不同的两件事 -->
@@ -263,9 +293,18 @@ function liveSummary(live: BoardTaskLive): string {
               收尾丢掉（服务端 decorateTaskForBoard 的 lastReply，与这里二选一）。
               样式沿用 live 里「思考」那行的竖线 —— 同一个含义（这是它说的原话）；
               不加标签：卡片窄，一行放不下 4 个字的标签还挤掉正文。
+
+              执行器图标（有才渲染）摆在引文开头：这句收尾的话是**它**说的，
+              图标就贴着它，比跑到卡片别处去找更直接。
             -->
             <p v-else-if="t.lastReply" class="kb-card__reply" :title="t.lastReply">
-              {{ t.lastReply }}
+              <span
+                v-if="cardAgent(t)"
+                class="kb-card__quote-agent"
+                :title="taskExecutorName(cardAgent(t))"
+              >
+                <TaskExecutorIcon :executor="cardAgent(t) as TaskExecutorId" class="kb-card__quote-agent-icon" />
+              </span><span class="kb-card__reply-text">{{ t.lastReply }}</span>
             </p>
 
             <div class="kb-card__actions">
@@ -338,8 +377,14 @@ function liveSummary(live: BoardTaskLive): string {
               <span class="kb-table__name">{{ cardTitle(t) || $t('@WORKBENCH:未命名任务') }}</span>
               <span v-if="showProjectLabel && projectLabel(t)" class="kb-table__project">{{ projectLabel(t) }}</span>
               <!-- 状态列的"进行中"太粗，跑起来之后一眼看不出进度：这里补一行
-                   最新回复 / 思考 / 工具（与卡片上的 live 同一份数据） -->
+                   最新回复 / 思考 / 工具（与卡片上的 live 同一份数据）。
+                   执行器图标摆最前（与看板卡片同一个位置：整块执行事实的开头） -->
               <span v-if="t.live" class="kb-table__live">
+                <template v-if="cardAgent(t)">
+                  <span class="kb-table__agent" :title="taskExecutorName(cardAgent(t))">
+                    <TaskExecutorIcon :executor="cardAgent(t) as TaskExecutorId" class="kb-table__agent-icon" />
+                  </span>
+                </template>
                 {{ liveSummary(t.live) }}
                 <span v-if="typeof t.live.silentMs === 'number'" class="kb-table__live-silent">
                   {{ $t('@WORKBENCH:静默 {elapsed}', { elapsed: formatDurationMs(t.live.silentMs) }) }}
@@ -348,7 +393,11 @@ function liveSummary(live: BoardTaskLive): string {
               <!-- 跑完的任务同理给一行"最后说了什么"：列表视图与看板卡片是同一批任务的
                    两种画法，一边有、一边没有会让人以为是两份数据 -->
               <span v-else-if="t.lastReply" class="kb-table__live kb-table__live--reply">
-                {{ t.lastReply }}
+                <template v-if="cardAgent(t)">
+                  <span class="kb-table__agent" :title="taskExecutorName(cardAgent(t))">
+                    <TaskExecutorIcon :executor="cardAgent(t) as TaskExecutorId" class="kb-table__agent-icon" />
+                  </span>
+                </template>{{ t.lastReply }}
               </span>
             </td>
             <td class="kb-table__td">
@@ -595,7 +644,54 @@ function liveSummary(live: BoardTaskLive): string {
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
-.kb-card__live-agent { color: var(--text-secondary); }
+/**
+ * 执行器品牌图标（卡片活动区 / 卡片引文 / 列表行三处共用同一个口径）。
+ *
+ * 12px 是量出来的：三处正文都是 var(--font-size-xs) = 11px，三种品牌标在这几处
+ * 全是实心小色块，跟着 11px 走时细节糊成一团；抬到 12px 既能认出是哪家的标，
+ * 又不比旁边的时间 / 工具次数抢眼。字号写在这一层（而不是给 img 写 px）是因为
+ * TaskExecutorIcon 自带 `width: 1em`，父级字号定了它就跟着走。
+ *
+ * 那圈描边是给**彩色标压在深浅底上**用的：实心色块在浅色主题的白底上边界会糊掉，
+ * 极淡的描边把轮廓提出来；currentColor 自动跟随主题，不用再开一套暗色覆盖。
+ *
+ * 两处各用各的类名（不共用一个 .kb-card__agent）：一个在活动区那一行里、一个在引文里，
+ * 验证脚本按类名找元素时不会把两处搞混。
+ */
+.kb-card__live-agent,
+.kb-card__quote-agent,
+.kb-table__agent {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.kb-card__live-agent-icon,
+.kb-card__quote-agent-icon,
+.kb-table__agent-icon { border: 1px solid currentColor; border-radius: 3px; }
+
+/* 活动区那一行是 flex 行（gap: 6px），图标不用自己留间距；引文与列表行不是 flex，靠外边距推 */
+.kb-card__live-agent,
+.kb-table__agent { margin-right: 4px; }
+
+/**
+ * 引文里的图标与正文。
+ *
+ * 竖线（border-left）标的是"这是它说的原话"，图标是说话的人 —— 两者一起摆在引文开头：
+ * 右边是那根竖线，图标紧贴它内侧，正文跟在图标后面。
+ *
+ * 布局是「图标 + 正文」的 flex 行（规则在下面 .kb-card__reply 处），不用负外边距把图标
+ * 拽到竖线外面：那是个和 padding 数字的巧合游戏 —— 吃掉 padding-left(6px) 之后图标
+ * 正好压在竖线上，要真挪出去得吃 14px 以上，而卡片本身只有 10px 内边距，再往外就捅到
+ * 卡片边框；而且负外边距让图标落在内容盒之外，验证脚本量到的位置和肉眼看到的对不上
+ * （本仓库第一次实现就在这儿栽了，见 .claude/rules/hmr-debug-check.md 的"看错元素"）。
+ * flex 没有这些隐性约定：位置由布局算出来，量到的就是看到的。
+ */
+/* 正文那一块：占满剩余宽度。包一层是因为引文同时是"图标 + 正文"的 flex 行，
+   line-clamp 要的 display:-webkit-box 和 flex 互斥，得落在正文这层上 */
+.kb-card__reply-text { flex: 1 1 auto; min-width: 0; margin-left: 4px; }
+
 /* 静默：卡片上最接近"可能卡住了"的信号，用告警色 */
 .kb-card__live-silent { color: var(--color-warning); }
 .kb-card__live-line {
@@ -636,19 +732,28 @@ function liveSummary(live: BoardTaskLive): string {
    宽一点的窗口整段看得见，窄窗口会从尾巴切掉几个字 —— 切到的是收尾那句话的末几个字，
    不是它整句话；完整摘录在悬停提示里。竖线不算在 clamp 内，但它只有 2px。 */
 .kb-card__reply {
+  /* 「执行器图标 + 正文」的 flex 行：图标是第一个 flex item、正文占满剩余宽度 */
+  display: flex;
+  align-items: flex-start;
   margin: 6px 0 0;
-  padding: 6px 0 0 6px;
+  /* 左侧缩进只留那根 2px 竖线，**不留 padding-left**：引文是 flex 行，
+     padding-left 会把图标一起往右推（实测正好推到正文上）。竖线本身已经是引文的视觉缩进。 */
+  padding: 6px 0 0;
   border-top: 1px dashed var(--border-color-light);
   border-left: 2px solid var(--border-color-light);
   font-size: var(--font-size-xs);
   line-height: 1.5;
   color: var(--text-secondary);
+  word-break: break-word;
+}
+/* 截 3 行的活儿落在这块正文上，不在引文容器上 —— 引文是 flex 行，
+   line-clamp 要的 display:-webkit-box 和 flex 互斥（谁写在后面谁赢，很容易看着像没生效） */
+.kb-card__reply-text {
   display: -webkit-box;
   -webkit-line-clamp: 3;
   line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  word-break: break-word;
 }
 
 /* hover 才出现的操作组：绝对定位不占位，空闲时连点击也一起让开
@@ -820,9 +925,10 @@ function liveSummary(live: BoardTaskLive): string {
   text-overflow: ellipsis;
 }
 .kb-table__live-silent { margin-left: 6px; color: var(--color-warning); }
-/* 「最后回复」在列表行里用同一根引用竖线（与看板卡片的 .kb-card__reply 同一个含义） */
+/* 「最后回复」在列表行里用同一根引用竖线（与看板卡片的 .kb-card__reply 同一个含义）。
+   不写 padding-left：图标与正文之间已经由 .kb-table__agent 的右外边距管着，
+   再叠一层内边距会把图标推到正文上去（与卡片那边同一条坑）。 */
 .kb-table__live--reply {
-  padding-left: 6px;
   border-left: 2px solid var(--border-color-light);
   color: var(--text-secondary);
 }

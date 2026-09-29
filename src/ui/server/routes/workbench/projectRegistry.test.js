@@ -209,6 +209,32 @@ test('decorateTaskForBoard: 只回卡片需要的字段', () => {
   // 没跑过就没有完成时间——看板「已完成」列的排序靠它，空值必须显式是 null
   // 而不是 undefined（前端 doneAt 的回退链要能一路退到 updatedAt）
   assert.equal(card.lastJobEndedAt, null);
+  // 执行器同理：从没跑过时是空串（前端据此不画品牌图标），不是 undefined
+  assert.equal(card.lastJobAgent, '');
+});
+
+// ── 卡片上的执行器图标 ──────────────────────────────────────────────
+// live.agent 只在**跑的时候**有值，跑完就断；而"这条是 Claude 还是 Codex 跑的"
+// 在跑完之后同样要能回答（卡片上那句收尾的话是谁说的）。
+
+test('decorateTaskForBoard: lastJobAgent 取最近一条 job 的执行器', () => {
+  const base = { id: 't1', title: '', desc: '', createdAt: '2025-12-31T00:00:00Z' };
+  const jobs = [
+    { ...job('j1', 't1', 'done', '2026-01-01T00:00:00Z', '2026-01-01T00:10:00Z'), agent: 'claude' },
+    { ...job('j2', 't1', 'done', '2026-01-03T00:00:00Z', '2026-01-03T00:20:00Z'), agent: 'codex' },
+  ];
+  // 最新的那条（j2）说了算，不是先跑的 j1
+  assert.equal(decorateTaskForBoard(base, jobs).lastJobAgent, 'codex');
+});
+
+test('decorateTaskForBoard: 执行器认不出时 lastJobAgent 是空串（前端不画图标）', () => {
+  const base = { id: 't1', title: '', desc: '', createdAt: '2025-12-31T00:00:00Z' };
+  // 老记录可能整条都没有 agent 字段
+  const legacy = [job('j1', 't1', 'done', '2026-01-01T00:00:00Z', '2026-01-01T00:10:00Z')];
+  assert.equal(decorateTaskForBoard(base, legacy).lastJobAgent, '');
+  // jobs.json 会被手工编辑，写了个不认识的执行器也不能透出去换成一个错的品牌标
+  const bogus = [{ ...job('j1', 't1', 'done', '2026-01-01T00:00:00Z'), agent: 'gemini' }];
+  assert.equal(decorateTaskForBoard(base, bogus).lastJobAgent, '');
 });
 
 test('decorateTaskForBoard: lastJobEndedAt 取最近一条 job 的结束时间（已完成列排序用）', () => {

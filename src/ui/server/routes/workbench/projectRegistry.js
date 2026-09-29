@@ -34,7 +34,7 @@
 //   - Git 状态复用 utils/directoryGitState.js 的批量探测（带并发上限 + TTL 缓存 + 超时）。
 
 import { probeDirectoryGitStates } from '../../utils/directoryGitState.js';
-import { pickLiveActivity, tailExcerpt } from './jobActivity.js';
+import { pickLiveActivity, tailExcerpt, jobAgent } from './jobActivity.js';
 
 /** 看板列，数组顺序即列顺序 */
 export const TASK_COLUMNS = ['todo', 'doing', 'done'];
@@ -336,6 +336,14 @@ export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now() 
      * 也不能把上一次的旧话当成这次的结果摆出来。
      */
     lastReply: live ? null : tailExcerpt(last ? last.output : ''),
+    /**
+     * 最近一条 job 用的执行器（卡片上的品牌图标；认不出 / 从没跑过 → ''）。
+     * 与 live.agent 的分工：那个只在**跑的时候**有值，跑完就断——而"这条是 Claude 还是
+     * Codex 跑的"在跑完之后同样要能回答（卡片上那句收尾的话究竟是谁说的）。
+     * 两条的校验口径同一份（jobActivity 的 jobAgent），所以同一张卡片上不会出现
+     * "跑着显示 A、跑完变成 B"。
+     */
+    lastJobAgent: jobAgent(last),
     lastJobStatus: last ? last.status : null,
     // 最近一条 job 的结束时间 = 这张卡片"跑完"的时刻。
     // 看板的「已完成」列要按完成时间倒序排（最新完成的在最上边），而 updatedAt 撑不起这个排序：
