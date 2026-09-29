@@ -2193,7 +2193,6 @@ export default {
   '@WORKBENCH:图片过大，已压缩后上传：{from} → {to}': '图片过大，已压缩后上传：{from} → {to}',
   '@WORKBENCH:上传失败': '上传失败',
   '@WORKBENCH:删除失败': '删除失败',
-  '@WORKBENCH:单个任务最多 9 个附件': '单个任务最多 9 个附件',
   '@WORKBENCH:正在执行…': '正在执行…',
   '@WORKBENCH:排队中…': '排队中…',
   '@WORKBENCH:查看执行日志': '查看执行日志',

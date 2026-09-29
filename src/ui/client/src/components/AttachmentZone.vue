@@ -40,7 +40,6 @@ const props = defineProps<{
   humanSize: (n: number) => string
   isUploading: boolean
   isPasteHover: boolean
-  maxCount: number
   onPick: () => void
   onRemove: (att: AttachmentItem) => void
   /**
@@ -189,11 +188,12 @@ onBeforeUnmount(() => {
     <div class="wb-attachments__head">
       <span class="wb-attachments__label">
         {{ $t('@WORKBENCH:附件') }}
-        <span class="wb-attachments__count">{{ attachments.length }} / {{ maxCount }}</span>
+        <!-- 只报个数：数量不设上限，写成 "N / 9" 会让人以为还剩几个能加 -->
+        <span class="wb-attachments__count">{{ attachments.length }}</span>
       </span>
       <button
         class="wb-attachments__add wb-soft-btn"
-        :disabled="isUploading || attachments.length >= maxCount"
+        :disabled="isUploading"
         @click="onPick"
       >
         {{ isUploading ? $t('@WORKBENCH:上传中…') : $t('@WORKBENCH:添加附件') }}

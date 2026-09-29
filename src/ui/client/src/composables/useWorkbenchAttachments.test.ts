@@ -1,9 +1,10 @@
-import { describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import {
   MAX_ATTACHMENT_BYTES,
   IMAGE_COMPRESS_THRESHOLD_BYTES,
   replaceExt,
-  shouldCompressImage
+  shouldCompressImage,
+  useWorkbenchAttachments
 } from './useWorkbenchAttachments'
 
 // size 是只读 getter，用同名的自有属性盖掉，避免真去分配几 MB 的 buffer
@@ -57,5 +58,78 @@ describe('replaceExt', () => {
   test('没有后缀 / 空名字也能兜住', () => {
     expect(replaceExt('screenshot', 'jpg')).toBe('screenshot.jpg')
     expect(replaceExt('', 'jpg')).toBe('attachment.jpg')
+  })
+})
+
+describe('uploadAttachment 数量不限', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function taskWith(n: number) {
+    return {
+      id: 't1',
+      attachments: Array.from({ length: n }, (_, i) => ({
+        id: `a${i}`,
+        originalName: `shot-${i}.png`,
+        mimeType: 'image/png',
+        size: 1000 + i,
+        ext: 'png'
+      }))
+    } as any
+  }
+
+  function stubFetchOk() {
+    const urls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      urls.push(String(url))
+      return {
+        json: async () => ({
+          success: true,
+          attachment: { id: 'new-1', originalName: 'more.png', mimeType: 'image/png', size: 8, ext: 'png' }
+        })
+      } as any
+    }))
+    return urls
+  }
+
+  // 曾经按 9 个封顶：一次性交十几张截图是常态，封顶只会逼人分批建任务。
+  test('已经挂了 12 个附件时，第 13 个照样能传出去', async () => {
+    const urls = stubFetchOk()
+    const { uploadAttachment } = useWorkbenchAttachments()
+    const task = taskWith(12)
+
+    await uploadAttachment({ kind: 'task', task }, fakeFile('more.png', 'image/png', 8))
+
+    expect(urls).toHaveLength(1)
+    expect(task.attachments).toHaveLength(13)
+  })
+
+  test('派发前的草稿附件同样不限量', async () => {
+    const urls = stubFetchOk()
+    const { uploadAttachment } = useWorkbenchAttachments()
+    // replace 必须换新数组（真实调用方就是这么写的），
+    // 否则 replace 里改同一个引用会把刚 push 进去的那条一起抹掉。
+    let list = taskWith(30).attachments
+
+    await uploadAttachment(
+      { kind: 'draft', list, replace: (next) => { list = next } },
+      fakeFile('more.png', 'image/png', 8)
+    )
+
+    expect(urls[0]).toContain('/api/workbench/orchestrator/attachments')
+    expect(list).toHaveLength(31)
+  })
+
+  test('取消数量上限不等于取消其它卡点：白名单与大小仍然拦得住', async () => {
+    const urls = stubFetchOk()
+    const { uploadAttachment } = useWorkbenchAttachments()
+    const task = taskWith(12)
+
+    await uploadAttachment({ kind: 'task', task }, fakeFile('evil.exe', '', 8))
+    await uploadAttachment({ kind: 'task', task }, fakeFile('huge.png', 'image/png', MAX_ATTACHMENT_BYTES + 1))
+
+    expect(urls).toHaveLength(0)
+    expect(task.attachments).toHaveLength(12)
   })
 })

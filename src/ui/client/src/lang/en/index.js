@@ -2184,7 +2184,6 @@ export default {
   '@WORKBENCH:图片过大，已压缩后上传：{from} → {to}': 'Image too large — compressed before upload: {from} → {to}',
   '@WORKBENCH:上传失败': 'Upload failed',
   '@WORKBENCH:删除失败': 'Delete failed',
-  '@WORKBENCH:单个任务最多 9 个附件': 'Each task can have at most 9 attachments',
   '@WORKBENCH:正在执行…': 'Running…',
   '@WORKBENCH:排队中…': 'Queued…',
   '@WORKBENCH:查看执行日志': 'View execution log',

@@ -679,7 +679,6 @@ const gitSummary = computed(() => {
         :human-size="humanSize"
         :is-uploading="attachBusy"
         :is-paste-hover="attachDragging"
-        :max-count="9"
         :on-pick="onPickAttachment"
         :on-remove="onRemoveAttachment"
         :raw-base="DRAFT_RAW_BASE"
@@ -693,7 +692,7 @@ const gitSummary = computed(() => {
         <button
           type="button"
           class="oc__attach"
-          :disabled="attachBusy || draftAttachments.length >= 9"
+          :disabled="attachBusy"
           :title="$t('@WORKBENCH:添加附件（也可直接粘贴或拖入文件）')"
           :aria-label="$t('@WORKBENCH:添加附件')"
           @click="onPickAttachment"

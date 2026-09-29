@@ -47,7 +47,6 @@ import {
   TRUTH_FILES,
   IMAGES_DIR,
   MAX_IMAGE_BYTES,
-  MAX_ATTACHMENTS_PER_TASK,
   MAX_DEFAULT_PROMPT_CHARS,
   readJson,
   writeJson,
@@ -967,7 +966,12 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
   }
 
   // 共享 helper：写入新附件
-  async function writeAttachmentTo({ req, target, maxCount }) {
+  //
+  // 只负责把字节落盘 + 造出附件记录，**不碰 target.attachments** —— 由调用方决定挂到哪。
+  // 之前这里既 push 了一次、调用方又 push 一次，而两处指向同一个数组（target 是浅拷贝），
+  // 于是每次上传都在 tasks.json 里留下一条 id 完全相同的幽灵附件：附件数翻倍、
+  // 缩略图列表出现重复项，删一条另一条还在。
+  async function writeAttachmentTo({ req, target }) {
     if (!req.body || !(req.body instanceof Buffer) || req.body.length === 0) {
       throw new HttpError(400, '请求体为空');
     }
@@ -980,10 +984,6 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
     if (!ext) {
       throw new HttpError(400, `不支持的文件类型（仅允许 ${[...ALLOWED_EXTS].join(', ')}）`);
     }
-    if (!Array.isArray(target.attachments)) target.attachments = [];
-    if (target.attachments.length >= maxCount) {
-      throw new HttpError(400, `附件已达上限 ${maxCount} 个`);
-    }
 
     const attId = genId();
     await fsp.mkdir(target.storageDir, { recursive: true });
@@ -991,7 +991,7 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
     const storedPath = path.join(target.storageDir, storedName);
     await fsp.writeFile(storedPath, req.body);
 
-    const attachment = {
+    return {
       id: attId,
       originalName,
       mimeType,
@@ -1001,9 +1001,6 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
       absolutePath: storedPath,
       createdAt: nowIso()
     };
-    target.attachments.push(attachment);
-    target.updatedAt = nowIso();
-    return attachment;
   }
 
   // 子任务附件
@@ -1014,7 +1011,7 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
     const task = (data.tasks || []).find(t => t.id === taskId);
     if (!task) throw new HttpError(404, '任务不存在');
     const target = { ...task, storageDir: path.join(IMAGES_DIR, '_task-' + taskId) };
-    const att = await writeAttachmentTo({ req, target, maxCount: MAX_ATTACHMENTS_PER_TASK });
+    const att = await writeAttachmentTo({ req, target });
     task.attachments = Array.isArray(task.attachments) ? task.attachments : [];
     task.attachments.push(att);
     task.updatedAt = nowIso();
@@ -1480,12 +1477,12 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
    * 为什么需要这一层：§17 的上传端点都要求 taskId / subId 当挂载点，而派发这一刻
    * 任务还不存在。所以先写进 `_dispatch/`，**不写任何 JSON** —— 附件记录回给前端持有，
    * 派发时再按 id 搬进任务目录。
-   * 代价是服务端在这里无状态：它不知道前端一共攒了几个，附件数上限只能在派发时统一卡。
+   * 代价是服务端在这里无状态：它不知道前端一共攒了几个（数量本来也不设上限，
+   * 所以这份无状态不再有代价 —— 真要卡也只能卡在派发那一刻，而那时已经晚了）。
    */
   app.post('/api/workbench/orchestrator/attachments', rawAttachment, asyncRoute(async (req, res) => {
     await fsp.mkdir(DISPATCH_STAGING_DIR, { recursive: true });
-    const target = { attachments: [], storageDir: DISPATCH_STAGING_DIR };
-    const att = await writeAttachmentTo({ req, target, maxCount: MAX_ATTACHMENTS_PER_TASK });
+    const att = await writeAttachmentTo({ req, target: { storageDir: DISPATCH_STAGING_DIR } });
     res.json({ success: true, attachment: att });
   }));
 

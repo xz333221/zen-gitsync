@@ -38,7 +38,6 @@ import {
   genId,
   TASKS_FILE,
   IMAGES_DIR,
-  MAX_ATTACHMENTS_PER_TASK,
 } from './shared.js';
 import { stagingPath, mimeForExt } from './attachmentUtils.js';
 import { readOrchestrator, resolveDispatchPrompt, appendInstruction } from './orchestratorStore.js';
@@ -182,11 +181,9 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
     // ── 附件：调用方只回传 { id, ext, originalName }，服务端按 id 回暂存区找文件 ──
     // 路径完全由服务端拼（stagingPath 会同时校验 id 形状与 ext 白名单），
     // 所以不存在"调用方指定任意路径"这回事 —— 比"信任 absolutePath 再校验前缀"干净。
-    // 数量与文件存在性在这里统一校验：上传时服务端是无状态的，压根不知道攒了几个。
+    // 这里只校验**每个附件自己**（形状 + 文件是否还在）；数量不设上限，
+    // 真正的卡点只有下游读得动读不动。
     const rawAttachments = Array.isArray(payload.attachments) ? payload.attachments : [];
-    if (rawAttachments.length > MAX_ATTACHMENTS_PER_TASK) {
-      throw new HttpError(400, `附件最多 ${MAX_ATTACHMENTS_PER_TASK} 个`);
-    }
     const staged = [];
     for (const item of rawAttachments) {
       const attId = typeof item?.id === 'string' ? item.id : '';

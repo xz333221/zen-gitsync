@@ -1279,7 +1279,6 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
             :human-size="humanSize"
             :is-uploading="isUploading('task-' + selectedTask.id)"
             :is-paste-hover="pasteHoverId === 'task-' + selectedTask.id"
-            :max-count="9"
             :on-pick="() => pickAttachmentFile({ kind: 'task', task: selectedTask })"
             :on-remove="(att) => removeAttachment({ kind: 'task', task: selectedTask }, att)"
             @paste="onAttachmentPaste($event, { kind: 'task', task: selectedTask })"
@@ -1364,7 +1363,9 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
                         enabled: true,
                         accept: ALLOWED_EXT_HINT,
                         multiple: true,
-                        maxCount: Math.max(0, 9 - (selectedTask.attachments?.length ?? 0)),
+                        // 0 = 不限：lib 内部是 `if (maxCount && ...)`，传 0 才真的不设卡；
+                        // 不传会落回它自带的默认值 10，比我们自己那道 9 还小。
+                        maxCount: 0,
                         maxSize: MAX_ATTACHMENT_BYTES
                       }"
                       class="wb-simple-chat__input"

@@ -14,6 +14,7 @@ export const ALLOWED_EXT_HINT = '.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.pdf,.txt,
 // 单个附件硬上限。原来是 5MB，4K 屏随手一张截图（3840px，PNG 5–15MB）就顶掉，
 // 所以抬到 20MB：非图片附件（PDF / 日志 / JSON）本来就该按需给大，
 // 图片则由下面的压缩逻辑保证真正落到下游时不会超限。
+// 附件**数量**不限（2026-09-29 起）：一次交十几张截图是常态，封顶只会逼人分批建任务。
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
 /**
@@ -205,10 +206,6 @@ export function useWorkbenchAttachments() {
       return
     }
     const existing = targetAttachments(t)
-    if (existing.length >= 9) {
-      ElMessage.error($t('@WORKBENCH:单个任务最多 9 个附件'))
-      return
-    }
     const dup = existing.find(a => a.originalName === file.name && a.size === file.size)
     if (dup) {
       ElMessage.info(`${file.name} ${$t('@WORKBENCH:已存在，已复用')}`)
