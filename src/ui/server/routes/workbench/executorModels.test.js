@@ -138,7 +138,9 @@ test('detectExecutorModels: 三家配置齐全时各自读出模型', async () =
   // 顶层注释不再截断 → model_provider 读得到 → 服务商名也能查出来
   assert.deepEqual(out.codex, { model: 'gpt-6-astra', display: null, provider: 'kakouai' })
   // 只有 .jsonc（没有 .json）时也要读到：早先那个 promise 被解构丢掉，这里是死代码
-  assert.deepEqual(out.opencode, { model: 'anthropic/claude-x', display: null, provider: null })
+  assert.deepEqual(out.opencode, {
+    model: 'anthropic/claude-x', display: null, provider: null, source: 'config',
+  })
 })
 
 test('detectExecutorModels: 只有 .jsonc 时 opencode 仍读得到 [回归]', async () => {
@@ -162,6 +164,74 @@ test('detectExecutorModels: opencode 的 model 是对象时带上 variant', asyn
   })
   const out = await detectExecutorModels({ homeDir: home })
   assert.equal(out.opencode?.model, 'openai/gpt-y (high)')
+})
+
+// ── opencode 的第二处来源：TUI 状态 ──────────────────────────────────────────
+//
+// opencode 的 TUI 允许直接选模型，而它把选择**存在自己的 state 里、不回写配置文件**。
+// 只读配置文件的话，对一个明明在跑的模型显示"未在配置中指定" —— 用户会去翻配置，
+// 配置里确实没有，白折腾一场。这组用例钉住"配置文件优先、没有则退回 state"。
+
+const OPENCODE_STATE = JSON.stringify({
+  recent: [
+    { providerID: 'opencode-go', modelID: 'space-bunny-free' },
+    { providerID: 'opencode-go', modelID: 'deepseek-v4.1-flash' },
+  ],
+  favorite: [],
+  variant: { 'opencode-go/space-bunny-free': 'max', 'opencode-go/deepseek-v4.1-flash': 'max' },
+})
+
+test('detectExecutorModels: 配置里没写 model 时，退回 TUI 状态里的「最近使用」', async () => {
+  const home = await makeHome({
+    // 本机真实情形：配置文件里只有一个 $schema
+    '.config/opencode/opencode.jsonc': '{\n  "$schema": "https://opencode.ai/config.json"\n}',
+    '.local/state/opencode/model.json': OPENCODE_STATE,
+  })
+  const out = await detectExecutorModels({ homeDir: home })
+  assert.deepEqual(out.opencode, {
+    model: 'opencode-go/space-bunny-free (max)', // recent[0] + variant 表里的 max
+    display: null,
+    provider: null, // 模型名本身已是 provider/model，不再重复报一次
+    source: 'state',
+  })
+})
+
+test('detectExecutorModels: 配置文件里写了 model 就以它为准（state 只是兜底）', async () => {
+  const home = await makeHome({
+    '.config/opencode/opencode.json': '{"model":"anthropic/claude-x"}',
+    '.local/state/opencode/model.json': OPENCODE_STATE,
+  })
+  const out = await detectExecutorModels({ homeDir: home })
+  assert.deepEqual(out.opencode, {
+    model: 'anthropic/claude-x', display: null, provider: null, source: 'config',
+  })
+})
+
+test('detectExecutorModels: recent 项自带 variant 时优先于顶层 variant 表', async () => {
+  const home = await makeHome({
+    '.config/opencode/opencode.jsonc': '',
+    '.local/state/opencode/model.json': JSON.stringify({
+      recent: [{ providerID: 'p', modelID: 'm', variant: 'own' }],
+      variant: { 'p/m': 'mapped' },
+    }),
+  })
+  const out = await detectExecutorModels({ homeDir: home })
+  assert.equal(out.opencode?.model, 'p/m (own)')
+})
+
+test('detectExecutorModels: state 里没有 recent / 缺字段时仍是 null（不猜）', async () => {
+  const empty = await makeHome({ '.local/state/opencode/model.json': '{"recent":[],"favorite":[]}' })
+  assert.equal((await detectExecutorModels({ homeDir: empty })).opencode, null)
+
+  const partial = await makeHome({
+    '.local/state/opencode/model.json': '{"recent":[{"providerID":"p"}]}',
+  })
+  assert.equal((await detectExecutorModels({ homeDir: partial })).opencode, null)
+})
+
+test('detectExecutorModels: 两处都没有 model 才是真的"未在配置中指定"', async () => {
+  const home = await makeHome({ '.config/opencode/opencode.json': '{"model":""}' })
+  assert.equal((await detectExecutorModels({ homeDir: home })).opencode, null)
 })
 
 test('detectExecutorModels: claude 显式 ANTHROPIC_MODEL 优先于档位别名', async () => {
@@ -219,21 +289,32 @@ test('formatExecutorModel: display 优先，别名落到 detail', () => {
       display: 'deepseek-v4.1-flash',
       provider: 'http://127.0.0.1:15721',
     }),
-    { name: 'deepseek-v4.1-flash', detail: 'claude-sonnet-5[1M]', provider: 'http://127.0.0.1:15721' },
+    { name: 'deepseek-v4.1-flash', detail: 'claude-sonnet-5[1M]', provider: 'http://127.0.0.1:15721', source: null },
   )
 })
 
 test('formatExecutorModel: 两个名字相同则不重复进 detail', () => {
   assert.deepEqual(
     formatExecutorModel({ model: 'same', display: 'same', provider: null }),
-    { name: 'same', detail: null, provider: null },
+    { name: 'same', detail: null, provider: null, source: null },
   )
 })
 
 test('formatExecutorModel: 只有别名时就用别名，detail 为空', () => {
   assert.deepEqual(
     formatExecutorModel({ model: 'only-alias', display: null, provider: null }),
-    { name: 'only-alias', detail: null, provider: null },
+    { name: 'only-alias', detail: null, provider: null, source: null },
+  )
+})
+
+test('formatExecutorModel: 来源（config / state）照实透传出去', () => {
+  assert.equal(
+    formatExecutorModel({ model: 'm', display: null, provider: null, source: 'state' }).source,
+    'state',
+  )
+  assert.equal(
+    formatExecutorModel({ model: 'm', display: null, provider: null, source: 'config' }).source,
+    'config',
   )
 })
 

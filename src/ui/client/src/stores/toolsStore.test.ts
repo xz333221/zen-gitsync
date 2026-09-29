@@ -29,11 +29,12 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useToolsStore } from './toolsStore'
 
 const UNSET_KEY = '@42BB9:未在配置中指定'
+const STATE_SOURCE_KEY = '@42BB9:CLI 内最近使用'
 
 const MODELS = {
-  claude: { name: 'deepseek-v4.1-flash', detail: 'claude-sonnet-5[1M]', provider: 'http://127.0.0.1:15721' },
-  codex: { name: 'gpt-6-astra', detail: null, provider: 'kakouai' },
-  opencode: null, // 配置文件里没写模型
+  claude: { name: 'deepseek-v4.1-flash', detail: 'claude-sonnet-5[1M]', provider: 'http://127.0.0.1:15721', source: null },
+  codex: { name: 'gpt-6-astra', detail: null, provider: 'kakouai', source: null },
+  opencode: null, // 两处来源都没有：配置文件没写，CLI state 里也没有
 }
 
 /** 把 /api/workbench/executor-models 固定成给定响应；其余请求给个空成功 */
@@ -111,6 +112,53 @@ describe('toolsStore 执行器模型', () => {
     expect(s.executorModelText('claude')).toBe(UNSET_KEY)
     expect(s.executorModelText('codex')).toBe(UNSET_KEY)
     expect(s.executorModelText('opencode')).toBe(UNSET_KEY)
+  })
+
+  test('来源是 CLI 内 state 时标出来源：模型名照常显示，detail 说明它从哪来', async () => {
+    // opencode 的 TUI 选择不写回配置文件，模型只存在于它自己的 state 里。
+    // 这时候必须显示真实模型名（而不是"未在配置中指定"），并在 detail 里说清来源 ——
+    // 否则用户看到模型名第一反应是"我配置里没写啊"。
+    stubModels({
+      success: true,
+      models: {
+        claude: null,
+        codex: null,
+        opencode: { name: 'opencode-go/space-bunny-free (max)', detail: null, provider: null, source: 'state' },
+      },
+    })
+    const s = useToolsStore()
+    await s.fetchExecutorModels()
+    expect(s.executorModelText('opencode')).toBe('opencode-go/space-bunny-free (max)')
+    expect(s.executorModelDetail('opencode')).toBe(STATE_SOURCE_KEY)
+  })
+
+  test('来源是配置文件时不加来源标签（就是"配置里写的"，无需额外说明）', async () => {
+    stubModels({
+      success: true,
+      models: {
+        claude: null,
+        codex: null,
+        opencode: { name: 'a/b', detail: null, provider: null, source: 'config' },
+      },
+    })
+    const s = useToolsStore()
+    await s.fetchExecutorModels()
+    expect(s.executorModelDetail('opencode')).toBe('')
+  })
+
+  test('未知来源值不显示来源标签（将来后端加新来源时前端不瞎猜）', async () => {
+    stubModels({
+      success: true,
+      models: {
+        claude: null,
+        codex: null,
+        opencode: { name: 'a/b', detail: null, provider: null, source: 'something-new' },
+      },
+    })
+    const s = useToolsStore()
+    await s.fetchExecutorModels()
+    expect(s.executorModelText('opencode')).toBe('a/b')
+    expect(s.executorModelDetail('opencode')).toBe('')
   })
 
   test('TTL 内重复调用不重发；force 时重探', async () => {

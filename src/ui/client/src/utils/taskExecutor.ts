@@ -47,6 +47,13 @@ export interface ExecutorModelInfo {
   detail: string | null
   /** 服务商名或 base_url；没有则 null */
   provider: string | null
+  /**
+   * 这个模型是从哪读到的 —— 同一个模型名，来源不同含义不同：
+   *   'config' 配置文件里写死的（"默认模型"）
+   *   'state'  CLI 自己记的"上次用的"（opencode 的 TUI 选择不回写配置文件）
+   *   null     不适用（claude / codex 只有一处来源）
+   */
+  source: 'config' | 'state' | null
 }
 
 /**

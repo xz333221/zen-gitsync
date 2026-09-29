@@ -17,7 +17,9 @@
  *     "同一个事实在多处展示"最典型的腐坏方式
  *   F **没探测到 ≠ 没配置**：接口失败时一律不显示，绝不说"未在配置中指定" ——
  *     请求还没回来就替用户下结论（"你没配"）是在撒谎，而用户会信
- *   G 切换执行器时那行跟着换；配置里没写模型的那个显示「未在配置中指定」而不编一个名字
+ *   G 切换执行器时那行跟着换。三条分支各一遍：两处来源都没有的 → 「未在配置中指定」
+ *     （不编一个名字）；**来源是 CLI 自身 state 的**（opencode 的 TUI 选择不写回配置）
+ *     → 真实模型名 + 标出来源，否则用户看到模型名会先问"我配置里没写啊"
  *   H 页面无 console / page 错误
  *
  * 两段式：前半段 route 拦截注入**构造数据**（覆盖 有别名 / 只有模型名 / 没配 三态），
@@ -44,18 +46,25 @@ const API = process.env.ZEN_API || 'http://127.0.0.1:5545'
 const CHROME = process.env.ZEN_CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 
 /**
- * 注入的模型 fixture。三种状态各来一条，一个用例覆盖全部分支：
+ * 注入的模型 fixture。四种形态各来一条，一个用例覆盖全部分支：
  *   claude   —— 别名两层齐全（CLI 别名 + 背后真实模型 + 代理地址）。日常最可能命中的形态
- *   codex    —— 只有模型名 + 服务商，没有第二层
- *   opencode —— 配置里没写模型（真实机器上就是这个样子），走「未在配置中指定」
+ *   codex    —— 配置里没写模型，两处来源都没有 → 走「未在配置中指定」
+ *   opencode —— **来源是 CLI 自己的 state 而不是配置文件**（TUI 里选过、
+ *               没回写配置）。本机 opencode 就是这个样子，早期版本因此误报"未指定"
  */
 const FIXTURE = {
-  claude: { name: 'deepseek-v4.1-flash', detail: 'claude-sonnet-5[1M]', provider: 'http://127.0.0.1:15721' },
-  codex: { name: 'gpt-6-astra', detail: null, provider: 'kakouai' },
-  opencode: null,
+  claude: { name: 'deepseek-v4.1-flash', detail: 'claude-sonnet-5[1M]', provider: 'http://127.0.0.1:15721', source: null },
+  codex: null,
+  opencode: {
+    name: 'opencode-go/space-bunny-free (max)',
+    detail: null,
+    provider: null,
+    source: 'state',
+  },
 }
-/** 与前端 i18n（@42BB9:未在配置中指定 / 当前模型：{model}）同一份口径 */
+/** 与前端 i18n（@42BB9:未在配置中指定 / 当前模型：{model} / CLI 内最近使用）同一份口径 */
 const UNSET_TEXT = '未在配置中指定'
+const STATE_SOURCE_TEXT = 'CLI 内最近使用'
 
 const results = []
 const consoleErrors = []
@@ -305,19 +314,29 @@ async function main() {
       opts.found && opts.options.some(o => o.model === FIXTURE.claude.name),
       JSON.stringify(opts.options.map(o => `${o.text}|${o.model}`)))
     check('C2 设置下拉：配置里没写模型的那个显示「未在配置中指定」，不编一个名字',
-      opts.options.some(o => o.model === UNSET_TEXT && o.text.includes('OpenCode')),
+      opts.options.some(o => o.model === UNSET_TEXT && o.text.includes('Codex')),
       JSON.stringify(opts.options.map(o => `${o.text}|${o.model}`)))
-    check('C3 选项 title 是模型 + 服务商（codex 只有服务商，没有第二层别名）',
-      opts.options.some(o => o.modelTitle === `${FIXTURE.codex.name} · ${FIXTURE.codex.provider}`),
+    check('C3 选项 title 是模型 + 服务商（claude 是别名 + 代理地址）',
+      opts.options.some(o => o.modelTitle === `${FIXTURE.claude.name} · ${FIXTURE.claude.detail} · ${FIXTURE.claude.provider}`),
       JSON.stringify(opts.options.map(o => o.modelTitle)))
 
-    // ── G 切换执行器 → 那行跟着换（尤其"没配"这个分支）─────────────────
-    await pickExecutor(page, 'OpenCode')
+    // ── G 切换执行器 → 那行跟着换（三个分支各走一遍）───────────────────
+    // G1/G2：两处来源都没有 → 如实说"未在配置中指定"
+    await pickExecutor(page, 'Codex')
     line = await readSettingsExecutor(page)
     check('G1 切到没配模型的执行器：那行改说「未在配置中指定」',
       line.found && line.text.includes(UNSET_TEXT), JSON.stringify(line))
     check('G2 没配时不显示空的括号（detail 段整块不渲染）',
       line.detail === null, JSON.stringify(line.detail))
+
+    // G4/G5：模型来自 CLI 自己的 state（TUI 里选的、没写回配置）—— 必须显示真实模型名，
+    // 并在括号里说清是"CLI 内最近使用"，否则用户看到模型名会先问"我配置里没写啊"
+    await pickExecutor(page, 'OpenCode')
+    line = await readSettingsExecutor(page)
+    check('G4 切到"用 CLI 内选择"的执行器：显示真实模型名（不是「未在配置中指定」）',
+      line.found && line.text.includes(FIXTURE.opencode.name), JSON.stringify(line))
+    check('G5 括号里标出来源（CLI 内最近使用），不让用户以为是自己配的',
+      !!line.detail && line.detail.includes(STATE_SOURCE_TEXT), String(line.detail))
 
     // 切回 claude，后面 E 组要拿它跟另外两处比对
     await pickExecutor(page, 'Claude Code')
@@ -353,6 +372,10 @@ async function main() {
       JSON.stringify(pickerDrop.items.map(i => `${i.text}|${i.model}`)))
     check('C5 控制台下拉：没配的那个同样显示「未在配置中指定」',
       pickerDrop.items.some(i => i.model === UNSET_TEXT), JSON.stringify(pickerDrop.items.map(i => i.model)))
+    check('C6 控制台下拉：来源是 CLI 内选择的那个，title 里也标出来源',
+      pickerDrop.items.some(i => i.model === FIXTURE.opencode.name
+        && (i.modelTitle || '').includes(STATE_SOURCE_TEXT)),
+      JSON.stringify(pickerDrop.items.map(i => `${i.model}|${i.modelTitle}`)))
     await page.keyboard.press('Escape')
     await sleep(400)
 

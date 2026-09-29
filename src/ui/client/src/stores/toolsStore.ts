@@ -45,6 +45,8 @@ function normalizeExecutorModel(raw: unknown): ExecutorModelInfo | null {
     name: r.name,
     detail: typeof r.detail === 'string' && r.detail ? r.detail : null,
     provider: typeof r.provider === 'string' && r.provider ? r.provider : null,
+    // 只认这两个值；后端将来加新来源时前端按"未知来源"处理（不显示来源标签）而不是瞎猜
+    source: r.source === 'config' || r.source === 'state' ? r.source : null,
   }
 }
 
@@ -217,13 +219,20 @@ export const useToolsStore = defineStore('tools', () => {
   }
 
   /**
-   * 次要信息（claude 的 CLI 别名 / 服务商 / base_url），不含模型名本身。
+   * 次要信息（来源 / claude 的 CLI 别名 / 服务商 / base_url），不含模型名本身。
    * 给 title 与设置弹窗的括号用；没有 → 空串。
+   *
+   * 来源排在最前是有意的：opencode 的模型来自它自己的 TUI 状态（`source === 'state'`），
+   * 用户看到模型名后第一个疑问就是"我配置文件里没写啊，你从哪知道的" —— 先答这个。
    */
   function executorModelDetail(id?: string | null): string {
     const s = executorModelState(id)
     if (s.status !== 'set') return ''
-    return [s.info.detail, s.info.provider].filter(Boolean).join(' · ')
+    return [
+      s.info.source === 'state' ? $t('@42BB9:CLI 内最近使用') : '',
+      s.info.detail,
+      s.info.provider,
+    ].filter(Boolean).join(' · ')
   }
 
   let pollTimer: ReturnType<typeof setInterval> | null = null

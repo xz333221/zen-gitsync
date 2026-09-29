@@ -42,8 +42,11 @@
 //   opencode ~/.config/opencode/opencode.json / .jsonc
 //            JSONC（带注释与尾逗号）。顶层 `model` 字段，可以是字符串
 //            "provider/model-id"，也可以是对象 { model, variant }。
-//            **本机这个文件里没写 model** —— opencode 允许启动参数/环境变量注入，
-//            配置文件里读不到就是读不到，返回 null 而不是编一个。
+//            ⚠️ **但它经常是空的** —— opencode 的 TUI 允许直接选模型，而选择存在
+//            自己的 state 里、不回写配置。所以还要读第二处：
+//            ~/.local/state/opencode/model.json 的 recent[0]（TUI 最近使用），
+//            variant（截图里那个蓝色的 max）在同文件的顶层 variant 表里。
+//            两处都没有才算"没指定"，返回值里用 source 区分（config / state）。
 //
 // ── 三条必须守住的底线 ──────────────────────────────────────────────────────
 //
@@ -203,16 +206,55 @@ function detectCodex(toml) {
 }
 
 /** opencode：顶层 model，字符串或 { model, variant } 都吃；顺便记 variant */
-function detectOpencode(json) {
+function detectOpencodeConfig(json) {
   const raw = json && json.model;
   if (typeof raw === 'string' && raw.trim()) {
-    return { model: raw.trim(), display: null, provider: null };
+    return { model: raw.trim(), display: null, provider: null, source: 'config' };
   }
   if (raw && typeof raw === 'object' && typeof raw.model === 'string' && raw.model.trim()) {
     const variant = typeof raw.variant === 'string' && raw.variant.trim() ? ` (${raw.variant.trim()})` : '';
-    return { model: raw.model.trim() + variant, display: null, provider: null };
+    return { model: raw.model.trim() + variant, display: null, provider: null, source: 'config' };
   }
   return null;
+}
+
+/**
+ * opencode 当前用哪个模型：**配置文件优先，没有就退回 TUI 的「最近使用」**。
+ *
+ * 为什么要读两处 —— opencode 的 TUI 允许直接选模型，而它把选择存在**自己的 state 里
+ * 而不是回写配置文件**。本机就是活例子：`~/.config/opencode/opencode.jsonc` 里只有
+ * `$schema`（真的没配 model），但 statusline 明确在用 `opencode-go/space-bunny-free`；
+ * 那个选择躺在 `~/.local/state/opencode/model.json` 的 `recent[0]`。
+ * 只读配置文件的话界面上会显示「未在配置中指定」—— 对一个**正在跑的模型**说"没指定"，
+ * 比不说还糟：用户会去翻配置，而配置里确实没有，于是白折腾一场。
+ *
+ * 两种来源语义不同，用 `source` 区分，前端会照实标出来（同一条模型名，来源不同含义不同）：
+ *   config —— 配置文件里写死了，这是"默认模型"
+ *   state  —— TUI 上次选的，opencode 下次启动默认还用它
+ *
+ * variant（截图里那个蓝色的 `max`）在 state 顶层 `variant` 表里，键是 `provider/model`；
+ * 也兼容某些版本直接写在 recent 项上的写法。
+ */
+function detectOpencodeState(json) {
+  const recent = json && Array.isArray(json.recent) ? json.recent[0] : null;
+  if (!recent || typeof recent.providerID !== 'string' || typeof recent.modelID !== 'string') return null;
+  const id = `${recent.providerID}/${recent.modelID}`;
+  const own = typeof recent.variant === 'string' ? recent.variant.trim() : '';
+  const mapped = typeof json.variant?.[id] === 'string' ? json.variant[id].trim() : '';
+  const variant = own || mapped;
+  return {
+    model: variant ? `${id} (${variant})` : id,
+    display: null,
+    // provider 不再单列：模型名本身就是 `provider/model` 形态，再报一次只是噪音
+    // （`opencode-go/space-bunny-free (max) （… · opencode-go）`）
+    provider: null,
+    source: 'state',
+  };
+}
+
+/** 配置里有就用配置的，否则看 TUI 状态；两处都没有才是真的"没指定" */
+function detectOpencode(cfgJson, stateJson) {
+  return detectOpencodeConfig(cfgJson) || detectOpencodeState(stateJson);
 }
 
 function escapeRe(s) {
@@ -225,19 +267,22 @@ function escapeRe(s) {
  * @param {object} [opts]
  * @param {string} [opts.homeDir] 测试沙箱用（默认 os.homedir()）
  * @returns {Promise<{ claude: object|null, codex: object|null, opencode: object|null }>}
- *          每项 `{ model, display, provider }`；该执行器没配模型时为 null。
+ *          每项 `{ model, display, provider, source }`；该执行器没配模型时为 null。
+ *          source = 'config'（配置文件里写死的）| 'state'（CLI 自己记的"上次用的"）。
  *
  * 三路并发、互不阻塞：任何一个配置文件读失败都只让**它自己**变成 null。
  */
 export async function detectExecutorModels({ homeDir } = {}) {
   const home = homeDir || os.homedir();
 
-  const [claudeRaw, codexRaw, opencodeJsonRaw, opencodeJsoncRaw] = await Promise.all([
+  const [claudeRaw, codexRaw, opencodeJsonRaw, opencodeJsoncRaw, opencodeStateRaw] = await Promise.all([
     readTextOrNull(path.join(home, '.claude', 'settings.json')),
     readTextOrNull(path.join(home, '.codex', 'config.toml')),
     // .json 优先（标准名），.jsonc 兜底。opencode 两个都认。
     readTextOrNull(path.join(home, '.config', 'opencode', 'opencode.json')),
     readTextOrNull(path.join(home, '.config', 'opencode', 'opencode.jsonc')),
+    // TUI 的"最近使用"（不写回配置文件，见 detectOpencodeState 的注释）
+    readTextOrNull(path.join(home, '.local', 'state', 'opencode', 'model.json')),
   ]);
 
   const pickJson = (raw) => {
@@ -249,13 +294,14 @@ export async function detectExecutorModels({ homeDir } = {}) {
   // ⚠️ 两个文件都要接住：早先这一行只吃了 .json（另一个 promise 被解构丢掉），
   // 于是注释里写的"jsonc 兜底"是死代码 —— 只写了 .jsonc 的机器永远显示未配置。
   const opencodeCfg = pickJson(opencodeJsonRaw) || pickJson(opencodeJsoncRaw);
+  const opencodeState = pickJson(opencodeStateRaw);
 
   return {
     claude: claudeCfg && typeof claudeCfg.env === 'object' && claudeCfg.env
       ? detectClaude(claudeCfg.env)
       : null,
     codex: codexRaw ? detectCodex(codexRaw) : null,
-    opencode: detectOpencode(opencodeCfg),
+    opencode: detectOpencode(opencodeCfg, opencodeState),
   };
 }
 
@@ -273,5 +319,11 @@ export function formatExecutorModel(info) {
   const detail = info.display && info.model && info.display !== info.model
     ? info.model
     : null;
-  return { name, detail: detail || null, provider: info.provider || null };
+  return {
+    name,
+    detail: detail || null,
+    provider: info.provider || null,
+    // 来源照实带出去：同一个模型名，"配置里写死的"与"CLI 上次记下的"含义不同
+    source: info.source || null,
+  };
 }
