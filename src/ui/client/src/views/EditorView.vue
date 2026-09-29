@@ -1563,8 +1563,16 @@ function stopPreviewResize() {
               class="preview-mindmap"
             />
             <!-- Markdown → in-app 渲染 -->
+            <!-- :key 按文件路径切 —— 预览的滚动容器就是这个组件自己的根节点
+                 (.preview-markdown[overflow:auto])，不换 key 时切 tab 走的是同类型
+                 组件 → Vue 复用同一个 DOM 节点、只把内容换掉，scrollTop 不在 patch
+                 范围里，会从上一个文件原样带过来（表现为"新文件预览停在上一个文件的
+                 滚动位置"）。key 随路径变 → 重建节点，天然回到顶部。
+                 注意 key 只取 path、不取 content：同一个文件里改字时预览是实时镜像，
+                 那种情况下不该把用户踢回顶部。 -->
             <MarkdownPreview
               v-else-if="showPreview && activeExt === 'md' && activeTabRef"
+              :key="activeTabRef.path"
               :content="activeTabRef.content"
               class="preview-markdown"
             />
