@@ -18,6 +18,13 @@
 //    回答说的是**当时**的状态,接着聊等于让模型拿旧数字答新问题。每次重开都是新会话,
 //    上下文永远等于界面上这一刻的状态。代价是同一批追问不会攒在一条会话里。
 //
+// 2b. **面板形态补一个「新建对话」**(上面那条只对弹窗成立)。最近项目面板是**常驻**的,
+//    销毁重建那套不生效 —— 同一块追问区从开盘攒到收盘都在一条会话里,想换个话题
+//    (上一轮已经 pull 完了,现在想聊另一批)没有任何出口。所以有消息时顶栏出现一个
+//    "新建对话":它只把当前会话指针置空(useAgentChat 的 newSession),旧会话仍然在
+//    智能体视图的会话列表里,不会丢。点击时**先 stop()** —— 否则用户看到的是空白新对话,
+//    而旧那一轮仍在后台生成、跑完照样落盘(与 onBeforeUnmount 同一条口径)。
+//
 // 3. **归属当前项目**。会话的 cwd 走 configStore.currentDirectory(useAgentChat 的口径),
 //    也就是"切过去之前的那个项目";服务端会校验它必须与当前项目一致。这里不做任何特殊处理,
 //    与其他入口完全一样 —— 切完目录弹窗会关掉,不构成问题。
@@ -55,6 +62,7 @@ const {
   answeringQuestion,
   sendMessage,
   answerQuestion,
+  newSession,
   stop,
 } = useAgentChat()
 
@@ -117,6 +125,15 @@ async function onSelectPreset(q: PresetQuestion) {
   await onSend({ text: q.prompt, files: [] })
 }
 
+/**
+ * 新建对话(见文件头取舍 2b)。旧会话不删 —— newSession() 只是把当前会话指针置空,
+ * 它已经落盘在服务端,智能体视图的会话列表里照旧能找到。
+ */
+function onNewSession() {
+  stop()
+  newSession()
+}
+
 onBeforeUnmount(() => {
   // 关弹窗时把还在跑的这一轮停掉:否则服务端会继续生成完再落盘,
   // 用户回来时那条会话已经躺在智能体视图里,而他记得自己明明关掉了。
@@ -126,6 +143,26 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="dir-chat" :class="{ 'dir-chat--fill': fill }">
+    <!-- 新建对话：只在**已经有消息**时出现 —— 开场白状态本来就是一条空对话,
+         这时再摆一个"新建"只会让人怀疑自己点错了什么。对话区高度本来就紧,
+         这条工具条因此做得很薄(见 .dir-chat__bar)。 -->
+    <div v-if="messages.length" class="dir-chat__bar">
+      <button
+        type="button"
+        class="dir-chat__new"
+        :title="$t('@13D1C:新建对话，当前会话会保留')"
+        :aria-label="$t('@13D1C:新建对话')"
+        @click="onNewSession"
+      >
+        <svg
+          viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"
+          stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+        >
+          <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+        <span>{{ $t('@13D1C:新建对话') }}</span>
+      </button>
+    </div>
     <ChatContainer
       :messages="messages"
       :assistant-name="AGENT_ASSISTANT_NAME"
@@ -157,6 +194,9 @@ onBeforeUnmount(() => {
    它会按内容长到天上去,把上面的目录列表整个挤出弹窗。 */
 .dir-chat {
   display: flex;
+  /* column:上面那条"新建对话"工具条 + 下面的对话区(原来只有 ChatContainer 一个子元素,
+     row 与 column 等价;加了工具条就必须是 column,否则两者会横着并排)。 */
+  flex-direction: column;
   /* 420 而不是 340:问题卡从两条变成四条,开场白整体高了一行多(~95px),固定高得跟着涨,
      否则每次打开都能看见开场白被顶掉一截。上限仍受 42vh 约束 —— 窗口矮的时候宁可让开场白
      自己滚(见下面 .acu-welcome),也不要把上面的目录列表整个挤走。 */
@@ -167,10 +207,45 @@ onBeforeUnmount(() => {
   padding-top: var(--spacing-sm);
 }
 
+/* 工具条:一条薄薄的右对齐小按钮,只在有消息时占位(有 24px 左右) */
+.dir-chat__bar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--spacing-xs);
+}
+.dir-chat__new {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 var(--spacing-base);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
+  background: transparent;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.dir-chat__new:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.dir-chat__new:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
 /* ChatContainer 根节点(.acu-chat)吃满这块高度,滚动留给它内部 */
 .dir-chat > :deep(.acu-chat) {
   flex: 1;
   min-width: 0;
+  /* column 方向下 flex:1 只用得了 min-height:0 —— 少了它,对话区内容一多
+     就会把这块撑过固定高度(父级高度链在这里断开)。 */
+  min-height: 0;
 }
 
 /* fill:全屏弹窗右栏 —— 不再用固定高度,而是吃掉父级(解读块)剩下的全部高度。
