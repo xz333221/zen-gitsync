@@ -226,6 +226,23 @@ export const useConfigStore = defineStore('config', () => {
     splitPercent: number
   }
 
+  // 文件空间的工作区快照：记住"文件树展开了哪些目录 + 开了哪些文件 + 当前看的是哪个"。
+  // 只记路径不记内容 —— 恢复时按盘上最新内容重开，未保存的改动不跨会话保留
+  // （那份内容只活在 Monaco model 里，落盘就等于替用户做了保存决定）。
+  type UiEditorWorkspace = {
+    /** 已展开目录的绝对路径。上限与后端 /api/browse_directory_tree 的 expand 上限对齐 */
+    expandedDirs: string[]
+    /** 已打开文件的绝对路径，数组顺序即标签顺序 */
+    tabs: string[]
+    /** 当前激活标签的绝对路径；不在 tabs 里时按 null 存（避免恢复到不存在的标签） */
+    activeTab: string | null
+  }
+
+  // 单项目快照的上限：标签页开几十个已经远超正常使用，树展开到 200 个目录也够深了。
+  // 超出的部分直接截断，避免一份脏配置把启动时的恢复请求撑爆。
+  const MAX_WORKSPACE_TABS = 40
+  const MAX_WORKSPACE_EXPANDED_DIRS = 200
+
   type UiSettings = {
     layout: UiLayout
     // 按项目隔离的布局比例镜像,key = 项目绝对路径(cwd),value = 该项目的 layout。
@@ -255,6 +272,9 @@ export const useConfigStore = defineStore('config', () => {
     /** Markdown 预览主题：flowdash-md-preview 的预设名(如 github / vuepress / phycat-forest)。
      *  全局唯一一份 —— 文件预览、差异预览、AI 差异说明共用同一套配色。 */
     markdownTheme: string
+    /** 文件空间工作区快照，key = 项目绝对路径(cwd)：树展开态 + 打开的标签页 + 激活标签。
+     *  和 layoutsByProject 同一个套路 —— 按项目隔离，切项目各记各的。 */
+    editorWorkspaceByProject: Record<string, UiEditorWorkspace>
   }
 
   const defaultUiSettings: UiSettings = {
@@ -280,6 +300,7 @@ export const useConfigStore = defineStore('config', () => {
     headerToolsHidden: [],
     pickerGlobalSearch: false,
     markdownTheme: DEFAULT_MARKDOWN_THEME,
+    editorWorkspaceByProject: {},
   }
 
   // 浅拷贝默认值（避免外部 mutate 到 defaultUiSettings）
@@ -608,6 +629,26 @@ export const useConfigStore = defineStore('config', () => {
           if (typeof enabled === 'boolean') aiDiffSummaryByProject[projPath] = enabled
         }
 
+        // 文件空间工作区快照：逐项目 sanitize。任何非法字段都退化成"没记住"，
+        // 恢复逻辑那边就不用再防一遍脏数据。
+        const rawWorkspaceByProject = (configData.ui.editorWorkspaceByProject && typeof configData.ui.editorWorkspaceByProject === 'object' && !Array.isArray(configData.ui.editorWorkspaceByProject))
+          ? configData.ui.editorWorkspaceByProject
+          : {}
+        const editorWorkspaceByProject: Record<string, UiEditorWorkspace> = {}
+        const strList = (v: unknown): string[] =>
+          Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length > 0) : []
+        for (const [projPath, rawWs] of Object.entries(rawWorkspaceByProject)) {
+          if (!rawWs || typeof rawWs !== 'object' || Array.isArray(rawWs)) continue
+          const ws = rawWs as Partial<UiEditorWorkspace>
+          const wsTabs = strList(ws.tabs).slice(0, MAX_WORKSPACE_TABS)
+          editorWorkspaceByProject[projPath] = {
+            expandedDirs: strList(ws.expandedDirs).slice(0, MAX_WORKSPACE_EXPANDED_DIRS),
+            tabs: wsTabs,
+            // 激活标签必须真在 tabs 里：手改过配置 / 标签被截断时，宁可回落到"第一个标签"
+            activeTab: typeof ws.activeTab === 'string' && wsTabs.includes(ws.activeTab) ? ws.activeTab : null,
+          }
+        }
+
         // 思维导图目录列表: 多根聚合(每个目录只列本级 *.mindmap.json)。
         // 归一化只做 trim + 去空 + 小写比较去重(Windows 不区分大小写,展示保留原串),
         // 尾部分隔符/绝对路径的规范化由 mindmapStore.addDirs 负责。
@@ -668,6 +709,7 @@ export const useConfigStore = defineStore('config', () => {
           markdownTheme: typeof configData.ui.markdownTheme === 'string' && MARKDOWN_THEMES.includes(configData.ui.markdownTheme)
             ? configData.ui.markdownTheme
             : defaultUiSettings.markdownTheme,
+          editorWorkspaceByProject,
         }
       }
 
@@ -802,6 +844,34 @@ export const useConfigStore = defineStore('config', () => {
       { aiDiffSummaryByProject: { [cwd]: enabled } },
       { immediate: true },
     )
+  }
+
+  /**
+   * 记住当前项目的文件空间工作区（文件树展开态 + 打开的标签页 + 激活标签）。
+   * 只覆盖当前项目那一条，其它项目条目由服务端深合并保留（同 layoutsByProject）。
+   * 由 EditorView 在标签/展开态变化时调用，走防抖落盘 + beforeunload 兜底 flush。
+   */
+  function saveEditorWorkspace(snapshot: UiEditorWorkspace) {
+    const cwd = currentDirectory.value
+    if (!cwd) return
+    const tabs = snapshot.tabs.slice(0, MAX_WORKSPACE_TABS)
+    ui.value.editorWorkspaceByProject = {
+      ...ui.value.editorWorkspaceByProject,
+      [cwd]: {
+        expandedDirs: snapshot.expandedDirs.slice(0, MAX_WORKSPACE_EXPANDED_DIRS),
+        tabs,
+        // 激活标签必须在快照内：闭到最后一个标签时 activeTab 可能已经指向已关闭的文件
+        activeTab: snapshot.activeTab && tabs.includes(snapshot.activeTab) ? snapshot.activeTab : null,
+      },
+    }
+    saveUiSettings({ editorWorkspaceByProject: ui.value.editorWorkspaceByProject })
+  }
+
+  /** 取某个项目（默认当前项目）记住的工作区快照；没记过返回 null */
+  function getEditorWorkspace(projectPath?: string): UiEditorWorkspace | null {
+    const key = projectPath ?? currentDirectory.value
+    if (!key) return null
+    return ui.value.editorWorkspaceByProject[key] ?? null
   }
 
   // 监听 ui 子字段变化，自动落盘
@@ -1525,6 +1595,8 @@ export const useConfigStore = defineStore('config', () => {
     saveGeneralSettings,
     saveUiSettings,
     setAiDiffSummaryEnabled,
+    saveEditorWorkspace,
+    getEditorWorkspace,
     setMarkdownTheme,
     resetUiLayout,
     applyTheme,

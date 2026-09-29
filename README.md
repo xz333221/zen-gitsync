@@ -349,6 +349,7 @@ A full IDE-like editor (fourth icon in the activity bar) for browsing and editin
 | File tree | Collapsible directory tree with file-type icons; **auto-refreshes every 15s** to pick up changes made outside the GUI (skipped when the tab is hidden or the search box is non-empty) |
 | File search | Type in the sidebar search box to filter the tree (180 ms debounce); matched substrings are highlighted in node names; `Ctrl+F` / `Cmd+F` focuses the box; `Esc` clears the query or blurs the input |
 | Multi-tab editing | Open multiple files simultaneously; tabs show unsaved (●) indicator |
+| Workspace restore | The tree's expanded folders and the open tabs (their order plus which one is active) are remembered **per project** and put back on reload, and when you switch back to that project. The snapshot lives in `~/.zen-gitsync/config.json` under `ui.editorWorkspaceByProject`; only paths are stored — files are re-read from disk, so unsaved edits do not survive a reload, and files that no longer exist are skipped silently |
 | Monaco editor | Syntax highlighting for JS, TS, Vue, Python, Go, JSON, CSS, and more |
 | Markdown preview | Toggle between source and rendered preview for `.md` files |
 | HTML preview / browser | `.html` / `.htm` render in a sandboxed in-app iframe; right-click one in the file tree → **Open in Browser** to hand it to the system default browser instead |
@@ -1006,6 +1007,7 @@ Activity Bar 第四个视图，在 GUI 内直接浏览并编辑项目文件：
 | 文件树 | 可折叠的目录树，附带文件类型图标；**每 15 秒自动刷新一次**，捕获 GUI 外部对文件的改动（标签页隐藏或搜索框非空时跳过） |
 | 文件搜索 | 在侧边栏搜索框中输入关键字过滤文件树（180ms 防抖），命中片段会在节点名中高亮；`Ctrl+F` / `Cmd+F` 聚焦搜索框，`Esc` 清空内容或失焦 |
 | 多标签页 | 同时打开多个文件，未保存文件显示 ● 标记 |
+| 工作区恢复 | **按项目**记住文件树展开了哪些目录、开了哪些标签（顺序 + 当前激活的那个），刷新页面或切回该项目时自动恢复；快照存在 `~/.zen-gitsync/config.json` 的 `ui.editorWorkspaceByProject`。只记路径 —— 文件按盘上最新内容重开，未保存的改动不跨会话保留，已被删除的文件静默跳过 |
 | Monaco 编辑器 | 支持 JS、TS、Vue、Python、Go、JSON、CSS 等语法高亮 |
 | Markdown 预览 | `.md` 文件可切换源码与渲染预览模式 |
 | HTML 预览 / 浏览器打开 | `.html` / `.htm` 在应用内沙箱 iframe 里渲染；在文件树里右键 → **在浏览器中打开**，改交系统默认浏览器渲染 |

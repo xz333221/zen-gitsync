@@ -141,8 +141,24 @@ function stopTreePolling() {
 }
 
 // currentDirectory 变更时重启 interval(避免旧 timer 引用旧路径)
-watch(() => configStore.currentDirectory, () => {
+// 同时重建文件树 + 换到新项目自己的工作区快照。之前这里只重启轮询，
+// 树要等下一轮 60s 静默刷新才换到新项目，而且展开态全丢。
+// 有未保存改动时不动标签页 —— 那些内容只活在内存里，重建标签就等于直接丢掉。
+watch(() => configStore.currentDirectory, async () => {
+  // 先关写入（同上：切换期间树/标签都会短暂变空，写回去就是把新项目的快照冲成空表）
+  workspaceHydrated = false
   startTreePolling()
+  await initTree()
+  if (tabs.value.some(t => t.isDirty)) {
+    // 有未保存改动就不动标签（内容只在内存里，重建标签等于直接丢），
+    // 但要把写入放回去，否则用户在这个项目里后面的操作全都记不下来
+    workspaceHydrated = true
+    return
+  }
+  tabs.value = []
+  activeTabPath.value = null
+  disposeAllModels()
+  await restoreWorkspace()
 })
 
 // 设置里切「文件树自动刷新」后立即生效,不用重开界面
@@ -515,6 +531,114 @@ function closeTab(path: string, e: MouseEvent) {
 
 const activeTab = () => tabs.value.find(t => t.path === activeTabPath.value) ?? null
 
+// ── 工作区快照：按项目记住"树展开了哪些目录 + 开了哪些文件" ────────────
+// 存到 ~/.zen-gitsync/config.json 的 ui.editorWorkspaceByProject[cwd]（见 configStore），
+// 刷新 / 重启 / 切回项目时恢复。只记路径不记内容 —— 恢复时按盘上最新内容重开：
+// 未保存的改动不跨会话保留，因为那份内容只活在 Monaco model 里，落盘就等于替用户做了保存决定。
+// 只在"标签/展开态真的变了"时写（computed 依赖变化才触发），不需要手动埋点。
+const workspaceSnapshot = computed(() => ({
+  expandedDirs: [...collectExpandedPaths(treeNodes.value)],
+  tabs: tabs.value.map(t => t.path),
+  activeTab: activeTabPath.value,
+}))
+
+// 恢复期间挂起写入：逐个重开标签会触发多次变更，这时写回去只会把快照改成"开了一半"的中间态。
+// ★ 更要紧的是**首轮恢复读完之前一律不许写** —— 启动时 initTree 一换 treeNodes，
+// computed 就产出一个新对象触发 watcher，此刻 tabs/展开态都还是空的，
+// 一写就把上次存的快照冲成空表，随后的 restoreWorkspace 读到的就是这份空表（恢复静默失效）。
+// 所以 workspaceHydrated 从 false 起步，restoreWorkspace 读完才置 true。
+let workspaceRestoring = false
+let workspaceHydrated = false
+
+function persistWorkspace() {
+  if (!workspaceHydrated || workspaceRestoring || !configStore.isUiLoaded) return
+  configStore.saveEditorWorkspace(workspaceSnapshot.value)
+}
+
+watch(workspaceSnapshot, () => persistWorkspace())
+
+// 静默重开一个标签：文件已被删/改名时直接跳过，不弹错误提示（这是恢复，不是用户点的操作）
+async function restoreTab(path: string) {
+  if (tabs.value.some(t => t.path === path)) return
+  const name = path.split(/[\\/]/).pop() || path
+  const ext = (name.split('.').pop() || '').toLowerCase()
+  // 图片/Office 与 openFile 口径一致：不读文本内容，建只读 tab，内容交给预览面板
+  if (IMAGE_EXTS.has(ext)) {
+    tabs.value.push({ path, name, content: '', originalContent: '', isDirty: false, language: 'plaintext' })
+    return
+  }
+  if (isOfficeFile(name)) {
+    tabs.value.push({ path, name, content: '', originalContent: '', isDirty: false, language: 'office' })
+    return
+  }
+  try {
+    const resp = await fetch(`/api/editor/file?path=${encodeURIComponent(path)}`)
+    const data = await resp.json()
+    if (!data.success) return
+    // 丢掉缓存里的旧 model：这次内容是从盘上刚读的，复用旧 model 会显示过期的文本
+    // （"关掉标签 → 外部改了文件 → 再打开"就会看到旧内容，一保存反而覆盖新内容）。
+    // 还挂在编辑器上的那个不碰 —— 正在显示它，Monaco 也不允许随手 dispose 在用的 model。
+    const stale = modelCache.get(path)
+    if (stale && !stale.isDisposed() && editorInstance.value?.getModel() !== stale) {
+      stale.dispose()
+      modelCache.delete(path)
+    }
+    tabs.value.push({
+      path,
+      name,
+      content: data.content,
+      originalContent: data.content,
+      isDirty: false,
+      language: getLanguageByExt(ext),
+    })
+  } catch {
+    // 网络抖动/后端重启：少恢复一个标签不影响使用，下次变更会把这个路径从快照里剔掉
+  }
+}
+
+// 恢复当前项目上次的工作区。顺序有讲究：先树后标签 ——
+// 树走 /api/browse_directory_tree 一次请求取回"根 + 已展开目录"，比逐目录请求省几十个往返。
+async function restoreWorkspace() {
+  try {
+    // ui 配置没加载完时 getEditorWorkspace() 只能读到空表（会静默"没恢复"）。
+    // 启动后立刻进文件空间、或后端慢一点都会撞上，所以先等它加载完再继续。
+    // 这里不用 watch 等：本函数已经不在组件 setup 的同步执行段里，
+    // 那儿建出来的 watcher 不归组件管，卸载时不会回收。
+    for (let i = 0; i < 100 && !configStore.isUiLoaded; i++) {
+      await new Promise(r => setTimeout(r, 50))
+    }
+    if (!configStore.isUiLoaded) return
+    const snap = configStore.getEditorWorkspace()
+    if (!snap) return
+    workspaceRestoring = true
+    try {
+      if (snap.expandedDirs.length > 0) {
+        const fresh = await fetchTreeSnapshot(snap.expandedDirs)
+        // 失败(网络/后端刚起)时保留 initTree 出来的骨架树，不阻塞后面恢复标签
+        if (fresh) treeNodes.value = fresh
+      }
+      for (const path of snap.tabs) {
+        await restoreTab(path)
+      }
+      // 若用户是从别处点"在编辑器中打开 X"进来的，以 X 为准（pendingFilePath 的 watcher 已经开过它了）
+      if (!props.pendingFilePath && snap.activeTab && tabs.value.some(t => t.path === snap.activeTab)) {
+        activeTabPath.value = snap.activeTab
+        const tab = activeTab()
+        const ext = (tab?.name.split('.').pop() || '').toLowerCase()
+        if (tab && (IMAGE_EXTS.has(ext) || isOfficeFile(tab.name))) showPreview.value = true
+      }
+    } finally {
+      workspaceRestoring = false
+    }
+  } finally {
+    // 无论恢复成功与否，读这一轮到此为止：放开写入，并落一次盘把
+    // "盘上已经不存在、没能恢复"的路径从快照里剔掉，避免下次再白试一遍。
+    // 没读到快照（新项目）时这一笔会把空状态存下来 —— 那正是"这个项目没开任何东西"的实情。
+    workspaceHydrated = true
+    persistWorkspace()
+  }
+}
+
 // ── Monaco 编辑器 ───────────────────────────────────────
 const editorContainerRef = ref<HTMLElement | null>(null)
 const editorInstance = shallowRef<monaco.editor.IStandaloneCodeEditor | null>(null)
@@ -528,6 +652,16 @@ function getOrCreateModel(tab: Tab): monaco.editor.ITextModel {
     modelCache.set(tab.path, model)
   }
   return model
+}
+
+// 释放全部 model（切项目清空标签时用）。缓存的 model 不会自己消失，
+// 下一轮恢复同一个文件时若被复用，显示的就是切项目前的旧内容。
+function disposeAllModels() {
+  editorInstance.value?.setModel(null)
+  for (const model of modelCache.values()) {
+    if (!model.isDisposed()) model.dispose()
+  }
+  modelCache.clear()
 }
 
 function mountEditor() {
@@ -686,6 +820,9 @@ function setupViewVisibilityObserver() {
 onMounted(async () => {
   mountEditor()
   await initTree()
+  // 恢复上次的工作区（树展开态 + 打开的标签）。必须在 initTree 之后：
+  // initTree 把 treeNodes 覆盖成"只有根、全折叠"，先恢复会被它冲掉。
+  await restoreWorkspace()
   // useThemeObserver 已自动注册观察者,无需在此再 observe
   setupViewVisibilityObserver()
   // 启动文件树 60s 轮询,捕获外部修改(详见 startTreePolling 注释)

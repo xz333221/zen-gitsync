@@ -1047,10 +1047,13 @@ export function registerConfigRoutes({
       if (!rawConfig.ui.aiDiffSummaryByProject || typeof rawConfig.ui.aiDiffSummaryByProject !== 'object' || Array.isArray(rawConfig.ui.aiDiffSummaryByProject)) {
         rawConfig.ui.aiDiffSummaryByProject = {}
       }
+      if (!rawConfig.ui.editorWorkspaceByProject || typeof rawConfig.ui.editorWorkspaceByProject !== 'object' || Array.isArray(rawConfig.ui.editorWorkspaceByProject)) {
+        rawConfig.ui.editorWorkspaceByProject = {}
+      }
 
       // 浅合并顶层 ui 字段（支持嵌套对象整体替换，如 commandConsole）
       for (const key of Object.keys(partial)) {
-        if (key === 'layoutsByProject' || key === 'aiDiffSummaryByProject') {
+        if (key === 'layoutsByProject' || key === 'aiDiffSummaryByProject' || key === 'editorWorkspaceByProject') {
           // 深合并 map：保留其它项目条目
           const incoming = partial[key]
           if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
