@@ -40,8 +40,9 @@
 import path from 'node:path';
 import os from 'node:os';
 import { promises as fs } from 'node:fs';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
+import open from 'open';
 import { asyncRoute, HttpError } from '../../utils/asyncRoute.js';
 import { AI_SKILLS_DIR, AI_MCP_FILE } from '../../../../paths.js';
 
@@ -738,12 +739,76 @@ function npmBinary() {
 }
 
 /**
+ * 扫描 root 下两层内所有含 SKILL.md 的目录。
+ * 集合型仓库很常见(一个仓库十几二十个 skill),必须把全部候选都收上来再挑,
+ * 不能像以前那样"按目录顺序撞见第一个就用"。
+ *
+ * @returns {Promise<Array<{ dir: string, rel: string }>>} rel 用 / 分隔,仓库根为 ''
+ */
+async function collectSkillDirs(root) {
+  const found = [];
+  async function walk(dir, rel, depth) {
+    if (await exists(path.join(dir, 'SKILL.md'))) found.push({ dir, rel });
+    if (depth >= 2) return;
+    const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      // 跳过 .git 与 .claude-plugin 这类点目录:它们不是 skill 本体
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+      await walk(path.join(dir, entry.name), rel ? `${rel}/${entry.name}` : entry.name, depth + 1);
+    }
+  }
+  await walk(root, '', 0);
+  return found;
+}
+
+/** 目录名归一化:大小写、空格、下划线都抹平,`Taste Skill` 与 `taste-skill` 应当能对上。 */
+function normalizeSkillName(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+/**
+ * 从候选目录里挑出"用户点的那个 skill"。
+ *
+ * 为什么不能直接取第一个:仓库 `Leonxlnx/taste-skill` 的 `skills/` 下有十几个 skill,
+ * 目录顺序第一个是 `brandkit`。旧逻辑会把 brandkit 装进去,而卡片的 id 仍然记成
+ * `github-Leonxlnx-taste-skill` —— 于是广场卡片显示"已安装",已安装列表里却是
+ * `brandkit` 这个名字,用户根本对不上,只能怀疑"是不是没装成功"。
+ *
+ * @returns {{ dir: string, rel: string } | null} null = 挑不出来(并列歧义),交给调用方报错
+ */
+function pickSkillDir(candidates, { subpath = '', skillName = '' } = {}) {
+  if (!candidates.length) return null;
+  const wantSub = String(subpath || '').replace(/^\.\//, '').replace(/\/+$/, '').toLowerCase();
+  const wantName = normalizeSkillName(skillName);
+
+  const rank = ({ rel }) => {
+    const norm = String(rel).toLowerCase();
+    const base = normalizeSkillName(norm.split('/').pop());
+    if (wantSub && norm === wantSub) return 0;                                    // 条目自己给的就是这个子目录
+    if (wantName && base === wantName) return 1;                                  // 目录名就是用户点的名字
+    if (!rel) return 2;                                                          // 仓库根就是一份 SKILL.md
+    // 名字沾边(如 taste-skill-v1 / taste-skill)。必须卡在 - 边界上:
+    // 用裸 includes 的话,目录 `a` 会被判成 `whatever` 的变体,短名一律乱匹配。
+    if (wantName && base && (
+      base.startsWith(`${wantName}-`) || base.endsWith(`-${wantName}`)
+      || wantName.startsWith(`${base}-`) || wantName.endsWith(`-${base}`)
+    )) return 3;
+    return 4;
+  };
+
+  const ranked = candidates.map(item => ({ ...item, rank: rank(item) })).sort((a, b) => a.rank - b.rank);
+  // 首选并列 → 宁可报错让用户自己说清是哪一个,也不要悄悄装错
+  if (ranked.length > 1 && ranked[1].rank === ranked[0].rank) return null;
+  return ranked[0];
+}
+
+/**
  * 只拉取仓库里的某个子目录。
  * 用 --filter=blob:none --sparse 是为了对付 monorepo ——
  * 直接 --depth 1 全量克隆一个几万文件的仓库只为拿一个 skill 太浪费。
  * sparse 不被支持(旧版 git / 服务端限制)时回落到普通浅克隆。
  */
-async function cloneSubdirectory({ repository, subpath, dest }) {
+async function cloneSubdirectory({ repository, subpath, dest, skillName = '' }) {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'zen-gitsync-skill-'));
   const url = `https://github.com/${repository}.git`;
   try {
@@ -767,29 +832,17 @@ async function cloneSubdirectory({ repository, subpath, dest }) {
       await execFileAsync(gitBinary(), ['clone', '--depth', '1', url, temp], { timeout: CLONE_TIMEOUT_MS, windowsHide: true });
     }
 
-    const requested = subpath ? path.join(temp, subpath) : '';
-    const candidates = [requested, path.join(temp, 'skills'), temp].filter(Boolean);
-    let source = null;
-    for (const candidate of candidates) {
-      if (await exists(path.join(candidate, 'SKILL.md'))) { source = candidate; break; }
+    const candidates = await collectSkillDirs(temp);
+    const picked = pickSkillDir(candidates, { subpath, skillName });
+    if (!picked) {
+      if (!candidates.length) throw new HttpError(422, `仓库 ${repository} 里没有找到 SKILL.md`);
+      const names = candidates.slice(0, 8).map(item => item.rel || '仓库根').join('、');
+      const more = candidates.length > 8 ? ` 等 ${candidates.length} 个` : '';
+      throw new HttpError(422, `仓库 ${repository} 里有多个 skill,且没有一个跟「${skillName || repository}」对得上(${names}${more}),请从具体子目录再装`);
     }
-    // 再退一步:找仓库里任意一层含 SKILL.md 的目录(只扫两层,避免在 monorepo 里乱窜)
-    if (!source) {
-      const top = await fs.readdir(temp, { withFileTypes: true }).catch(() => []);
-      for (const dir of top.filter(entry => entry.isDirectory() && entry.name !== '.git')) {
-        if (await exists(path.join(temp, dir.name, 'SKILL.md'))) { source = path.join(temp, dir.name); break; }
-        const inner = await fs.readdir(path.join(temp, dir.name), { withFileTypes: true }).catch(() => []);
-        let hit = null;
-        for (const sub of inner.filter(entry => entry.isDirectory())) {
-          if (await exists(path.join(temp, dir.name, sub.name, 'SKILL.md'))) { hit = path.join(temp, dir.name, sub.name); break; }
-        }
-        if (hit) { source = hit; break; }
-      }
-    }
-    if (!source) throw new HttpError(422, `仓库 ${repository} 里没有找到 SKILL.md`);
 
     await fs.mkdir(path.dirname(dest), { recursive: true });
-    await fs.cp(source, dest, { recursive: true, force: false });
+    await fs.cp(picked.dir, dest, { recursive: true, force: false });
   } finally {
     await fs.rm(temp, { recursive: true, force: true }).catch(() => {});
   }
@@ -806,7 +859,7 @@ async function installSkill({ item, target, cwd }) {
   const repository = String(item.repository || '').trim().replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$/, '');
   if (repository && SAFE_REPOSITORY.test(repository)) {
     const subpath = item.subpath && isSafeSubpath(item.subpath) ? String(item.subpath) : '';
-    await cloneSubdirectory({ repository, subpath, dest });
+    await cloneSubdirectory({ repository, subpath, dest, skillName: String(item.name || id) });
     return { id, type: 'skill', name: item.name || id, target, dir: dest, source: repository };
   }
 
@@ -891,6 +944,29 @@ async function installMcp({ item, target, cwd }) {
   await fs.writeFile(paths.file, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
 
   return { id, type: 'mcp', name: item.name || id, target, file: paths.file, envKeys: missingEnv, warning: installWarning };
+}
+
+/**
+ * 在系统文件管理器里定位一个已安装项:
+ *   目录 → 直接打开;文件(如 .mcp.json)→ 在其中选中它。
+ * Linux 没有"选中文件"的标准接口,退化为打开所在目录。
+ * 与 /api/editor/reveal 同一套行为,只是那个接口只认工作目录以内的路径,
+ * 这里要能定位 ~/.zen-gitsync/ai 下的全局安装项。
+ */
+async function revealInFileManager(resolved) {
+  const stat = await fs.stat(resolved);
+  if (stat.isDirectory()) {
+    await open(resolved, { wait: false });
+    return;
+  }
+  if (process.platform === 'win32') {
+    // explorer.exe /select,<path>(逗号分隔,无双引号,argv 数组防二次解释)
+    spawn('explorer.exe', ['/select,', resolved], { detached: true, stdio: 'ignore' }).unref();
+  } else if (process.platform === 'darwin') {
+    spawn('open', ['-R', resolved], { detached: true, stdio: 'ignore' }).unref();
+  } else {
+    await open(path.dirname(resolved), { wait: false });
+  }
 }
 
 async function uninstall({ type, id, target, cwd }) {
@@ -987,6 +1063,33 @@ export function registerAgentMarketplaceRoutes({ app, getCurrentProjectPath }) {
     res.json({ success: true, target, cwd, item: installed });
   }));
 
+  // 在文件管理器里定位已安装项。路径由服务端用同一份 targetPaths 推导,
+  // 前端只传 id —— 不接收任意路径,天然不给出路径穿越的口子。
+  app.post('/api/agent/marketplace/reveal', asyncRoute(async (req, res) => {
+    const type = normalizeType(req.body?.type);
+    if (!type) throw new HttpError(400, '未知扩展类型');
+    const target = normalizeTarget(req.body?.target);
+    const cwd = resolveProjectPath(req.body?.cwd, getCurrentProjectPath?.());
+    const id = String(req.body?.id || '');
+    if (type === 'skill' && !SAFE_ID.test(id)) throw new HttpError(400, '参数不合法');
+    if (type === 'mcp' && id && !SAFE_ID.test(id)) throw new HttpError(400, '参数不合法');
+
+    const paths = targetPaths({ type, target, cwd });
+    let resolved;
+    if (type === 'skill') {
+      const root = path.resolve(paths.root);
+      resolved = path.resolve(root, id);
+      if (!resolved.startsWith(`${root}${path.sep}`)) throw new HttpError(400, '路径不合法');
+    } else {
+      // MCP 没有独立目录,定位到配置文件本身(在其中选中)
+      resolved = path.resolve(paths.file);
+    }
+    if (!(await exists(resolved))) throw new HttpError(404, '目标不存在');
+
+    await revealInFileManager(resolved);
+    res.json({ success: true, type, target, path: resolved });
+  }));
+
   app.delete('/api/agent/marketplace/item/:type/:id', asyncRoute(async (req, res) => {
     const type = normalizeType(req.params.type);
     if (!type) throw new HttpError(400, '未知扩展类型');
@@ -998,3 +1101,7 @@ export function registerAgentMarketplaceRoutes({ app, getCurrentProjectPath }) {
     res.json({ success: true, ...result });
   }));
 }
+
+// 给回归测试用:集合型仓库"装哪一个"的挑选逻辑必须能被单独钉住
+// (真跑一遍 git clone 要联网,测试里不现实)
+export { pickSkillDir, collectSkillDirs };

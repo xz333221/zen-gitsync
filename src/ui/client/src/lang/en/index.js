@@ -2759,6 +2759,8 @@ export default {
   '@MKT:卸载中...': 'Uninstalling...',
   '@MKT:已卸载': 'Uninstalled',
   '@MKT:卸载失败': 'Uninstall failed',
+  '@MKT:打开文件夹': 'Open folder',
+  '@MKT:打开失败': 'Failed to open',
   '@MKT:确定卸载': 'Uninstall',
   '@MKT:重新安装': 'Reinstall',
   '@MKT:重装': 'Reinstall',

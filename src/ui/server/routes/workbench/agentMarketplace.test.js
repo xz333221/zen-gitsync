@@ -37,7 +37,7 @@ process.env.HOME = sandboxHome;
 delete process.env.HOMEDRIVE;
 delete process.env.HOMEPATH;
 
-const { registerAgentMarketplaceRoutes } = await import('./agentMarketplace.js');
+const { registerAgentMarketplaceRoutes, pickSkillDir, collectSkillDirs } = await import('./agentMarketplace.js');
 const { AI_SKILLS_DIR, AI_MCP_FILE } = await import('../../../../paths.js');
 
 // ── 测试脚手架:把注册的 handler 抓出来直接调 ──────────────────
@@ -335,4 +335,71 @@ test('install: 项目不存在时拒绝,不会把 .claude/skills 建到奇怪的
   });
   assert.equal(status, 400);
   assert.match(payload.error, /项目目录不存在/);
+});
+
+// ── 集合型仓库"装哪一个" ────────────────────────────────────────
+// 踩过的坑:Leonxlnx/taste-skill 的 skills/ 下第一个是 brandkit,
+// 旧逻辑"按目录顺序撞见第一个含 SKILL.md 的就装" → 点 taste-skill 装成 brandkit。
+// 卡片 id 仍是 github-Leonxlnx-taste-skill 所以显示"已安装",
+// 已安装列表里却是 brandkit 这个名字,用户根本对不上,只能怀疑没装成功。
+
+test('pickSkillDir: 候选里挑与条目同名的那个,不取目录顺序第一个', () => {
+  const candidates = [
+    { dir: 'T/skills/brandkit', rel: 'skills/brandkit' },
+    { dir: 'T/skills/taste-skill', rel: 'skills/taste-skill' },
+    { dir: 'T/skills/taste-skill-v1', rel: 'skills/taste-skill-v1' },
+  ];
+  assert.equal(pickSkillDir(candidates, { skillName: 'taste-skill' }).rel, 'skills/taste-skill');
+});
+
+test('pickSkillDir: 条目给了子目录时以子目录为准,名字对得上也不用', () => {
+  const candidates = [
+    { dir: 'T/skills/taste', rel: 'skills/taste' },
+    { dir: 'T/skills/taste-skill', rel: 'skills/taste-skill' },
+  ];
+  assert.equal(pickSkillDir(candidates, { subpath: 'skills/taste', skillName: 'taste-skill' }).rel, 'skills/taste');
+});
+
+test('pickSkillDir: 名字对不上且候选并列时返回 null(报错,而不是猜一个)', () => {
+  const candidates = [
+    { dir: 'T/alpha', rel: 'alpha' },
+    { dir: 'T/beta', rel: 'beta' },
+  ];
+  assert.equal(pickSkillDir(candidates, { skillName: 'whatever' }), null);
+});
+
+test('pickSkillDir: 短目录名不会被裸 includes 误判成变体', () => {
+  const only = [{ dir: 'T/a', rel: 'a' }];
+  // wantName='whatever' 包含子串 'a',裸 includes 会把它当 rank 3 命中
+  assert.equal(pickSkillDir([...only, { dir: 'T/b', rel: 'b' }], { skillName: 'whatever' }), null);
+  assert.equal(pickSkillDir(only, { skillName: 'whatever' }).rel, 'a');
+});
+
+test('pickSkillDir: 仓库根就一份 SKILL.md 时优先于没名字的深层目录', () => {
+  const candidates = [
+    { dir: 'T/sub/other', rel: 'sub/other' },
+    { dir: 'T', rel: '' },
+  ];
+  assert.equal(pickSkillDir(candidates, { skillName: 'anything' }).rel, '');
+});
+
+test('pickSkillDir: 没有候选时返回 null(调用方报"仓库里没有 SKILL.md")', () => {
+  assert.equal(pickSkillDir([], { skillName: 'x' }), null);
+});
+
+test('collectSkillDirs: 收两层以内的 SKILL.md,跳过 .git 与点目录', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'zen-mp-collect-'));
+  const write = async rel => {
+    await fs.mkdir(path.join(root, rel), { recursive: true });
+    await fs.writeFile(path.join(root, rel, 'SKILL.md'), `---\nname: ${path.basename(rel)}\n---\n`, 'utf8');
+  };
+  await write('skills/brandkit');
+  await write('skills/deep/nested/too-deep');
+  await write('.claude-plugin');
+  await fs.mkdir(path.join(root, '.git'), { recursive: true });
+  await fs.writeFile(path.join(root, '.git', 'SKILL.md'), 'not a skill', 'utf8');
+  await fs.writeFile(path.join(root, 'README.md'), '# x', 'utf8');
+
+  const rels = (await collectSkillDirs(root)).map(item => item.rel).sort();
+  assert.deepEqual(rels, ['skills/brandkit']);
 });

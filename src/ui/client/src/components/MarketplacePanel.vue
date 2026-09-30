@@ -9,7 +9,7 @@
 import { ref, computed, watch, reactive } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Refresh, Delete, Link, Check, Star, Download, Warning } from '@element-plus/icons-vue'
+import { Search, Refresh, Delete, Link, Check, Star, Download, Warning, FolderOpened } from '@element-plus/icons-vue'
 import { useConfigStore } from '@/stores/configStore'
 import CommonDialog from '@/components/CommonDialog.vue'
 
@@ -60,6 +60,10 @@ interface InstalledItem {
   package?: string
   command?: string
   requiredEnv?: string[]
+  // 落盘位置:skill 是目录、mcp 是配置文件。列表里展示 id 用,
+  // 用户才能把广场卡片上的名字和实际装出来的目录对上号。
+  dir?: string
+  file?: string
 }
 
 const groups = ref<SourceGroup[]>([])
@@ -72,6 +76,7 @@ const selectedSources = ref<string[]>([])
 const installTarget = ref<'project' | 'global'>('project')
 const installing = ref<Set<string>>(new Set())
 const removing = ref<Set<string>>(new Set())
+const revealing = ref<Set<string>>(new Set())
 
 const cwd = computed(() => configStore.currentDirectory || '')
 
@@ -230,6 +235,26 @@ async function confirmReinstall(item: MarketItem) {
 }
 
 /** MCP 安装前的配置收集已改为 el-dialog(见 configDialog),不再走 DOM hack。 */
+
+// 在系统文件管理器里定位:skill 打开安装目录,mcp 在配置文件里选中它。
+// 路径由后端按 target + id 自己推导,前端不传路径。
+async function onReveal(item: InstalledItem) {
+  const key = `${item.target}:${item.id}`
+  revealing.value.add(key)
+  try {
+    const res = await fetch('/api/agent/marketplace/reveal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: props.type, target: item.target, cwd: cwd.value, id: item.id }),
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok || !data?.success) ElMessage.error(data?.error || $t('@MKT:打开失败'))
+  } catch {
+    ElMessage.error($t('@MKT:打开失败'))
+  } finally {
+    revealing.value.delete(key)
+  }
+}
 
 async function onRemove(item: InstalledItem) {
   try {
@@ -390,10 +415,22 @@ async function onRemove(item: InstalledItem) {
             </div>
             <div class="mp-installed-list">
               <div v-for="item in installedByTarget[target]" :key="target + item.id" class="mp-installed-row">
-                <span class="mp-installed-name">{{ item.name }}</span>
+                <span class="mp-installed-name" :title="item.name">{{ item.name }}</span>
+                <!-- 实际落盘的标识:SKILL.md 里的 name 常与仓库名不同(如仓库 taste-skill
+                     里的 skill 自称 brandkit),不显示这个用户就对不上广场卡片上的名字 -->
+                <code v-if="item.id && item.id !== item.name" class="mp-installed-id" :title="item.dir || item.file || item.id">{{ item.id }}</code>
                 <code v-if="item.package" class="mp-meta-pkg">{{ item.package }}</code>
                 <span v-if="item.requiredEnv?.length" class="mp-tag warn">{{ $t('@MKT:待配置') }}: {{ item.requiredEnv.join(', ') }}</span>
                 <span class="mp-foot-spacer" />
+                <button
+                  class="mp-reveal-btn"
+                  :disabled="revealing.has(target + item.id)"
+                  :title="item.dir || item.file || ''"
+                  @click="onReveal(item)"
+                >
+                  <el-icon><FolderOpened /></el-icon>
+                  {{ $t('@MKT:打开文件夹') }}
+                </button>
                 <button
                   class="mp-remove-btn"
                   :disabled="removing.has(target + item.id)"
@@ -816,8 +853,21 @@ async function onRemove(item: InstalledItem) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
+/* 实际落盘的目录名 / 配置键:比标题小一档,弱化但不隐藏 */
+.mp-installed-id {
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40%;
+}
+
+.mp-reveal-btn,
 .mp-remove-btn {
   display: inline-flex;
   align-items: center;
@@ -830,14 +880,22 @@ async function onRemove(item: InstalledItem) {
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
+  white-space: nowrap;
   transition: var(--transition-ui-fast);
 
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+.mp-reveal-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--text-tertiary);
+}
+
+.mp-remove-btn {
   &:hover:not(:disabled) {
     color: var(--color-danger);
     border-color: var(--color-danger);
   }
-
-  &:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 
 @media (prefers-reduced-motion: reduce) {
