@@ -2427,6 +2427,8 @@ export default {
   '@WORKBENCH:已运行 {elapsed}': 'Running for {elapsed}',
   '@WORKBENCH:工具 {n} 次': '{n} tool calls',
   '@WORKBENCH:静默 {elapsed}': 'Silent for {elapsed}',
+  '@WORKBENCH:AI 估计': 'AI estimate',
+  '@WORKBENCH:百分比是主 Agent 根据任务思考与工具调用推测的大致估计，不是精确进度': 'The percentage is a rough estimate the master agent inferred from task thinking and tool calls — not a measured figure',
   '@WORKBENCH:最近思考': 'Thinking',
   '@WORKBENCH:最新回复': 'Reply',
   '@WORKBENCH:暂无进度报告': 'No progress reports yet',

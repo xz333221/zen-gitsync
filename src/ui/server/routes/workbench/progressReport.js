@@ -24,7 +24,7 @@
 //   · 服务端定时器只有一个（多个标签页不会各报一份），且时间戳落在共享文件上，
 //     两个 g ui 实例也不会重复报告（见 claimReportSlot）。
 //
-// 报告长什么样：一段模型写的自然语言 + 当时那一批任务的事实快照。
+// 报告长什么样：一段模型写的自然语言 + 当时那一批任务的事实快照 + 模型给的一串百分比。
 // 事实快照必须跟着报告存下来 —— 只存那段话的话，用户回头看"3 分钟前那份报告说
 // 已经跑了 12 分钟"，而他现在看到的是"已运行 45 分钟"，两份报告就对不上了。
 //
@@ -38,6 +38,15 @@
 //     而那句话说的那个任务，思考一直在产出。
 //   · 工具分布 —— 只报"最近一次调用"看不出 119 次里 118 次在干同一件事。
 //   · 静默时长 —— "多久没动静了"是判断卡住最硬的依据，没有它，"可能卡住了"只能靠猜。
+//
+// 2026-09-30 补的百分比（用户："让 AI 给个它认为的进度百分比，直观展示一下"）：
+//   · 一段自然语言说不出"跑了 8 成还是在原地转"，所以让模型在正文之前先交两行数字
+//     （PROGRESS / TASKS，见 PARSE_* 与 buildReportPrompt），前端把它画成进度条。
+//   · **数字同样是模型给的，不是我们算的** —— 所以它进的是报告记录（跟着报告一起
+//     落盘、一起变旧），而不是前端拿时钟实时推。模型没给 / 给了脏值就是 null，
+//     界面不画那条进度条：宁可什么都不画，也不画一条我们自己编出来的进度。
+//   · 解析fail-safe：认不出来的标记行**留在正文里**（不吞内容），只把真认下来的那两行
+//     从正文里摘掉。老模型 / 不听话的模型不过是少一条进度条，报告本身照常。
 
 import { callLlmStream } from './llmClient.js';
 import { createThinkFilter } from '../../../../cli/ai/streamFilter.js';
@@ -141,11 +150,134 @@ export function formatDuration(ms, zh) {
   return `${s}s`;
 }
 
-/** 单个任务的事实块。导出供单测直接断言。 */
-export function describeFact(fact, zh) {
+// ── 进度百分比：模型在正文之前交的那两行数字 ─────────────────────────────
+//
+// 为什么不让前端按"已运行多久 / 调了多少次工具"自己算一个百分比：那两个量跟
+// "还剩多少活"没有固定关系（改一个错别字和重构一个模块都可能跑 20 分钟），
+// 算出来的数字只会看着专业。所以百分比只有模型能给 —— 它读过思考、工具分布、
+// 静默时长；我们只负责**收下并原样透传**，收不到就不画。
+
+/** 头部标记最多出现在前几行。再往后出现同形文字就是正文的一部分，不动它 */
+const HEADER_SCAN_LINES = 6;
+
+/**
+ * 标记行。模型很爱加粗、用全角冒号、或顺手在前面点一个列表符号，三种都认：
+ *   `PROGRESS: 62` / `**PROGRESS：62%**` / `- 进度: 62`
+ * 中文那两个写法是给"没照英文标记写"的模型兜底的。
+ */
+const PROGRESS_MARKER_RE = /^\s*(?:[-*•]\s*)*(?:\*\*|__)?\s*(?:progress|整体进度|进度)\s*(?:\*\*|__)?\s*[:：]\s*(.+?)\s*(?:\*\*|__)?\s*$/i;
+const TASKS_MARKER_RE = /^\s*(?:[-*•]\s*)*(?:\*\*|__)?\s*(?:tasks|任务进度|各任务进度)\s*(?:\*\*|__)?\s*[:：]\s*(.+?)\s*(?:\*\*|__)?\s*$/i;
+
+/**
+ * 百分比归一：只认 0~100 的整数，其余（缺字段 / 脏数据 / 越界）一律 null。
+ *
+ * 越界**不夹到 100** 而是当没给：模型写个 130 是它自己糊涂了，而 100% 在界面上
+ * 长得像"这个任务已经做完了" —— 给一个还在跑的任务画满格，比不画那条更糟。
+ */
+export function normalizePercent(value) {
+  // null / undefined / '' 必须先挡掉：`Number(null)` 与 `Number('')` 都是 0。
+  // 漏了这一行，落盘时写的 `percent: null`（模型没给）读回来会变成 0 ——
+  // 界面上就是一条 0% 的实心进度条，纯属凭空造出来的
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const round = Math.round(n);
+  return round >= 0 && round <= 100 ? round : null;
+}
+
+/** 从一段文本里取第一个整数当百分比（`62%` / `62 分` / `大概 62` 都认） */
+function percentFromText(value) {
+  const m = String(value == null ? '' : value).match(/\d+/);
+  return m ? normalizePercent(Number(m[0])) : null;
+}
+
+/**
+ * `TASKS:` 那一行的值 → 每个任务一个百分比。
+ *
+ * 分隔符认全角/半角逗号、顿号、分号、竖线（模型在这上面很随意）；
+ * `?` `-` `x` 这类写法按"这个任务估不出来"处理 —— 那是模型明确说的不知道，
+ * 与"没写"必须一个待遇（都是 null），不能当成 0。
+ */
+function splitTaskPercents(value) {
+  return String(value == null ? '' : value)
+    .split(/[,，、;；|]/)
+    .map((part) => {
+      const s = part.trim();
+      if (!s) return null;
+      if (/^[?？x×\-–—]+$/i.test(s)) return null;
+      // `1=70` / `1:70` 这种带序号的写法：取分隔符后面那个数，别把序号当进度
+      const numbered = s.match(/^\d+\s*[=:：]\s*([\s\S]+)$/);
+      return percentFromText(numbered ? numbered[1] : s);
+    });
+}
+
+/**
+ * 把模型交回的东西拆成「正文 + 百分比」。
+ *
+ * 三条规矩：
+ *   1. **认不下来就不吃** —— 标记行必须真的解析出数字（或明确的 `?`）才从正文里摘掉，
+ *      否则原样留着。宁可正文里多一行怪话，也不能把用户要看的内容悄悄吞掉。
+ *   2. 整体没给、各任务给了 → 整体取**已知任务的平均值**。那是模型自己的数字的均值，
+ *      不是我们编的，比"没有整体进度"更接近用户想要的（也只在有已知值时才这么干）。
+ *   3. 正文里顺手剥掉裹在外面的 ``` 围栏 —— 模型偶尔会把整个回答写成代码块，
+ *      留着围栏的话卡片上会明晃晃多出三个反引号。
+ *
+ * @returns {{ percent: number|null, taskPercents: (number|null)[], text: string }}
+ */
+export function parseProgressHeader(raw) {
+  const body = [];
+  let percent = null;
+  let taskPercents = [];
+  let hadHeader = false;
+
+  String(raw == null ? '' : raw).split(/\r?\n/).forEach((line, i) => {
+    if (i < HEADER_SCAN_LINES) {
+      const pm = line.match(PROGRESS_MARKER_RE);
+      if (pm) {
+        const v = percentFromText(pm[1]);
+        if (v !== null) { percent = v; hadHeader = true; return; }
+      }
+      const tm = line.match(TASKS_MARKER_RE);
+      if (tm) {
+        const list = splitTaskPercents(tm[1]);
+        // 全估不出来（`TASKS: ?`）也算认下来了 —— 那是模型明确回答"不知道"
+        if (list.some(v => v !== null) || /[?？]/.test(tm[1])) {
+          taskPercents = list;
+          hadHeader = true;
+          return;
+        }
+      }
+    }
+    body.push(line);
+  });
+
+  let text = body.join('\n');
+  if (hadHeader) {
+    text = text.replace(/^\s*```[a-z]*\s*\n/i, '').replace(/\n\s*```\s*$/, '');
+  }
+  text = text.trim();
+
+  if (percent === null) {
+    const known = taskPercents.filter(v => v !== null);
+    if (known.length) percent = Math.round(known.reduce((a, b) => a + b, 0) / known.length);
+  }
+  return { percent, taskPercents, text };
+}
+
+/**
+ * 单个任务的事实块。导出供单测直接断言。
+ *
+ * `index` 是任务在清单里的序号（从 1 起）—— `TASKS:` 那一行靠它跟任务对上，
+ * 不写序号的话模型只能自己数，任务一多必然错位。
+ */
+export function describeFact(fact, zh, index = 0) {
+  const no = Number(index) > 0 ? ` ${Math.floor(Number(index))}` : '';
+
   const none = zh ? '（暂无）' : '(none yet)';
   const lines = [];
-  lines.push(zh ? `【任务】${fact.taskTitle || '（未命名任务）'}` : `[Task] ${fact.taskTitle || '(untitled task)'}`);
+  lines.push(zh
+    ? `【任务${no}】${fact.taskTitle || '（未命名任务）'}`
+    : `[Task${no}] ${fact.taskTitle || '(untitled task)'}`);
   lines.push(zh ? `项目：${fact.projectName || '—'}` : `Project: ${fact.projectName || '—'}`);
   lines.push(zh
     ? `已运行：${formatDuration(fact.elapsedMs, true)}`
@@ -178,7 +310,8 @@ export function describeFact(fact, zh) {
 /** 组装 prompt：事实清单 + 输出要求。导出供单测直接断言。 */
 export function buildReportPrompt(facts, locale) {
   const zh = !String(locale || '').startsWith('en');
-  const list = (Array.isArray(facts) ? facts : []).map(f => describeFact(f, zh));
+  // 序号从 1 起：`TASKS:` 那一行要按它跟任务对齐（见 describeFact 的 index）
+  const list = (Array.isArray(facts) ? facts : []).map((f, i) => describeFact(f, zh, i + 1));
 
   if (zh) {
     return `你在「多项目编排台」里做一次**进度汇报**：用户派出去的任务正在后台跑，他想一句话知道现在到哪一步了。
@@ -187,7 +320,15 @@ export function buildReportPrompt(facts, locale) {
 
 ${list.join('\n\n')}
 
-请写**一段中文进度汇报**：
+**输出格式（开头两行是给界面读的，必须照写：标记词用原文、不要加粗、不要翻译成中文）**
+第 1 行：PROGRESS: <你判断的**整体**进度，0~100 的整数>
+第 2 行：TASKS: <按上面任务的序号顺序，每个任务一个 0~100 的整数，用逗号分隔；确实判断不出来的那个写 ?>
+第 3 行起：汇报正文
+
+这两个数字会被画成用户眼前的**进度条**，所以估不准就写 ? —— 编一个漂亮数字比说"判断不出来"更糟。
+口径是"离做完还有多远"：还在探路给 10~30，主要改动做完但还没验证给 40~70，只剩跑测试、写提交这类收尾给 70~90；**不要给 100**（没跑完就不算完）。
+
+然后写**一段中文进度汇报**：
 1. 3~6 句，总长不超过 220 字，纯文本 —— 不要标题、不要列表符号、不要 Markdown
 2. 逐个说清每个任务**正在做什么、走到哪一步了**。依据按可靠程度排：最近思考 > 工具分布与最近一次工具调用 > 最近输出。很多任务一句正文都不写（输出是「（暂无）」），**别就此说看不出来 —— 先看它的思考**
 3. 判断"是不是卡住了"必须给依据：看「静默」多久、看工具分布是不是在原地打转（例如最近 20 次里 18 次都在读文件）。这两条都没有时不要下这个结论，也不要因为它调用次数多就暗示卡住
@@ -201,7 +342,15 @@ Tasks currently running (${facts.length} in total. The following comes from loca
 
 ${list.join('\n\n')}
 
-Write **one English progress report**:
+**Output format (the first two lines are read by the UI — keep the labels exactly as below, no bold, do not translate them)**
+Line 1: PROGRESS: <your estimate of the **overall** progress, an integer 0-100>
+Line 2: TASKS: <one integer 0-100 per task above, in the order they are numbered, comma separated; write ? for a task you genuinely cannot judge>
+From line 3: the report itself
+
+Those two lines are drawn as a **progress bar** in front of the user, so write ? rather than guessing prettily — a made-up number is worse than admitting you cannot tell.
+Judge by how far the task is from being finished: 10-30 while it is still exploring, 40-70 once the main change is in but unverified, 70-90 when only wrap-up (tests, commit) is left. **Never 100** — nothing is finished until it has finished.
+
+Then write **one English progress report**:
 1. 3-6 sentences, at most 130 words, plain text — no heading, no bullet points, no Markdown
 2. Say what each task is **doing right now and how far it has got**. Rank your evidence: latest thinking > tool mix and most recent tool call > latest output. Many tasks never write a single line of prose (their output is "(none yet)") — do **not** conclude you cannot tell; read their thinking first
 3. To call a task stuck you must show evidence: how long it has been silent, and whether the tool mix is going in circles (e.g. 18 of the last 20 calls were file reads). Without either, do not say it, and do not imply it just because the call count is high
@@ -224,7 +373,7 @@ Write **one English progress report**:
  * @param {object}   [input.model]      模型配置（{baseURL, model, apiKey}）；null = 没配模型
  * @param {function} [input.callStream] 注入点：单测替换掉真实网络调用
  * @param {number}   [input.now]
- * @returns {Promise<object>} 报告记录（含 tasks 事实快照 / text / errorCode）
+ * @returns {Promise<object>} 报告记录（含 tasks 事实快照 / text / percent / errorCode）
  */
 export async function generateProgressReport({
   facts = [],
@@ -240,6 +389,9 @@ export async function generateProgressReport({
     trigger: trigger === 'auto' ? 'auto' : 'manual',
     tasks: facts,
     text: '',
+    // 模型给的整体进度百分比（0~100），null = 没给 / 给的是脏值 —— 界面据此决定
+    // 画不画那条进度条。凡是没走到"模型正常返回"这一步的，都是 null（不许拿时长糊一个）
+    percent: null,
     errorCode: '',
     errorDetail: '',
   };
@@ -285,10 +437,24 @@ export async function generateProgressReport({
     clearTimeout(timer);
   }
 
-  const out = text.trim().slice(0, MAX_REPORT_CHARS);
+  // 先摘掉头部那两行（PROGRESS / TASKS），剩下的才是给用户看的正文。
+  // 顺序不能反：先截断再解析，免得 2000 字的正文把标记行挤出去（标记总在最前面，
+  // 截断其实伤不到它，但"先解析"这件事本身更经得起以后改格式）
+  const parsed = parseProgressHeader(text.trim().slice(0, MAX_REPORT_CHARS));
+  const out = parsed.text;
   // 空正文按失败记：界面上一张"什么都没有"的报告卡片和"模型没返回内容"是两回事
   if (!out) return { ...base, errorCode: 'LLM_FAILED' };
-  return { ...base, text: out };
+  return {
+    ...base,
+    text: out,
+    percent: parsed.percent,
+    // 每个任务各自的百分比挂在事实快照上：报告卡片里那一行行事实本来就在，
+    // 挂上去才不会"整体 62%，但看不出是哪两个任务拖的"
+    tasks: facts.map((f, i) => ({
+      ...f,
+      percent: i < parsed.taskPercents.length ? parsed.taskPercents[i] : null,
+    })),
+  };
 }
 
 export const __testables = {

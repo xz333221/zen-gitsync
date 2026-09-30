@@ -2436,6 +2436,8 @@ export default {
   '@WORKBENCH:已运行 {elapsed}': '已运行 {elapsed}',
   '@WORKBENCH:工具 {n} 次': '工具 {n} 次',
   '@WORKBENCH:静默 {elapsed}': '静默 {elapsed}',
+  '@WORKBENCH:AI 估计': 'AI 估计',
+  '@WORKBENCH:百分比是主 Agent 根据任务思考与工具调用推测的大致估计，不是精确进度': '百分比是主 Agent 根据任务思考与工具调用推测的大致估计，不是精确进度',
   '@WORKBENCH:最近思考': '思考',
   '@WORKBENCH:最新回复': '回复',
   '@WORKBENCH:暂无进度报告': '暂无进度报告',

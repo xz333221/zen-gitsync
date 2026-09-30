@@ -48,6 +48,10 @@ import {
   nowIso,
   genId,
 } from './shared.js';
+// 百分比的归一化只有一处实现（progressReport.js）—— 报告是它生成的，读回来时
+// 也必须按同一把尺子收脏数据，两处各写一份必然分叉（分叉的表现是"盘上 130 被当成
+// 100% 满格，而生成那一刻明明是当没给"）
+import { normalizePercent } from './progressReport.js';
 import { projectName, canonicalProjectPath } from './projectRegistry.js';
 import { TARGET_SOURCES } from './targetResolver.js';
 
@@ -349,6 +353,10 @@ function normalizeReport(raw) {
     at: typeof r.at === 'string' ? r.at : null,
     trigger: r.trigger === 'auto' ? 'auto' : 'manual',
     text: typeof r.text === 'string' ? r.text : '',
+    // 模型给的整体进度（0~100），null = 模型没给 / 老记录没有这个字段 ——
+    // 界面据此决定画不画进度条。**不要给它填一个默认值**：填 0 会在界面上
+    // 变成一条"进度 0%"的实心条，那是在替模型说它没说过的话
+    percent: normalizePercent(r.percent),
     errorCode: typeof r.errorCode === 'string' ? r.errorCode : '',
     errorDetail: typeof r.errorDetail === 'string' ? r.errorDetail : '',
     tasks: tasks
@@ -371,6 +379,9 @@ function normalizeReport(raw) {
         toolMix: typeof t.toolMix === 'string' ? t.toolMix : '',
         lastThought: typeof t.lastThought === 'string' ? t.lastThought : '',
         silentMs: Number.isFinite(Number(t.silentMs)) ? Math.max(0, Math.floor(Number(t.silentMs))) : null,
+        // 每个任务各自的进度。与整体那条同一个口径（null = 模型没给），
+        // 老记录里没有它 —— 一律 null，不拿整体百分比摊到每个任务头上
+        percent: normalizePercent(t.percent),
       })),
   };
 }

@@ -39,9 +39,12 @@ import type {
 import { clockFromIso, formatDurationMs, relativeTimeFromIso } from '@/utils/relativeTime'
 import {
   REPORT_INTERVAL_OPTIONS_MS,
+  REPORT_PERCENT_HINT_KEY,
+  REPORT_PERCENT_LABEL_KEY,
   reportErrorKey,
   reportIntervalLabelKey,
   reportIntervalLabelParams,
+  reportPercent,
 } from '@/utils/progressReport'
 import AttachmentZone from '@/components/AttachmentZone.vue'
 import AgentChatSurface from '@/components/AgentChatSurface.vue'
@@ -418,6 +421,31 @@ const currentReport = computed<ProgressReport | null>(() => {
 
 function pickReport(r: ProgressReport) { selectedReportId.value = r.id }
 
+/**
+ * 历史行里那一列文案：能画的就是 `62%`，没有进度的给空串 —— **空串不是"没有这一列"**，
+ * 模板里那一格照样占位（min-width），否则没有进度的那几条摘要会整体左移，
+ * 一整列时间/百分比扫下来忽左忽右。
+ *
+ * 归一放在这里而不是模板里：面板读的是盘上的历史报告，老版本服务端写的记录同样会流进来
+ * （见 utils/progressReport.ts 的 reportPercent）。
+ */
+function historyPct(r: ProgressReport): string {
+  const v = reportPercent(r.percent)
+  return v === null ? '' : v + '%'
+}
+
+/**
+ * 当前这份报告的整体进度。null = 主 Agent 没给 → 顶部那条进度条整行不渲染。
+ * 绝不回落到 0：一条 0% 的实心条是在替模型说它没说过的话。
+ */
+const currentPercent = computed(() => reportPercent(currentReport.value?.percent))
+
+/** 当前这份报告的任务事实 + 归一后的百分比（模板里 v-for 用它，省掉每行四次函数调用） */
+const currentTasks = computed(() => (currentReport.value?.tasks || []).map(t => ({
+  ...t,
+  pct: reportPercent(t.percent),
+})))
+
 /** 历史列表里那一行摘要：有正文就取开头，没有就说清为什么没有 */
 function reportBrief(r: ProgressReport): string {
   const text = String(r.text || '').replace(/\s+/g, ' ').trim()
@@ -612,13 +640,39 @@ const gitSummary = computed(() => {
             <span class="rp__time">{{ clockFromIso(currentReport.at) }}</span>
           </div>
 
+          <!-- 进度条：主 Agent 自己给的百分比（不是我们拿时长算的 —— 跑多久跟还剩多少活
+               没有固定关系）。它没给就不画这一行，见 currentPercent。
+               形状与左栏项目列表的进度条同一套（4px / pill / --gradient-progress），
+               两处的"进度"看起来得是一个东西 -->
+          <div
+            v-if="currentPercent !== null"
+            class="rp__progress"
+            :title="$t(REPORT_PERCENT_HINT_KEY)"
+          >
+            <span
+              class="rp__bar"
+              role="progressbar"
+              :aria-valuenow="currentPercent"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              :aria-label="$t(REPORT_PERCENT_LABEL_KEY)"
+            >
+              <i class="rp__bar-fill" :style="{ width: currentPercent + '%' }" />
+            </span>
+            <!-- 「AI 估计」四个字不能省：这个数字是模型看着思考与工具调用估的，
+                 光甩一个 62% 会被当成实测值 -->
+            <span class="rp__percent">
+              <span class="rp__percent-tag">{{ $t(REPORT_PERCENT_LABEL_KEY) }}</span>{{ currentPercent }}%
+            </span>
+          </div>
+
           <p v-if="currentReport.text" class="rp__text">{{ currentReport.text }}</p>
           <!-- 没有正文时给的是**实话**：没任务 / 没配模型 / 模型没返回内容，
                三种情况的处理办法完全不同，一律写"暂无"会让人白等 -->
           <p v-else class="rp__notice" :title="currentReport.errorDetail">{{ reportNotice(currentReport) }}</p>
 
-          <ul v-if="currentReport.tasks.length" class="rp__tasks">
-            <li v-for="(t, i) in currentReport.tasks" :key="t.taskId || i" class="rpt">
+          <ul v-if="currentTasks.length" class="rp__tasks">
+            <li v-for="(t, i) in currentTasks" :key="t.taskId || i" class="rpt">
               <p class="rpt__title">{{ t.taskTitle || $t('@WORKBENCH:未命名任务') }}</p>
               <p class="rpt__meta">
                 <span v-if="t.projectName" class="rpt__project">{{ t.projectName }}</span>
@@ -633,6 +687,21 @@ const gitSummary = computed(() => {
                 <span v-if="typeof t.silentMs === 'number'" class="rpt__silent">
                   {{ $t('@WORKBENCH:静默 {elapsed}', { elapsed: formatDurationMs(t.silentMs) }) }}
                 </span>
+              </p>
+              <!-- 每个任务自己的进度。整体那条说不清"是哪两个任务拖着的" —— 这一行就是
+                   为它准备的。主 Agent 只给整体、没给单个时（老模型 / 判断不出来）整行不渲染 -->
+              <p v-if="t.pct !== null" class="rpt__progress" :title="$t(REPORT_PERCENT_HINT_KEY)">
+                <span
+                  class="rpt__bar"
+                  role="progressbar"
+                  :aria-valuenow="t.pct"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  :aria-label="t.taskTitle || $t('@WORKBENCH:未命名任务')"
+                >
+                  <i class="rpt__bar-fill" :style="{ width: t.pct + '%' }" />
+                </span>
+                <span class="rpt__percent">{{ t.pct }}%</span>
               </p>
               <!-- 证据按可靠程度排：工具调用（正在做什么）→ 思考（为什么这么做）→ 正文。
                    思考这一行是 2026-09-29 补的：很多任务一句正文都不写，只靠工具调用
@@ -663,6 +732,9 @@ const gitSummary = computed(() => {
               @click="pickReport(r)"
             >
               <span class="oc__history-time">{{ clockFromIso(r.at) }}</span>
+              <!-- 历史里也带上进度：一眼看出"这条是 20 分钟前那会儿 40%，现在 70%"。
+                   没有进度的那几条这一格是空的但**占着位**（见 historyPct） -->
+              <span class="oc__history-pct">{{ historyPct(r) }}</span>
               <span class="oc__history-sum">{{ reportBrief(r) }}</span>
             </button>
           </li>
@@ -1088,6 +1160,42 @@ const gitSummary = computed(() => {
   color: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
+/* 进度条：几何与左栏项目列表那条（WorkbenchProjectPanel 的 proj-item__bar）保持一致，
+   两处的"进度"才像同一个东西。轨道用 --bg-active（深浅两套都有定义）—— 卡片本身
+   已经是 --bg-subtle，轨道再用更浅的色就看不见了 */
+.rp__progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+.rp__bar {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-active);
+  overflow: hidden;
+}
+.rp__bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--gradient-progress);
+  transition: width var(--transition-base) var(--ease-custom);
+}
+.rp__percent {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+/* 「AI 估计」四个字压暗一档：要读的是数字，但那四个字不能被省掉 */
+.rp__percent-tag {
+  margin-right: 4px;
+  color: var(--text-meta);
+}
+
 .rp__text {
   margin: 0;
   font-size: var(--font-size-sm);
@@ -1131,6 +1239,36 @@ const gitSummary = computed(() => {
   font-variant-numeric: tabular-nums;
 }
 .rpt__project { color: var(--text-secondary); }
+/* 每个任务自己的进度：比整体那条细一档（3px），它是注脚不是标题 */
+.rpt__progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0 0;
+}
+.rpt__bar {
+  flex: 1;
+  min-width: 0;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-active);
+  overflow: hidden;
+}
+.rpt__bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--gradient-progress);
+  transition: width var(--transition-base) var(--ease-custom);
+}
+.rpt__percent {
+  flex-shrink: 0;
+  min-width: 30px;
+  text-align: right;
+  font-size: var(--font-size-xs);
+  color: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+}
 /* 静默：报告里说"可能卡住了"时，用户能在这行上核到依据 */
 .rpt__silent { color: var(--color-warning); }
 .rpt__line {
@@ -1195,6 +1333,15 @@ const gitSummary = computed(() => {
 }
 .oc__history-item:focus-visible { outline: var(--focus-outline); outline-offset: -2px; }
 .oc__history-time { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+/* 进度列给个固定最小宽度：整列数字对得齐才扫得动。**没有进度的那几条这一格是空的、
+   但照样占位**（见 historyPct）—— 否则摘要会忽左忽右，一列扫下来很费眼 */
+.oc__history-pct {
+  flex-shrink: 0;
+  min-width: 30px;
+  text-align: right;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
 .oc__history-sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .oc-empty {

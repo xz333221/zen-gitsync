@@ -14,8 +14,11 @@
  *      另外把「服务端不给报告」那一条桩出来，单独验前端的回应（真实环境里
  *      "恰好没有任务在跑"不可控，见 P5e/P5f）
  *   P6 两份以上时出现历史区，点其中一条能把上面那张换掉（选中态跟着走）
- *   P7 无 JS 运行时异常 / 无控制台错误
- *   P8 截图存证
+ *   P7 进度条：主 Agent 给的百分比被画成条（宽度 = 那个数），带「AI 估计」字样与
+ *      role=progressbar；每个任务各自的百分比只在模型给了时才画一条；历史列表那一列
+ *      **没有进度时留空但占位**；**没给百分比就一条都不画**（反证：桩一份 percent=null 的报告）
+ *   P8 无 JS 运行时异常 / 无控制台错误
+ *   P9 截图存证
  *
  * 前置：dev server 已启动（npm run dev，后端 5545 / 前端 5544）。
  * 用法：node scripts/verify-wb-progress-report.cjs
@@ -70,6 +73,22 @@ async function readPanel(page) {
         .findIndex(e => e.classList.contains('is-active')),
       historyActive: (document.querySelector('.oc__history-item.is-active .oc__history-sum')?.textContent || '').trim(),
       empty: (document.querySelector('.oc-empty')?.textContent || '').trim(),
+      /** 进度条：卡片整体那条（`.rpt__bar` 是每个任务各自的那条，别混） */
+      hasBar: !!card?.querySelector('.rp__bar'),
+      barRole: card?.querySelector('.rp__bar')?.getAttribute('role') || '',
+      barAriaNow: card?.querySelector('.rp__bar')?.getAttribute('aria-valuenow') || '',
+      barInlineWidth: card?.querySelector('.rp__bar-fill')?.style.width || '',
+      /** 实测像素：光看内联 style 分不出"CSS 把宽度吃掉了"这种情况 */
+      barTrackPx: card?.querySelector('.rp__bar')?.getBoundingClientRect().width ?? 0,
+      barFillPx: card?.querySelector('.rp__bar-fill')?.getBoundingClientRect().width ?? 0,
+      percentText: (card?.querySelector('.rp__percent')?.textContent || '').trim(),
+      barTitle: card?.querySelector('.rp__progress')?.getAttribute('title') || '',
+      /** 每个任务各自那条进度条的百分比文案（没有的不渲染，所以数量 ≤ 任务数） */
+      factPercents: Array.from(document.querySelectorAll('.rpt__percent')).map(e => e.textContent.trim()),
+      factTitlesWithPct: Array.from(document.querySelectorAll('.rpt'))
+        .filter(li => li.querySelector('.rpt__percent'))
+        .map(li => (li.querySelector('.rpt__title')?.textContent || '').trim()),
+      historyPercents: Array.from(document.querySelectorAll('.oc__history-pct')).map(e => e.textContent.trim()),
     }
   })
 }
@@ -298,18 +317,115 @@ async function main() {
         `历史只有 ${historyCount} 份（没任务在跑时不会再多造），先手动攒够两份再跑本脚本`)
     }
 
-    /* ══ P7 无异常 ══ */
-    check('P7a 无 JS 运行时异常', pageErrors.length === 0, pageErrors.join(' | ').slice(0, 300))
+    /* ══ P7 进度条（主 Agent 给的百分比）══ */
+    // 真模型给不给百分比不可控（它会照 62 写、也可能整行不写），所以这一组把 POST 的
+    // 响应**桩掉**：面板读的就是响应里那份记录（useOrchestrator.generateReport 直接
+    // 插到列表最前），桩住才能验到确定的数字。
+    // 先 reload 一次：P6b 点过历史里的一条，选中态还停在那份老报告上，
+    // 不重置的话新插进来的这份根本不会显示在卡片里（选中态优先于"跟随最新"）。
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await openCommandMode(page)
+
+    /** 桩一份报告：percent 给不给、每个任务给不给都由参数说了算 */
+    const stubReport = (percent, taskPercents, textStub) => ({
+      id: 'probe-percent-' + Math.random().toString(36).slice(2, 8),
+      at: new Date().toISOString(),
+      trigger: 'manual',
+      text: textStub,
+      percent,
+      errorCode: '',
+      errorDetail: '',
+      tasks: taskPercents.map((p, i) => ({
+        taskId: `probe-${i}`,
+        taskTitle: `桩任务 ${i + 1}`,
+        projectName: 'zen-gitsync',
+        startedAt: null,
+        elapsedMs: 60000 - i * 1000,
+        agent: 'claude',
+        toolCallCount: 3,
+        lastTool: '',
+        lastLine: '',
+        percent: p,
+      })),
+    })
+
+    const STUB_PERCENT = 62
+    /** 把 POST /report 换成"直接返回这一份"。三处都用它 —— 各写一遍很容易漏掉 unroute，
+     *  上一处的桩会一直挂到脚本结束，后面所有断言读到的都是同一份假报告 */
+    const stubPost = async (report) => {
+      await page.unroute('**/api/workbench/orchestrator/report')
+      await page.route('**/api/workbench/orchestrator/report', route => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, report }),
+      }))
+    }
+    /** 点一次「立即报告」，把桩那份插到面板最前 */
+    const stubOnce = async (report) => {
+      await stubPost(report)
+      await clearToasts(page)
+      await page.click('.oc__report-run')
+      await sleep(800)
+    }
+
+    await stubOnce(stubReport(STUB_PERCENT, [70, null], '桩：正在改登录模块。'))
+    let pm = await readPanel(page)
+
+    check('P7a 卡片上画出进度条，宽度 = 主 Agent 给的那个数',
+      pm.hasBar && pm.barInlineWidth === `${STUB_PERCENT}%`
+        && pm.barTrackPx > 0
+        && Math.abs(pm.barFillPx / pm.barTrackPx - STUB_PERCENT / 100) < 0.02,
+      `inline=${pm.barInlineWidth} px=${pm.barFillPx.toFixed(1)}/${pm.barTrackPx.toFixed(1)}`)
+    check('P7b 百分比带「AI 估计」字样（不能光甩一个数字让人当成实测值）',
+      /AI/.test(pm.percentText) && pm.percentText.includes(`${STUB_PERCENT}%`),
+      `text="${pm.percentText}"`)
+    check('P7c 进度条有 progressbar 语义（aria 值 = 那个数）',
+      pm.barRole === 'progressbar' && pm.barAriaNow === String(STUB_PERCENT),
+      `role=${pm.barRole} now=${pm.barAriaNow}`)
+    check('P7d 悬停能说明这个数字的来路（"不是精确进度"那句）',
+      pm.barTitle.length > 0, `title="${pm.barTitle.slice(0, 60)}"`)
+    // 桩里的两个任务一个给了 70、一个没给 —— 只有给了的那条该画出来
+    check('P7e 每个任务的百分比只在模型给了时才画（null 那条不画）',
+      pm.factPercents.length === 1 && pm.factPercents[0] === '70%', pm.factPercents.join(','))
+    check('P7f 有进度的那条挂在**给了数字的那个任务**下面，没给的那条没有',
+      pm.factTitlesWithPct.length === 1 && pm.factTitlesWithPct[0] === '桩任务 1',
+      pm.factTitlesWithPct.join(' / '))
+    // 历史区要在两份以上才出现；出现时第一条就是刚插进来的这份
+    check('P7g 历史列表里也带百分比',
+      pm.historyCount <= 1 || pm.historyPercents[0] === `${STUB_PERCENT}%`,
+      `items=${pm.historyCount} percents=${pm.historyPercents.join(',')}`)
+
+    /* ══ P7 反证：模型没给百分比 → 一条进度条都不许有 ══ */
+    // 少了这一条，上面那组"画出来了"完全可能是"条一直在那儿"（假绿）——
+    // 本仓库踩过探针只验正向的坑
+    await stubOnce(stubReport(null, [null, null], '桩：这次模型没给百分比。'))
+    pm = await readPanel(page)
+    check('P7h 模型没给百分比时：卡片上一条进度条都没有（不画 0% 糊弄人）',
+      pm.hasBar === false && pm.percentText === '' && pm.factPercents.length === 0,
+      `bar=${pm.hasBar} percent="${pm.percentText}" facts=${pm.factPercents.join(',')}`)
+    check('P7i 历史里那一列空着但占位（没有进度的那几条摘要不会整体左移）',
+      pm.historyCount <= 1
+        || (pm.historyPercents.length === pm.historyCount && pm.historyPercents[0] === ''),
+      `items=${pm.historyCount} percents=${JSON.stringify(pm.historyPercents.slice(0, 4))}`)
+    check('P7j 这一份的正文照常显示（少一条进度条不该影响报告本身）',
+      pm.text.includes('这次模型没给百分比'), `text="${pm.text.slice(0, 40)}"`)
+    await page.unroute('**/api/workbench/orchestrator/report')
+
+    /* ══ P8 无异常 ══ */
+    check('P8a 无 JS 运行时异常', pageErrors.length === 0, pageErrors.join(' | ').slice(0, 300))
     const bad = consoleErrors.filter(t => !/favicon|ResizeObserver/i.test(t))
     // 连接被拒时把 URL 一起报出来：只看到 "ERR_CONNECTION_REFUSED" 是没法判断
     // 「我这个面板的接口挂了」还是「旁边某个后台服务没起」的
     const refused = failedRequests.filter(t => /ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET/.test(t))
-    check('P7b 无控制台错误', bad.length === 0,
+    check('P8b 无控制台错误', bad.length === 0,
       bad.length
         ? `${bad.slice(0, 3).join(' | ').slice(0, 160)} || 5xx: ${badResponses.slice(0, 5).join(' , ')} || refused: ${refused.slice(0, 5).join(' , ')}`
         : '')
 
-    /* ══ P8 截图存证 ══ */
+    /* ══ P9 截图存证 ══ */
+    // 截图前把带百分比的那份换回来：上面那组反证最后留在面板上的是"没有进度条"的一份，
+    // 直接截的话存证图上根本看不到这个功能
+    await stubOnce(stubReport(STUB_PERCENT, [70, 30], '桩：正在改登录模块，两处改动都还没验证。'))
     const shot = path.resolve(__dirname, '../.tmp/verify-wb-progress-report.png')
     await page.locator('.oc').screenshot({ path: shot }).catch(() => {})
     log('截图:', shot)

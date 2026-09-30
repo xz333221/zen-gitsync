@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// 进度报告面板的展示口径：间隔档位、档位文案、失败原因码 → i18n key。
+// 进度报告面板的展示口径：间隔档位、档位文案、失败原因码 → i18n key、进度百分比归一。
 //
 // 为什么档位是**白名单**而不是让用户自由填分钟数：这个值直接决定每多久烧一次模型额度。
 // 服务端 shared.js 的 PROGRESS_REPORT_INTERVALS_MS 是同一份白名单的另一半 ——
@@ -62,3 +62,36 @@ export function reportErrorKey(code: string): string {
     default: return '@WORKBENCH:生成失败，只记录了任务事实'
   }
 }
+
+// ── 进度百分比 ──────────────────────────────────────────────────────────
+//
+// 这个数字是**主 Agent 自己估的**（判据是任务思考 / 工具分布 / 静默时长，见服务端
+// progressReport.js 的 buildReportPrompt），不是任何实测值 —— 所以界面上必须带上
+// "AI 估计"这四个字和一个说明，光甩一个 62% 会被人当成精确进度。
+//
+// 服务端已经归一过一次，这里再挡一道是因为面板读的是**盘上的历史报告**：
+// 老版本服务端写的、别的 g ui 实例写进同一份文件的记录，都可能带 130 或 "62"。
+
+/**
+ * 归一成一个能画的百分比，null = 这个值不该画（缺字段 / 脏数据 / 越界）。
+ *
+ * 越界**不夹到 100**：给一个还在跑的任务画满格，比不画那条更糟（100% 在界面上
+ * 长得像"做完了"）。口径与服务端 normalizePercent 一致。
+ */
+export function reportPercent(value: unknown): number | null {
+  // null / undefined / '' 必须先挡掉：`Number(null)` 与 `Number('')` 都是 0，
+  // 漏了这一行的话"模型没给"会在界面上变成一条 0% 的实心进度条 —— 而这正是
+  // 服务端落盘时写的那个值（percent: null），一来一回就成假数据了
+  if (value === null || value === undefined || value === '') return null
+  const n = Number(value)
+  if (!Number.isFinite(n)) return null
+  const round = Math.round(n)
+  return round >= 0 && round <= 100 ? round : null
+}
+
+/** 百分比前面那四个字。数字由模板自己拼（`{{ n }}%`），不走 i18n 插值 */
+export const REPORT_PERCENT_LABEL_KEY = '@WORKBENCH:AI 估计'
+
+/** 悬停说明：说清这个数字是怎么来的，免得被当成实测进度 */
+export const REPORT_PERCENT_HINT_KEY =
+  '@WORKBENCH:百分比是主 Agent 根据任务思考与工具调用推测的大致估计，不是精确进度'

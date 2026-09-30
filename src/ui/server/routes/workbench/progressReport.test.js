@@ -30,6 +30,8 @@ import {
   buildReportPrompt,
   formatDuration,
   generateProgressReport,
+  normalizePercent,
+  parseProgressHeader,
   MAX_FACT_TASKS,
   SYSTEM_PROMPT_ZH,
   SYSTEM_PROMPT_EN,
@@ -344,6 +346,124 @@ test('trigger 只认 auto，其余（含脏值）一律记成 manual', async () 
   const weird = await generateProgressReport({ facts: [], trigger: '什么鬼' });
   assert.equal(auto.trigger, 'auto');
   assert.equal(weird.trigger, 'manual');
+});
+
+// ── 进度百分比（模型在正文之前交的那两行数字）──────────────────────────
+//
+// 这一串断言守的是**同一件事**：报告里那个百分比只能是模型说的。
+// 解析太松会把正文吞掉 / 把序号当进度，太严又会白白丢掉模型真给的值 ——
+// 而这三种错在界面上都只是"进度条不对"，没人会去想是解析写错了。
+
+test('parseProgressHeader 把标记行摘掉，正文与百分比各归各', () => {
+  const r = parseProgressHeader('PROGRESS: 62\nTASKS: 70, 30\nzen-gitsync 正在改登录模块。');
+  assert.equal(r.percent, 62);
+  assert.deepEqual(r.taskPercents, [70, 30]);
+  assert.equal(r.text, 'zen-gitsync 正在改登录模块。');
+});
+
+test('标记行的各种写法都认（加粗 / 全角冒号 / 列表符号 / 百分号 / 顿号 / 带序号）', () => {
+  assert.deepEqual(
+    parseProgressHeader('**PROGRESS：62%**\n- TASKS: 70、?、40\n正文'),
+    { percent: 62, taskPercents: [70, null, 40], text: '正文' }
+  );
+  // `1=70` 这种带序号的写法：别把序号 1 当成进度
+  assert.deepEqual(parseProgressHeader('TASKS: 1=70, 2=30\n正文').taskPercents, [70, 30]);
+});
+
+test('认不出来的标记行**留在正文里**，不吞内容', () => {
+  const r = parseProgressHeader('进度：还没法判断\n正文第一句。');
+  assert.equal(r.percent, null);
+  assert.equal(r.text, '进度：还没法判断\n正文第一句。');
+});
+
+test('整体没给、各任务给了：整体取已知任务的平均值（模型自己的数字的均值）', () => {
+  const r = parseProgressHeader('TASKS: 60, ?, 30\n正文');
+  assert.equal(r.percent, 45);
+  // 全估不出来（`TASKS: ?`）时整体也是 null —— 不能因为"给了几个问号"就编一个 0
+  assert.equal(parseProgressHeader('TASKS: ?\n正文').percent, null);
+  assert.equal(parseProgressHeader('TASKS: ?\n正文').text, '正文');
+});
+
+test('越界 / 脏值一律当没给，不夹到 0 或 100', () => {
+  assert.equal(normalizePercent(130), null);
+  assert.equal(normalizePercent(-5), null);
+  assert.equal(normalizePercent('abc'), null);
+  assert.equal(normalizePercent(undefined), null);
+  // 落盘写的就是 `percent: null`（模型没给），读回来必须还是 null ——
+  // `Number(null)` 是 0，漏了那一挡就会变成一条 0% 的进度条
+  assert.equal(normalizePercent(null), null);
+  assert.equal(normalizePercent(''), null);
+  assert.equal(normalizePercent(62.4), 62);
+  assert.equal(normalizePercent('62'), 62);
+  assert.equal(normalizePercent(0), 0);
+});
+
+test('正文外面裹的 ``` 围栏被剥掉（模型偶尔把整个回答写成代码块）', () => {
+  assert.equal(parseProgressHeader('```\nPROGRESS: 50\nTASKS: 50\n正文\n```').text, '正文');
+});
+
+test('prompt 要求模型先交两行数字，并说清这两个数字会被画成进度条', () => {
+  const facts = buildRunningFacts({ jobs: [runningJob()], tasks: TASKS, now: NOW });
+  const zh = buildReportPrompt(facts, 'zh');
+  assert.ok(zh.includes('PROGRESS:'));
+  assert.ok(zh.includes('TASKS:'));
+  assert.ok(zh.includes('进度条'));
+  // 任务清单带序号 —— `TASKS:` 那一行靠它跟任务对齐，没序号必然错位
+  assert.ok(zh.includes('【任务 1】'));
+
+  const en = buildReportPrompt(facts, 'en-US');
+  assert.ok(en.includes('PROGRESS:') && en.includes('TASKS:'));
+  assert.ok(en.includes('[Task 1]'));
+  assert.ok(en.includes('progress bar'));
+});
+
+test('模型按格式交回：正文摘干净，百分比落到报告与每个任务上', async () => {
+  const facts = buildRunningFacts({
+    jobs: [runningJob(), runningJob({ id: 'j2', taskId: 't2' })],
+    tasks: TASKS,
+    now: NOW,
+  });
+  assert.deepEqual(facts.map(f => f.taskId), ['t1', 't2']);
+  const report = await generateProgressReport({
+    facts,
+    model: MODEL,
+    // 标记行故意拆在两个 delta 里：解析必须发生在**拼好的整段**上，
+    // 谁要是改成边流边解析，这条会先挂
+    callStream: fakeStream([{ content: 'PROGRESS: 62\nTAS' }, { content: 'KS: 70, 30\nzen-gitsync 正在改登录模块。' }]),
+  });
+  assert.equal(report.text, 'zen-gitsync 正在改登录模块。');
+  assert.equal(report.percent, 62);
+  assert.deepEqual(report.tasks.map(t => t.percent), [70, 30]);
+});
+
+test('模型没给百分比（老模型 / 不听话）：percent 是 null，正文一字不动', async () => {
+  const facts = buildRunningFacts({ jobs: [runningJob()], tasks: TASKS, now: NOW });
+  const report = await generateProgressReport({
+    facts,
+    model: MODEL,
+    callStream: fakeStream([{ content: '一切照旧，正在改登录模块。' }]),
+  });
+  assert.equal(report.percent, null);
+  assert.equal(report.tasks[0].percent, null);
+  assert.equal(report.text, '一切照旧，正在改登录模块。');
+});
+
+test('失败 / 超时的报告没有百分比（不许拿时长糊一个出来）', async () => {
+  const facts = buildRunningFacts({ jobs: [runningJob()], tasks: TASKS, now: NOW });
+  const failed = await generateProgressReport({
+    facts,
+    model: MODEL,
+    callStream: fakeStream([], { error: new Error('HTTP 401') }),
+  });
+  assert.equal(failed.percent, null);
+  // 超时那份连标记行都吐出来了，照样不给百分比：半份报告上的数字是残次品
+  const timeout = await generateProgressReport({
+    facts,
+    model: MODEL,
+    callStream: fakeStream([{ content: 'PROGRESS: 62\n刚写到这里就断了' }], { aborted: true }),
+  });
+  assert.equal(timeout.percent, null);
+  assert.equal(timeout.text, '');
 });
 
 // ── 两端档位白名单必须一致 ──────────────────────────────────────────────

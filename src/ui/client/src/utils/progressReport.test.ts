@@ -24,10 +24,13 @@ import { describe, it, expect } from 'vitest'
 import {
   REPORT_INTERVAL_OPTIONS_MS,
   DEFAULT_REPORT_INTERVAL_MS,
+  REPORT_PERCENT_HINT_KEY,
+  REPORT_PERCENT_LABEL_KEY,
   normalizeReportInterval,
   reportIntervalLabelKey,
   reportIntervalLabelParams,
   reportErrorKey,
+  reportPercent,
 } from './progressReport'
 
 describe('进度报告间隔档位', () => {
@@ -67,5 +70,36 @@ describe('报告失败原因码', () => {
   it('没见过的码退回通用文案，而不是把码印在界面上', () => {
     expect(reportErrorKey('SOMETHING_NEW')).toBe(reportErrorKey('LLM_FAILED'))
     expect(reportErrorKey('')).toBe(reportErrorKey('LLM_FAILED'))
+  })
+})
+
+/**
+ * 百分比归一是**界面要不要画那条进度条**的唯一判据（null = 不画）。
+ * 所以两边都得钉住：该画的必须画出来，不该画的绝不能给个 0 糊过去。
+ */
+describe('报告里的进度百分比', () => {
+  it('正常的整数原样放行', () => {
+    expect(reportPercent(0)).toBe(0)
+    expect(reportPercent(62)).toBe(62)
+    expect(reportPercent(100)).toBe(100)
+    expect(reportPercent('62')).toBe(62)
+    expect(reportPercent(62.4)).toBe(62)
+  })
+
+  it('缺字段 / 脏值 / 越界一律 null（不画），绝不夹成 0 或 100', () => {
+    expect(reportPercent(undefined)).toBeNull()
+    expect(reportPercent(null)).toBeNull()
+    expect(reportPercent('')).toBeNull()
+    expect(reportPercent('abc')).toBeNull()
+    expect(reportPercent(NaN)).toBeNull()
+    // 越界不夹：把 130 画成 100% 等于替模型说"这个任务做完了"
+    expect(reportPercent(130)).toBeNull()
+    expect(reportPercent(-5)).toBeNull()
+  })
+
+  it('标签与说明是两条真实的 key（不是空串）', () => {
+    // 光甩一个 62% 会被当成实测进度，所以那四个字和悬停说明必须在
+    expect(REPORT_PERCENT_LABEL_KEY).toBe('@WORKBENCH:AI 估计')
+    expect(REPORT_PERCENT_HINT_KEY.startsWith('@WORKBENCH:')).toBe(true)
   })
 })

@@ -378,6 +378,11 @@ export interface ProgressReportFact {
    * 阈值见服务端 SILENT_NOTABLE_MS —— 这里记的是"显然静默了"，不是精确的空闲时长。
    */
   silentMs?: number | null
+  /**
+   * 模型给这个任务估的进度（0~100 的整数），null / 缺字段 = 模型没给或给的是脏值 ——
+   * 这时**不画**那一条进度条。别拿整体百分比往下摊：那是替模型说它没说过的话。
+   */
+  percent?: number | null
 }
 
 /** 报告生成失败的原因码。'' = 成功；正文由前端 $t() 渲染，服务端只给码 */
@@ -396,6 +401,15 @@ export interface ProgressReport {
   at: string | null
   trigger: 'auto' | 'manual'
   text: string
+  /**
+   * 主 Agent 对**整体**进度的估计（0~100 的整数），null / 缺字段 = 它没给 ——
+   * 界面据此决定画不画顶部那条进度条。
+   *
+   * 它是模型给的**估计**，不是精确进度：判据是任务的思考 / 工具分布 / 静默时长，
+   * 和"还剩多少活"没有硬对应关系。所以界面上必须写明这是 AI 估计（见
+   * OrchestratorConsole 的 .rp__percent-tag），不能光甩一个百分比数字让人当成实测值。
+   */
+  percent?: number | null
   errorCode: ProgressReportErrorCode
   /** 失败时的原始报错（模型 / 网关给的），只用于展示细节 */
   errorDetail: string

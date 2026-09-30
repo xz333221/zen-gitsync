@@ -175,3 +175,50 @@ test('上限仍然生效：多余的报告按时间从旧到新丢掉', async ()
   }
   assert.equal((await onDisk()).length, 20);
 });
+
+// ── 百分比（模型给的进度）────────────────────────────────────────────────
+//
+// 读回来这一侧要守的只有一条：**盘上是什么就是什么**。脏值 / 老记录一律 null
+// （界面据此不画进度条），不许出现"读一次变成 0"或"写 130 读回 100"这种事 ——
+// 那等于替模型说了一句它没说过的话。
+
+test('百分比原样进出：报告整体与每个任务各自的都留着', async () => {
+  await seed([]);
+  await appendReport(rawReport({
+    text: '正在改登录模块。',
+    percent: 62,
+    tasks: [{ ...fact('t1', '任务 A'), percent: 70 }, { ...fact('t2', '任务 B'), percent: 30 }],
+  }));
+  const [r] = await readReports();
+  assert.equal(r.percent, 62);
+  assert.deepEqual(r.tasks.map(t => t.percent), [70, 30]);
+});
+
+test('脏百分比不会变成 0 / 100：越界与非法值一律 null', async () => {
+  await seed([
+    rawReport({
+      id: 'dirty',
+      tasks: [
+        { ...fact('t1', '越界'), percent: 130 },
+        { ...fact('t2', '负数'), percent: -5 },
+        { ...fact('t3', '不是数'), percent: 'abc' },
+        { ...fact('t4', '显式 null'), percent: null },
+      ],
+    }),
+  ]);
+  const [r] = await readReports();
+  // 报告本身的 percent 压根没写（老记录）—— 同样是 null
+  assert.equal(r.percent, null);
+  // 显式 null 那条是**模型没给**时落盘的样子：读回来必须是 null，
+  // 不能变成 0（`Number(null)` 是 0）—— 那会让界面上多出一条 0% 的条
+  assert.deepEqual(r.tasks.map(t => t.percent), [null, null, null, null]);
+});
+
+test('老报告（没有 percent 这个字段）读出来是 null，不是 0', async () => {
+  await seed([rawReport({ id: 'legacy', tasks: [fact('t1', '老任务')] })]);
+  const [r] = await readReports();
+  assert.equal(r.percent, null);
+  assert.equal(r.tasks[0].percent, null);
+  // 字段本身得在：前端拿 undefined 和拿 null 是两种分支，缺字段会让"不画"那条路走不到
+  assert.ok('percent' in r.tasks[0]);
+});
