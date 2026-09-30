@@ -22,12 +22,12 @@
 // 2) **内置精选离线可用**。每个类型的 builtin 组是静态数据,不联网也有内容;
 //    联网来源失败时用户至少还能看到它们。内置条目的仓库与 npm 包名都经过实际校验,
 //    不是凭印象写的占位数据。
-// 3) **两个安装目标**。
-//    - project: <cwd>/.claude/skills/<id>/ 与 <cwd>/.mcp.json(项目级,生态通行约定)
+// 3) **两个安装目标**(路径常量都在 src/paths.js,与 g ai 读取端共用同一份)。
+//    - project: <cwd>/.zen-gitsync/ai/skills/<id>/ 与 <cwd>/.zen-gitsync/ai/mcp.json
 //    - global : ~/.zen-gitsync/ai/skills/<id>/ 与 ~/.zen-gitsync/ai/mcp.json
-//               (即「g ai 智能体」,对所有项目生效;路径常量在 src/paths.js)
-//    路径与 g ai 的读取端(src/cli/ai/skills.js、src/cli/ai/mcp.js)共用同一份常量,
-//    改这里不会出现"装了但读不到"。
+//               (即「g ai 智能体」,对所有项目生效)
+//    早先项目级写在 <cwd>/.claude/skills 与 <cwd>/.mcp.json —— 那是别家工具的约定目录,
+//    2026-09-30 按用户要求迁到自家目录,不再读写 .claude。
 // 4) 所有来自网络的值在落盘前都要过白名单校验(仓库名 / 包名 / 子路径),
 //    因为这些值最终会变成 git clone 与 npm install 的参数 —— 网络数据不可信。
 //
@@ -44,7 +44,7 @@ import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import open from 'open';
 import { asyncRoute, HttpError } from '../../utils/asyncRoute.js';
-import { AI_SKILLS_DIR, AI_MCP_FILE } from '../../../../paths.js';
+import { AI_SKILLS_DIR, AI_MCP_FILE, projectSkillsDir, projectMcpFile } from '../../../../paths.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -634,6 +634,7 @@ function normalizeTarget(value) {
 /**
  * 把 target + type 翻译成落盘位置。
  * 项目级与全局级的 skill 目录形状刻意保持一致,读取端才能共用一套解析逻辑。
+ * 路径常量统一来自 paths.js —— 这里改了、g ai 那边没改,就会出现"装了但读不到"。
  */
 function targetPaths({ type, target, cwd }) {
   if (target === 'global') {
@@ -641,9 +642,10 @@ function targetPaths({ type, target, cwd }) {
       ? { root: AI_SKILLS_DIR, file: '', label: 'g ai 智能体' }
       : { root: '', file: AI_MCP_FILE, label: 'g ai 智能体' };
   }
+  const label = path.basename(cwd) || cwd;
   return type === 'skill'
-    ? { root: path.join(cwd, '.claude', 'skills'), file: '', label: path.basename(cwd) || cwd }
-    : { root: '', file: path.join(cwd, '.mcp.json'), label: path.basename(cwd) || cwd };
+    ? { root: projectSkillsDir(cwd), file: '', label }
+    : { root: '', file: projectMcpFile(cwd), label };
 }
 
 // ── 已安装扫描 ────────────────────────────────────────────────
@@ -715,10 +717,10 @@ async function installedMcpsIn(file, target) {
 async function listInstalled({ type, cwd }) {
   const items = [];
   if (type === 'skill') {
-    if (cwd) items.push(...await installedSkillsIn(path.join(cwd, '.claude', 'skills'), 'project'));
+    if (cwd) items.push(...await installedSkillsIn(projectSkillsDir(cwd), 'project'));
     items.push(...await installedSkillsIn(AI_SKILLS_DIR, 'global'));
   } else {
-    if (cwd) items.push(...await installedMcpsIn(path.join(cwd, '.mcp.json'), 'project'));
+    if (cwd) items.push(...await installedMcpsIn(projectMcpFile(cwd), 'project'));
     items.push(...await installedMcpsIn(AI_MCP_FILE, 'global'));
   }
   return items;

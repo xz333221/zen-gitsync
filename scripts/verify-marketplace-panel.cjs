@@ -39,9 +39,9 @@ const DIFFERENT = {
   name: 'brandkit',
   description: 'Premium brand-kit image generation skill',
   target: 'project',
-  dir: `${CWD}\\.claude\\skills\\github-Leonxlnx-taste-skill`,
+  dir: `${CWD}\\.zen-gitsync\\ai\\skills\\github-Leonxlnx-taste-skill`,
 }
-const SAME = { id: 'docx', name: 'docx', description: 'Word 处理', target: 'project', dir: `${CWD}\\.claude\\skills\\docx` }
+const SAME = { id: 'docx', name: 'docx', description: 'Word 处理', target: 'project', dir: `${CWD}\\.zen-gitsync\\ai\\skills\\docx` }
 
 function catalogBody(installed) {
   return {

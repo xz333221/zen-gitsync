@@ -15,13 +15,16 @@
 // g ai 的 Skill 加载层。
 //
 // Skill 的形态就是「一个目录 + 内含 SKILL.md(YAML frontmatter: name / description)」,
-// 与 Claude Code、Cursor 等工具共用同一套约定 —— 所以智能体页面里从广场装下来的
+// 与生态里其他工具共用同一套形状 —— 所以智能体页面里从广场装下来的
 // skill 不需要任何转换就能被 g ai 直接读。
 //
 // 两级作用域(与安装目标一一对应):
-//   - 项目级 <cwd>/.claude/skills/<id>/SKILL.md   仅该项目可见
-//   - 全局级 ~/.zen-gitsync/ai/skills/<id>/SKILL.md  所有项目可见
+//   - 项目级 <cwd>/.zen-gitsync/ai/skills/<id>/SKILL.md   仅该项目可见
+//   - 全局级 ~/.zen-gitsync/ai/skills/<id>/SKILL.md       所有项目可见
 // 同名时**项目级覆盖全局级**(与本仓库其他"项目配置优先"的口径一致)。
+//
+// 项目级**不再读** <cwd>/.claude/skills:那是 Claude Code 一系的约定目录,
+// 本应用不依赖它(2026-09-30 迁出)。两个路径常量都来自 paths.js,与广场的安装端共用。
 //
 // 渐进式披露(progressive disclosure):
 //   这里只把「名字 + 描述 + SKILL.md 路径」塞进系统提示词(每个 skill 约 30~50 token),
@@ -30,7 +33,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { AI_SKILLS_DIR } from '../../paths.js';
+import { AI_SKILLS_DIR, projectSkillsDir } from '../../paths.js';
 
 // 单个 skill 目录下必须存在的入口文件名
 export const SKILL_ENTRY = 'SKILL.md';
@@ -144,7 +147,7 @@ async function readSkillRoot(root, scope) {
  */
 export async function loadSkills({ cwd } = {}) {
   const roots = [];
-  if (cwd) roots.push({ root: path.join(path.resolve(cwd), '.claude', 'skills'), scope: 'project' });
+  if (cwd) roots.push({ root: projectSkillsDir(cwd), scope: 'project' });
   roots.push({ root: AI_SKILLS_DIR, scope: 'global' });
 
   const skills = [];

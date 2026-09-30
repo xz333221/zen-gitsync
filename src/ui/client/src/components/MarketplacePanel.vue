@@ -1,7 +1,7 @@
 <!--
   智能体页面的「广场」面板:Skill 广场 / MCP 广场共用这一份。
   - 按来源分组展示(每个来源独立请求、独立降级,一个目录站挂了不影响其他组)
-  - 两个安装目标:当前项目(.claude/skills、.mcp.json)/ g ai 智能体(~/.zen-gitsync/ai/)
+  - 两个安装目标:当前项目(<项目>/.zen-gitsync/ai/skills、…/ai/mcp.json)/ g ai 智能体(~/.zen-gitsync/ai/)
   - MCP 需要 API key 时弹窗收集环境变量;参数(如 Filesystem 的目录)可改
   后端见 src/ui/server/routes/workbench/agentMarketplace.js
 -->

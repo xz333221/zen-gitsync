@@ -20,9 +20,10 @@
 //   自己写≈200 行,换取零依赖 + 完全可控的超时与降级行为。
 //
 // 配置来源(两级,项目级覆盖全局同名 server):
-//   1) ~/.zen-gitsync/ai/mcp.json      「g ai 智能体」全局安装(对所有项目生效)
-//   2) <cwd>/.mcp.json                 项目级安装
-//   形状沿用 Claude 的 mcpServers,便于与生态里其他工具共享配置:
+//   1) ~/.zen-gitsync/ai/mcp.json                    「g ai 智能体」全局安装(对所有项目生效)
+//   2) <cwd>/.zen-gitsync/ai/mcp.json                项目级安装
+//   形状沿用生态通行的 mcpServers。项目级路径常量与广场安装端共用 src/paths.js 那一份;
+//   项目级**不再读** <cwd>/.mcp.json(那是 Claude Code 一系的约定路径,2026-09-30 迁出)。
 //   { "mcpServers": { "github": { "command": "npx", "args": ["-y", "@..."], "env": {} } } }
 //
 // ⚠️ Windows 上 spawn 的两个坑(已实测,不要"优化"掉):
@@ -38,7 +39,7 @@ import { spawn } from 'node:child_process';
 import { promises as fs, statSync } from 'node:fs';
 import path from 'node:path';
 import { trackChild } from '../cleanup.js';
-import { AI_MCP_FILE } from '../../paths.js';
+import { AI_MCP_FILE, projectMcpFile } from '../../paths.js';
 
 const IS_WIN = process.platform === 'win32';
 
@@ -171,7 +172,7 @@ async function readServersFile(file) {
  */
 export async function loadMcpServers({ cwd, globalFile = AI_MCP_FILE, projectFile } = {}) {
   const globalServers = await readServersFile(globalFile);
-  const projectPath = projectFile || (cwd ? path.join(path.resolve(cwd), '.mcp.json') : null);
+  const projectPath = projectFile || (cwd ? projectMcpFile(cwd) : null);
   const projectServers = projectPath ? await readServersFile(projectPath) : {};
   return {
     servers: { ...globalServers, ...projectServers },

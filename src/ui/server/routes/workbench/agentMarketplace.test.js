@@ -69,6 +69,13 @@ async function exists(target) {
   return await fs.stat(target).then(() => true).catch(() => false);
 }
 
+// 项目级扩展的落盘位置。这里**写死字面量**而不是 import paths.js 的常量 ——
+// 契约就是"装在哪儿",常量漂了必须在这几条断言上炸出来。
+// (2026-09-30 之前是 <cwd>/.claude/skills 与 <cwd>/.mcp.json,已迁到自家目录)
+const PROJECT_AI = path.join(sandboxProject, '.zen-gitsync', 'ai');
+const PROJECT_SKILLS = path.join(PROJECT_AI, 'skills');
+const PROJECT_MCP = path.join(PROJECT_AI, 'mcp.json');
+
 test('catalog: 只查内置来源时完全离线,并保留按来源分组的形状', async () => {
   const { call } = harness();
   const { status, payload } = await call('GET /api/agent/marketplace/catalog', {
@@ -144,7 +151,7 @@ test('sources: 拒绝未知类型', async () => {
   assert.equal(payload.success, false);
 });
 
-test('install skill: 项目级落到 <cwd>/.claude/skills,全局级落到 ~/.zen-gitsync/ai/skills', async () => {
+test('install skill: 项目级落到 <cwd>/.zen-gitsync/ai/skills,全局级落到 ~/.zen-gitsync/ai/skills', async () => {
   const { call } = harness();
   const content = '---\nname: demo\n description: x\n---\n# demo\n';
   const body = { type: 'skill', item: { id: 'demo-skill', name: 'demo', content } };
@@ -153,7 +160,9 @@ test('install skill: 项目级落到 <cwd>/.claude/skills,全局级落到 ~/.zen
     body: { ...body, target: 'project', cwd: sandboxProject },
   });
   assert.equal(project.status, 200);
-  assert.ok(await exists(path.join(sandboxProject, '.claude', 'skills', 'demo-skill', 'SKILL.md')));
+  assert.ok(await exists(path.join(PROJECT_SKILLS, 'demo-skill', 'SKILL.md')));
+  // 反向自证:项目级不再碰 .claude(那是别家工具的目录,装进去会让人以为有依赖)
+  assert.equal(await exists(path.join(sandboxProject, '.claude')), false, '不该在项目里建 .claude');
 
   const global = await call('POST /api/agent/marketplace/install', {
     body: { ...body, target: 'global', cwd: sandboxProject },
@@ -182,7 +191,7 @@ test('install skill: 没有仓库也没有正文时拒绝,不产生空目录', a
   });
   assert.equal(status, 400);
   assert.match(payload.error, /没有可安装的仓库地址/);
-  assert.equal(await exists(path.join(sandboxProject, '.claude', 'skills', 'useless')), false);
+  assert.equal(await exists(path.join(PROJECT_SKILLS, 'useless')), false);
 });
 
 test('install skill: 仓库名与子路径都要过白名单', async () => {
@@ -220,7 +229,7 @@ test('install mcp: 写入目标文件、补齐 name/description,并把 ${project
   });
 
   assert.equal(status, 200);
-  const file = path.join(sandboxProject, '.mcp.json');
+  const file = PROJECT_MCP;
   const config = JSON.parse(await fs.readFile(file, 'utf8'));
   const server = config.mcpServers['mcp-fake-fs'];
   assert.ok(server, '应写入 mcpServers');
@@ -232,12 +241,12 @@ test('install mcp: 写入目标文件、补齐 name/description,并把 ${project
 
 test('install mcp: 非法包名被拒绝,且不写出配置文件', async () => {
   const { call } = harness();
-  const before = await exists(path.join(sandboxProject, '.mcp.json'));
+  const before = await exists(PROJECT_MCP);
   const { status } = await call('POST /api/agent/marketplace/install', {
     body: { type: 'mcp', target: 'project', cwd: sandboxProject, item: { id: 'evil', package: 'pkg; rm -rf /' } },
   });
   assert.equal(status, 400);
-  if (!before) assert.equal(await exists(path.join(sandboxProject, '.mcp.json')), false);
+  if (!before) assert.equal(await exists(PROJECT_MCP), false);
 });
 
 test('install mcp: 只有远程端点时用 mcp-remote 桥接,而不是报错或装出一个无效配置', async () => {
@@ -291,7 +300,7 @@ test('uninstall: 只删指定目标的那一份,另一份保留', async () => {
     query: { target: 'project', cwd: sandboxProject },
   });
   assert.equal(status, 200);
-  assert.equal(await exists(path.join(sandboxProject, '.claude', 'skills', 'demo-skill')), false);
+  assert.equal(await exists(path.join(PROJECT_SKILLS, 'demo-skill')), false);
   assert.ok(await exists(path.join(AI_SKILLS_DIR, 'demo-skill', 'SKILL.md')), '全局那份不应被连坐删掉');
 });
 
@@ -302,7 +311,7 @@ test('uninstall: MCP 从配置里摘掉对应键,保留其他 server', async () 
     query: { target: 'project', cwd: sandboxProject },
   });
   assert.equal(status, 200);
-  const config = JSON.parse(await fs.readFile(path.join(sandboxProject, '.mcp.json'), 'utf8'));
+  const config = JSON.parse(await fs.readFile(PROJECT_MCP, 'utf8'));
   assert.equal(Object.prototype.hasOwnProperty.call(config.mcpServers, 'mcp-fake-fs'), false);
   assert.ok(await exists(AI_MCP_FILE), '全局配置文件应保持不变');
 });
@@ -327,7 +336,7 @@ test('uninstall: 未安装的条目返回 404', async () => {
   assert.equal(status, 404);
 });
 
-test('install: 项目不存在时拒绝,不会把 .claude/skills 建到奇怪的地方', async () => {
+test('install: 项目不存在时拒绝,不会把 .zen-gitsync/ai/skills 建到奇怪的地方', async () => {
   const { call } = harness();
   const missing = path.join(sandboxProject, 'no-such-dir');
   const { status, payload } = await call('POST /api/agent/marketplace/install', {

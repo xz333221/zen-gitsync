@@ -93,7 +93,7 @@ export class AgentExtensions {
   }
 
   /**
-   * 切换工作目录:重读项目级 skill 与 .mcp.json,先关掉旧目录起的子进程。
+   * 切换工作目录:重读项目级 skill 与项目级 mcp.json,先关掉旧目录起的子进程。
    * 全局级配置不受影响,但一起重载更简单也更好推理。
    *
    * @param {{ cwd: string, locale?: string, onWarn?: (message: string) => void,

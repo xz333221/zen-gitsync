@@ -94,7 +94,10 @@ test('loadMcpServers: 项目级覆盖全局同名 server,坏的 JSON 只当没�
       broken: { args: ['no-command'] },
     },
   }), 'utf8');
-  await fs.writeFile(path.join(project, '.mcp.json'), JSON.stringify({
+  // 项目级落在 .zen-gitsync/ai/mcp.json —— 写死字面量,常量漂了要在这里炸
+  const projectFile = path.join(project, '.zen-gitsync', 'ai', 'mcp.json');
+  await fs.mkdir(path.dirname(projectFile), { recursive: true });
+  await fs.writeFile(projectFile, JSON.stringify({
     mcpServers: { shared: { command: 'npx', args: ['project'] } },
   }), 'utf8');
 
@@ -103,11 +106,20 @@ test('loadMcpServers: 项目级覆盖全局同名 server,坏的 JSON 只当没�
   assert.ok(servers.onlyGlobal);
   assert.equal(servers.broken, undefined, '没有 command 的条目应被丢弃');
   assert.equal(sources.length, 2);
+  assert.equal(sources[1].file, projectFile, '项目级来源路径必须就是那个文件');
 
   // 坏文件:整个文件当空配置,不抛错
-  await fs.writeFile(path.join(project, '.mcp.json'), '{ this is not json', 'utf8');
+  await fs.writeFile(projectFile, '{ this is not json', 'utf8');
   const broken = await loadMcpServers({ cwd: project });
   assert.deepEqual(broken.servers.shared.args, ['global'], '坏的项目配置应回落到全局配置');
+
+  // 反向自证:老位置 <cwd>/.mcp.json 不再被读
+  const legacyProject = await fs.mkdtemp(path.join(os.tmpdir(), 'zen-mcp-legacy-'));
+  await fs.writeFile(path.join(legacyProject, '.mcp.json'), JSON.stringify({
+    mcpServers: { fromClaude: { command: 'npx', args: ['legacy'] } },
+  }), 'utf8');
+  const legacy = await loadMcpServers({ cwd: legacyProject });
+  assert.equal(legacy.servers.fromClaude, undefined, '项目根 .mcp.json 是别家工具的路径,不该再被读');
 });
 
 // ── 真实 stdio 往返 ───────────────────────────────────────────

@@ -682,7 +682,7 @@ export async function handleSlashCommand(state, input, t) {
       const st = await fsp.stat(target)
       if (!st.isDirectory()) throw new Error('not a dir')
       state.ctx.cwd = target
-      // 项目级 skill 与 .mcp.json 跟着工作目录走:先重载扩展(会关掉旧目录起的 MCP 子进程),
+      // 项目级 skill 与项目级 mcp.json 跟着工作目录走:先重载扩展(会关掉旧目录起的 MCP 子进程),
       // 再重建首条 system 消息 —— 顺序反了会把旧目录的 skill 清单写进新目录的提示词。
       await state.extensions?.reload({ cwd: target, locale: state.locale, onWarn: printWarn })
       state.messages[0] = { role: 'system', content: await buildProjectPrompt({ cwd: target, locale: state.locale, shellDesc: state.shellDesc, extra: extensionSuffix(state) }) }

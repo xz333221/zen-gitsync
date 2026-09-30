@@ -66,8 +66,10 @@ test('parseFrontmatter: 覆盖 SKILL.md 里实际会出现的几种写法', () =
 test('loadSkills: 项目级覆盖同名全局级,并保留 scope 标记', async () => {
   await writeSkill(AI_SKILLS_DIR, 'shared', '---\nname: 全局版\ndescription: from global\n---\n');
   await writeSkill(AI_SKILLS_DIR, 'only-global', '---\nname: 只有全局\ndescription: g\n---\n');
-  await writeSkill(path.join(sandboxProject, '.claude', 'skills'), 'shared', '---\nname: 项目版\ndescription: from project\n---\n');
-  await writeSkill(path.join(sandboxProject, '.claude', 'skills'), 'only-project', '---\nname: 只有项目\ndescription: p\n---\n');
+  // 项目级落在 .zen-gitsync/ai/skills —— 路径写死成字面量,常量漂了要在这里炸
+  const projectSkills = path.join(sandboxProject, '.zen-gitsync', 'ai', 'skills');
+  await writeSkill(projectSkills, 'shared', '---\nname: 项目版\ndescription: from project\n---\n');
+  await writeSkill(projectSkills, 'only-project', '---\nname: 只有项目\ndescription: p\n---\n');
 
   const { skills } = await loadSkills({ cwd: sandboxProject });
   const byId = new Map(skills.map(skill => [skill.id, skill]));
@@ -77,6 +79,16 @@ test('loadSkills: 项目级覆盖同名全局级,并保留 scope 标记', async 
   assert.equal(byId.get('shared').scope, 'project');
   assert.equal(byId.get('only-global').scope, 'global');
   assert.equal(byId.get('only-project').scope, 'project');
+});
+
+test('loadSkills: 不再读 <cwd>/.claude/skills(那是别家工具的目录)', async () => {
+  // 反向自证:同样的 skill 放进 .claude/skills,必须一条都读不出来 ——
+  // 否则"迁出 .claude"这件事只是安装端单方面改了,读端还连着。
+  const legacy = path.join(sandboxProject, '.claude', 'skills');
+  await writeSkill(legacy, 'from-claude-only', '---\nname: 别家的\ndescription: legacy\n---\n');
+
+  const { skills } = await loadSkills({ cwd: sandboxProject });
+  assert.equal(skills.some(skill => skill.id === 'from-claude-only'), false);
 });
 
 test('loadSkills: 没有 frontmatter 时用目录名兜底,坏目录不影响其他 skill', async () => {

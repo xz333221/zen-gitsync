@@ -67,16 +67,35 @@ export const AI_IMAGES_DIR = path.join(DATA_DIR, 'ai-images');
 export const LEGACY_HOME_DIR = path.join(os.homedir(), '.git-commit-tool');
 export const LEGACY_AI_IMAGES_DIR = path.join(LEGACY_HOME_DIR, 'ai-images');
 
-// ── g ai 智能体的全局扩展(2026-09-21 新增) ────────────────────
+// ── g ai 智能体的扩展(Skill / MCP,两级作用域) ────────────────
 // 智能体页面的「Skill 广场 / MCP 广场」有两个安装目标:
-//   1) 当前项目 → <cwd>/.claude/skills/<id>/ 与 <cwd>/.mcp.json(生态既有约定,别的工具也认)
-//   2) g ai 智能体(全局) → 下面这两个路径,对**所有**项目生效
-// 目录形状刻意与 .claude/skills 保持一致(每个 skill 一个子目录,内含 SKILL.md),
-// 这样 src/cli/ai/skills.js 可以用同一套解析逻辑读两处。
+//   1) 当前项目 → 下面 project* 那组函数拼出来的 <cwd>/.zen-gitsync/ai/…
+//   2) g ai 智能体(全局) → 同一形状的一份,放在数据目录里,对**所有**项目生效
+//
+// 为什么不是 <cwd>/.claude/skills:那是 Claude Code / Cursor 那一系的约定目录。
+// zen-gitsync 不依赖它们,把自家扩展写进别人产品的目录里,既让人以为有依赖,
+// 也会和「那个工具自己的 skill」混成一锅(2026-09-30 按用户要求迁出)。
+// 目录形状仍然保持「一个 skill 一个子目录 + 内含 SKILL.md」——
+// 要跟生态互通时拷过去即可,但落盘位置由本应用自己说了算。
+//
+// ⚠️ 这四个常量是**安装端与读取端的唯一出处**:广场写进去、g ai 读出来,
+// 两边必须同一份,否则会出现"装了但读不到"。
 export const AI_SKILLS_DIR = path.join(DATA_DIR, 'ai', 'skills');
-// MCP 服务定义。键名与内容沿用 Claude 的 mcpServers 形状,
-// 与项目里的 <cwd>/.mcp.json 可以直接合并(项目级覆盖全局同名 server)。
+// MCP 服务定义。形状沿用生态通行的 mcpServers,项目级覆盖全局同名 server。
 export const AI_MCP_FILE = path.join(DATA_DIR, 'ai', 'mcp.json');
+
+/** 项目级扩展根:`<cwd>/.zen-gitsync/ai`(与全局级同构,只是根不同)。 */
+export function projectAiDir(cwd) {
+  return path.join(path.resolve(cwd), '.zen-gitsync', 'ai');
+}
+/** 项目级 skill 目录:`<cwd>/.zen-gitsync/ai/skills/<id>/SKILL.md`。 */
+export function projectSkillsDir(cwd) {
+  return path.join(projectAiDir(cwd), 'skills');
+}
+/** 项目级 MCP 配置文件:`<cwd>/.zen-gitsync/ai/mcp.json`。 */
+export function projectMcpFile(cwd) {
+  return path.join(projectAiDir(cwd), 'mcp.json');
+}
 
 // ── 给 g ai 看的「工作区状态快照」 ────────────────────────────
 // 各板块状态(git / 远程仓库 / 自定义命令 / 工作台任务 / 系统 / 思维导图)由**服务端**
