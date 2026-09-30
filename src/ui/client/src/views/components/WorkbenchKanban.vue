@@ -31,6 +31,12 @@
   工具条上只有一个搜索框：原来并排的「仅看报错」勾选框 2026-09-29 去掉——
   "哪条任务报过错"卡片自己就有标记（.kb-card.has-error + 小红点），
   真要筛也就少数几次，为此常驻一个勾选框占着工具条不划算。
+
+  被点开过的那张卡片（.kb-card.is-opened，id 由上层给的 openedTaskId）取消 hover：
+  「执行 / ×」不再随鼠标浮出、卡片也不再抬升、正文右侧的渐隐一并撤掉。
+  理由是这条任务已经在编辑器里了（执行 / 删除在那儿都有），卡片上再摆一份
+  只会跟正文抢右下角那块地方 —— 顺带把"鼠标恰好停在这张上"的误触也堵掉。
+  键盘仍然可达（:focus-within 照旧浮出），否则 Tab 过去就摸不到这两个按钮。
 -->
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
@@ -47,6 +53,13 @@ const props = defineProps<{
   /** 视图为「全部项目」时在卡片上标出项目名，避免同名任务分不清 */
   projectLabels: Record<string, string>
   showProjectLabel: boolean
+  /**
+   * 用户从看板上点开过的任务 id（null = 还没点开过任何一条）。
+   * 这张卡片取消 hover —— 见文件头那段说明。
+   * 刻意**不**复用上层的 selectedTaskId：它在首次加载时就会自动落到某条任务上
+   * （applyRestoredSelection），拿它当"点开过"会让一张从没被碰过的卡片莫名丢掉操作按钮。
+   */
+  openedTaskId: string | null
 }>()
 
 const emit = defineEmits<{
@@ -231,8 +244,13 @@ function liveSummary(live: BoardTaskLive): string {
             v-for="t in col.tasks"
             :key="t.id"
             class="kb-card"
-            :class="{ 'is-running': t.runningJobs > 0, 'has-error': hasError(t) }"
+            :class="{
+              'is-running': t.runningJobs > 0,
+              'has-error': hasError(t),
+              'is-opened': t.id === openedTaskId,
+            }"
             :data-task-id="t.id"
+            :aria-current="t.id === openedTaskId ? 'true' : undefined"
             role="button"
             tabindex="0"
             @click="emit('open-task', t)"
@@ -616,6 +634,18 @@ function liveSummary(live: BoardTaskLive): string {
   border-color: color-mix(in srgb, var(--color-danger) 40%, var(--border-color));
   background: color-mix(in srgb, var(--color-danger) 4%, var(--surface-elevated));
 }
+/* 点开过的那张（.is-opened）：常驻一圈主色描边，让"这张不再有 hover 操作"看着是条规则，
+   而不是"这张卡坏了"。描边色与上面两个状态色同用 color-mix 那一套写法。
+   hover 时描边不变（还是主色），只把抬升撤掉 —— 抬升是"我要点你了"的暗示，
+   而这张卡的操作已经在编辑器里了，不该再暗示。 */
+.kb-card.is-opened,
+.kb-card.is-opened:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--border-color));
+}
+.kb-card.is-opened:hover {
+  box-shadow: var(--shadow-card-rest);
+  transform: none;
+}
 
 /* 首行：项目色标 + 标题 + 时间 —— 三者都是单行文本。
    baseline 而不是 center：三者的盒子高度天生不同（胶囊 18px = 16px 行高 + 上下各 1px 边框、
@@ -847,7 +877,14 @@ function liveSummary(live: BoardTaskLive): string {
   pointer-events: none;
   transition: opacity var(--transition-fast) var(--ease-custom);
 }
-.kb-card:hover .kb-card__actions,
+/*
+ * 点开过的卡片（.is-opened）不参与 hover 那套：操作组不浮出、正文右侧也不渐隐。
+ * 用 `:not(.is-opened)` 改**触发侧**而不是事后去覆盖 opacity / mask ——
+ * 遮罩与浮层是成对的（遮罩是遮**字**的），只撤一个就会留下"按钮没了但字白少一截"的半吊子状态。
+ * :focus-within 那一路**不加**这个条件：Tab 进卡片里的按钮时操作组照旧浮出，
+ * 否则「执行 / ×」对键盘用户就等于消失了（它们 pointer-events 也归零，鼠标和键盘都点不到）。
+ */
+.kb-card:not(.is-opened):hover .kb-card__actions,
 .kb-card:focus-within .kb-card__actions {
   opacity: 1;
   pointer-events: auto;
@@ -868,14 +905,14 @@ function liveSummary(live: BoardTaskLive): string {
  * 整个落在全透明区里，不会露出半截字形；再往左 16px 是淡出段。
  * 英文标签（Run）比中文窄，组更小、左边缘更靠右，同样被完全透明区覆盖，不会失效。
  */
-.kb-card:hover .kb-card__title,
+.kb-card:not(.is-opened):hover .kb-card__title,
 .kb-card:focus-within .kb-card__title,
 /* 活动区同理：它渲染在哪一行取决于哪个字段有值（工具 / 思考 / 回复 / 只有时长），
    所以对**最后渲染出来的那个孩子**渐隐，而不是逐个类名去猜 */
-.kb-card:hover .kb-card__live > :last-child,
+.kb-card:not(.is-opened):hover .kb-card__live > :last-child,
 .kb-card:focus-within .kb-card__live > :last-child,
 /* 「最后回复」是卡片的最后一块，操作组正压在它右下角 */
-.kb-card:hover .kb-card__reply,
+.kb-card:not(.is-opened):hover .kb-card__reply,
 .kb-card:focus-within .kb-card__reply {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 80px), transparent calc(100% - 64px));
   mask-image: linear-gradient(to right, #000 calc(100% - 80px), transparent calc(100% - 64px));

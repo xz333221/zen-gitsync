@@ -128,6 +128,17 @@ function closeEditor() {
 }
 
 /**
+ * 从看板上点开过的任务（本次会话内记住，最后点开的那条为准）。
+ * 看板据此给这张卡片取消 hover：「执行 / ×」不再随鼠标浮出（执行/删除在编辑器里都有），
+ * 顺带堵掉"鼠标恰好停在自己正在编辑的那张卡上"的误触。
+ *
+ * 刻意与 selectedTaskId 分开：后者在首次加载时就会自动落到某条任务上
+ * （applyRestoredSelection 挑"当前项目上次打开的那条"），拿它当"点开过"
+ * 会让一张从没被碰过的卡片莫名丢掉 hover 操作按钮。
+ */
+const boardOpenedTaskId = ref<string | null>(null)
+
+/**
  * 从看板打开某个任务（把 L2 编辑器弹窗顶起来）。
  *
  * 两处必须显式处理：
@@ -139,6 +150,7 @@ function closeEditor() {
 async function openTaskFromBoard(payload: { taskId: string; projectPath: string }) {
   await _loadDataTasks()
   selectedTaskId.value = payload.taskId
+  boardOpenedTaskId.value = payload.taskId
   captureSnapshot()
   if (selectedTask.value) {
     rememberLastTask(canonicalProjectPath(currentProject.value.path), payload.taskId)
@@ -1013,7 +1025,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 <template>
   <div class="workbench">
     <!-- L1：多项目编排台 —— **常驻底图**，不再与编辑器互斥 -->
-    <WorkbenchBoard @open-task="openTaskFromBoard" />
+    <WorkbenchBoard :opened-task-id="boardOpenedTaskId" @open-task="openTaskFromBoard" />
 
     <!-- L2：单任务编辑器 —— 大弹窗浮在看板之上，关掉即回到原位，全程无跳转 -->
     <CommonDialog

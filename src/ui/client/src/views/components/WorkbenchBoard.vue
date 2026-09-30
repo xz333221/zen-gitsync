@@ -49,6 +49,11 @@ import OrchestratorConsole from './OrchestratorConsole.vue'
 import WorkbenchDefaultPromptDialog from './WorkbenchDefaultPromptDialog.vue'
 import WorkbenchTaskCreateDialog from './WorkbenchTaskCreateDialog.vue'
 
+const props = defineProps<{
+  /** 用户从看板上点开过的任务 id（null = 还没点开过）。透传给看板，卡片据此取消 hover */
+  openedTaskId: string | null
+}>()
+
 const emit = defineEmits<{
   /** 请求上层切到任务编辑器的某个任务（只由弹窗里的「打开编辑器」显式触发） */
   'open-task': [payload: { taskId: string; projectPath: string }]
@@ -649,6 +654,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
           :tasks="visibleTasks"
           :project-labels="projectLabels"
           :show-project-label="!selectedProject"
+          :opened-task-id="props.openedTaskId"
           @open-task="onOpenTask"
           @run-task="runTask"
           @delete-task="deleteTask"
