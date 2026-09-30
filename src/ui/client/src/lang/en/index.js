@@ -2397,7 +2397,7 @@ export default {
   '@WORKBENCH:列表视图': 'List',
   '@WORKBENCH:搜索任务标题或描述': 'Search title or description',
   '@WORKBENCH:状态': 'Status',
-  '@WORKBENCH:更新时间': 'Updated',
+  '@WORKBENCH:时间': 'Time',
   '@WORKBENCH:已开始执行': 'Started',
   '@WORKBENCH:指令内容不能为空': 'Instruction cannot be empty',
   '@WORKBENCH:主 Agent 控制台': 'Master agent console',

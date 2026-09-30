@@ -47,6 +47,7 @@
     "verify:wb-card-reply": "node scripts/verify-wb-card-reply.cjs",
     "verify:wb-card-executor-icon": "node scripts/verify-wb-card-executor-icon.cjs",
     "verify:wb-card-opened": "node scripts/verify-wb-card-opened.cjs",
+    "verify:wb-list-view": "node scripts/verify-wb-list-view.cjs",
     "verify:wb-executor-models": "node scripts/verify-wb-executor-models.cjs",
     "verify:wb-task-sound": "node scripts/verify-wb-task-sound.cjs",
     "verify:wb-proj-branch": "node scripts/verify-workbench-proj-branch.cjs",

@@ -32,6 +32,13 @@
   "哪条任务报过错"卡片自己就有标记（.kb-card.has-error + 小红点），
   真要筛也就少数几次，为此常驻一个勾选框占着工具条不划算。
 
+  列表视图 2026-09-30 补上时间列并改成最新的在最上边。此前它有两处对不上：
+  一是「状态 / 时间」两列其实从没露过面（表格被 nowrap 正文撑到横向溢出，
+  两列被推出可视区，DOM 里量得到、屏幕上什么都没有 —— 详见 .kb-table 的注释），
+  二是那列时间用的是 `updatedAt || createdAt`，撑不起排序：执行完成只写 jobs.json，
+  tasks.json 里的 updatedAt 一直停在创建/编辑时刻，于是十几行全是同一个时间。
+  现在时间列与排序键都统一到 cardTime（与看板卡片同一口径），排序键 = 显示键。
+
   被点开过的那张卡片（.kb-card.is-opened，id 由上层给的 openedTaskId）取消 hover：
   「执行 / ×」不再随鼠标浮出、卡片也不再抬升、正文右侧的渐隐一并撤掉。
   理由是这条任务已经在编辑器里了（执行 / 删除在那儿都有），卡片上再摆一份
@@ -127,10 +134,28 @@ function byDoneAtDesc(a: BoardTask, b: BoardTask): number {
   return doneAt(b).localeCompare(doneAt(a))
 }
 
-/** 卡片右上角的时间：已完成列给完成时间，其余列给最后变动时间 */
+/**
+ * 一条任务"最近发生了什么"的时间 —— 看板卡片（cardTime）与列表视图的时间列**共用这一个**。
+ *
+ * 已完成的给完成时刻（doneAt），其余给最后变动时刻。列表视图单独再写一遍
+ * `updatedAt || createdAt` 的话，同一条任务在两个视图里会显示两个时间；
+ * 更糟的是拿显示不出来的那个键去排序（列表视图 2026-09-30 之前就是），
+ * 用户会看到一列看不出先后的时间 —— 看着就像没排过。
+ */
 function cardTime(t: BoardTask): string {
   return t.column === 'done' ? doneAt(t) : (t.updatedAt || t.createdAt || '')
 }
+
+/**
+ * 列表视图的行序：最新的在最上边。
+ *
+ * 排序键 = 显示键（cardTime），理由同上面那段：按 A 排、显示 B 的话，
+ * 用户看到的是一列时间乱跳的行。回退到空串的任务（连 createdAt 都没有）
+ * 会沉到最后 —— 没有任何时刻可依据时，"最旧的"是比"最新"更安全的默认。
+ *
+ * 复制一份再排：filtered 同一份数组还被看板的 columns 用着，原地 sort 会把它一起改掉。
+ */
+const listRows = computed(() => [...filtered.value].sort((a, b) => cardTime(b).localeCompare(cardTime(a))))
 
 /**
  * 列轨道数跟着列数走。
@@ -402,12 +427,12 @@ function liveSummary(live: BoardTaskLive): string {
           <tr>
             <th class="kb-table__th">{{ $t('@WORKBENCH:任务') }}</th>
             <th class="kb-table__th kb-table__th--narrow">{{ $t('@WORKBENCH:状态') }}</th>
-            <th class="kb-table__th kb-table__th--narrow">{{ $t('@WORKBENCH:更新时间') }}</th>
+            <th class="kb-table__th kb-table__th--narrow">{{ $t('@WORKBENCH:时间') }}</th>
           </tr>
         </thead>
         <tbody>
           <tr
-            v-for="t in filtered"
+            v-for="t in listRows"
             :key="t.id"
             class="kb-table__row"
             tabindex="0"
@@ -454,9 +479,9 @@ function liveSummary(live: BoardTaskLive): string {
                 {{ $t(COLUMNS.find(c => c.key === t.column)!.labelKey) }}
               </span>
             </td>
-            <td class="kb-table__td kb-table__td--num">{{ relativeTimeFromIso(t.updatedAt || t.createdAt) }}</td>
+            <td class="kb-table__td kb-table__td--num">{{ relativeTimeFromIso(cardTime(t)) }}</td>
           </tr>
-          <tr v-if="filtered.length === 0">
+          <tr v-if="listRows.length === 0">
             <td class="kb-table__td kb-table__empty" colspan="3">{{ $t('@WORKBENCH:暂无任务') }}</td>
           </tr>
         </tbody>
@@ -989,6 +1014,14 @@ function liveSummary(live: BoardTaskLive): string {
 }
 .kb-table {
   width: 100%;
+  /* fixed 是这两列能露出来的前提（2026-09-30 修）：
+     默认的 auto 布局按**内容**算列宽，而「任务」那一格里有两段 white-space: nowrap
+     的正文（.kb-table__name 的长标题、.kb-table__live 的回复摘录），
+     它的 max-content 宽度（实测 1055px）远大于容器（918px）。
+     auto 布局下表格不会裁掉超宽的那一格，而是把整张表撑到 1181px 横向溢出，
+     右边的「状态 / 时间」两列被推出可视区右侧 —— DOM 里量得到、屏幕上没有。
+     fixed 下未声明宽度的列平分剩余空间，nowrap 正文由各自的 ellipsis 收尾。 */
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: var(--font-size-sm);
 }

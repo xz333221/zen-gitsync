@@ -2406,7 +2406,7 @@ export default {
   '@WORKBENCH:列表视图': '列表视图',
   '@WORKBENCH:搜索任务标题或描述': '搜索任务标题或描述',
   '@WORKBENCH:状态': '状态',
-  '@WORKBENCH:更新时间': '更新时间',
+  '@WORKBENCH:时间': '时间',
   '@WORKBENCH:已开始执行': '已开始执行',
   '@WORKBENCH:指令内容不能为空': '指令内容不能为空',
   '@WORKBENCH:主 Agent 控制台': '主 Agent 控制台',
