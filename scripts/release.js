@@ -31,12 +31,18 @@
  *   npm run release -- --poll-timeout=3600                # 窗口上限(秒,默认 1800 = 30 分钟)
  *   npm run release -- --poll-fast-window=600 --poll-slow-interval=60  # 600s 后退避到 60s 一跳
  *   npm run release -- --install-timeout=900               # 单次 npm install 上限(秒),0 = 不限时(默认)
+ *   npm run release -- --no-notify                         # 结束时不再弹系统通知 / 响提示音
  *
  * 发布后自更新:每轮看两个就绪信号(packument 里有没有这个版本 / tarball 能不能取),
  * 任一为真就真调 npm,并两条路(`pkg@<版本>` / tarball URL 直连)都试,装上后校验全局版本;
  * 探针说"取不到"时也每 4 轮强制真试一次,窗口用尽前还会补最后一次,失败把原因打出来。
  * 原因见 tarballUrl() / selfUpdateGlobal() 处注释 —— publish 成功不等于
  * packument 立即可见,也不等于 tarball 立即可取(两种先后顺序都实测出现过)。
+ *
+ * 结束时**离开终端也能收到**提醒(见 announceRelease):系统通知 + 提示音 + 终端标题。
+ * 装全局那步实测能磨十几分钟,用户不可能一直盯着;终端里再醒目的一行字,对已经走去
+ * 干别的事的人等于没打。三种结局(成功 / 已发布但全局没装上 / 失败)各有各的文案与音,
+ * 用 `--no-notify`(或环境变量 ZEN_NO_NOTIFY=1)可关掉。
  *
  * "这一轮要不要真调 npm"的判定抽在 src/utils/selfUpdatePolicy.js(有单测);
  * 动那里的阈值/分支请连带跑 `node --test src/utils/selfUpdatePolicy.test.js`。
@@ -61,6 +67,7 @@ import {
   classifyInstallError,
   FORCE_INSTALL_EVERY,
 } from '../src/utils/selfUpdatePolicy.js'
+import { notifyDesktop, setTerminalTitle } from '../src/utils/desktopNotify.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -71,6 +78,9 @@ const DRY_RUN = argv.includes('--dry-run')
 const SKIP_SELF_UPDATE = argv.includes('--skip-self-update')
 const SKIP_PUSH = argv.includes('--skip-push')
 const KEEP_INSTANCES = argv.includes('--keep-instances')
+// 关掉结束时的桌面提醒(系统通知 / 提示音 / 终端标题)。环境变量那份是给
+// "通过 npm script 起、不方便追加参数"的场景留的口子(CI / 别的工具代跑)。
+const NO_NOTIFY = argv.includes('--no-notify') || process.env.ZEN_NO_NOTIFY === '1'
 
 const NPM_REGISTRY = 'https://registry.npmjs.org/'
 const PKG_NAME = 'zen-gitsync'
@@ -365,8 +375,7 @@ async function checkEnvironment() {
       console.log(chalk.yellow('发布已取消'))
       process.exit(0)
     }
-    console.error(chalk.red('环境检查失败:'), err.message || err)
-    process.exit(1)
+    abortRelease('环境检查失败:', err.message || err)
   }
 }
 
@@ -386,8 +395,7 @@ async function runTypeCheck() {
     execSync('npx vue-tsc -b --noEmit', { cwd: frontendDir, stdio: 'inherit' })
     console.log(chalk.green('vue-tsc 类型检查通过'))
   } catch (err) {
-    console.error(chalk.red('vue-tsc 类型检查失败,请修复以上错误后重新发布'))
-    process.exit(1)
+    abortRelease('vue-tsc 类型检查失败,请修复以上错误后重新发布')
   }
 }
 
@@ -442,6 +450,8 @@ async function buildFrontend() {
     console.error(chalk.red('前端项目构建失败:'), err.message || err)
     const shouldContinue = await askContinue(chalk.yellow('前端构建失败,是否继续发布? (Y/n): '))
     if (!shouldContinue) {
+      // 这里**故意不提醒**:用户刚亲手回答了上面的提示,人就在键盘前(与 abortRelease 那些
+      // "进程自己撞墙"的出口不同,那些才需要把人叫回来)。
       console.log(chalk.red('发布流程已取消'))
       process.exit(1)
     }
@@ -467,11 +477,10 @@ async function verifyPackageContents() {
   try {
     execSync(`"${process.execPath}" --test test/package-files.test.mjs`, { cwd: rootDir, stdio: 'inherit' })
   } catch {
-    console.error(chalk.red(
+    abortRelease(
       '发布物自检失败:package.json#files 覆盖不全(上面哪几条 not ok 就补哪几个文件)。\n'
       + '继续发布会打出缺文件的包 —— 用户装上就是 ERR_MODULE_NOT_FOUND。'
-    ))
-    process.exit(1)
+    )
   }
   console.log(chalk.green('① files 覆盖所有被 import 的本地模块'))
 
@@ -482,15 +491,13 @@ async function verifyPackageContents() {
     // npm 可能在前/后混入提示行,这里取第一个 '[' 到最后一个 ']' 之间
     packJson = JSON.parse(out.slice(out.indexOf('['), out.lastIndexOf(']') + 1))
   } catch (err) {
-    console.error(chalk.red('npm pack --dry-run 失败:'), err.message || err)
-    process.exit(1)
+    abortRelease('npm pack --dry-run 失败:', err.message || err)
   }
 
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'))
   const packed = new Set((packJson[0]?.files || []).map((f) => f.path))
   if (packed.size === 0) {
-    console.error(chalk.red('npm pack 打出了空包,绝对有问题'))
-    process.exit(1)
+    abortRelease('npm pack 打出了空包,绝对有问题')
   }
 
   const notPacked = (pkg.files || []).filter((entry) => {
@@ -502,11 +509,10 @@ async function verifyPackageContents() {
   })
 
   if (notPacked.length) {
-    console.error(chalk.red(
+    abortRelease(
       `npm pack 里有 ${notPacked.length} 条 files 白名单没真正进包(大概率是 .npmignore / .gitignore 排除了):\n`
       + notPacked.map((e) => `  - ${e}`).join('\n')
-    ))
-    process.exit(1)
+    )
   }
   console.log(chalk.green(`② 真实打包 ${packed.size} 个文件,白名单逐条命中`))
 }
@@ -534,9 +540,9 @@ function stageReleaseFiles() {
     .filter(Boolean)
   const unexpected = stagedOut.filter((f) => !RELEASE_FILES.includes(f))
   if (unexpected.length) {
-    console.error(chalk.red('staged 范围超出白名单,中止提交:'))
-    for (const f of unexpected) console.error('  - ' + f)
-    process.exit(1)
+    abortRelease(
+      'staged 范围超出白名单,中止提交:\n' + unexpected.map((f) => `  - ${f}`).join('\n')
+    )
   }
 }
 
@@ -609,8 +615,7 @@ async function commitChanges(version) {
       }
     }
   } catch (err) {
-    console.error(chalk.red('Git 提交失败:'), err.message || err)
-    process.exit(1)
+    abortRelease('Git 提交失败:', err.message || err)
   }
 }
 
@@ -885,6 +890,11 @@ async function selfUpdateGlobal(version) {
     + `单次安装${INSTALL_TIMEOUT_MS > 0 ? `上限 ${INSTALL_TIMEOUT_MS / 1000}s` : '不限时'}`
     + '(可用 --install-timeout=<秒> 调,0 = 不限时)。'
   ))
+  console.log(chalk.gray(
+    '这一步可能要等几分钟到半小时,**不用盯着** —— 装好或彻底失败时会弹一条系统通知'
+    + ' + 响一声(成功失败两种音),终端标题也会变成结果。'
+    + (NO_NOTIFY ? '(本次带了 --no-notify,提醒已关掉)' : '(想关掉用 --no-notify)')
+  ))
 
   const startedAt = Date.now()
   const deadline = startedAt + POLL_TIMEOUT_MS
@@ -970,7 +980,7 @@ async function selfUpdateGlobal(version) {
 
     if (plan.attempt) {
       const res = await runInstallRound(packumentHasVersion)
-      if (res.ok) return
+      if (res.ok) return { ok: true }
     } else {
       skippedRounds += 1
       if (skippedRounds === FORCE_INSTALL_EVERY - 1) {
@@ -1015,7 +1025,7 @@ async function selfUpdateGlobal(version) {
       + '(探针可能误报,事实判据只有 npm 自己)。'
     ))
     const res = await runInstallRound(readPackumentHasVersion(version), '超时前补的真装')
-    if (res.ok) return
+    if (res.ok) return { ok: true }
   }
 
   console.error(chalk.red(
@@ -1055,9 +1065,22 @@ async function selfUpdateGlobal(version) {
     + '若报 ETARGET / E404(registry 元数据与 tarball 还没对齐),直连 tarball:\n'
     + `  npm install -g ${tarballUrl(version)}`
   ))
+
+  // 把结论交回调用方:这一阶段失败**不会**抛异常(包已经发布成功了,只是没装到全局),
+  // 所以 main() 那边光看有没有异常是分不出"全成了"和"只成了一半"的 ——
+  // 曾经这里什么都不返回,于是自更新失败时终端照样打出 "🎉 发布完成!"。
+  const tally = [...errorTally.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ×${n}`)
+  return {
+    ok: false,
+    reason: tally.length
+      ? `${POLL_TIMEOUT_MS / 1000}s 内真调 npm ${installAttempts} 次仍未装上(${tally.join(' / ')})`
+      : `${POLL_TIMEOUT_MS / 1000}s 窗口内没装上(npm 没给出失败原因)`,
+  }
 }
 
-// 发布到 NPM
+// 发布到 NPM。返回 `{ published, selfUpdate, reason }` —— 自更新失败时 `published`
+// 仍是 true(包已经在 npm 上了),`selfUpdate: 'failed'` + `reason` 才是给 main() 拿去做
+// "已发布但全局没更新"提醒用的。`selfUpdate` 取值:`'ok' | 'failed' | 'skipped'`。
 async function publishToNpm(version) {
   console.log(chalk.blue('\n=== 发布到 NPM ==='))
 
@@ -1070,22 +1093,115 @@ async function publishToNpm(version) {
       console.log(chalk.yellow(
         '[dry-run] 安装前先停掉实例注册表里的所有运行实例(见 stopRunningInstances)'
       ))
-      return
+      return { published: false, selfUpdate: 'skipped', reason: '' }
     }
     execSync(`npm publish --registry=${NPM_REGISTRY}`, { stdio: 'inherit' })
     console.log(chalk.green('已成功发布到 NPM'))
 
     if (SKIP_SELF_UPDATE) {
       console.log(chalk.yellow('--skip-self-update: 不自动 `npm install -g zen-gitsync`'))
-      return
+      return { published: true, selfUpdate: 'skipped', reason: '--skip-self-update' }
     }
 
     // 发版后可选:把刚发布的版本装到全局(默认开启,可用 --skip-self-update 关掉)
-    await selfUpdateGlobal(version)
+    const selfUpdate = await selfUpdateGlobal(version)
+    return {
+      published: true,
+      selfUpdate: selfUpdate.ok ? 'ok' : 'failed',
+      reason: selfUpdate.reason ?? '',
+    }
   } catch (err) {
-    console.error(chalk.red('发布到 NPM 失败:'), err.message || err)
-    process.exit(1)
+    abortRelease('发布到 NPM 失败:', err.message || err)
   }
+}
+
+// ===========================================================================
+// 结束提醒(系统通知 + 提示音 + 终端标题)
+// ===========================================================================
+//
+// 为什么值得专门做:装全局那一步实测能磨十几分钟(registry 元数据/对象就绪慢,见文件头
+// 注释),而且整条流程常常是"开着就走人"的。终端里再醒目的一行字,对已经走去干别的事的
+// 人等于没打 —— 提醒必须走**终端之外**的信道(实现见 src/utils/desktopNotify.js)。
+//
+// 覆盖所有提前结束的出口:类型检查 / 发布物自检 / git / npm publish 失败原本都是直接
+// `process.exit(1)`,进程当场就没了,提醒根本没机会发 —— 而这些恰恰是最该被通知的结局
+// (用户走开 15 分钟,失败发生在第 40 秒)。所以它们统一改走 abortRelease()。
+
+// 发布时间与版本号挂在模块作用域:abortRelease() 可能在 updateVersion() 之前就被调用
+// (类型检查失败就是这么早),那时版本号还不存在,文案里得能优雅地少一段。
+let releaseStartedAt = 0
+let currentVersion = null
+
+// 秒数换成人话:"耗时 698.7s" 是给日志看的,"11 分 38 秒" 才是给通知看的
+function humanDuration(ms) {
+  const total = Math.max(0, Math.round(ms / 1000))
+  if (total < 60) return `${total} 秒`
+  return `${Math.floor(total / 60)} 分 ${total % 60} 秒`
+}
+
+// 通知正文压成一行并截断:toast 塞不下长文本,而报错原文常常是多行 + 一长串 URL
+function oneLine(text, max = 160) {
+  const s = String(text ?? '').replace(/\s+/g, ' ').trim()
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s
+}
+
+// 各结局的文案。集中在一处,是因为"通知里说什么"和"终端里说什么"必须是同一件事 ——
+// 尤其 partial:包已经发出去了,但全局没装上,报"发布完成"是误导,报"发布失败"也是误导。
+function releaseOutcome({ status, version, durationMs, reason }) {
+  const spent = humanDuration(durationMs)
+  if (status === 'ok') {
+    return {
+      ok: true,
+      title: `发布完成 · zen-gitsync v${version}`,
+      message: `已发布到 npm,全局版本已更新为 v${version}。耗时 ${spent}。`,
+    }
+  }
+  if (status === 'ok-skipped') {
+    return {
+      ok: true,
+      title: `发布完成 · zen-gitsync v${version}`,
+      message: `已发布到 npm。本次带 --skip-self-update,全局版本没动。耗时 ${spent}。`,
+    }
+  }
+  if (status === 'partial') {
+    return {
+      ok: false,
+      title: `已发布但全局没更新 · zen-gitsync v${version}`,
+      message: `npm 上已有 v${version},全局仍是旧版。${oneLine(reason)} `
+        + `手动装:npm install -g ${PKG_NAME}@${version}`,
+    }
+  }
+  return {
+    ok: false,
+    title: `发布失败 · zen-gitsync${version ? ` v${version}` : ''}`,
+    message: oneLine(reason || '见终端输出'),
+  }
+}
+
+// 发提醒 + 把结果写上终端标题。DRY_RUN 一律不提醒:什么都没发生,响一声只会让人以为发成功了。
+function announceRelease(outcome) {
+  if (DRY_RUN) return
+  setTerminalTitle(outcome.title)
+  if (NO_NOTIFY) {
+    console.log(chalk.gray('--no-notify:跳过系统通知 / 提示音(终端标题已更新)'))
+    return
+  }
+  notifyDesktop({ title: outcome.title, message: outcome.message, ok: outcome.ok })
+  console.log(chalk.gray('已发送结束提醒(系统通知 + 提示音;发不出去也不影响发布结果)'))
+}
+
+// 发布提前结束的统一出口:打日志 → 发提醒 → 退出 1。
+// 原本这些地方各自写 `console.error(...)` + `process.exit(1)`,提醒没机会发(见上面注释)。
+function abortRelease(message, detail) {
+  if (detail === undefined) console.error(chalk.red(message))
+  else console.error(chalk.red(message), detail)
+  announceRelease(releaseOutcome({
+    status: 'fail',
+    version: currentVersion,
+    durationMs: Date.now() - releaseStartedAt,
+    reason: detail ?? message,
+  }))
+  process.exit(1)
 }
 
 // 主流程
@@ -1099,15 +1215,21 @@ async function main() {
   if (SKIP_SELF_UPDATE) console.log(chalk.yellow('--skip-self-update: 发版后不自动 npm install -g'))
   if (KEEP_INSTANCES) console.log(chalk.yellow('--keep-instances: 装全局前不停运行中的实例'))
   if (SKIP_PUSH) console.log(chalk.yellow('--skip-push: 不 push git'))
+  if (NO_NOTIFY) console.log(chalk.yellow('--no-notify: 结束时不再弹系统通知 / 响提示音'))
+
+  releaseStartedAt = Date.now()
+  // 先把"发布中"写上终端标题:整条流程常要十几分钟,人不在时任务栏那行字是唯一能看出
+  // "还在跑"的地方;结束时会被 announceRelease 换成结果。
+  if (!DRY_RUN) setTerminalTitle('发布中 · zen-gitsync')
 
   try {
     await checkEnvironment()
     await runTypeCheck()
-    const newVersion = updateVersion()
+    currentVersion = updateVersion()
     await buildFrontend()
     await verifyPackageContents()
-    await commitChanges(newVersion)
-    await publishToNpm(newVersion)
+    await commitChanges(currentVersion)
+    const { selfUpdate, reason } = await publishToNpm(currentVersion)
 
     if (stoppedInstanceCount > 0) {
       console.log(chalk.yellow(
@@ -1116,10 +1238,31 @@ async function main() {
       ))
     }
 
+    // 自更新失败**不抛异常**(包已经发上去了,只是没装到全局),所以这里必须显式分支 ——
+    // 否则终端会照样打 "🎉 发布完成!",而那是对用户的误导。
+    if (selfUpdate === 'failed') {
+      console.log(chalk.yellow(`\n⚠️ v${currentVersion} 已经发布到 npm,但全局版本没装上。`))
+      console.log(chalk.yellow('   重发没有意义(版本已经占掉了),按上面的命令手动装一次即可。'))
+      announceRelease(releaseOutcome({
+        status: 'partial',
+        version: currentVersion,
+        durationMs: Date.now() - releaseStartedAt,
+        reason,
+      }))
+      return
+    }
+
     console.log(chalk.green('\n🎉 发布完成!'))
+    if (selfUpdate === 'skipped' && !DRY_RUN) {
+      console.log(chalk.gray('(全局版本没动,见上面的 --skip-self-update)'))
+    }
+    announceRelease(releaseOutcome({
+      status: selfUpdate === 'skipped' ? 'ok-skipped' : 'ok',
+      version: currentVersion,
+      durationMs: Date.now() - releaseStartedAt,
+    }))
   } catch (err) {
-    console.error(chalk.red('\n❌ 发布失败:'), err.message || err)
-    process.exit(1)
+    abortRelease('\n❌ 发布失败:', err.message || err)
   }
 }
 

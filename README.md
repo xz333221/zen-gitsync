@@ -470,6 +470,20 @@ git add --renormalize .
 
 All `package.json` scripts use **npm** (`npm install`, `npm run dev`, `npm run release`, etc.). The `package-lock.json` is git-ignored, so each developer generates it locally. The CLI's own `bin` entry and most devDeps are pinned to caret ranges.
 
+### Release
+
+`npm run release` (`scripts/release.js`) runs the whole publish in one shot: bump the patch version → `vue-tsc` type check → build the frontend → verify the package contents (`files` whitelist vs relative imports, plus a real `npm pack` manifest) → commit + tag + push → `npm publish` → `npm install -g zen-gitsync@<version>`.
+
+The last step is the slow one: the registry can take anywhere from seconds to over 30 minutes to make a freshly published version installable, so the script polls on two readiness signals (packument has the version / tarball is fetchable) and force-installs every 4 rounds — the probes only save a doomed call, **`npm` itself is the judge**. Each failed attempt prints an `[E404]` / `[EPERM]` short code, and giving up prints the breakdown of what it kept hitting.
+
+**You don't have to watch it.** When the run ends you get a desktop notification plus a sound (success and failure use different sounds), and the terminal / taskbar title switches to the result. All of it is best-effort and can never fail the release itself; pass `--no-notify` (or set `ZEN_NO_NOTIFY=1`) to turn it off. The three outcomes are reported separately, because "published but the global install failed" is neither success nor failure:
+
+- **release complete** — published to npm and the global version was verified.
+- **published, global not updated** — the version is on npm but the global install didn't land. Re-running the release won't help (the version number is taken); just run `npm install -g zen-gitsync@<version>`.
+- **release failed** — an earlier step (type check / package self-check / git / `npm publish`) aborted the run.
+
+Other switches: `--dry-run` (print the plan only), `--skip-push`, `--skip-self-update`, `--keep-instances`, `--poll-timeout=<seconds>`.
+
 ---
 
 ## CLI Commands
@@ -1132,6 +1146,20 @@ GUI 底栏版本号每个会话会向 npm 查询一次最新版本。检测到�
 ```bash
 git add --renormalize .
 ```
+
+### 发布到 npm
+
+`npm run release`（`scripts/release.js`）一条命令跑完整个发版流程：patch 版本号 +1 → `vue-tsc` 类型检查 → 构建前端 → 发布物自检（`files` 白名单 vs 相对 import，外加一次真实 `npm pack` 清单）→ 提交 + 打标签 + 推送 → `npm publish` → `npm install -g zen-gitsync@<版本>`。
+
+最后一步最慢：registry 让刚发布的版本变得可安装，实测从几秒到 30 分钟以上都有，所以脚本用两个就绪信号（packument 里有没有该版本 / tarball 能否取到）轮询，并每 4 轮强制真装一次 —— 探针只负责省下一次注定失败的调用，**判据只有 npm 自己**。每次失败打 `[E404]` / `[EPERM]` 短码，放弃时汇总失败构成。
+
+**不用盯着它。** 流程结束时你会收到一条系统通知 + 提示音（成功与失败是两种不同的音），终端 / 任务栏标题也会变成结果。这些都是尽力而为，**绝不会**影响发布本身的成败；加 `--no-notify`（或设 `ZEN_NO_NOTIFY=1`）可关掉。三种结局分开报，因为"包发出去了但全局没装上"既不是成功也不是失败：
+
+- **发布完成** —— 已发布到 npm，且全局版本已校验通过。
+- **已发布但全局没更新** —— 版本已经在 npm 上，只是没装到全局。重发没有意义（版本号已被占用），按提示手动装一次即可。
+- **发布失败** —— 更早的一步（类型检查 / 发布物自检 / git / `npm publish`）把流程中断了。
+
+其它开关：`--dry-run`（只打印计划）、`--skip-push`、`--skip-self-update`、`--keep-instances`、`--poll-timeout=<秒>`。
 
 ---
 
