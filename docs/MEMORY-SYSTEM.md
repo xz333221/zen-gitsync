@@ -25,8 +25,16 @@
     └── archive/      冻结历史 · **永不读**
 ```
 
-`<slug>` = `可读部分-路径哈希6位`，例如
-`c-workspace-github_workspace-xz333221-zen-gitsync-f4b3bd`
+`<slug>` = `可读部分-路径哈希6位`，由 `src/memory/store.js` 的 `projectSlug(repoPath)` 算出来：
+小写 + 分隔符归一后取 sha1 前 6 位，前者保留 `[a-z0-9_]`、其余压成 `-`。
+例如 `C:\workspace\acme\webapp` → `c-workspace-acme-webapp-51ee1e`。
+
+> ⚠️ 上面这个例子（以及任何文档 / 记忆正文里冒出来的目录名）**只是举例，别照抄**。
+> 2026-09-29 就栽过：本仓自己的目录被建成本文件当时举的那个哈希
+> （`…-zen-gitsync-f4b3bd`），而 `projectSlug()` 算出来的一直是 `…-zen-gitsync-1e37d3`
+> —— 于是注入给 Agent 的「本项目索引」指向一个不存在的文件，历史经验全躺在另一个目录里，
+> 两套目录互不可见且不报错。
+> **要目录名就用代码算**（或直接列 `~/.zen-gitsync/memory/projects/` 下真实的目录）。
 
 **哈希不是装饰**（2026-09-29 实测踩到）：只做"小写 + 非 [a-z0-9_] 压成 `-`"的话，
 `C:\中文\项目` 与 `C:\中文\别的` 会塌成同一个 `c-` —— 两个仓库共用一份 lessons，
