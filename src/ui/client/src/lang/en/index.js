@@ -2019,6 +2019,9 @@ export default {
   '@ACTBAR:个未提交文件': 'uncommitted files',
   '@ACTBAR:个未保存文件': 'unsaved files',
   '@ACTBAR:个任务正在执行': 'running tasks',
+  // Ahead/behind badge on the Git icon (ActivityBar.vue)
+  '@ACTBAR:领先 {count} 个提交': '{count} commits ahead',
+  '@ACTBAR:落后 {count} 个提交': '{count} commits behind',
   // @ACTBAR: file end
   // @SRCMAP: file path: views\SourceMapView.vue
   '@SRCMAP:源码地图': 'Source Map',

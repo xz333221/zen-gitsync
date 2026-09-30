@@ -159,6 +159,7 @@ The GUI runs as a local web server and opens in your default browser on the firs
 | Commit log | Browse commit history with author, date, branch tags, and changed files |
 | Remote URL | Display and one-click copy the remote repository URL; the gear icon beside it opens **Remote Management** (multi-remote setups, multi push URLs) |
 | Auto-refresh | Silently refreshes status and branch info when the window gains focus, the tab becomes visible, or you switch back to the **Git** view in the Activity Bar |
+| Rail badge | The **Git** icon in the left rail carries the counts you would otherwise have to open the panel for: uncommitted files at the top-right, and the current branch's ahead / behind counts at the bottom (`↑2 ↓3`). Behind is amber (something to pull), ahead-only is green (something to push), diverged is red; the tooltip spells both out |
 
 #### Structured Commit Form
 
@@ -823,6 +824,7 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 | 提交日志 | 浏览历史提交（作者、时间、分支标签、变更文件） |
 | 远程地址 | 显示并一键复制远程仓库 URL；旁边的齿轮图标打开 **远程仓库管理**（多远程、多推送地址） |
 | 自动刷新 | 窗口获得焦点、标签页重新可见，或从 Activity Bar 切回 **Git** 视图时，自动静默刷新文件状态与分支信息 |
+| 导航栏徽标 | 左侧 Activity Bar 的 **Git** 图标上直接带数字，不必先切回面板才看得到：右上角是未提交文件数，底部是当前分支的领先 / 落后数（`↑2 ↓3`）。落后为橙色（有东西要拉）、只领先为绿色（有东西要推）、两边都有（分叉）为红色；悬停的 tooltip 会把两项都写全 |
 
 #### 结构化提交表单
 

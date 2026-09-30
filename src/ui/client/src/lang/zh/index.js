@@ -2028,6 +2028,9 @@ export default {
   '@ACTBAR:个未提交文件': '个未提交文件',
   '@ACTBAR:个未保存文件': '个未保存文件',
   '@ACTBAR:个任务正在执行': '个任务正在执行',
+  // Git 图标上的领先/落后徽标(ActivityBar.vue)
+  '@ACTBAR:领先 {count} 个提交': '领先 {count} 个提交',
+  '@ACTBAR:落后 {count} 个提交': '落后 {count} 个提交',
   // @ACTBAR: file end
   // @SRCMAP: file path: views\SourceMapView.vue
   '@SRCMAP:源码地图': '源码地图',

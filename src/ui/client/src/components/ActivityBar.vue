@@ -55,6 +55,52 @@ const uncommittedBadge = computed(() => {
   return n > 99 ? '99+' : String(n)
 })
 
+// 与远程分支的领先 / 落后提交数:同一颗 Git 图标上再挂一个「底部」徽标。
+// 为什么要有:右上角那个未提交徽标只能表达"本地有东西没提交",而
+// "你的分支落后 'origin/master' 1 个提交"此前只写在左侧面板里那行蓝条上 ——
+// 切到别的视图、或面板滚出视口之后完全无感,偏偏它是最需要立刻 pull 的状态。
+const syncAhead = computed(() => (gitStore.isGitRepo ? gitStore.branchAhead : 0))
+const syncBehind = computed(() => (gitStore.isGitRepo ? gitStore.branchBehind : 0))
+const hasSyncBadge = computed(() => syncAhead.value > 0 || syncBehind.value > 0)
+
+// ↑2 ↓1 形态:箭头表方向、数字表个数,一眼能分清"要 push"还是"要 pull"。
+// 数字同样封顶 99+(三位数会把 36px 的按钮撑爆)。
+function capBadge(n: number) {
+  return n > 99 ? '99+' : String(n)
+}
+const syncBadgeText = computed(() => {
+  const parts: string[] = []
+  if (syncAhead.value > 0) parts.push(`↑${capBadge(syncAhead.value)}`)
+  if (syncBehind.value > 0) parts.push(`↓${capBadge(syncBehind.value)}`)
+  return parts.join(' ')
+})
+
+// 颜色按「该做什么」分档,而不是按方向(方向已经由箭头表达):
+//   behind   → warning:远端有新提交待拉取,最需要立刻处理
+//   ahead    → success:本地提交待推送,属于正常待办
+//   diverged → danger:两边都有,得先解决分叉
+const syncBadgeClass = computed(() => {
+  if (syncAhead.value > 0 && syncBehind.value > 0) return 'git-sync-badge--diverged'
+  if (syncBehind.value > 0) return 'git-sync-badge--behind'
+  return 'git-sync-badge--ahead'
+})
+
+// 领先 / 落后的文字描述(徽标 title + 按钮 aria-label 复用同一份)
+const gitSyncSummary = computed(() => {
+  const parts: string[] = []
+  if (syncAhead.value > 0) parts.push($t('@ACTBAR:领先 {count} 个提交', { count: syncAhead.value }))
+  if (syncBehind.value > 0) parts.push($t('@ACTBAR:落后 {count} 个提交', { count: syncBehind.value }))
+  return parts.join(' · ')
+})
+
+// Git 按钮的 tooltip / aria-label:未提交 + 领先/落后合成一句,空则退回纯名称
+const gitButtonLabel = computed(() => {
+  const parts: string[] = []
+  if (uncommittedCount.value > 0) parts.push(`${uncommittedCount.value} ${$t('@ACTBAR:个未提交文件')}`)
+  if (gitSyncSummary.value) parts.push(gitSyncSummary.value)
+  return parts.length ? `${$t('@ACTBAR:Git')} · ${parts.join(' · ')}` : $t('@ACTBAR:Git')
+})
+
 // 编辑器未保存文件数：与 Git 的 uncommitted 徽标刻意区分开。
 //   - editor dirty（这里）= 文件已改动但尚未落盘（编辑器内部状态）
 //   - git uncommitted   = 改动已落盘但尚未提交（仓库状态）
@@ -80,7 +126,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   <div class="activity-bar">
     <!-- Git 页面 -->
     <el-tooltip
-      :content="uncommittedCount > 0 ? `${$t('@ACTBAR:Git')} · ${uncommittedCount} ${$t('@ACTBAR:个未提交文件')}` : $t('@ACTBAR:Git')"
+      :content="gitButtonLabel"
       placement="right"
       :show-after="300"
     >
@@ -88,7 +134,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
         class="activity-btn"
         :class="{ active: props.activeView === 'git' }"
         @click="select('git')"
-        :aria-label="uncommittedCount > 0 ? `${$t('@ACTBAR:Git')} · ${uncommittedCount} ${$t('@ACTBAR:个未提交文件')}` : $t('@ACTBAR:Git')"
+        :aria-label="gitButtonLabel"
         :aria-pressed="props.activeView === 'git'"
       >
         <!-- git.svg -->
@@ -101,6 +147,14 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
           :title="`${uncommittedCount} ${$t('@ACTBAR:个未提交文件')}`"
           aria-hidden="true"
         >{{ uncommittedBadge }}</span>
+        <!-- 与远程分支的领先 / 落后:落在按钮右下角,与右上的未提交徽标错开 -->
+        <span
+          v-if="hasSyncBadge"
+          class="git-sync-badge"
+          :class="syncBadgeClass"
+          :title="gitSyncSummary"
+          aria-hidden="true"
+        >{{ syncBadgeText }}</span>
       </button>
     </el-tooltip>
 
@@ -443,6 +497,54 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   100% { transform: scale(1);    opacity: 1; }
 }
 
+/* ―― Git 领先 / 落后远程分支徽标 ―――――――――――――――――――――――――――――――――
+   锚点在按钮「右下角」(未提交徽标在右上角),一个贴顶一个贴底,互不遮挡。
+   尺寸沿用同一套,唯独 bottom 压到 -5px:图标只有 20px 高,若按 -2px 贴,
+   上下两枚徽标会把图标夹得只剩中间 8px 可见 —— 图标是主 affordance,不能被角标吃光。
+   压到 -5px 后与图标只重叠 3px,余下 5px 落在活动栏 6px 的按钮间隙里。 */
+.git-sync-badge {
+  position: absolute;
+  bottom: -5px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 字号比其余徽标低一档(--font-size-xs 是 11px):这一枚要并排塞下
+     「↑N ↓M」两个数,11px 时两位数形态实测 51px,比 48px 的活动栏还宽。
+     10px 下两位数约 44px,留得住余量;单数(绝大多数情况)只有 26px 左右。
+     代价是「两边都 ≥ 100」的极端情况下(↑99+ ↓99+ 约 55px)会略微溢出活动栏 ——
+     正常仓库不会同时领先又落后三位数,真到那一步左侧面板里的蓝条仍给完整信息。 */
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 0 0 2px var(--bg-container);
+  pointer-events: none;
+  animation: git-badge-pop-in var(--transition-base) var(--ease-spring);
+  z-index: 1;
+}
+
+/* 落后:远端有新提交待拉取 —— 最需要注意的一档 */
+.git-sync-badge--behind {
+  background: var(--color-warning);
+}
+
+/* 只领先:本地提交待推送 —— 正常待办,用 success 而不是 warning 免得跟"落后"同色 */
+.git-sync-badge--ahead {
+  background: var(--color-success);
+}
+
+/* 两边都有(分叉):得先解决,用 danger */
+.git-sync-badge--diverged {
+  background: var(--color-danger);
+}
+
 /* ── 编辑器未保存文件数量徽标 ─────────────────────────────────────── */
 /* 几何与 Git 徽标一致，颜色用 warning 橙色以呼应编辑器 tab 上的 dirty dot，
    与 Git 的品牌色"未提交"徽标形成视觉区分。 */
@@ -508,6 +610,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
 @media (prefers-reduced-motion: reduce) {
   .wb-running-badge,
   .git-uncommitted-badge,
+  .git-sync-badge,
   .editor-dirty-badge,
   .console-sessions-badge,
   .agent-running-badge,

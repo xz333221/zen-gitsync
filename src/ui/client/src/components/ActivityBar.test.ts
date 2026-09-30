@@ -21,6 +21,7 @@ import type { VueWrapper } from '@vue/test-utils'
 import { mountWithSetup } from '@/test-utils/mount'
 import ActivityBar from './ActivityBar.vue'
 import { useAgentActivityStore } from '@/stores/agentActivity'
+import { useGitStore } from '@/stores/gitStore'
 
 /**
  * 智能体那个按钮。靠 aria-label 里的 @ACTBAR:智能体 认（测试里 $t 是恒等函数，
@@ -28,6 +29,13 @@ import { useAgentActivityStore } from '@/stores/agentActivity'
  */
 function agentBtn(wrapper: VueWrapper<any>) {
   return wrapper.find('button[aria-label*="@ACTBAR:智能体"]')
+}
+
+/**
+ * Git 那个按钮。用 aria-label 里的 @ACTBAR:Git 认（其余按钮的 key 都不是它的前缀）。
+ */
+function gitBtn(wrapper: VueWrapper<any>) {
+  return wrapper.find('button[aria-label*="@ACTBAR:Git"]')
 }
 
 describe('ActivityBar 智能体徽标', () => {
@@ -81,5 +89,88 @@ describe('ActivityBar 智能体徽标', () => {
     for (let i = 0; i < 100; i++) store.begin(`t${i}`)
     await nextTick()
     expect(w.find('.agent-running-badge').text()).toBe('99+')
+  })
+})
+
+/**
+ * Git 图标上的领先 / 落后徽标：落在按钮右下角（未提交徽标在右上角），
+ * 跟着 gitStore.branchAhead / branchBehind 走。
+ * 守的是「有领先或落后时左侧图标上必须看得到数字」这条线 —— 这个状态此前
+ * 只写在左侧面板那行蓝条里，切到别的视图就完全无感，而它恰恰最需要立刻 pull。
+ */
+describe('ActivityBar Git 领先/落后徽标', () => {
+  /** 挂一个 Git 仓库场景下的活动栏（gitStore 与组件共用同一个 pinia 实例） */
+  function mountBar() {
+    const w = mountWithSetup(ActivityBar, { props: { activeView: 'git' } })
+    const gitStore = useGitStore()
+    gitStore.isGitRepo = true
+    return { w, gitStore }
+  }
+
+  it('没有领先/落后时不显示徽标', () => {
+    const { w } = mountBar()
+    expect(gitBtn(w).find('.git-sync-badge').exists()).toBe(false)
+  })
+
+  it('落后时显示 ↓N，走 behind 档', async () => {
+    const { w, gitStore } = mountBar()
+    gitStore.branchBehind = 1
+    await nextTick()
+    const badge = gitBtn(w).find('.git-sync-badge')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toBe('↓1')
+    expect(badge.classes()).toContain('git-sync-badge--behind')
+  })
+
+  it('领先时显示 ↑N，走 ahead 档', async () => {
+    const { w, gitStore } = mountBar()
+    gitStore.branchAhead = 2
+    await nextTick()
+    const badge = gitBtn(w).find('.git-sync-badge')
+    expect(badge.text()).toBe('↑2')
+    expect(badge.classes()).toContain('git-sync-badge--ahead')
+  })
+
+  it('两边都有时同一个徽标给出 ↑N ↓M，走 diverged 档', async () => {
+    const { w, gitStore } = mountBar()
+    gitStore.branchAhead = 2
+    gitStore.branchBehind = 3
+    await nextTick()
+    const badge = gitBtn(w).find('.git-sync-badge')
+    expect(badge.text()).toBe('↑2 ↓3')
+    expect(badge.classes()).toContain('git-sync-badge--diverged')
+  })
+
+  it('与右上角的未提交徽标并存，两个徽标同时可见', async () => {
+    const { w, gitStore } = mountBar()
+    gitStore.fileList = [{ path: 'a.ts', type: 'modified' }]
+    gitStore.branchBehind = 1
+    await nextTick()
+    const btn = gitBtn(w)
+    expect(btn.find('.git-uncommitted-badge').text()).toBe('1')
+    expect(btn.find('.git-sync-badge').text()).toBe('↓1')
+  })
+
+  it('不是 Git 仓库时不显示（store 里的脏值不算数）', async () => {
+    const w = mountWithSetup(ActivityBar, { props: { activeView: 'git' } })
+    const gitStore = useGitStore()
+    gitStore.branchAhead = 3
+    gitStore.isGitRepo = false
+    await nextTick()
+    expect(gitBtn(w).find('.git-sync-badge').exists()).toBe(false)
+  })
+
+  it('超过 99 显示 99+', async () => {
+    const { w, gitStore } = mountBar()
+    gitStore.branchAhead = 120
+    await nextTick()
+    expect(gitBtn(w).find('.git-sync-badge').text()).toBe('↑99+')
+  })
+
+  it('aria-label 带上领先/落后，供读屏与 tooltip 使用', async () => {
+    const { w, gitStore } = mountBar()
+    gitStore.branchBehind = 1
+    await nextTick()
+    expect(gitBtn(w).attributes('aria-label')).toContain('@ACTBAR:落后 {count} 个提交')
   })
 })
