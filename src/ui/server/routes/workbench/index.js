@@ -692,7 +692,12 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
       promptOverride: userMessage,
       attachments: carryAtts
     };
-    const repoPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
+    // 工作目录口径必须与「执行任务」那条路一致：**任务自己的项目优先**，没有才回落当前项目
+    // （resolveTaskRepoPath）。这里以前直接用 getCurrentProjectPath()，于是"在 B 项目里打开
+    // A 项目的任务续聊"会把 CLI spawn 到 B（甚至空路径 → process.cwd()，即服务器所在的仓库）：
+    // 续接的这轮在错误的工作区里干活，而 --resume 又把上下文带过来了，症状很隐蔽。
+    // 2026-09-30 由 verify:wb-env-context 第 8 组抓到（续聊轮的 prompt 里出现的不是任务的项目）。
+    const repoPath = resolveTaskRepoPath(task, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
     res.json({ success: true, message: '已加入续接队列' });
     // 执行器必须沿用上一轮 job 的 agent：claude 的 --resume 和 opencode 的 --session
     // 互不认对方的会话 id，串了执行器续接必然失败。
@@ -1125,13 +1130,13 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
    * 而快照生成器在服务端入口创建、注册顺序在它之前就已经建好了 —— 但两者是同一次装配，
    * 用 getter 可以避免"必须记得按某个顺序注册"这种隐性契约。
    */
-  setEnvContextProvider(async ({ repoPath } = {}) => {
+  setEnvContextProvider(async ({ repoPath, compact } = {}) => {
     const snapshotter = typeof getAiContextSnapshotter === 'function' ? getAiContextSnapshotter() : null;
 
     if (!snapshotter || typeof snapshotter.refreshSections !== 'function') {
       // 快照生成器没装配上（理论上不会发生）。至少把**不需要取数**的两样递进去：
       // 用户偏好与真相源路径 —— 前者少一次就会让任务卡在 https 凭据窗口上。
-      return buildEnvContextBlock({ currentProjectPath: repoPath || '', truthFiles: TRUTH_FILES });
+      return buildEnvContextBlock({ currentProjectPath: repoPath || '', truthFiles: TRUTH_FILES, compact });
     }
 
     try {
@@ -1155,6 +1160,8 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
       currentProjectPath: repoPath || '',
       board,
       truthFiles: TRUTH_FILES,
+      // 续聊轮走精简刷新版（调用方 taskRunner 按 resumeSessionId 判定）
+      compact,
     });
   });
 

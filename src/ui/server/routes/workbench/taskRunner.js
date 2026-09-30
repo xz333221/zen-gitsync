@@ -69,7 +69,9 @@ let envContextProvider = null;
 
 /**
  * 注册运行环境上下文的提供者。由 routes/workbench/index.js 在注册路由时调用。
- * @param {(ctx: {repoPath: string}) => Promise<string|null>|string|null} fn
+ * @param {(ctx: {repoPath: string, compact?: boolean}) => Promise<string|null>|string|null} fn
+ *        `compact: true` = 续聊轮，只要精简刷新版（完整清单上一轮已进过 prompt）。
+ *        接不接这个字段由提供者自己决定：不接就等于每轮都发整块 —— 老行为，不会报错。
  */
 export function setEnvContextProvider(fn) {
   envContextProvider = typeof fn === 'function' ? fn : null;
@@ -78,13 +80,17 @@ export function setEnvContextProvider(fn) {
 /**
  * 取本次执行的运行环境上下文块。
  *
+ * 续聊轮（`resumeSessionId` 有值）传 `compact: true` 只要精简刷新版：完整环境块上一轮
+ * 就在 prompt 里了，CLI 的会话恢复会把它带回来，整块重发是纯重复
+ * （实测数据与理由见 envContext.js 文件头）。
+ *
  * 提供者抛错一律降级成"没有上下文"：读 tasks.json 失败、配置竞态都是可能发生的，
  * 但它们都不该让用户的指令执行不了 —— 与「读不到最近目录不该让整个看板挂掉」同一条原则。
  */
-async function resolveEnvContext(repoPath) {
+async function resolveEnvContext(repoPath, { compact = false } = {}) {
   if (!envContextProvider) return '';
   try {
-    const block = await envContextProvider({ repoPath: repoPath || '' });
+    const block = await envContextProvider({ repoPath: repoPath || '', compact: !!compact });
     return typeof block === 'string' ? block : '';
   } catch (err) {
     logger.warn(`[workbench] 运行环境上下文注入失败，本次跳过: ${err.message}`);
@@ -917,7 +923,8 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
   const prefixBlocks = [];
 
   if (task.envContext !== false) {
-    const envBlock = await resolveEnvContext(repoPath);
+    // 续聊轮只要精简刷新版（见 resolveEnvContext 的注释）
+    const envBlock = await resolveEnvContext(repoPath, { compact: !!resumeSessionId });
     if (envBlock) prefixBlocks.push(envBlock);
   }
 

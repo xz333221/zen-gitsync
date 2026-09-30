@@ -260,3 +260,71 @@ test('真相源清单来自唯一的 TRUTH_FILES（四个路径一个不落，�
   assert.ok(block.includes(TRUTH_FILES.orchestratorFile));
   assert.match(block, /调度台发过的指令流水/);
 });
+
+// ── 续聊轮精简版（compact）──────────────────────────────────────────────
+//
+// 续接走的是 CLI 自己的会话恢复（claude --resume / opencode --session / codex exec resume），
+// 上一轮那份**完整**块已在会话历史里 —— 续聊轮再发一遍就是纯重复。实测一条续接轮 prompt：
+// 环境块 2118~2200 字符 + 记忆块 424 字符 + 用户原话 44 字符（本机 jobs.json，2026-09-30）。
+//
+// 这组守四件事：
+//   1. 项目清单真的不再发（它占这块 90%，且几乎不变）；
+//   2. 会变的那部分（合计概览、当前项目）还在 —— 精简不等于把刷新能力也砍了；
+//   3. 真相源路径照给：会话被压缩后靠它重新够得着数据；
+//   4. 首行锚点不变（scripts/verify-workbench-env-context.mjs 断言 startsWith('[运行环境')）。
+//
+// 数字口径一栏用"两种模式必须给出同一组计数"来守：精简是**裁剪**，不是另算一份。
+
+const richBoard = () => {
+  // 项目数刻意贴近真实规模（用户本机 19 个）：清单的"贵"是随项目数线性涨的，
+  // 只放两三个项目的夹具量不出"精简到底省了多少"（这条正是 compact 的存在理由）。
+  const recentDirs = ['D:\\ws\\zen-gitsync', 'D:\\ws\\article-generator'];
+  const tasks = [
+    { id: 't1', projectPath: 'D:\\ws\\zen-gitsync', type: 'simple' },
+    { id: 't2', projectPath: 'D:\\ws\\article-generator', type: 'simple' },
+    { id: 't3', projectPath: 'D:\\ws\\article-generator', type: 'simple' },
+  ];
+  for (let i = 0; i < 17; i += 1) recentDirs.push(`D:\\ws\\filler${i}`);
+  return boardOf({ recentDirs, tasks, jobs: [job('j1', 't1', 'done'), job('j2', 't2', 'running')] });
+};
+
+test('compact 不再发项目清单，但保留当前项目与合计概览', () => {
+  const board = richBoard();
+  const full = build({ currentProjectPath: 'D:\\ws\\zen-gitsync', board });
+  const compact = build({ currentProjectPath: 'D:\\ws\\zen-gitsync', board, compact: true });
+
+  // ① 清单行没了 —— 连"还有 N 个未列出"这种残余也不能留（模型会以为清单被截断）
+  assert.doesNotMatch(compact, /项目清单（共 \d+ 个/);
+  assert.doesNotMatch(compact, /^- .+ \| .+ \| \d+\/\d+\/\d+/m);
+  assert.doesNotMatch(compact, /还有 \d+ 个未列出/);
+  // 另一个项目（没在当前项目栏里出现过的）整体不该出现在精简块里
+  assert.ok(!compact.includes('D:\\ws\\article-generator'), '精简块不该再列其它项目');
+
+  // ② 会变的部分还在，而且数字与完整版**逐字相同**（同一次取数、两种裁剪）
+  const overview = full.match(/看板任务概览：全部项目合计 [^\n]+/)[0];
+  assert.ok(compact.includes(overview), `精简块应原样保留合计概览:\n${compact}`);
+  assert.match(compact, /全部项目合计 3 条/);
+  assert.match(compact, /正在执行 1 个/);
+  assert.match(compact, /当前任务所在项目（也是你的工作目录）: D:\\ws\\zen-gitsync/);
+
+  // ③ 真相源路径照给（会话被压缩后靠它重新够得着数据）
+  for (const p of Object.values(TRUTH_FILES)) assert.ok(compact.includes(p), `缺少路径 ${p}`);
+  // 用户偏好不重述，但要点名"有这么一条" —— 少这一句，克隆仓库时会退回 https
+  assert.match(compact, /克隆优先 SSH/);
+
+  // ④ 首行锚点（探针依赖）与完整版同前缀
+  assert.ok(compact.startsWith('[运行环境'));
+  assert.ok(full.startsWith('[运行环境'));
+
+  // ⑤ 真省：精简块不到完整版的一半
+  assert.ok(compact.length * 2 < full.length, `精简块应显著更短: compact=${compact.length} full=${full.length}`);
+});
+
+test('compact 在取不到 board 时也照给真相源（且不返回空）', () => {
+  const compact = build({ currentProjectPath: 'D:\\ws\\a', board: null, compact: true });
+  assert.ok(compact, '精简版同样不返回 null');
+  for (const p of Object.values(TRUTH_FILES)) assert.ok(compact.includes(p), `缺少路径 ${p}`);
+  assert.match(compact, /项目清单：本次未能取到/);
+  // 没有清单时更不该出现"清单行"的残影
+  assert.doesNotMatch(compact, /^- .+ \| .+ \| \d+\/\d+\/\d+/m);
+});

@@ -39,6 +39,25 @@
 // 不经过前端 $t()，也不会显示在界面上。反过来说，它也不该跟着界面语言变 ——
 // 中文指令配中文上下文，模型理解得更稳。
 //
+// ── 为什么续聊轮要精简（`compact`）────────────────────────────────────────
+//
+// 续接一轮对话时，prompt = [环境块][记忆块][用户这一轮说的话]。而续接走的是 CLI 自己的
+// 会话恢复（claude `--resume` / opencode `--session` / codex `exec resume`），上一轮那份
+// **完整**环境块已经在会话历史里 —— 整块再发一遍，信息上是纯重复。
+//
+// 实测（本机 jobs.json，2026-09-30）：一条续接轮的 prompt 是
+//   环境块 2118~2200 字符 + 记忆块 424 字符 + 用户原话 44 字符
+// 也就是 98% 是重发的背景。代价有两处：一是每轮多烧约两千 token，而且它在**会话尾部**
+// （不是前缀），命不中前缀缓存；二是 job.prompt 会被前端当成用户气泡渲染
+// （useWorkbenchSimpleConversation.ts）—— 聊天记录里每续一轮就多一份一模一样的项目清单，
+// 打开一条跑过多轮的任务，第一屏全是它（WorkbenchView.vue 里那条"钉到底部"的注释同源）。
+//
+// 但**不能整块砍掉**：块里有真正会变的东西（看板计数、正在执行几个、项目增减），
+// 而且会话被压缩/裁剪之后那块背景可能真的不在了。所以续聊轮发的是这个"精简刷新版"：
+// 只留 当前项目 + 合计概览 + 真相源路径，项目清单与用户偏好交给前文
+// （引导语里点名"克隆优先 SSH"，免得那条行为约定被彻底忘掉）。
+// 记忆块是同一套思路，见 taskRunner.js 的 `capture: !resumeSessionId`。
+//
 // 纯函数：只吃入参、不读文件（取数在 workbench/index.js，数据在快照里）。
 // 这样单测不用碰真实用户数据 —— 与 promptParts.js 同一个理由。
 
@@ -70,6 +89,8 @@ const columnLabels = TASK_COLUMNS.map(k => COLUMN_LABELS[k] || k);
  * @param {object}   [input.truthFiles] { tasksFile, jobsFile, orchestratorFile, configFile }
  *                                      路径口径的唯一来源见 workbench/shared.js 的 TRUTH_FILES
  * @param {number}   [input.maxProjects] 只影响列出条数，不影响合计统计
+ * @param {boolean}  [input.compact]  续聊轮的精简刷新版：只留 当前项目 + 合计概览 + 真相源，
+ *                                    项目清单与用户偏好交给会话前文（见文件头那一节）
  * @returns {string} 上下文块。**不返回 null** —— 见下面的注释。
  */
 export function buildEnvContextBlock({
@@ -77,6 +98,7 @@ export function buildEnvContextBlock({
   board = null,
   truthFiles = {},
   maxProjects = ENV_CONTEXT_MAX_PROJECTS,
+  compact = false,
 } = {}) {
   const list = Array.isArray(board?.projects) ? board.projects.filter(p => p && p.key) : [];
   const statsByKey = (board?.statsByKey && typeof board.statsByKey === 'object') ? board.statsByKey : {};
@@ -90,24 +112,33 @@ export function buildEnvContextBlock({
   const currentKey = canonicalProjectPath(currentProjectPath);
 
   const lines = [];
-  lines.push('[运行环境 · 由 zen-gitsync 多项目编排台自动注入，不是用户输入的内容]');
+  // 首行前缀 `[运行环境` 是探针的锚点（scripts/verify-workbench-env-context.mjs
+  // 断言 prompt.startsWith('[运行环境')），精简版也照旧以它开头。
+  lines.push(compact
+    ? '[运行环境 · 由 zen-gitsync 多项目编排台自动注入，不是用户输入的内容 · 续聊轮精简刷新，完整项目清单与用户偏好见本会话前文]'
+    : '[运行环境 · 由 zen-gitsync 多项目编排台自动注入，不是用户输入的内容]');
   lines.push('');
   lines.push(`当前任务所在项目（也是你的工作目录）: ${currentProjectPath || '(未指定)'}`);
   lines.push('');
 
   if (list.length > 0) {
-    const limit = Number.isFinite(maxProjects) && maxProjects > 0 ? Math.floor(maxProjects) : ENV_CONTEXT_MAX_PROJECTS;
-    const shown = list.slice(0, limit);
-    lines.push(`项目清单（共 ${list.length} 个；格式: 名称 | 路径 | ${columnLabels.join('/')}）:`);
-    for (const p of shown) {
-      const s = statsByKey[p.key] || {};
-      const mark = currentKey && p.key === currentKey ? '  ← 当前' : '';
-      lines.push(`- ${p.name || p.key} | ${p.path} | ${TASK_COLUMNS.map(k => s[k] || 0).join('/')}${mark}`);
+    // 项目清单整段只在首轮发。它占这块的 90%（19 个项目 ≈ 1300 字符）却几乎不变，
+    // 续聊轮再发一遍等于把同一张表贴在对话里（见文件头）。
+    if (!compact) {
+      const limit = Number.isFinite(maxProjects) && maxProjects > 0 ? Math.floor(maxProjects) : ENV_CONTEXT_MAX_PROJECTS;
+      const shown = list.slice(0, limit);
+      lines.push(`项目清单（共 ${list.length} 个；格式: 名称 | 路径 | ${columnLabels.join('/')}）:`);
+      for (const p of shown) {
+        const s = statsByKey[p.key] || {};
+        const mark = currentKey && p.key === currentKey ? '  ← 当前' : '';
+        lines.push(`- ${p.name || p.key} | ${p.path} | ${TASK_COLUMNS.map(k => s[k] || 0).join('/')}${mark}`);
+      }
+      if (list.length > shown.length) {
+        lines.push(`- …还有 ${list.length - shown.length} 个未列出（读下面的文件可以看全）`);
+      }
+      lines.push('');
     }
-    if (list.length > shown.length) {
-      lines.push(`- …还有 ${list.length - shown.length} 个未列出（读下面的文件可以看全）`);
-    }
-    lines.push('');
+    // 计数概览是这块里**真正会变**的部分，首轮与续聊轮都发
     lines.push(
       `看板任务概览：全部项目合计 ${total.total || 0} 条 —— ` +
       TASK_COLUMNS.map(k => `${COLUMN_LABELS[k]} ${total[k] || 0}`).join(' / ') +
@@ -122,27 +153,36 @@ export function buildEnvContextBlock({
     lines.push('');
   }
 
-  // 用户偏好（见文件头）。放在"读文件"之前、"看板概览"之后 ——
-  // 它是**行为**约定，与上面的事实清单分开；压尾的那句仍是"去读文件"，
-  // 那是整块上下文里最需要被记住的动作。
-  lines.push(
-    '用户偏好：克隆仓库 / 添加远端时**优先使用 SSH**（https 地址先换算成 ' +
-    'git@github.com:owner/repo.git，Gitee 同理 git@gitee.com:owner/repo.git —— ' +
-    '走 https 会弹凭据窗口，把任务停在半路等用户输账号密码）。' +
-    '只有 SSH 不可用（Permission denied (publickey) / Host key verification failed）' +
-    '才退回 https，并说明这次走的是 https。',
-  );
-  lines.push('');
-  lines.push('需要细节时直接读这些文件（本机绝对路径，你有读取权限，不必先问用户）:');
+  if (compact) {
+    // 引导语替掉整段用户偏好，但**点名**那条行为约定：偏好本身不重述（前文有），
+    // 可"有这么一条"得让模型看得见，否则克隆仓库时它会退回 https。
+    lines.push('需要完整项目清单 / 进展细节时（含「克隆优先 SSH」偏好），直接读这些文件（本机绝对路径，你有读取权限，不必先问用户）:');
+  } else {
+    // 用户偏好（见文件头）。放在"读文件"之前、"看板概览"之后 ——
+    // 它是**行为**约定，与上面的事实清单分开；压尾的那句仍是"去读文件"，
+    // 那是整块上下文里最需要被记住的动作。
+    lines.push(
+      '用户偏好：克隆仓库 / 添加远端时**优先使用 SSH**（https 地址先换算成 ' +
+      'git@github.com:owner/repo.git，Gitee 同理 git@gitee.com:owner/repo.git —— ' +
+      '走 https 会弹凭据窗口，把任务停在半路等用户输账号密码）。' +
+      '只有 SSH 不可用（Permission denied (publickey) / Host key verification failed）' +
+      '才退回 https，并说明这次走的是 https。',
+    );
+    lines.push('');
+    lines.push('需要细节时直接读这些文件（本机绝对路径，你有读取权限，不必先问用户）:');
+  }
   if (truthFiles.tasksFile) lines.push(`- ${truthFiles.tasksFile} —— 全部任务全文（标题/描述/子任务状态/报错/projectPath）`);
   if (truthFiles.jobsFile) lines.push(`- ${truthFiles.jobsFile} —— 历次执行记录（状态与输出）`);
   if (truthFiles.orchestratorFile) lines.push(`- ${truthFiles.orchestratorFile} —— 用户在调度台发过的指令流水`);
   if (truthFiles.configFile) lines.push(`- ${truthFiles.configFile} —— 应用配置（projects / recentDirectories）`);
-  lines.push('');
-  lines.push(
-    '用户问到"我有哪些项目""某件事进展如何"这类问题时，先读上面的文件再回答；' +
-    '不要凭当前目录猜测，也不要回答"我看不到/无法访问"。',
-  );
+  // 压尾那句"先读文件再回答"只在首轮讲：续聊轮上面那句引导语已经说了同一件事
+  if (!compact) {
+    lines.push('');
+    lines.push(
+      '用户问到"我有哪些项目""某件事进展如何"这类问题时，先读上面的文件再回答；' +
+      '不要凭当前目录猜测，也不要回答"我看不到/无法访问"。',
+    );
+  }
 
   return lines.join('\n');
 }

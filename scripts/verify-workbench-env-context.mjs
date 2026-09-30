@@ -11,6 +11,14 @@
 // 判据是 tasks 板块的采集时间必须往前走(桩 claude 活满 5s,秒级时间戳必跨整数秒)。
 // 把 workbench/index.js 里那条 bus.on('event', jobSettledHandler) 删掉,这一组会红。
 //
+// 第 8 组守的是**续聊轮的精简注入**:续接一轮时,上一轮那份完整环境块已经在 CLI 的
+// 会话历史里(--resume / --session / exec resume 都会把它带回来),整块重发是纯重复 ——
+// 实测占该轮 prompt 的 98%(环境块 2200 字符 vs 用户原话 44 字符)。判据是"另一个项目
+// 不该再出现":projB 只可能来自"项目清单"那一段,精简版把它整段省掉。
+// 把 taskRunner 里 `{ compact: !!resumeSessionId }` 那个参数删掉,这一组会红
+// (续聊轮又变回整块,projB 冒出来)。这才是"接线有没有接上"的唯一证据:
+// 单测(envContext.test.js)只验得到纯函数,compact 传没传过去它看不见。
+//
 // 隔离:server 进程的 USERPROFILE/HOME 指向 mkdtemp 沙箱,绝不碰用户真实
 // ~/.zen-gitsync/(见 src/paths.js 的说明)。
 //
@@ -44,6 +52,9 @@ const projBAlias = process.platform === 'win32' ? projB.toUpperCase() : null
 const PORT = 5611
 const base = `http://127.0.0.1:${PORT}`
 const TEXT = '我的项目有哪些'
+// 续聊轮发的那句话（第 8 组）。刻意写得比环境块短得多 —— 这一组要证明的正是
+// "续聊轮的 prompt 里，用户真正说的那句才是主体，背景不该再占 98%"。
+const CONTINUE_TEXT = '再补充一句'
 
 const failures = []
 const check = (cond, msg) => { if (!cond) failures.push(msg) }
@@ -65,6 +76,9 @@ await fs.writeFile(path.join(stubDir, 'claude.cmd'), '@echo off\r\nnode "%~dp0no
 await fs.writeFile(path.join(stubMedia, 'cli.js'), [
   "const fs = require('fs');",
   "const out = process.env.STUB_PROMPT_OUT;",
+  // 先推一条 system/init —— 真 claude 就是这么开场的:session_id 是 --resume 的唯一凭据,
+  // 没有它第 8 组的续接会被路由层挡回 400(「无法续接:会话标识未捕获」)。
+  "process.stdout.write(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'stub-session-1' }) + '\\n');",
   "let buf = '';",
   "process.stdin.setEncoding('utf8');",
   "process.stdin.on('data', d => { buf += d; });",
@@ -240,6 +254,46 @@ try {
     !!tasksAfter?.collectedAt && tasksAfter.collectedAt > tasksBefore.collectedAt,
     `任务结束后 tasks 板块应被重新采集（前 ${tasksBefore?.collectedAt} / 后 ${tasksAfter?.collectedAt}）`,
   )
+
+  // ── 8. 续聊轮注入的是**精简版**环境块（见文件头第 8 组）──
+  // 判据分三层：
+  //   · 正向 —— 首行锚点还在、当前项目与合计概览还在（活数据要刷新）；
+  //   · 反向 —— projB 不该出现（它只来自"项目清单"那一段，精简版整段省掉）；
+  //   · 兜底 —— 真相源路径照给（会话被压缩后靠它重新够得着数据）。
+  const contRes = await fetch(`${base}/api/workbench/jobs/${job.id}/continue`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ userMessage: CONTINUE_TEXT }),
+  })
+  const contBody = await contRes.json().catch(() => ({}))
+  check(contRes.status === 200, `续接应 200，实际 ${contRes.status} ${JSON.stringify(contBody)}`)
+
+  let contJob = null
+  for (let i = 0; i < 60 && !contJob; i += 1) {
+    const body = await (await fetch(`${base}/api/workbench/jobs`)).json()
+    contJob = (body.jobs || []).find(j => j.taskId === taskId && /__simple__r1$/.test(j.subId || '')) || null
+    if (!contJob) await sleep(250)
+  }
+  check(!!contJob, '续接应产生一条新 job（subId 形如 <taskId>__simple__r1）')
+  const contPrompt = contJob?.prompt || ''
+  check(contPrompt.startsWith('[运行环境'), '续聊轮仍以运行环境块开头（渲染与探针都按这个锚点找）')
+  check(contPrompt.includes('续聊轮精简刷新'), `续聊轮应注入精简版环境块，实际开头: ${JSON.stringify(contPrompt.slice(0, 120))}`)
+  // 这一条同时守着**工作目录口径**：任务属于 projA，而"UI 当前选中的项目"在沙箱里是空的 ——
+  // 精简块里出现的必须仍是 projA（= 任务自己的项目）。续接路由以前直接吃 getCurrentProjectPath()，
+  // 于是续接那轮会 spawn 到别处（这条断言就是把它钉住的）。
+  check(contPrompt.includes(projA), '续聊轮仍应给出当前项目（活数据要刷新），且用的必须是任务自己的项目')
+  check(
+    !contPrompt.includes(projB),
+    `续聊轮不该再列项目清单（projB 不应出现）—— 实际: ${JSON.stringify(contPrompt.slice(0, 220))}`,
+  )
+  check(contPrompt.includes(tasksFile), '续聊轮仍应给出真相源路径（会话被压缩后的兜底）')
+  check(
+    contPrompt.includes(CONTINUE_TEXT) && contPrompt.indexOf(CONTINUE_TEXT) > contPrompt.lastIndexOf(tasksFile),
+    '用户原话仍应压在真相源清单之后（离注意力中心最近）',
+  )
+  // 这里**不断言"省了多少"**：本组夹具只有两个项目，而精简省下的正是随项目数线性涨的
+  // 那一段清单 —— 两个项目时精简块仍有 60% 是"当前项目 + 真相源"这种固定底。
+  // 比例断言放在 envContext.test.js，那里用 19 个项目的夹具（贴近用户本机真实规模）。
 } catch (err) {
   failures.push(`异常: ${err.message}`)
 } finally {
