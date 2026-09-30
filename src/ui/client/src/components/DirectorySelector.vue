@@ -238,10 +238,26 @@ interface SimpleTool {
   id: SimpleToolId
   name: string
   icon: string
-  label: string
   /** 存 key（不是译好的字符串）：权限档菜单项要按当前语言实时译，不能吃模块加载时那一份 */
   labelKey: string
+  /** 按钮 tooltip / aria-label 的 key：默认与 labelKey 相同，直点走完全批准档的另指一个 */
+  tooltipKey: string
   action: () => void | Promise<void>
+}
+
+/**
+ * 「直接点这个工具」走哪一档 —— 顶栏图标左键和「更多工具」菜单项共用这一份。
+ * 表里没有的工具 = 默认档（不带 token）。
+ *
+ * 三个 AI CLI（claude / codex / opencode）直点一律给**完全批准**：顶栏这排按钮是
+ * "开这个目录干活"的入口，进去再被一轮批准确认打断是自己给自己添麻烦
+ * （2026-09 与用户对齐；claude 本来就这么做，这里把 codex / opencode 补成同一条规则）。
+ * 想收着点就去右键菜单 / 编排台项目菜单，那两处仍逐档列全。
+ * token 语义见服务端 `fileOpen.js` 的 buildCodexArgs / buildOpencodeArgs。
+ */
+const TOOL_PRIMARY_MODE: Partial<Record<SimpleToolId, string>> = {
+  codex: 'bypass',
+  opencode: 'auto',
 }
 
 /** 每个工具的打开动作。成功兜底文案各不相同（服务端一般都给了 message，这里只是保底），
@@ -249,11 +265,18 @@ interface SimpleTool {
  *  和编排台项目列表的「打开方式」菜单共用一份，避免同一工具两处叫法/图标不一致。 */
 const TOOL_ACTIONS: Record<SimpleToolId, () => void | Promise<void>> = {
   vscode: onOpenInVscode,
-  codex: onOpenInCodex,
-  opencode: onOpenInOpencode,
+  codex: () => onOpenInCodex(TOOL_PRIMARY_MODE.codex),
+  opencode: () => onOpenInOpencode(TOOL_PRIMARY_MODE.opencode),
   kimi: onOpenInKimi,
   zcode: onOpenInZcode,
   dsh: onOpenInDsh,
+}
+
+/** 直点档 ≠ 默认档的工具，按钮 tooltip / aria-label 必须写明是哪一档，否则界面上
+ *  只有"用 Codex 打开"，用户看不出点下去已经是免批准。key 是现成的（编排台项目菜单在用）。 */
+const PRIMARY_TOOLTIP_KEYS: Partial<Record<SimpleToolId, string>> = {
+  codex: '@67CE7:用 Codex 打开（完全批准）',
+  opencode: '@67CE7:用 OpenCode 打开（完全批准）',
 }
 
 /**
@@ -264,10 +287,12 @@ const TOOL_ACTIONS: Record<SimpleToolId, () => void | Promise<void>> = {
  *   codex:    'sandboxed' → `-a never -s workspace-write`（从不问，但命令仍在沙箱里）
  *             'bypass'    → `--dangerously-bypass-approvals-and-sandbox`（免批准 + 免沙箱）
  * 各家的档位 token 刻意**不统一** —— CLI 的语义本来就不一样，硬凑一个公共词只会让服务端
- * 多一层没必要的映射。第一项恒为"默认权限"（不带 token），与各工具的左键行为一致。
+ * 多一层没必要的映射。第一项恒为"默认权限"（不带 token）：顶栏左键已经是完全批准档了
+ * （见 `TOOL_PRIMARY_MODE`），这一档只能从右键菜单 / 编排台项目菜单点进来。
  */
 interface ToolPermissionTier {
-  /** 缺省 = 该工具的默认档（不带任何 flag），与左键走的是同一条路 */
+  /** 缺省 = 该工具的默认档（不带任何 flag）。左键走的是完全批准档，所以这一档只能
+   *  从右键菜单 / 编排台项目菜单进来 —— 别再拿"与左键一致"当它的不变量 */
   mode?: string
   hintKey: string
   danger?: boolean
@@ -306,7 +331,7 @@ const simpleTools: SimpleTool[] = OPEN_WITH_TOOLS.map((tool) => ({
   name: tool.name,
   icon: tool.icon,
   labelKey: tool.labelKey,
-  label: $t(tool.labelKey),
+  tooltipKey: PRIMARY_TOOLTIP_KEYS[tool.id] ?? tool.labelKey,
   action: TOOL_ACTIONS[tool.id],
 }))
 
@@ -348,13 +373,15 @@ const moreTools = computed(() => {
   for (const t of simpleTools) {
     const installed = toolsStore.isToolAvailable(t.id)
     if (installed && isToolPinned(t.id)) continue
-    list.push({ id: t.id, name: t.name, icon: t.icon, label: t.label, missing: !installed })
+    // 走 tooltipKey 而不是 label：直点走完全批准档的工具，菜单里也得写明是哪一档
+    list.push({ id: t.id, name: t.name, icon: t.icon, label: $t(t.tooltipKey), missing: !installed })
   }
   if (!(toolsStore.claudeAvailable && isToolPinned('claude'))) {
     list.push({
       id: 'claude',
       name: TOOL_DISPLAY_NAMES.claude,
-      label: '用 Claude Code 打开',
+      // 直点 = 完全批准（与顶栏那个 Claude Code 图标左键同一条路），菜单里要写明
+      label: $t('@67CE7:用 Claude Code 打开（完全批准）'),
       missing: !toolsStore.claudeAvailable,
     })
   }
@@ -365,8 +392,8 @@ const hasMoreTools = computed(() => moreTools.value.length > 0)
 function runMoreTool(tool: { id: ToolId }) {
   moreToolsVisible.value = false
   if (tool.id === 'claude') {
-    // 装了就直接以默认权限打开，没装才是安装引导
-    if (toolsStore.claudeAvailable) void onOpenInClaudeCode()
+    // 装了就直接以完全批准打开（同顶栏图标的左键），没装才是安装引导
+    if (toolsStore.claudeAvailable) void onOpenInClaudeCode('bypassPermissions')
     else openToolInstall('claude')
     return
   }
@@ -473,8 +500,8 @@ function closeClaudeMenu() {
 /**
  * 顶栏 opencode / codex 右键菜单里的权限档位由 `TOOL_PERMISSION_TIERS` 驱动，
  * 不在这里按工具写 if —— 各工具档位数本来就不一样（opencode 两档、codex 三档）。
- * 顶栏所有工具的**左键仍是默认档**：opencode / codex 的默认档比 claude 松得多，
- * 不该让一次普通左键静默进入免批准。
+ * 左键已经是完全批准档（`TOOL_PRIMARY_MODE`），所以这一层菜单的用处是"这次想收着点"，
+ * 逐档列全（含比左键更严的档）。
  */
 
 // ── 更新已安装的工具 ─────────────────────────────────────────────
@@ -831,8 +858,8 @@ function onBrowserSelect(path: string) {
               @contextmenu.prevent.stop="onSimpleToolContextMenu(tool)"
             >
               <IconButton
-                :tooltip="toolTooltip(tool.id, tool.label)"
-                :aria-label="toolTooltip(tool.id, tool.label)"
+                :tooltip="toolTooltip(tool.id, $t(tool.tooltipKey))"
+                :aria-label="toolTooltip(tool.id, $t(tool.tooltipKey))"
                 :custom-class="toolsStore.lastCheckedAt === null ? 'tool-button--checking' : (toolsStore.isToolAvailable(tool.id) ? '' : 'tool-button--missing')"
                 size="large"
                 @click="runOrInstall(tool.id, tool.action)"

@@ -8,6 +8,7 @@
  *            完全批准（`--dangerously-bypass-approvals-and-sandbox`，免批准 + 免沙箱）
  *
  * 守的契约（对每个"有档位"的工具逐一跑）：
+ *   A0 该工具固定在顶栏且已安装（否则后面几条无从谈起）
  *   A1 顶栏该工具图标右键能弹出菜单
  *   A2 菜单里的档位项与期望**逐项对齐**（数量、顺序、提示文案都对）——
  *      多一档少一档都要红：档位数是产品行为，不是实现细节
@@ -15,7 +16,12 @@
  *   A4 点每个档位 → 发往 /api/open-directory-with-{tool} 的 body 里 permissionMode
  *      等于该档的 token；**默认档必须不带这个字段**（不能偷偷进免批准）
  *   A5 点完菜单关闭
+ *   A6 **左键直点图标 = 完全批准档**（body.permissionMode === primary）——
+ *      2026-09 起 codex / opencode 与 claude 对齐：直接点就给完全批准，菜单是给
+ *      "这次想收着点"用的。这条是最容易被人改回去的默认值，所以钉死
+ *   A6b 按钮的 tooltip / aria-label 写明「完全批准」—— 免批准要在界面上看得见
  *   B  编排台项目「打开方式」菜单：各档位项都在，点对了就发对的 token
+ *      （编排台**不做**直点改造 —— 那里逐档平铺，默认档仍单独成项）
  *   R  反向锚：没有档位的工具（vscode）菜单里**只有「更新」**——
  *      这是最容易写错的地方（一个 v-if 写错就让所有工具都长出档位项）
  *
@@ -27,6 +33,7 @@
  *   · 把 TOOL_PERMISSION_TIERS 里的 codex 一项删掉 → 只有 codex 那组红（分组独立）
  *   · 让 v-if 条件恒真 → R 红
  *   · 默认档也传 token → A4 的"默认档不带字段"那条红
+ *   · 把 TOOL_PRIMARY_MODE 里的 codex / opencode 删掉（回到默认档直点）→ A6 红
  *
  * 用法：先 `npm run dev`（后端 5545 + vite 5544），再
  *   node scripts/verify-open-with-permission-menus.cjs
@@ -40,12 +47,14 @@ const { chromium } = require('playwright')
 const BASE = process.env.ZEN_BASE || 'http://127.0.0.1:5544'
 const API = process.env.ZEN_API || 'http://127.0.0.1:5545'
 
-/** 顶栏要逐一验的工具：aria = 菜单的 aria-label（= 工具名）；tiers 必须与界面逐项对齐 */
+/** 顶栏要逐一验的工具：aria = 菜单的 aria-label（= 工具名）；tiers 必须与界面逐项对齐。
+ *  primary = 左键直点该图标时应带的 permissionMode（完全批准档） */
 const TOPBAR_CASES = [
   {
     id: 'opencode',
     aria: 'OpenCode',
     buttonPrefix: '用 OpenCode 打开',
+    primary: 'auto',
     // 只有两档：opencode 没有 claude 那种中间档
     tiers: [
       { hint: '默认权限', mode: null },
@@ -56,6 +65,7 @@ const TOPBAR_CASES = [
     id: 'codex',
     aria: 'Codex',
     buttonPrefix: '用 Codex 打开',
+    primary: 'bypass',
     tiers: [
       { hint: '默认权限', mode: null },
       { hint: '自动批准（沙箱内）', mode: 'sandboxed' },
@@ -166,6 +176,13 @@ async function main() {
     await page.mouse.click(5, 500)
     await sleep(250)
   }
+  // 打开成功的 toast 是顶部居中的，正好压住这排工具按钮；不等着它消失，
+  // 下一个点击会被它吃掉，报出来的是 "element intercepts pointer events"，看着像渲染坏了。
+  const dismissToasts = async () => {
+    for (let i = 0; i < 8 && (await page.locator('.el-message').count()) > 0; i++) {
+      await sleep(500)
+    }
+  }
   // ⚠️ 点击也要认准"当前可见的那份菜单"，理由同上 —— 而且更隐蔽：`hasText` 命中后
   //    Playwright 报的是 "element is not visible"，看起来像渲染问题，其实是点到了
   //    另一个工具的隐藏菜单（实测 OPEN_WITH_TOOLS 里 codex 排在 opencode 前面，
@@ -230,6 +247,22 @@ async function main() {
           await waitUntil(async () => (await menuItems(c.aria)) === null, 5000))
         await closeMenus()
       }
+
+      // A6 左键直点 = 完全批准档。放在档位循环**之后**：左键会弹出成功 toast，
+      // 而 toast 在顶部居中、正好压住这排工具按钮，先点它会把后面的右键点击吃掉。
+      openBodies.length = 0
+      await btn.first().click()
+      const gotPrimary = await waitUntil(async () => openBodies.length > 0, 8000)
+      const pBody = lastBody() || {}
+      check(`A6${tag} 左键直点 → permissionMode ${c.primary}（完全批准档）`,
+        gotPrimary && pBody.permissionMode === c.primary && typeof pBody.path === 'string' && pBody.path.length > 0,
+        JSON.stringify(pBody))
+      // 界面上要看得出来：直点就是完全批准，按钮的 aria-label / tooltip 必须写明
+      const ariaNow = await btn.first().getAttribute('aria-label')
+      check(`A6b${tag} 按钮文案写明「完全批准」（tooltip / aria-label）`,
+        /完全批准/.test(ariaNow || ''), String(ariaNow).replace(/\n/g, ' '))
+      await dismissToasts()
+      await closeMenus()
     }
 
     // ── R 反向锚：没有档位的工具菜单里只有「更新」 ─────────────────
