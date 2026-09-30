@@ -49,9 +49,13 @@ export function relativeTimeFromIso(iso?: string | null, now: number = Date.now(
  * 进度报告的事实快照存的是**时长**（不是起止时间，见 ProgressReportFact），走这个。
  */
 export function formatDurationMs(ms?: number | null): string {
-  const diff = Number(ms)
-  if (!Number.isFinite(diff) || diff < 0) return ''
-  const totalSec = Math.floor(diff / 1000)
+  // 只认真·number 类型的毫秒数，null / undefined / 字符串一律给空串。
+  // 两个坑都在 Number() 上：**Number(null) 就是 0**（"服务端没给这个数"会变成
+  // 「用时 0 秒」，一个看着像真的假时长 —— 看板卡片的 lastDurationMs 推不出来时
+  // 给的正是 null）；**Number('200000') 也是 200000**（脏数据会悄悄变成一个看着
+  // 合法的时长）。宁可整段不渲染，也不要渲染一个来路不明的数。
+  if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return ''
+  const totalSec = Math.floor(ms / 1000)
   const h = Math.floor(totalSec / 3600)
   const m = Math.floor((totalSec % 3600) / 60)
   const s = totalSec % 60

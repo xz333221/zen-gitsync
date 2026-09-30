@@ -53,7 +53,7 @@ import TaskExecutorIcon from '@/components/TaskExecutorIcon.vue'
 import type { BoardTask, BoardTaskLive, TaskColumn } from '@/types/workbench'
 import { taskExecutorName, type TaskExecutorId } from '@/utils/taskExecutor'
 import { projectTagStyle } from '@/utils/projectTag'
-import { formatDurationMs, relativeTimeFromIso } from '@/utils/relativeTime'
+import { formatDurationMs, relativeTimeFromIso, clockFromIso } from '@/utils/relativeTime'
 
 const props = defineProps<{
   tasks: BoardTask[]
@@ -144,6 +144,38 @@ function byDoneAtDesc(a: BoardTask, b: BoardTask): number {
  */
 function cardTime(t: BoardTask): string {
   return t.column === 'done' ? doneAt(t) : (t.updatedAt || t.createdAt || '')
+}
+
+/**
+ * 卡片上那行「用时 x」；不适用时是空串（模板据此整行不渲染）。
+ *
+ * **只在没有 job 在跑时给值**：正在跑的那个时长每 5s 都在长，已经写在活动区第一行的
+ * 「已运行 x」里（live.elapsedMs）。两处各给一份、一个会长一个不长的数字，
+ * 用户会以为其中一个坏了 —— 所以判据是「这张卡片有没有活动区」，不是「哪一列」。
+ *
+ * 服务端给不出（lastDurationMs 为 null：从没执行过 / 老记录缺 startedAt 或 endedAt）
+ * 就空着。用时是给人判断"这条是不是特别磨"的参考，宁可没有也不要一个假的 0。
+ */
+function cardDuration(t: BoardTask): string {
+  if (t.live) return ''
+  return formatDurationMs(t.lastDurationMs)
+}
+
+/**
+ * 用时那一行的悬停提示：把「用时」背后的两个绝对时刻摊开（几点起、几点止）。
+ *
+ * 相对时间（"3 小时前"）+ 用时（"12 分"）已经能回答"跑了多久"，但答不了"是哪一段"——
+ * 排查某段时间里到底跑过什么时，得能指着绝对时刻。两者都取不到就退回空提示，
+ * 不拼一个"无"/"-"出来占位。
+ */
+function cardTimeTitle(t: BoardTask): string {
+  const dur = cardDuration(t)
+  if (!dur) return ''
+  const from = clockFromIso(t.lastJobStartedAt)
+  const to = clockFromIso(t.lastJobEndedAt)
+  // 只有起止都拿得到才给区间；缺一头的话那串时刻对不上号，反而误导
+  if (!from || !to) return dur
+  return `${dur} · ${from} → ${to}`
 }
 
 /**
@@ -303,6 +335,19 @@ function liveSummary(live: BoardTaskLive): string {
             </div>
 
             <!--
+              跑完的任务：用时**独占一行**，不挤进上面那个时间位。
+              实测首行（项目色标 + 标题 + 时间）在真实数据上已经排满，
+              再塞一串「用时 30 分 0 秒」会把项目色标压出 1px 的省略号
+              （verify-wb-card-row1 的 C 组守的正是"色标一枚都不许被压窄"）。
+              竖着放只多一行 16px，横向一个字节都不占；而且「什么时候跑的」与
+              「跑了多久」本来就是两个维度，分两行读比挤在一行清楚 ——
+              同理它也没去挤活动区那行"已运行 x · 工具 n 次"。
+            -->
+            <p v-if="cardDuration(t)" class="kb-card__spent" :title="cardTimeTitle(t)">
+              {{ $t('@WORKBENCH:用时 {d}', { d: cardDuration(t) }) }}
+            </p>
+
+            <!--
               正在跑的任务：把"现在在干嘛"直接写在卡片上。
               在此之前卡片只有右上角一个圆点 —— 一次跑二十分钟的任务，
               用户盯着看只知道"还在跑"，是在改代码还是卡住了完全看不出来，
@@ -427,7 +472,7 @@ function liveSummary(live: BoardTaskLive): string {
           <tr>
             <th class="kb-table__th">{{ $t('@WORKBENCH:任务') }}</th>
             <th class="kb-table__th kb-table__th--narrow">{{ $t('@WORKBENCH:状态') }}</th>
-            <th class="kb-table__th kb-table__th--narrow">{{ $t('@WORKBENCH:时间') }}</th>
+            <th class="kb-table__th kb-table__th--time">{{ $t('@WORKBENCH:时间') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -479,7 +524,17 @@ function liveSummary(live: BoardTaskLive): string {
                 {{ $t(COLUMNS.find(c => c.key === t.column)!.labelKey) }}
               </span>
             </td>
-            <td class="kb-table__td kb-table__td--num">{{ relativeTimeFromIso(cardTime(t)) }}</td>
+            <td class="kb-table__td kb-table__td--num">
+              <!-- 与看板卡片首行同一个口径：同一批任务的两种画法，一边有一边没有
+                   会让人以为是两份数据 -->
+              <span class="kb-table__time" :title="cardTimeTitle(t)">
+                <template v-if="cardDuration(t)">
+                  <span class="kb-table__dur">{{ $t('@WORKBENCH:用时 {d}', { d: cardDuration(t) }) }}</span>
+                  <span class="kb-table__time-sep" aria-hidden="true">·</span>
+                </template>
+                <span>{{ relativeTimeFromIso(cardTime(t)) }}</span>
+              </span>
+            </td>
           </tr>
           <tr v-if="listRows.length === 0">
             <td class="kb-table__td kb-table__empty" colspan="3">{{ $t('@WORKBENCH:暂无任务') }}</td>
@@ -686,6 +741,20 @@ function liveSummary(live: BoardTaskLive): string {
   color: var(--text-meta);
 }
 .kb-card__time { margin-left: auto; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+/* ── 「用时 x」：跑完的任务独占一行（为什么不挤首行见模板里那段） ──────────
+   字色比首行那段时间亮一档：相对时间是"什么时候的事"（背景），用时是用户盯着
+   这一列时真正在找的东西，扫视时先落在它身上。
+   不进 hover 那条右侧渐隐名单：字串短，渐隐起点在右侧 64px 处，
+   加进去等于把它的尾巴（多半是"0 秒"）洗掉。 */
+.kb-card__spent {
+  margin: -2px 0 8px;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 .kb-card__title {
   margin: 0;
   /* 与色标 / 时间同排（见 .kb-card__row1）：必须压掉 flex item 默认的 min-width: auto，
@@ -1041,6 +1110,10 @@ function liveSummary(live: BoardTaskLive): string {
   white-space: nowrap;
 }
 .kb-table__th--narrow { width: 96px; }
+/* 时间列比状态列宽：加了「用时」之后是「用时 12 分 · 3 小时前」，96px 装不下
+   （fixed 布局下不会裁，会直接把那一格撑成两行，行高跟着跳）。
+   这点宽度是从「任务」列那格拿的 —— 它本来就靠 ellipsis 收尾，多让 52px 代价最小。 */
+.kb-table__th--time { width: 148px; }
 .kb-table__row {
   cursor: pointer;
   transition: background var(--transition-fast) var(--ease-custom);
@@ -1053,6 +1126,14 @@ function liveSummary(live: BoardTaskLive): string {
   vertical-align: middle;
 }
 .kb-table__td--num { font-variant-numeric: tabular-nums; }
+/* 列表视图的时间格是**独立一列**，宽度自己说了算（见 .kb-table__th--time），
+   所以两个事实并排放：「用时 12 分 · 3 小时前」。
+   不换行：换行会把这一行的行高只由它决定，整张表参差不齐；
+   宽度不够时省略号收尾（title 里有完整内容），而不是让它换行。 */
+.kb-table__time { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 与卡片那行同一档语义：用时是"要读的"，相对时间是"背景" */
+.kb-table__dur { color: var(--text-primary); }
+.kb-table__time-sep { margin: 0 3px; opacity: .55; }
 .kb-table__name { color: var(--text-primary); }
 /* .kb-table__project 的样式与卡片那枚共用，见上方 .kb-card__project-chip 一段 */
 /* 进行中那一行的"跑到哪了"：与任务名同一格，占满剩余宽度后省略号收尾 */

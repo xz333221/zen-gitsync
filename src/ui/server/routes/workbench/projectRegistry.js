@@ -34,7 +34,7 @@
 //   - Git 状态复用 utils/directoryGitState.js 的批量探测（带并发上限 + TTL 缓存 + 超时）。
 
 import { probeDirectoryGitStates } from '../../utils/directoryGitState.js';
-import { pickLiveActivity, tailExcerpt, jobAgent } from './jobActivity.js';
+import { pickLiveActivity, tailExcerpt, jobAgent, jobDurationMs } from './jobActivity.js';
 
 /** 看板列，数组顺序即列顺序 */
 export const TASK_COLUMNS = ['todo', 'doing', 'done'];
@@ -350,6 +350,20 @@ export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now() 
     // 执行完成只写 jobs.json，tasks.json 里的 updatedAt 一直停在创建/编辑时间，
     // 于是十几张卡片的时间会全是创建时刻，"最新完成的"根本排不出来。
     lastJobEndedAt: last ? (last.endedAt || last.startedAt || null) : null,
+    /**
+     * 最近一条 job 实际跑了多久（毫秒）—— 卡片上那串「用时 3 分 20 秒」。
+     *
+     * 之前只有"什么时候结束"（lastJobEndedAt），没有"跑了多久"，于是问不出
+     * 「哪条任务特别磨」「一条简单改动是不是比上次慢了十倍」这类问题 ——
+     * 光看"3 小时前"分不清它是跑了 3 小时还是 3 分钟前跑完的。
+     *
+     * 正在跑的不在这里给：那个时长每 5s 都在长，已经由 live.elapsedMs 呈现
+     * （见 jobDurationMs 的注释），两处各给一个会长一个不长的数字会让人以为坏了。
+     * 推不出（从没跑过 / 老记录缺时间戳）→ null，前端据此不显示这一段。
+     */
+    lastDurationMs: jobDurationMs(last),
+    /** 那条 job 的启动时刻，配合 lastJobEndedAt 给悬停提示里的「几点到几点」 */
+    lastJobStartedAt: last ? (last.startedAt || null) : null,
     createdAt: task.createdAt || null,
     updatedAt: task.updatedAt || null,
   };

@@ -234,6 +234,14 @@ export interface BoardTask {
   lastJobStatus: string | null
   /** 最近一条 job 的结束时间（= 这张卡片跑完的时刻），从没执行过时为 null */
   lastJobEndedAt: string | null
+  /**
+   * 最近一条 job 实际跑了多久（毫秒），卡片上渲染成「用时 3 分 20 秒」。
+   * null = 算不出来（正在跑 → 用 live.elapsedMs；从没跑过 / 老记录缺时间戳），
+   * 此时前端不显示这一段，而不是显示一个假的 0。
+   */
+  lastDurationMs?: number | null
+  /** 那条 job 的启动时刻（悬停提示里的「几点到几点」），从没执行过时为 null */
+  lastJobStartedAt?: string | null
   createdAt: string | null
   updatedAt: string | null
 }

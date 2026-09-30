@@ -32,6 +32,7 @@ import {
   describeToolMix,
   silentMsOf,
   jobAgent,
+  jobDurationMs,
   buildLiveActivity,
   pickLiveActivity,
   TOOL_MIX_WINDOW,
@@ -292,4 +293,53 @@ test('pickLiveActivity：lastActivityAt 是脏值时退回 startedAt 比较', ()
     { id: 'b', status: 'running', startedAt: '2026-09-28T08:00:00.000Z' },
   ], NOW);
   assert.equal(live.jobId, 'a');
+});
+
+// ── jobDurationMs ────────────────────────────────────────────────────────
+
+test('jobDurationMs：终态 job 给 endedAt - startedAt', () => {
+  assert.equal(
+    jobDurationMs({ status: 'done', startedAt: '2026-09-28T10:00:00.000Z', endedAt: '2026-09-28T10:03:20.000Z' }),
+    200_000,
+  );
+  // cancelled / error 同样算得出 —— 用户问"这条跑了多久"时不会关心它是怎么结束的
+  assert.equal(
+    jobDurationMs({ status: 'cancelled', startedAt: '2026-09-28T10:00:00.000Z', endedAt: '2026-09-28T10:00:05.000Z' }),
+    5000,
+  );
+});
+
+test('jobDurationMs：还在跑一律 null（那个时长是活的，归 live.elapsedMs）', () => {
+  assert.equal(jobDurationMs({ status: 'running', startedAt: '2026-09-28T10:00:00.000Z' }), null);
+  assert.equal(jobDurationMs({ status: 'pending', startedAt: '2026-09-28T10:00:00.000Z' }), null);
+  // 即使 endedAt 被写了也不采信 —— status 才是"跑完了"的唯一权威
+  assert.equal(
+    jobDurationMs({ status: 'running', startedAt: '2026-09-28T10:00:00.000Z', endedAt: '2026-09-28T10:03:00.000Z' }),
+    null,
+  );
+});
+
+test('jobDurationMs：缺时间戳 / 脏值 / 没有 job 时给 null，不拿别的戳凑一个假时长', () => {
+  assert.equal(jobDurationMs(null), null);
+  assert.equal(jobDurationMs(undefined), null);
+  assert.equal(jobDurationMs({ status: 'done', endedAt: '2026-09-28T10:03:00.000Z' }), null);
+  assert.equal(jobDurationMs({ status: 'done', startedAt: '2026-09-28T10:00:00.000Z' }), null);
+  assert.equal(jobDurationMs({ status: 'done', startedAt: '瞎写的', endedAt: '也是瞎写的' }), null);
+});
+
+test('jobDurationMs：不用 lastActivityAt 冒充结束时刻（那会把时长稳定算短）', () => {
+  const job = {
+    status: 'done',
+    startedAt: '2026-09-28T10:00:00.000Z',
+    lastActivityAt: '2026-09-28T10:00:30.000Z', // 收尾前最后一次吐字
+    endedAt: '2026-09-28T10:20:00.000Z',
+  };
+  assert.equal(jobDurationMs(job), 20 * 60 * 1000);
+});
+
+test('jobDurationMs：结束早于开始（时钟漂移 / 手工改过 jobs.json）不给出负数', () => {
+  assert.equal(
+    jobDurationMs({ status: 'done', startedAt: '2026-09-28T10:00:10.000Z', endedAt: '2026-09-28T10:00:00.000Z' }),
+    0,
+  );
 });

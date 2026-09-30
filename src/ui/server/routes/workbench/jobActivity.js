@@ -184,6 +184,26 @@ export function isLiveJob(job) {
 }
 
 /**
+ * 一条**已经跑完**的 job 跑了多久（毫秒）；推不出来时返回 null。
+ *
+ * 口径严格是 `endedAt - startedAt`，三个刻意的取舍：
+ *   · 还在跑（running/pending）不给值：它的时长是**活的**，已经由 buildLiveActivity 的
+ *     elapsedMs 负责（每 5s 随轮询重算）。两处各给一个会长一个不长的数字，
+ *     用户会以为其中一个坏了。
+ *   · 缺 startedAt 或 endedAt（老记录 / 被手工编辑过的 jobs.json）给 null，
+ *     不拿别的时间戳凑 —— 宁可卡片上不显示，也不要显示一个看着像真的假时长。
+ *   · 绝不拿 lastActivityAt 冒充结束时刻：那是"最后一次吐字"，收尾前的长思考、
+ *     最后一次落盘都可能隔很久，拿它当结束会把时长**稳定地算短**。
+ */
+export function jobDurationMs(job) {
+  if (!job || isLiveJob(job)) return null;
+  const started = Date.parse(job.startedAt || '');
+  const ended = Date.parse(job.endedAt || '');
+  if (!Number.isFinite(started) || !Number.isFinite(ended)) return null;
+  return Math.max(0, ended - started);
+}
+
+/**
  * 本轮跑的是哪个执行器（`claude` | `opencode` | `codex`）。
  *
  * 只在**认出是已知执行器**时才回值：job.agent 来自 jobs.json（会被手工编辑、也读过
@@ -275,6 +295,7 @@ export const __testables = {
   describeToolMix,
   silentMsOf,
   jobAgent,
+  jobDurationMs,
   buildLiveActivity,
   pickLiveActivity,
 };

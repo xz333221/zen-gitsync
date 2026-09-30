@@ -5,19 +5,25 @@
 
 import { describe, expect, test, vi } from 'vitest'
 
-vi.mock('@/lang/static', () => ({
-  // 最简 i18n：剥掉命名空间前缀 + 具名插值。
-  // zh 表里绝大多数 key 的值就是"去掉前缀的 key 本身"，所以这样足够真实，
-  // 断言里能直接读到渲染后的句子（而不是 `@WORKBENCH:昨天 {time}`）。
-  $t: (key: string, params?: Record<string, string | number>) => {
-    const text = key.replace(/^@[A-Z0-9]+:/, '')
-    return params
-      ? Object.entries(params).reduce((s, [k, v]) => s.replace(`{${k}}`, String(v)), text)
-      : text
-  },
-}))
+vi.mock('@/lang/static', async () => {
+  // 直接用**真实的 zh 词表**，而不是"剥掉命名空间前缀当文案"那套近似：
+  // 本仓的 key 并不总是等于 value（`@WORKBENCH:N 秒` 的 value 是 `{n} 秒`），
+  // 近似 mock 会把插值整段丢掉，于是 formatDurationMs 全部渲染成 "N 秒"，
+  // 断言再按正确文案写就变成 7 条全红（2026-09-30 实测）。
+  const zh = (await import('@/lang/zh')).default as Record<string, string>
+  return {
+    $t: (key: string, params?: Record<string, string | number>) => {
+      const text = zh[key] ?? key.replace(/^@[A-Z0-9]+:/, '')
+      if (!params) return text
+      return Object.entries(params).reduce(
+        (s, [k, v]) => s.split(`{${k}}`).join(String(v)),
+        text,
+      )
+    },
+  }
+})
 
-import { clockFromIso } from './relativeTime'
+import { clockFromIso, formatDurationMs, formatElapsed } from './relativeTime'
 
 /** 以本地时区构造某个时刻的 ISO 串 */
 const localIso = (y: number, mo: number, d: number, h = 0, mi = 0, s = 0) =>
@@ -67,5 +73,60 @@ describe('clockFromIso', () => {
     expect(clockFromIso(null, NOW)).toBe('')
     expect(clockFromIso(undefined, NOW)).toBe('')
     expect(clockFromIso('not-a-date', NOW)).toBe('')
+  })
+})
+
+// 看板卡片上的「用时 3 分 20 秒」走的就是 formatDurationMs（2026-09-30 加的）。
+// 断言按"键去掉命名空间前缀"的渲染结果写，与页面上的中文一致 ——
+// 这是"用户看到的那个字符串"的形状，别改成拿毫秒数自己折算（那等于重写一遍实现）。
+
+describe('formatDurationMs', () => {
+  test('不足一分钟只报秒', () => {
+    expect(formatDurationMs(0)).toBe('0 秒')
+    expect(formatDurationMs(8_000)).toBe('8 秒')
+    expect(formatDurationMs(59_999)).toBe('59 秒')
+  })
+
+  test('满一分钟起报分 + 秒', () => {
+    expect(formatDurationMs(60_000)).toBe('1 分 0 秒')
+    expect(formatDurationMs(200_000)).toBe('3 分 20 秒')
+  })
+
+  test('满一小时起报小时 + 分（秒那一档不再出现）', () => {
+    expect(formatDurationMs(3_600_000)).toBe('1 小时 0 分')
+    expect(formatDurationMs(20 * 60_000 + 30_000)).toBe('20 分 30 秒')
+    expect(formatDurationMs(4_332_000)).toBe('1 小时 12 分')
+  })
+
+  test('非数 / 负数 / 空值给空串（调用方整段不渲染，不显示假的 0 秒）', () => {
+    expect(formatDurationMs(undefined)).toBe('')
+    expect(formatDurationMs(null)).toBe('')
+    expect(formatDurationMs(Number.NaN)).toBe('')
+    // 数字字符串（脏数据经 JSON 进来就是这个形状）：Number('200000') 会给出
+    // 一个看着合法的时长，所以必须被拒。签名声明的是 number，故要显式捅一刀。
+    expect(formatDurationMs('200000' as unknown as number)).toBe('')
+    expect(formatDurationMs(-1)).toBe('')
+  })
+})
+
+describe('formatElapsed', () => {
+  test('有结束时刻时取两端之差', () => {
+    expect(formatElapsed(localIso(2026, 9, 17, 14, 40, 0), localIso(2026, 9, 17, 14, 43, 20), NOW))
+      .toBe('3 分 20 秒')
+  })
+
+  test('没有结束时刻（还在跑）以 now 为结束 —— 那个数字是会长的', () => {
+    expect(formatElapsed(localIso(2026, 9, 17, 14, 55, 0), null, NOW)).toBe('13 分 37 秒')
+  })
+
+  test('结束早于开始（时钟漂移）给出 0 而不是负数', () => {
+    expect(formatElapsed(localIso(2026, 9, 17, 14, 43, 20), localIso(2026, 9, 17, 14, 40, 0), NOW))
+      .toBe('0 秒')
+  })
+
+  test('缺起点 / 非法时刻给空串', () => {
+    expect(formatElapsed('', null, NOW)).toBe('')
+    expect(formatElapsed('not-a-date', null, NOW)).toBe('')
+    expect(formatElapsed(localIso(2026, 9, 17, 14, 0, 0), 'not-a-date', NOW)).toBe('')
   })
 })

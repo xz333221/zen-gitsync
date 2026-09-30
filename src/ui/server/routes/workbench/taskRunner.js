@@ -1122,7 +1122,19 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
   return job.status;  // 'done' | 'cancelled' | 'error'
 }
 
-// polling 等进程退出：信号 0 探测存活；30 分钟超时兜底
+/**
+ * polling 等进程退出：信号 0 探测存活。
+ *
+ * 刻意**没有**超时兜底（2026-09-30 去掉原 30 分钟那一版）。那一版只 resolve、不 kill，
+ * 于是任何跑过 30 分钟的任务都会在这里返回，落到调用处那段"判定终态"的代码里被
+ * 静默标成 `done` / exitCode 0 并 flush 进 jobs.json —— 而 CLI 子进程还在机器上继续
+ * 改文件，句柄也已经从 `job.child` 上删掉，连「停止」都杀不掉它。
+ * 那不是"超时被杀"，是**谎报成功**：看板上它进了「已完成」、卡片上开始显示用时，
+ * 而实际活儿还在跑。用时统计要建立在"跑完了"这个事实上，这个兜底正好在破坏它。
+ *
+ * 现在进程真的不退出时唯一的出路是用户点「停止」（taskkill 之后 polling 随即收到
+ * ESRCH）；polling 本身每 1.5s 一次，代价可以忽略。
+ */
 export function waitProcessExit(pid) {
   return new Promise(resolve => {
     let exited = false;
@@ -1141,7 +1153,5 @@ export function waitProcessExit(pid) {
       setTimeout(tryCheck, 1500);
     };
     tryCheck();
-    // 兜底：30 分钟超时自动结束
-    setTimeout(() => { if (!exited) { exited = true; resolve(); } }, 30 * 60 * 1000);
   });
 }

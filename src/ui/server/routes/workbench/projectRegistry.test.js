@@ -257,6 +257,42 @@ test('decorateTaskForBoard: lastJobEndedAt 取最近一条 job 的结束时间�
   assert.equal(decorateTaskForBoard(base, running).lastJobEndedAt, '2026-02-01T00:00:00Z');
 });
 
+// ── 卡片上的「用时」（lastDurationMs） ──────────────────────────────────
+// 只给"什么时候结束"答不出"跑了多久"：同一栏里"跑了 12 分"和"跑了 3 小时"是完全不同的
+// 两件事。这几条守的是：时长取自最近那条 job、正在跑的不给（让位给 live.elapsedMs）、
+// 取不出时是 null 而不是 0（假的 0 会被渲染成「用时 0 秒」，比不显示更糟）。
+
+test('decorateTaskForBoard: lastDurationMs 取最近一条 job 的 endedAt - startedAt', () => {
+  const base = { id: 't1', title: '', desc: '', createdAt: '2025-12-31T00:00:00Z' };
+  const jobs = [
+    job('j1', 't1', 'done', '2026-01-01T00:00:00Z', '2026-01-01T00:10:00Z'),
+    job('j2', 't1', 'done', '2026-01-03T00:00:00Z', '2026-01-03T00:20:30Z'),
+  ];
+  const card = decorateTaskForBoard(base, jobs);
+  assert.equal(card.lastDurationMs, 20 * 60 * 1000 + 30 * 1000);
+  // 悬停提示里的「几点到几点」用这一对起止，别让前端再去猜取哪两个字段
+  assert.equal(card.lastJobStartedAt, '2026-01-03T00:00:00Z');
+  assert.equal(card.lastJobEndedAt, '2026-01-03T00:20:30Z');
+});
+
+test('decorateTaskForBoard: 正在跑时 lastDurationMs 为 null（时长交给 live.elapsedMs）', () => {
+  const base = { id: 't1', title: '', desc: '', createdAt: '2026-02-01T00:00:00Z' };
+  const running = [{ ...job('j9', 't1', 'running', '2026-02-01T00:00:00Z'), agent: 'claude', output: '在改' }];
+  const card = decorateTaskForBoard(base, running, { now: Date.parse('2026-02-01T00:10:00Z') });
+  assert.equal(card.lastDurationMs, null);
+  // 那个会长的数字在活动区里，两处不重复给同一件事
+  assert.equal(card.live.elapsedMs, 10 * 60 * 1000);
+});
+
+test('decorateTaskForBoard: 从没跑过 / 老记录缺时间戳 → lastDurationMs 为 null', () => {
+  const base = { id: 't1', title: '', desc: '', createdAt: '2026-02-01T00:00:00Z' };
+  assert.equal(decorateTaskForBoard(base, []).lastDurationMs, null);
+  assert.equal(decorateTaskForBoard(base, []).lastJobStartedAt, null);
+  // 老 jobs.json 只有 startedAt（进程还在跑时写的），没有 endedAt —— 不拿它凑一个假时长
+  const legacy = [job('j0', 't1', 'done', '2026-01-01T00:00:00Z')];
+  assert.equal(decorateTaskForBoard(base, legacy).lastDurationMs, null);
+});
+
 // ── 卡片上的「现在在干嘛」（live） ──────────────────────────────────
 // 卡片过去只有一个"进行中"的圆点，跑二十分钟的任务看不出是在改代码还是卡住了。
 // 这几条守的是：摘要有值、值是真话、没在跑时必须是 null。
