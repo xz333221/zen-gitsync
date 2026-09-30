@@ -27,6 +27,7 @@ import { useToolsStore, type ToolId } from "@/stores/toolsStore";
 import { storeToRefs } from "pinia";
 import IconButton from "@components/IconButton.vue";
 import RecentDirectoriesList from "@components/RecentDirectoriesList.vue";
+import DirListRefreshButton from "@components/DirListRefreshButton.vue";
 import SvgIcon from "@components/SvgIcon/index.vue";
 import ToolInstallDialog from "@components/ToolInstallDialog.vue";
 import claudeCodeIcon from "@/assets/icons/svg/claudecode-color.svg";
@@ -111,6 +112,29 @@ const isChangingDirectory = ref(false);
 const recentDirsListRef = ref<InstanceType<typeof RecentDirectoriesList> | null>(null);
 // 常用目录总数:列表内部滚动,label 上标出总数,避免"看到几个就以为只有几个"
 const recentDirsCount = ref(0);
+
+/**
+ * 弹窗「常用目录」标题行右端那个「刷新全部」按钮要用的状态。
+ *
+ * 与首屏「最近项目」面板上那一个是**同一个组件**(DirListRefreshButton)、同一份刷新逻辑
+ * —— 那边按钮长在列表组件自带的标题行里,这边标题行是 el-form-item 的 label(在列表组件
+ * 外面,插槽落不过去),所以列表组件把这几个值 expose 出来,由这里取用。
+ * 组件实例经过 proxyRefs,expose 出去的 computed/ref 读出来就是值且响应式,
+ * 于是这里可以直接在模板上绑,不需要再抄一份「刷新中 {done}/{total}」的拼装逻辑。
+ *
+ * 列表还没挂上时为 null,按钮就不渲染(弹窗 destroy-on-close,列表是打开时才挂的)。
+ */
+const recentDirsRefresh = computed(() => {
+  const list = recentDirsListRef.value;
+  if (!list) return null;
+  return {
+    label: list.refreshLabel,
+    title: list.refreshTitle,
+    refreshing: list.refreshing,
+    disabled: list.refreshDisabled,
+    run: list.refreshAll,
+  };
+});
 const isBrowserDialogVisible = ref(false);
 const installDialogVisible = ref(false);
 const selectedInstallTool = ref<ToolId | null>(null);
@@ -1108,10 +1132,24 @@ function onBrowserSelect(path: string) {
              .form-item--dirs 让这一项吃掉弹窗剩余高度,由列表内部滚动 -->
         <el-form-item class="form-item--dirs">
           <template #label>
-            <div class="form-label">
+            <div class="form-label form-label--dirs">
               <el-icon class="label-icon"><Clock /></el-icon>
               <span>{{ $t('@67CE7:常用目录') }}</span>
               <span class="label-count">{{ $t('@67CE7:共 {count} 个', { count: recentDirsCount }) }}</span>
+              <!-- 「刷新全部」:与首屏「最近项目」面板上那一个同款(同一个按钮组件、
+                   同一份刷新逻辑、同一段文案)。徽标里的「领先/落后」读的是上次 git fetch
+                   的本地快照,只看列表会以为都已同步;这是个要联网的显式动作,所以摆明说。
+                   状态由列表组件 expose 出来(recentDirsRefresh),不在这儿重算一遍。 -->
+              <DirListRefreshButton
+                v-if="recentDirsRefresh"
+                class="form-label__refresh"
+                :label="recentDirsRefresh.label"
+                :title="recentDirsRefresh.title"
+                :aria-label="$t('@13D1C:刷新全部')"
+                :refreshing="recentDirsRefresh.refreshing"
+                :disabled="recentDirsRefresh.disabled"
+                @click="recentDirsRefresh.run()"
+              />
             </div>
           </template>
           <RecentDirectoriesList
@@ -1605,6 +1643,10 @@ function onBrowserSelect(path: string) {
   min-height: 0;
   margin-bottom: 0;
 }
+/* Element Plus 的 .el-form-item__label 是 `flex: 0 0 auto` + inline-flex,
+   在 label-position="top" 下这一列也只按内容宽度收缩 —— 于是 label 行
+   里的 margin-left:auto 没有任何剩余空间可推,「刷新全部」会紧贴在"共 N 个"后面。
+   要给它一个明确宽度,见下面 .form-label--dirs 那组规则里的说明。 */
 .directory-content :deep(.form-item--dirs .el-form-item__content) {
   flex: 1;
   min-height: 0;
@@ -1622,6 +1664,23 @@ function onBrowserSelect(path: string) {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
+}
+/* 常用目录这一行是"标题 + 总数 + 「刷新全部」":与最近项目面板的标题行同一版式
+   (标题靠左、动作靠右)。两件事要凑齐按钮才落在对的位置:
+   1) label 行本身在 Element Plus 下只按内容宽度收缩,得先给它一个明确宽度,
+      行内的 margin-left:auto 才有剩余空间可推;
+   2) 这个宽度只取**左栏**(卡片网格)那么宽 —— label 行在 split 布局的外面,
+      而按钮要跟卡片网格的右边界对齐,不是跟整个弹窗(那会跑到右侧 AI 解读栏上方)。
+      ⚠️ 下面的 clamp / gap 必须与 RecentDirectoriesList.vue 的 .dir-list--split 保持一致
+      (.dir-list__summary 的 clamp(360px, 38%, 560px) + .dir-list--split 的
+      column gap var(--spacing-xl)) —— 那边改了这儿要跟着改,否则按钮会跟卡片错位。
+   .label-count 用 margin-left 而不是靠 gap 顶开,所以这里也不能改成
+   justify-content: flex-end —— 那会把"图标 + 常用目录"整组一起推到右边。 */
+.directory-content :deep(.form-item--dirs .el-form-item__label) {
+  width: calc(100% - clamp(360px, 38%, 560px) - var(--spacing-xl));
+}
+.form-label--dirs .form-label__refresh {
+  margin-left: auto;
 }
 
 /* dialog-footer、footer-actions、dialog-cancel-btn、dialog-confirm-btn 基础样式已移至 @/styles/common.scss */

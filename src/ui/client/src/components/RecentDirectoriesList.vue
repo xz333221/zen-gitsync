@@ -16,12 +16,16 @@
 <script setup lang="ts">
 // 最近项目 / 常用目录的统一列表组件(同一份数据源 + 同一套卡片外观)。
 //
-// 两个调用方,差异只有两点,全部由 props 表达:
+// 两个调用方,前两点差异由 props 表达:
 //   1. 点击语义  mode='open'(App.vue 非 Git 仓库空态)   → 点击即在新的 cmd 标签页打开该目录
 //               mode='pick'(切换工作目录弹窗的常用目录) → 点击把路径回填到输入框,
 //                                                       Ctrl/Cmd + 点击才在新标签页打开
 //   2. 外壳形态  variant='panel' → 自带标题行 + 搜索框 + 卡片容器,撑满父级高度(右侧整列空态)
 //               variant='bare'  → 无外壳直接铺在弹窗表单里,列表自身限高滚动
+//
+// 第三点「刷新全部」按钮的位置不由 props 决定:panel 形态的按钮长在本组件自带的标题行里,
+// bare 形态的标题行在调用方那边(弹窗的 el-form-item label),插槽落不到那儿,
+// 于是由 defineExpose 把按钮状态交出去、调用方渲染同一个 DirListRefreshButton。
 //
 // 拉取 / 搜索 / 加载态 / 空态 / 复制路径 / 移除 都收在这里,调用方不再各写一份。
 // 数据源:GET /api/recent_directories(只读) + POST /api/remove_recent_directory(移除)
@@ -31,11 +35,12 @@
 // 目录家族文案(原 RecentProjectsList.vue 同样复用),不为此新建命名空间。
 import { computed, onMounted, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Delete, DocumentCopy, Folder, Loading, Refresh, Search } from "@element-plus/icons-vue";
+import { Delete, DocumentCopy, Folder, Loading, Search } from "@element-plus/icons-vue";
 import { $t } from "@/lang/static";
 import { getFolderNameFromPath } from "@/utils/path";
 import { oncePerLoad } from "@/utils/oncePerLoad";
 import RecentDirectoriesSummary from "@/components/RecentDirectoriesSummary.vue";
+import DirListRefreshButton from "@/components/DirListRefreshButton.vue";
 
 /** 后端 /api/recent_directories/git-state 的单条结果 */
 interface DirectoryGitState {
@@ -106,7 +111,8 @@ const props = withDefaults(defineProps<{
   /**
    * 挂载时自动跑一遍「刷新全部」(联网 fetch)。
    * 只在 g ui 首屏那块常驻面板上开(见 App.vue):打开界面就该看到真实的领先/落后,
-   * 而不是"上次 fetch 时的快照"。弹窗场景保持关闭 —— 打开一个选目录的弹窗不该联网刷十几个仓库。
+   * 而不是"上次 fetch 时的快照"。弹窗场景保持关闭 —— 打开一个选目录的弹窗不该联网刷十几个仓库,
+   * 改成给一个手动按钮(与面板上那一个同款,见文件头注释第三点)。
    */
   refreshOnMount?: boolean;
   /** 卡片网格每列最小宽度,窄容器下自动降为单列 */
@@ -162,6 +168,14 @@ const refreshLabel = computed(() =>
       })
     : $t("@13D1C:刷新全部")
 );
+// 悬浮提示:讲清这是要联网的显式动作。写成 computed 而不是 setup 期就求值的常量,
+// 是因为 $t 内部读的是 i18n 的 locale ref —— 只有在响应式上下文里调才会被 track 到,
+// 换语言时才跟着重算(模板里直接写 $t(...) 就是这个效果,搬进 script 就得自己补上)。
+const refreshTitle = computed(() =>
+  $t("@13D1C:对所有项目执行 git fetch --all，让「领先/落后」显示真实状态（需联网，较慢）")
+);
+// 没有目录时无刷可刷(按钮灰掉),已经在刷时也不能再点一遍
+const refreshDisabled = computed(() => isRefreshingAll.value || directories.value.length === 0);
 
 // 平台差异只影响"Ctrl + 点击"的提示文案(⌘ / Ctrl)
 const isMac = computed(() => {
@@ -493,7 +507,21 @@ onMounted(async () => {
 });
 
 // 弹窗在每次打开时都需要最新数据(用户可能刚在别处切过目录)
-defineExpose({ reload: load });
+//
+// refresh* 那一组是给 **bare 形态的调用方**用的:切换工作目录弹窗的标题行是
+// el-form-item 的 label,在本组件外面,插槽的落点又由本组件决定,按钮没法自动长到那一行上。
+// 所以把按钮要用的状态与动作 expose 出去,让调用方拿 DirListRefreshButton 渲染在它自己的
+// 标题行里 —— 外观与行为与 panel 形态上那一个完全同款。
+// (组件实例上的 ref 会经过 proxyRefs,expose 出去的 ref/computed 读出来就是值,
+//  且是响应式的 —— 调用方可以直接在模板里绑,见 DirectorySelector.vue 的 recentDirsRefresh)
+defineExpose({
+  reload: load,
+  refreshAll: refreshAllGitStates,
+  refreshing: isRefreshingAll,
+  refreshLabel,
+  refreshTitle,
+  refreshDisabled,
+});
 </script>
 
 <template>
@@ -506,18 +534,17 @@ defineExpose({ reload: load });
           <span class="dir-list__hint">{{ $t('@13D1C:点击在新标签页打开') }}</span>
           <!-- 徽标里的「领先/落后」读的是本地 remote-tracking 引用 = "上次 fetch 时的
                快照",只有 fetch 才会更新它。「未提交 N 项」是本地实时扫描,不需要刷。
-               这是个显式的联网动作(十几个项目),所以按钮上带图标+进度、并写明代价。 -->
-          <button
-            type="button"
-            class="dir-list__refresh"
-            :disabled="isRefreshingAll || directories.length === 0"
-            :title="$t('@13D1C:对所有项目执行 git fetch --all，让「领先/落后」显示真实状态（需联网，较慢）')"
+               这是个显式的联网动作(十几个项目),所以按钮上带图标+进度、并写明代价。
+               按钮本体是 DirListRefreshButton —— bare 形态(切换工作目录弹窗)用同一个,
+               两处外观/文案不会漂,见那个组件的头注释。 -->
+          <DirListRefreshButton
+            :label="refreshLabel"
+            :title="refreshTitle"
             :aria-label="$t('@13D1C:刷新全部')"
+            :refreshing="isRefreshingAll"
+            :disabled="refreshDisabled"
             @click="refreshAllGitStates"
-          >
-            <el-icon :class="{ 'is-spinning': isRefreshingAll }" aria-hidden="true"><Refresh /></el-icon>
-            <span>{{ refreshLabel }}</span>
-          </button>
+          />
         </div>
       </div>
       <div class="dir-list__search">
@@ -778,52 +805,8 @@ defineExpose({ reload: load });
   align-items: center;
   gap: var(--spacing-base);
 }
-/* 「刷新全部」:一个要花几秒联网的显式动作,所以不做成无边框图标 ——
-   有边框才有"这里可以点"的暗示。卡片上那些 icon-only 操作用的是另一套语汇
-   (hover 才出现、无边框),两者语义不同,不强行统一。 */
-.dir-list__refresh {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 var(--spacing-md);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-base);
-  background: transparent;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: var(--font-size-mid);
-  /* 显式行高:按钮高度只由 height 决定,不受外部继承的行高影响 */
-  line-height: 1;
-  cursor: pointer;
-  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
-}
-.dir-list__refresh:hover:not(:disabled) {
-  color: var(--color-primary);
-  border-color: var(--color-primary);
-  background: var(--tint-primary-08);
-}
-.dir-list__refresh:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-.dir-list__refresh:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
-.dir-list__refresh .el-icon {
-  font-size: var(--font-size-base);
-}
-.dir-list__refresh .el-icon.is-spinning {
-  animation: dir-list-spin 0.9s linear infinite;
-}
-@keyframes dir-list-spin {
-  to { transform: rotate(360deg); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .dir-list__refresh .el-icon.is-spinning { animation: none; }
-}
+/* 「刷新全部」按钮(转圈、边框、禁用态)整套样式已随按钮本体搬到
+   DirListRefreshButton.vue —— 两处标题行共用一个组件,样式也只有一份。 */
 
 /* 搜索框:panel 形态独占 */
 .dir-list__search {
