@@ -41,6 +41,7 @@
     "verify:wb-env-context": "node scripts/verify-workbench-env-context.mjs",
     "verify:wb-live-jobs": "node scripts/verify-wb-live-jobs.mjs",
     "verify:wb-bubble-prompt": "node scripts/verify-wb-bubble-prompt.cjs",
+    "verify:wb-copy-execution": "node scripts/verify-wb-copy-execution.cjs",
     "verify:wb-overview": "node scripts/verify-workbench-overview.cjs",
     "verify:wb-progress-report": "node scripts/verify-wb-progress-report.cjs",
     "verify:wb-card-live": "node scripts/verify-wb-card-live.cjs",

@@ -2526,6 +2526,21 @@ export default {
   '@WORKBENCH:任务会落到看板，跑完有完成提示': 'Tasks land on the board and notify you when they finish',
   // @WORKBENCH: file end (append: orchestrator console dispatches via g ai)
 
+  // @WORKBENCH: file path: utils/taskExecutionExport.ts, views/WorkbenchView.vue (append: one-click copy of execution content)
+  // Section headings in the exported text: user prompt / Claude thinking / model output are reused
+  // from the execution-log view (see components/JobLogDetails.vue copyAll); only tool calls,
+  // round headings and the export header are new here.
+  '@WORKBENCH:第 {n} 轮': 'Round {n}',
+  '@WORKBENCH:工具调用': 'Tool calls',
+  '@WORKBENCH:工具': 'Tool',
+  '@WORKBENCH:项目：{name}': 'Project: {name}',
+  '@WORKBENCH:导出时间：{time}': 'Exported at {time}',
+  '@WORKBENCH:复制执行内容': 'Copy execution content',
+  '@WORKBENCH:复制本任务的全部执行对话（提示词 / 思考 / 工具调用 / 模型返回）': 'Copy the full execution conversation of this task (prompt / thinking / tool calls / model output)',
+  '@WORKBENCH:已复制执行内容': 'Execution content copied',
+  '@WORKBENCH:暂无执行内容可复制': 'Nothing to copy — this task has no execution content yet',
+  // @WORKBENCH: file end (append: one-click copy of execution content)
+
   // @ACTBAR: file path: components/ActivityBar.vue (append: monitor)
   '@ACTBAR:系统监控': 'System Monitor',
   // @ACTBAR: file end (append)

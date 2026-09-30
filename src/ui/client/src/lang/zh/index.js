@@ -2537,6 +2537,20 @@ export default {
   '@WORKBENCH:任务会落到看板，跑完有完成提示': '任务会落到看板，跑完有完成提示',
   // @WORKBENCH: file end (追加: 主 Agent 控制台改用 g ai 派发)
 
+  // @WORKBENCH: file path: utils/taskExecutionExport.ts, views/WorkbenchView.vue (追加: 一键复制执行内容)
+  // 导出文本里的分节标题：用户提示词 / Claude 思考 / 模型返回 三个沿用「执行日志」那套
+  // （见 components/JobLogDetails.vue 的 copyAll），这里只补工具调用与轮次标题。
+  '@WORKBENCH:第 {n} 轮': '第 {n} 轮',
+  '@WORKBENCH:工具调用': '工具调用',
+  '@WORKBENCH:工具': '工具',
+  '@WORKBENCH:项目：{name}': '项目：{name}',
+  '@WORKBENCH:导出时间：{time}': '导出时间：{time}',
+  '@WORKBENCH:复制执行内容': '复制执行内容',
+  '@WORKBENCH:复制本任务的全部执行对话（提示词 / 思考 / 工具调用 / 模型返回）': '复制本任务的全部执行对话（提示词 / 思考 / 工具调用 / 模型返回）',
+  '@WORKBENCH:已复制执行内容': '已复制执行内容',
+  '@WORKBENCH:暂无执行内容可复制': '暂无执行内容可复制',
+  // @WORKBENCH: file end (追加: 一键复制执行内容)
+
   // @ACTBAR: file path: components/ActivityBar.vue (追加: 系统监控)
   '@ACTBAR:系统监控': '系统监控',
   // @ACTBAR: file end (追加)

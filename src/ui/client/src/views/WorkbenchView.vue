@@ -40,6 +40,7 @@ import { canonicalProjectPath } from '@/utils/path'
 import type { Task, Prompt } from '@/types/workbench'
 import { useWorkbenchAttachments, ALLOWED_EXT_HINT, MAX_ATTACHMENT_BYTES } from '@/composables/useWorkbenchAttachments'
 import { useWorkbenchSimpleConversation } from '@/composables/useWorkbenchSimpleConversation'
+import { buildTaskExecutionText } from '@/utils/taskExecutionExport'
 import { useWorkbenchExecution } from '@/composables/useWorkbenchExecution'
 import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection'
 import { TASK_EXECUTOR_OPTIONS, taskExecutorName, type TaskExecutorId } from '@/utils/taskExecutor'
@@ -488,6 +489,46 @@ async function copyTaskDesc(t: Task | null) {
 
 // 任务对话流（通 useWorkbenchSimpleConversation 合并 jobs → ChatMessage[]）
 const { simpleConversationMessages, simpleAllJobsFor, simpleJobFor, simpleJobState } = useWorkbenchSimpleConversation(jobs, selectedTask)
+
+// ── 一键复制「任务执行内容」──────────────────────────────────────────────────
+// 复制的是**这条任务全部轮次**（首次执行 + N 次续聊）的对话流，不是当前屏幕上选中的
+// 那一段文本 —— 所以走 utils/taskExecutionExport.ts 从 job 数据现拼，而不是读 DOM /
+// window.getSelection()：对话区是 v-for 渲染的，用户在中间划一段再点复制的话，
+// "复制了半截"比"复制了全部"更难发现。
+const copyExecFlashId = ref<string | null>(null)
+
+/**
+ * 任务实际执行所在目录名。跨项目任务（从看板点开的别的项目的任务）按 task.projectPath 算，
+ * 不是编辑器当前项目 —— 与顶部返回栏 foreignRepo 的口径一致。
+ */
+function taskRepoName(t: Task | null): string {
+  const p = (t?.projectPath || '').trim().replace(/[\\/]+$/, '')
+  if (p) return p.split(/[\\/]/).pop() || p
+  return currentProject.value.name || ''
+}
+
+async function copyTaskExecution(t: Task | null) {
+  if (!t) return
+  const text = buildTaskExecutionText(simpleAllJobsFor(t), {
+    title: t.title,
+    projectName: taskRepoName(t)
+  })
+  // 空串 = 这条任务一轮有内容的执行都没有（新建后还没跑过 / 执行内容被清空过）
+  if (!text) {
+    ElMessage.warning($t('@WORKBENCH:暂无执行内容可复制'))
+    return
+  }
+  const ok = await copyToClipboard(text)
+  if (!ok) {
+    ElMessage.error($t('@WORKBENCH:复制失败'))
+    return
+  }
+  copyExecFlashId.value = t.id
+  ElMessage.success($t('@WORKBENCH:已复制执行内容'))
+  window.setTimeout(() => {
+    if (copyExecFlashId.value === t.id) copyExecFlashId.value = null
+  }, 1500)
+}
 
 // ── 打开任务时把对话流钉到最底部 ─────────────────────────────────────────────
 // 症状（2026-09-29 用户报）：从看板点开一条跑过的任务，对话区停在**最上面**那轮
@@ -1195,6 +1236,19 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
               rel="noopener noreferrer"
             >{{ $t('@WORKBENCH:查看安装指引') }}</a>
           </div>
+          <!-- 一键复制执行内容：非破坏性动作，排在最前；「清空执行」这种危险动作留在后面 -->
+          <button
+            type="button"
+            class="wb-logs-inline-btn wb-logs-inline-btn--copy"
+            :class="{ 'is-flash': copyExecFlashId === selectedTask.id }"
+            :title="$t('@WORKBENCH:复制本任务的全部执行对话（提示词 / 思考 / 工具调用 / 模型返回）')"
+            :aria-label="$t('@WORKBENCH:复制执行内容')"
+            @click="copyTaskExecution(selectedTask)"
+          >
+            <el-icon class="wb-logs-inline-btn__icon" v-if="copyExecFlashId !== selectedTask.id"><CopyDocument /></el-icon>
+            <el-icon class="wb-logs-inline-btn__icon" v-else>✓</el-icon>
+            <span>{{ $t('@WORKBENCH:复制执行内容') }}</span>
+          </button>
           <button
             type="button"
             class="wb-logs-inline-btn wb-logs-inline-btn--danger"
@@ -2358,6 +2412,14 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   color: var(--color-danger, var(--color-danger-light));
   border-color: var(--tint-danger-50);
   background: var(--tint-danger-06);
+}
+/* 「复制执行内容」成功后闪一下成功色 —— 与标题/描述旁的 .wb-copy-btn.is-flash 同一套色。
+   文案**刻意不换**（只换图标为 ✓）：这一排按钮宽度会跟着文字变，换文案会让
+   「清空执行」「执行日志」跟着左右跳一下，banner 级别的抖动不值得。 */
+.wb-logs-inline-btn--copy.is-flash {
+  color: var(--color-success-dark, var(--color-success));
+  border-color: var(--tint-success-35, color-mix(in srgb, var(--color-success) 35%, transparent));
+  background: var(--tint-success-14, color-mix(in srgb, var(--color-success) 14%, transparent));
 }
 .wb-logs-inline-btn:focus-visible {
   outline: 2px solid var(--color-primary);
