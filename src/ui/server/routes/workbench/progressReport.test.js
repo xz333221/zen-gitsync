@@ -28,11 +28,14 @@ import { readFile } from 'node:fs/promises';
 import {
   buildRunningFacts,
   buildReportPrompt,
+  describeCallResult,
   formatDuration,
   generateProgressReport,
   normalizePercent,
   parseProgressHeader,
   MAX_FACT_TASKS,
+  MAX_REPORT_TOKENS,
+  MAX_REPORT_TOKENS_RETRY,
   SYSTEM_PROMPT_ZH,
   SYSTEM_PROMPT_EN,
 } from './progressReport.js';
@@ -237,11 +240,11 @@ test('英文模板同样给思考 / 工具分布 / 静默', () => {
 // ── generateProgressReport ──────────────────────────────────────────────
 
 /** 假流式调用：按 delta 序列回调，再给出终态 */
-function fakeStream(deltas, { aborted = false, error = null } = {}) {
+function fakeStream(deltas, { aborted = false, error = null, finishReason = '', usage = null } = {}) {
   return async (_model, _prompt, onDelta) => {
     if (error) throw error;
     for (const d of deltas) onDelta(d);
-    return { content: deltas.map(d => d.content || '').join(''), aborted };
+    return { content: deltas.map(d => d.content || '').join(''), aborted, finishReason, usage };
   };
 }
 
@@ -300,7 +303,7 @@ test('thinking 段被滤掉，不混进正文（否则用户会以为那是结�
   assert.equal(report.text, '一切正常。');
 });
 
-test('模型报错 → LLM_FAILED 并留住原因；空正文也按失败记', async () => {
+test('模型报错 → LLM_FAILED 并留住原因；空正文记成 LLM_EMPTY', async () => {
   const facts = buildRunningFacts({ jobs: [runningJob()], tasks: TASKS, now: NOW });
   const failed = await generateProgressReport({
     facts,
@@ -310,13 +313,107 @@ test('模型报错 → LLM_FAILED 并留住原因；空正文也按失败记', a
   assert.equal(failed.errorCode, 'LLM_FAILED');
   assert.equal(failed.errorDetail, 'HTTP 401');
 
+  // 空正文与"报错"分开记：成因不同（这个是模型答了但没写正文），处理办法也不同
   const empty = await generateProgressReport({
     facts,
     model: MODEL,
     callStream: fakeStream([{ content: '   ' }]),
   });
-  assert.equal(empty.errorCode, 'LLM_FAILED');
+  assert.equal(empty.errorCode, 'LLM_EMPTY');
   assert.equal(empty.text, '');
+  // detail 里必须留下可以查的东西 —— 老实现这里是空串，界面上只有一句"生成失败"，
+  // 盘上也查不出原因（2026-09-30 那三条失败报告就是这么埋掉的）
+  assert.match(empty.errorDetail, /finish_reason=/);
+});
+
+// ── 空正文：预算被思考吃光（2026-09-30 用户报的"有时候生成失败"）──────────
+//
+// 复现过的形态：推理模型的 `max_tokens` 是**思考 + 正文共用**的，思考写满预算时
+// 正文一个字都没写出来，HTTP 还是 200。900 的老预算下实测思考 2708 字符 / content 0。
+// 这三条守的是"预算够用 + 截断了会自己重试一次 + 重试也没用时不假装成功"。
+
+test('生成预算够装下思考与正文（900 那个老值会被推理模型吃光）', () => {
+  assert.ok(MAX_REPORT_TOKENS >= 2000, `MAX_REPORT_TOKENS=${MAX_REPORT_TOKENS}`);
+  assert.ok(MAX_REPORT_TOKENS_RETRY > MAX_REPORT_TOKENS, '重试预算必须比常规预算大');
+});
+
+test('第一次被截断（finish_reason=length）且正文为空 → 加预算重试一次并拿到正文', async () => {
+  const facts = buildRunningFacts({ jobs: [runningJob()], tasks: TASKS, now: NOW });
+  const budgets = [];
+  const report = await generateProgressReport({
+    facts,
+    model: MODEL,
+    callStream: async (_m, _p, onDelta, opts) => {
+      budgets.push(opts.maxTokens);
+      if (budgets.length === 1) return { content: '', aborted: false, finishReason: 'length' };
+      onDelta({ content: 'PROGRESS: 40\nTASKS: 40\n第二次拿到了汇报正文。' });
+      return { content: '...', aborted: false, finishReason: 'stop' };
+    },
+  });
+  assert.equal(report.errorCode, '');
+  assert.equal(report.text, '第二次拿到了汇报正文。');
+  assert.equal(report.percent, 40);
+  assert.equal(budgets.length, 2, '必须恰好重试一次');
+  assert.ok(budgets[1] > budgets[0], `预算没加大：${budgets.join(' -> ')}`);
+});
+
+test('空正文但没被截断（模型自己 stop 了）→ 不重试，加预算也没用', async () => {
+  const facts = buildRunningFacts({ jobs: [runningJob()], tasks: TASKS, now: NOW });
+  let calls = 0;
+  const report = await generateProgressReport({
+    facts,
+    model: MODEL,
+    callStream: async () => { calls++; return { content: '', aborted: false, finishReason: 'stop' }; },
+  });
+  assert.equal(calls, 1);
+  assert.equal(report.errorCode, 'LLM_EMPTY');
+  assert.match(report.errorDetail, /finish_reason=stop/);
+});
+
+test('重试也没拿到正文时，errorDetail 里留下 finish_reason 与思考用量', async () => {
+  const facts = buildRunningFacts({ jobs: [runningJob()], tasks: TASKS, now: NOW });
+  let calls = 0;
+  const report = await generateProgressReport({
+    facts,
+    model: MODEL,
+    callStream: async () => {
+      calls++;
+      return {
+        content: '',
+        aborted: false,
+        finishReason: 'length',
+        usage: { completion_tokens: 8000, completion_tokens_details: { reasoning_tokens: 7980 } },
+      };
+    },
+  });
+  assert.equal(calls, 2, '被截断时两轮都该跑');
+  assert.equal(report.errorCode, 'LLM_EMPTY');
+  // 这一串就是"下次不用再翻网关日志"的全部意义
+  assert.match(report.errorDetail, /finish_reason=length/);
+  assert.match(report.errorDetail, /reasoning_tokens=7980/);
+  assert.match(report.errorDetail, /max_tokens=8000/);
+});
+
+test('超时不重试（90 秒没回来，再来一次大概率还是 90 秒）', async () => {
+  const facts = buildRunningFacts({ jobs: [runningJob()], tasks: TASKS, now: NOW });
+  let calls = 0;
+  const report = await generateProgressReport({
+    facts,
+    model: MODEL,
+    callStream: async () => { calls++; return { content: '', aborted: true, finishReason: 'length' }; },
+  });
+  assert.equal(calls, 1);
+  assert.equal(report.errorCode, 'LLM_TIMEOUT');
+  assert.match(report.errorDetail, /aborted/);
+});
+
+test('describeCallResult 认不出的字段不写，整串有上限', () => {
+  assert.equal(describeCallResult(null, 900), 'max_tokens=900 finish_reason=unknown');
+  assert.equal(
+    describeCallResult({ finishReason: 'stop' }, 3000),
+    'max_tokens=3000 finish_reason=stop'
+  );
+  assert.ok(describeCallResult({ finishReason: 'x'.repeat(600) }, 1).length <= 300);
 });
 
 test('流被中断（超时）→ LLM_TIMEOUT，而不是当成一句空汇报', async () => {

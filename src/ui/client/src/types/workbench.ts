@@ -394,7 +394,7 @@ export interface ProgressReportFact {
 }
 
 /** 报告生成失败的原因码。'' = 成功；正文由前端 $t() 渲染，服务端只给码 */
-export type ProgressReportErrorCode = '' | 'NO_MODEL' | 'LLM_TIMEOUT' | 'LLM_FAILED'
+export type ProgressReportErrorCode = '' | 'NO_MODEL' | 'LLM_TIMEOUT' | 'LLM_EMPTY' | 'LLM_FAILED'
 
 /**
  * 一份进度报告：一段模型写的汇报 + 当时那批任务的事实。

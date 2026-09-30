@@ -108,7 +108,14 @@ export function cloneMsgContent(c) {
  *   - reasoning_content / reasoning：部分模型（如 deepseek）放在 delta.reasoning_content
  *   - reasoning / reasoning_text：openai o1 风格
  *   - content：普通输出
- * 返回 { content: string, aborted: boolean }。
+ * 返回 { content, aborted, finishReason, usage }。
+ *
+ * finishReason / usage 是 2026-09-30 为进度报告补的：**推理模型的 max_tokens 是
+ * "思考 + 正文"共用的**，思考写满预算时正文一个字都没有，返回的却是正常的 HTTP 200。
+ * 上层只看到"content 为空"，分不清是"被截断"还是"模型就是不说话" ——
+ *   截断（finish_reason='length'）→ 调大预算重试就能拿到；
+ *   不吭声（finish_reason='stop'）→ 重试没用。
+ * 值直接透传 provider 的原话；不支持 usage 的网关给 null，两个字段都只是"有则更好"。
  *
  * input 支持两种形态(判别 union):
  *   - string: 旧模式，拼成单条 user message，支持 opts.images 多模态
@@ -169,6 +176,9 @@ export async function callLlmStream(model, input, onDelta, opts = {}) {
 
   let fullContent = '';
   let aborted = false;
+  // 结束原因与用量：见函数头。`stop` / `length` 是判"被预算截断"的唯一依据
+  let finishReason = '';
+  let usage = null;
   try {
     const resp = await fetch(url, { method: 'POST', headers, body, signal: controller.signal });
     if (!resp.ok || !resp.body) {
@@ -203,6 +213,11 @@ export async function callLlmStream(model, input, onDelta, opts = {}) {
             fullContent += contentChunk;
             onDelta({ content: contentChunk });
           }
+          // finish_reason 只在最后一帧出现；usage 多数网关放在最后一帧（有的放在
+          // 一个 choices 为空的独立帧里），两处都收 —— 收到哪个算哪个
+          const choice = evt.choices?.[0];
+          if (choice && choice.finish_reason) finishReason = String(choice.finish_reason);
+          if (evt.usage) usage = evt.usage;
         } catch { /* 跳过无法解析的行 */ }
       }
     }
@@ -217,5 +232,5 @@ export async function callLlmStream(model, input, onDelta, opts = {}) {
     clearTimeout(timer);
     if (signal) signal.removeEventListener('abort', onAbort);
   }
-  return { content: fullContent, aborted };
+  return { content: fullContent, aborted, finishReason, usage };
 }

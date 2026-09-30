@@ -47,6 +47,17 @@
 //     界面不画那条进度条：宁可什么都不画，也不画一条我们自己编出来的进度。
 //   · 解析fail-safe：认不出来的标记行**留在正文里**（不吞内容），只把真认下来的那两行
 //     从正文里摘掉。老模型 / 不听话的模型不过是少一条进度条，报告本身照常。
+//
+// 2026-09-30 晚修的「有时候生成失败」（用户报的，历史里三条连着空报告）：
+//   · 失败形态：errorCode=LLM_FAILED、errorDetail **空**、text 空 —— 界面上只有一句
+//     "生成失败，只记录了任务事实"，盘上查不出任何原因。
+//   · 根因：`max_tokens` 是**思考 + 正文共用**的，而 900 的预算被推理模型的思考写满了。
+//     用本机默认模型（deepseek-v4.1-flash）复现：同样一份 prompt，一轮思考 2708 字符、
+//     content 0 字节，HTTP 却是 200 —— 前端看到的"有时候"，就是模型这次想得多不多。
+//   · 三处改动：预算 900 → 3000（正文只要 200~400，其余是思考的余量）；
+//     被截断且正文为空时**加预算重试一次**（第二种预算见 MAX_REPORT_TOKENS_RETRY）；
+//     两轮都空记成 `LLM_EMPTY`，并把 finish_reason / token 用量写进 errorDetail，
+//     下次不用再翻网关日志。
 
 import { callLlmStream } from './llmClient.js';
 import { createThinkFilter } from '../../../../cli/ai/streamFilter.js';
@@ -68,8 +79,23 @@ export const MAX_FACT_TASKS = 8;
 const MAX_TITLE_CHARS = 140;
 const MAX_REPORT_CHARS = 2000;
 const MAX_ERROR_CHARS = 300;
-/** 一次汇报只有几句话，给足余量（部分模型会把预算用在 thinking 上） */
-const MAX_REPORT_TOKENS = 900;
+/**
+ * 生成预算。**注意这是"思考 + 正文"共用的**：推理模型（本机默认的
+ * deepseek-v4.1-flash 就是）在写正文之前会先想一遍，思考的 token 也从这里扣。
+ *
+ * 2026-09-30 从 900 提到 3000：900 的时候观察到的失败形态是**思考把预算写满、
+ * 正文一个字都没有**，HTTP 200、`finish_reason='length'`、content 空 —— 界面上
+ * 就是"生成失败，只记录了任务事实"（那三条失败报告全是这个，见下面的重试）。
+ * 正文本身只要 200~400（220 字的汇报），剩下的全是留给思考的余量。
+ */
+export const MAX_REPORT_TOKENS = 3000;
+
+/**
+ * 还是被截断时的重试预算。只在"第一次被截断且正文为空"时用一次 ——
+ * 思考的长度跟任务数量、日志长度一起涨，3000 也不是保险箱（实测 4 个任务时
+ * 思考已到 2708 字符），而重试的代价只是一次已经失败掉的调用。
+ */
+export const MAX_REPORT_TOKENS_RETRY = 8000;
 /** 生成超时。它跑在服务端后台，卡住不返回会一直占着"正在生成"这个位子 */
 const REPORT_TIMEOUT_MS = 90000;
 
@@ -359,12 +385,37 @@ Then write **one English progress report**:
 }
 
 /**
+ * 一次调用的元信息摘要 → 写进 errorDetail（界面上悬停可见的那个 tooltip）。
+ *
+ * 为什么值得单独写一行：界面上"生成失败"三个字背后是几种完全不同的处理办法，
+ * 而它们在盘上的记录里**长得一模一样**。2026-09-30 那三条失败报告就是
+ * `errorCode=LLM_FAILED` + `errorDetail=''` + `text=''`，光看 orchestrator-reports.json
+ * 什么都查不出来（得去翻网关日志才知道是被 max_tokens 截断）。
+ * 摘要里放 finish_reason 与 token 用量，下次一眼能分清"被预算截断"和"网关没回话"。
+ *
+ * 认不出来的字段一律不写（老网关不给 usage），整串截到 MAX_ERROR_CHARS。
+ */
+export function describeCallResult(res, maxTokens) {
+  const r = res && typeof res === 'object' ? res : {};
+  const parts = [`max_tokens=${Number(maxTokens) || 0}`];
+  parts.push(`finish_reason=${r.finishReason || 'unknown'}`);
+  const u = r.usage && typeof r.usage === 'object' ? r.usage : null;
+  if (u && u.completion_tokens != null) parts.push(`completion_tokens=${u.completion_tokens}`);
+  // reasoning_tokens 是"预算里有多少花在思考上"的唯一直接证据
+  const detail = u && u.completion_tokens_details;
+  if (detail && detail.reasoning_tokens != null) parts.push(`reasoning_tokens=${detail.reasoning_tokens}`);
+  if (r.aborted) parts.push('aborted');
+  return parts.join(' ').slice(0, MAX_ERROR_CHARS);
+}
+
+/**
  * 生成一份进度报告。**不落盘**（落盘由 orchestratorStore.appendReport 负责），
  * 返回的就是要存的那个记录。
  *
  * 三种"没有正文"的情况都记成一条**带事实的报告**而不是抛错，理由是一样：
  * 面板上"有 2 个任务在跑，但没配模型"远比一个空白面板有用，
  * 而且失败会留在历史里 —— 用户能看出"是模型挂了"而不是"这个功能没做"。
+ * （第四种，"模型答了但没写正文"，记成 LLM_EMPTY —— 成因与处理办法都不同。）
  *
  * @param {object}   input
  * @param {object[]} input.facts        buildRunningFacts 的输出
@@ -403,58 +454,92 @@ export async function generateProgressReport({
 
   const zh = !String(locale || '').startsWith('en');
   const prompt = buildReportPrompt(facts, locale);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REPORT_TIMEOUT_MS);
 
-  // 部分模型把推理也塞进 content（与 recentDirectoriesAiSummary 同一处理）：
-  // 汇报里混进一段思考过程，用户会以为那是结论。
-  const filter = createThinkFilter();
-  let text = '';
-  const forward = (segments) => {
-    for (const seg of segments) if (seg.content) text += seg.content;
-  };
-
-  try {
-    const { aborted } = await callStream(
-      model,
-      prompt,
-      (delta) => { if (delta.content) forward(filter.feed(delta.content)); },
-      {
-        maxTokens: MAX_REPORT_TOKENS,
-        systemPrompt: zh ? SYSTEM_PROMPT_ZH : SYSTEM_PROMPT_EN,
-        signal: controller.signal,
-      }
-    );
-    forward(filter.flush());
-    if (aborted) return { ...base, errorCode: 'LLM_TIMEOUT' };
-  } catch (err) {
-    return {
-      ...base,
-      errorCode: 'LLM_FAILED',
-      errorDetail: String((err && err.message) || err).slice(0, MAX_ERROR_CHARS),
+  /**
+   * 跑一次模型。每次调用**自带** AbortController 与过滤器：重试必须是干净的一次，
+   * 上一轮的超时定时器和半截 think 状态都不能带过来。
+   * 部分模型把推理也塞进 content（与 recentDirectoriesAiSummary 同一处理）：
+   * 汇报里混进一段思考过程，用户会以为那是结论。
+   */
+  async function attempt(maxTokens) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REPORT_TIMEOUT_MS);
+    const filter = createThinkFilter();
+    let raw = '';
+    const forward = (segments) => {
+      for (const seg of segments) if (seg.content) raw += seg.content;
     };
-  } finally {
-    clearTimeout(timer);
+    try {
+      const res = await callStream(
+        model,
+        prompt,
+        (delta) => { if (delta.content) forward(filter.feed(delta.content)); },
+        {
+          maxTokens,
+          systemPrompt: zh ? SYSTEM_PROMPT_ZH : SYSTEM_PROMPT_EN,
+          signal: controller.signal,
+        }
+      );
+      forward(filter.flush());
+      return {
+        raw,
+        aborted: !!(res && res.aborted),
+        // 老签名（单测注入的假流）没有这两个字段 —— 拿不到就当"不知道"，
+        // 后果是退化成"不重试"，不是重试到天荒地老
+        finishReason: String((res && res.finishReason) || ''),
+        meta: describeCallResult(res, maxTokens),
+      };
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
-  // 先摘掉头部那两行（PROGRESS / TASKS），剩下的才是给用户看的正文。
-  // 顺序不能反：先截断再解析，免得 2000 字的正文把标记行挤出去（标记总在最前面，
-  // 截断其实伤不到它，但"先解析"这件事本身更经得起以后改格式）
-  const parsed = parseProgressHeader(text.trim().slice(0, MAX_REPORT_CHARS));
-  const out = parsed.text;
-  // 空正文按失败记：界面上一张"什么都没有"的报告卡片和"模型没返回内容"是两回事
-  if (!out) return { ...base, errorCode: 'LLM_FAILED' };
-  return {
-    ...base,
-    text: out,
-    percent: parsed.percent,
-    // 每个任务各自的百分比挂在事实快照上：报告卡片里那一行行事实本来就在，
-    // 挂上去才不会"整体 62%，但看不出是哪两个任务拖的"
-    tasks: facts.map((f, i) => ({
-      ...f,
-      percent: i < parsed.taskPercents.length ? parsed.taskPercents[i] : null,
-    })),
-  };
+  // 两轮：常规预算 → （只有**被截断且正文为空**才）加预算重试一次。
+  // 中途任何一次拿到正文就返回；一次都没拿到正文时，第二轮的元信息更值得留档
+  // （它才带着"两次都空"这个事实）。
+  let meta = '';
+  for (let round = 0; round < 2; round++) {
+    const budget = round === 0 ? MAX_REPORT_TOKENS : MAX_REPORT_TOKENS_RETRY;
+    let res;
+    try {
+      res = await attempt(budget);
+    } catch (err) {
+      return {
+        ...base,
+        errorCode: 'LLM_FAILED',
+        errorDetail: String((err && err.message) || err).slice(0, MAX_ERROR_CHARS),
+      };
+    }
+    // 超时不重试：90 秒没回来，再来一次大概率还是 90 秒
+    if (res.aborted) return { ...base, errorCode: 'LLM_TIMEOUT', errorDetail: res.meta };
+    meta = res.meta;
+
+    // 先摘掉头部那两行（PROGRESS / TASKS），剩下的才是给用户看的正文。
+    // 顺序不能反：先截断再解析，免得 2000 字的正文把标记行挤出去（标记总在最前面，
+    // 截断其实伤不到它，但"先解析"这件事本身更经得起以后改格式）
+    const parsed = parseProgressHeader(res.raw.trim().slice(0, MAX_REPORT_CHARS));
+    if (parsed.text) {
+      return {
+        ...base,
+        text: parsed.text,
+        percent: parsed.percent,
+        // 每个任务各自的百分比挂在事实快照上：报告卡片里那一行行事实本来就在，
+        // 挂上去才不会"整体 62%，但看不出是哪两个任务拖的"
+        tasks: facts.map((f, i) => ({
+          ...f,
+          percent: i < parsed.taskPercents.length ? parsed.taskPercents[i] : null,
+        })),
+      };
+    }
+    // 空正文但不是被预算截断（模型自己 stop 了、或只回了那两行标记）：
+    // 加预算重试解决不了，直接按空正文记
+    if (res.finishReason !== 'length') break;
+  }
+
+  // 空正文按失败记：界面上一张"什么都没有"的报告卡片和"模型没返回内容"是两回事。
+  // 单独一个码是因为它的成因与前两个不同（模型答了，但没写正文），
+  // 处理办法也不同 —— LLM_EMPTY 要调的是生成预算，不是网络。
+  return { ...base, errorCode: 'LLM_EMPTY', errorDetail: meta };
 }
 
 export const __testables = {

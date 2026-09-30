@@ -17,6 +17,8 @@
  *   P7 进度条：主 Agent 给的百分比被画成条（宽度 = 那个数），带「AI 估计」字样与
  *      role=progressbar；每个任务各自的百分比只在模型给了时才画一条；历史列表那一列
  *      **没有进度时留空但占位**；**没给百分比就一条都不画**（反证：桩一份 percent=null 的报告）
+ *   P10 空正文的原因码：LLM_EMPTY（模型答了但没写正文）与通用失败说两句不同的话，
+ *     悬停带服务端写的 errorDetail；认不出来的码仍然退回通用文案（反证）
  *   P8 无 JS 运行时异常 / 无控制台错误
  *   P9 截图存证
  *
@@ -65,6 +67,8 @@ async function readPanel(page) {
       count: (card?.querySelector('.rp__count')?.textContent || '').trim(),
       text: (document.querySelector('.rp__text')?.textContent || '').trim(),
       notice: (document.querySelector('.rp__notice')?.textContent || '').trim(),
+      /** 没有正文时那句说明的悬停提示 = 服务端写的 errorDetail（失败原因的细节） */
+      noticeTitle: document.querySelector('.rp__notice')?.getAttribute('title') || '',
       factTitles: Array.from(document.querySelectorAll('.rpt__title')).map(e => e.textContent.trim()),
       historyCount: document.querySelectorAll('.oc__history-item').length,
       /** 选中项的下标。别拿文字比：多份报告的摘要可能一模一样（都是"当时没有任务在执行"），
@@ -199,7 +203,12 @@ async function main() {
 
     let mine = null
     if (runningNow > 0) {
-      for (let i = 0; i < 45; i++) {
+      // ⚠️ 窗口必须**大于服务端自己那条 90 秒的超时**（progressReport 的 REPORT_TIMEOUT_MS），
+      // 否则等不到的那一下不是"没生成"，而是"还没生成" —— 2026-09-30 实测踩过：
+      // 三个任务同时跑、同一个网关在给它们供货时，这一份报告用了 95 秒才落盘，
+      // 而这里的 45×2s≈88s 刚好在它写完之前放弃，报了个假 FAIL。
+      // 刷新拿到的那一份是按 `manual.length` 变的，所以窗口放大只是失败时多等一会儿。
+      for (let i = 0; i < 100; i++) {
         const now = await getJson('/api/workbench/orchestrator/reports')
         const manual = (now?.reports || []).filter(r => r.trigger === 'manual')
         if (manual.length > beforeManual) { mine = manual[0]; break }
@@ -255,7 +264,7 @@ async function main() {
       /* ══ P5c 落盘的那份长什么样 ══ */
       check('P5c 记录字段齐全（trigger / at / tasks / errorCode）',
         mine.trigger === 'manual' && typeof mine.at === 'string' && Array.isArray(mine.tasks)
-          && ['', 'NO_MODEL', 'LLM_TIMEOUT', 'LLM_FAILED'].includes(mine.errorCode || ''),
+          && ['', 'NO_MODEL', 'LLM_TIMEOUT', 'LLM_EMPTY', 'LLM_FAILED'].includes(mine.errorCode || ''),
         `trigger=${mine.trigger} at=${mine.at} errorCode="${mine.errorCode}"`)
       check('P5d 事实快照存的是**时长**（elapsedMs），不是一对会随历史一起变大的起止时间',
         mine.tasks.every(t => Number.isFinite(t.elapsedMs) && t.elapsedMs >= 0
@@ -292,7 +301,8 @@ async function main() {
     if (runningNow > 0 && historyCount < 2) {
       await sleep(11000)
       await page.click('.oc__report-run')
-      for (let i = 0; i < 45; i++) {
+      // 窗口与 P4a 同一个理由（服务端超时 90 秒，这一份还得排在前面那批之后）
+      for (let i = 0; i < 100; i++) {
         historyCount = (await readPanel(page)).historyCount
         if (historyCount >= 2) break
         await sleep(2000)
@@ -409,6 +419,31 @@ async function main() {
       `items=${pm.historyCount} percents=${JSON.stringify(pm.historyPercents.slice(0, 4))}`)
     check('P7j 这一份的正文照常显示（少一条进度条不该影响报告本身）',
       pm.text.includes('这次模型没给百分比'), `text="${pm.text.slice(0, 40)}"`)
+    await page.unroute('**/api/workbench/orchestrator/report')
+
+    /* ══ P10 空正文为什么空，面板上要分得清（LLM_EMPTY，2026-09-30 新增）══ */
+    // 用户报的"进度有时候会生成失败"：推理模型的 max_tokens 是**思考 + 正文共用**的，
+    // 思考写满预算时正文一个字都没有，HTTP 还是 200。服务端现在把它记成 LLM_EMPTY 而不是
+    // 通用的 LLM_FAILED —— 两种失败的处理办法不同（这个要调生成预算，不是查网络），
+    // 面板上也就得说两句不同的话。同样把响应桩掉：真模型给不给正文不可控。
+    await stubOnce({
+      ...stubReport(null, [null], ''),
+      errorCode: 'LLM_EMPTY',
+      errorDetail: 'max_tokens=8000 finish_reason=length reasoning_tokens=7980',
+    })
+    let em = await readPanel(page)
+    check('P10a LLM_EMPTY 说的是自己那句话（不是通用的"生成失败"）',
+      em.notice.includes('没有返回正文'), `notice="${em.notice}"`)
+    check('P10b 悬停能看到服务端写的 errorDetail（finish_reason / 思考用量）',
+      em.noticeTitle.includes('finish_reason=length') && em.noticeTitle.includes('reasoning_tokens'),
+      `title="${em.noticeTitle}"`)
+    // 反证：认不出来的码仍然退回通用文案 —— 少了这条，上面 P10a 完全可能是
+    // "所有码都在说同一句话"（假绿）
+    await stubOnce({ ...stubReport(null, [null], ''), errorCode: 'SOMETHING_NEW' })
+    em = await readPanel(page)
+    check('P10c 没见过的码仍然退回通用的「生成失败」',
+      /生成失败/.test(em.notice) && !em.notice.includes('没有返回正文'),
+      `notice="${em.notice}"`)
     await page.unroute('**/api/workbench/orchestrator/report')
 
     /* ══ P8 无异常 ══ */

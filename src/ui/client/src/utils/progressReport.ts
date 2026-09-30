@@ -58,6 +58,10 @@ export function reportErrorKey(code: string): string {
   switch (code) {
     case 'NO_MODEL': return '@WORKBENCH:没有可用的 AI 模型，只记录了任务事实'
     case 'LLM_TIMEOUT': return '@WORKBENCH:生成超时，只记录了任务事实'
+    // 模型答了、但正文一个字都没有（本机默认模型实测：思考把 max_tokens 吃光，
+    // 正文没轮到写）。与 LLM_FAILED 分开是因为处理办法不同 —— 这个要调生成预算，
+    // 不是查网络。老前端不认这个码，退回下面那句通用的"生成失败"。
+    case 'LLM_EMPTY': return '@WORKBENCH:模型没有返回正文，只记录了任务事实'
     case 'LLM_FAILED': return '@WORKBENCH:生成失败，只记录了任务事实'
     default: return '@WORKBENCH:生成失败，只记录了任务事实'
   }

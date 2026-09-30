@@ -2439,6 +2439,7 @@ export default {
   '@WORKBENCH:模型没有返回内容': 'The model returned nothing',
   '@WORKBENCH:没有可用的 AI 模型，只记录了任务事实': 'No AI model available — task facts only',
   '@WORKBENCH:生成超时，只记录了任务事实': 'Generation timed out — task facts only',
+  '@WORKBENCH:模型没有返回正文，只记录了任务事实': 'The model returned no report body — task facts only',
   '@WORKBENCH:生成失败，只记录了任务事实': 'Generation failed — task facts only',
   '@WORKBENCH:读取进度报告失败': 'Failed to load progress reports',
   '@WORKBENCH:生成进度报告失败': 'Failed to generate the progress report',

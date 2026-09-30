@@ -61,9 +61,11 @@ describe('进度报告间隔档位', () => {
 })
 
 describe('报告失败原因码', () => {
-  it('三个已知码各有各的说法', () => {
+  it('四个已知码各有各的说法', () => {
     expect(reportErrorKey('NO_MODEL')).toContain('AI 模型')
     expect(reportErrorKey('LLM_TIMEOUT')).toContain('超时')
+    // 「模型答了但没写正文」要跟「生成失败」分开说：处理办法是调生成预算，不是查网络
+    expect(reportErrorKey('LLM_EMPTY')).toContain('没有返回正文')
     expect(reportErrorKey('LLM_FAILED')).toContain('失败')
   })
 
