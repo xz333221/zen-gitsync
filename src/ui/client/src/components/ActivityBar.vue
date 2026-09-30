@@ -514,7 +514,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   justify-content: center;
   /* 字号比其余徽标低一档(--font-size-xs 是 11px):这一枚要并排塞下
      「↑N ↓M」两个数,11px 时两位数形态实测 51px,比 48px 的活动栏还宽。
-     10px 下两位数约 44px,留得住余量;单数(绝大多数情况)只有 26px 左右。
+     10px 下(探针实测)单数 ↑2 ↓3 = 33px、两位数 ↑12 ↓34 = 45px,都留得住余量。
      代价是「两边都 ≥ 100」的极端情况下(↑99+ ↓99+ 约 55px)会略微溢出活动栏 ——
      正常仓库不会同时领先又落后三位数,真到那一步左侧面板里的蓝条仍给完整信息。 */
   font-size: 10px;
