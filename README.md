@@ -478,13 +478,13 @@ All `package.json` scripts use **npm** (`npm install`, `npm run dev`, `npm run r
 
 The last step is the slow one: the registry can take anywhere from seconds to over 30 minutes to make a freshly published version installable, so the script polls on two readiness signals (packument has the version / tarball is fetchable) and force-installs every 4 rounds — the probes only save a doomed call, **`npm` itself is the judge**. Each failed attempt prints an `[E404]` / `[EPERM]` short code, and giving up prints the breakdown of what it kept hitting.
 
-**You don't have to watch it.** When the run ends you get a desktop notification plus a sound (success and failure use different sounds), and the terminal / taskbar title switches to the result. All of it is best-effort and can never fail the release itself; pass `--no-notify` (or set `ZEN_NO_NOTIFY=1`) to turn it off. The three outcomes are reported separately, because "published but the global install failed" is neither success nor failure:
+**You don't have to watch it.** When the run ends you get a desktop notification, a click-to-dismiss always-on-top popup (green / amber / red depending on the outcome) and a sound, and the terminal / taskbar title switches to the result. The popup is the channel that matters: a Windows banner disappears after ~5 seconds and the notification-center entry gets buried under everything else, so an always-on-top window is the only one you can't sleep through. All of it is best-effort and can never fail the release itself; pass `--no-notify` (or set `ZEN_NO_NOTIFY=1`) to turn it off, and run `npm run release -- --notify-test` at any time to check whether notifications actually reach your desktop (no real release needed). The three outcomes are reported separately, because "published but the global install failed" is neither success nor failure:
 
 - **release complete** — published to npm and the global version was verified.
 - **published, global not updated** — the version is on npm but the global install didn't land. Re-running the release won't help (the version number is taken); just run `npm install -g zen-gitsync@<version>`.
 - **release failed** — an earlier step (type check / package self-check / git / `npm publish`) aborted the run.
 
-Other switches: `--dry-run` (print the plan only), `--skip-push`, `--skip-self-update`, `--keep-instances`, `--poll-timeout=<seconds>`.
+Other switches: `--dry-run` (print the plan only), `--skip-push`, `--skip-self-update`, `--keep-instances`, `--poll-timeout=<seconds>`, `--no-notify`, `--notify-test`.
 
 ---
 
@@ -1157,13 +1157,13 @@ git add --renormalize .
 
 最后一步最慢：registry 让刚发布的版本变得可安装，实测从几秒到 30 分钟以上都有，所以脚本用两个就绪信号（packument 里有没有该版本 / tarball 能否取到）轮询，并每 4 轮强制真装一次 —— 探针只负责省下一次注定失败的调用，**判据只有 npm 自己**。每次失败打 `[E404]` / `[EPERM]` 短码，放弃时汇总失败构成。
 
-**不用盯着它。** 流程结束时你会收到一条系统通知 + 提示音（成功与失败是两种不同的音），终端 / 任务栏标题也会变成结果。这些都是尽力而为，**绝不会**影响发布本身的成败；加 `--no-notify`（或设 `ZEN_NO_NOTIFY=1`）可关掉。三种结局分开报，因为"包发出去了但全局没装上"既不是成功也不是失败：
+**不用盯着它。** 流程结束时你会收到一条系统通知、一个置顶弹窗（点一下即关，成功 / 部分成功 / 失败分别是绿 / 琥珀 / 红）和一声提示音，终端 / 任务栏标题也会变成结果。真正管用的是那个弹窗：Windows 的通知横幅挂 5 秒就没了、通知中心里那一条又会被别的东西淹掉，只有置顶窗口是"睡一觉回来也躲不掉"的信道。这些都是尽力而为，**绝不会**影响发布本身的成败；加 `--no-notify`（或设 `ZEN_NO_NOTIFY=1`）可关掉，想随时确认提醒能不能送到你的桌面就跑 `npm run release -- --notify-test`（不用真发一次版）。三种结局分开报，因为"包发出去了但全局没装上"既不是成功也不是失败：
 
 - **发布完成** —— 已发布到 npm，且全局版本已校验通过。
 - **已发布但全局没更新** —— 版本已经在 npm 上，只是没装到全局。重发没有意义（版本号已被占用），按提示手动装一次即可。
 - **发布失败** —— 更早的一步（类型检查 / 发布物自检 / git / `npm publish`）把流程中断了。
 
-其它开关：`--dry-run`（只打印计划）、`--skip-push`、`--skip-self-update`、`--keep-instances`、`--poll-timeout=<秒>`。
+其它开关：`--dry-run`（只打印计划）、`--skip-push`、`--skip-self-update`、`--keep-instances`、`--poll-timeout=<秒>`、`--no-notify`、`--notify-test`。
 
 ---
 
