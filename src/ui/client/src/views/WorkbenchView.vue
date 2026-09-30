@@ -41,7 +41,8 @@ import type { Task, Prompt } from '@/types/workbench'
 import { useWorkbenchAttachments, ALLOWED_EXT_HINT, MAX_ATTACHMENT_BYTES } from '@/composables/useWorkbenchAttachments'
 import { useWorkbenchSimpleConversation } from '@/composables/useWorkbenchSimpleConversation'
 import { useWorkbenchExecution } from '@/composables/useWorkbenchExecution'
-import { TASK_EXECUTOR_OPTIONS, getSelectedTaskExecutor, setSelectedTaskExecutor, taskExecutorName, type TaskExecutorId } from '@/utils/taskExecutor'
+import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection'
+import { TASK_EXECUTOR_OPTIONS, taskExecutorName, type TaskExecutorId } from '@/utils/taskExecutor'
 import TaskExecutorIcon from '@components/TaskExecutorIcon.vue'
 import { useWorkbenchData } from '@/composables/useWorkbenchData'
 import WorkbenchSidebar from '@/views/components/WorkbenchSidebar.vue'
@@ -986,46 +987,20 @@ const {
 )
 
 // ── 任务执行器（claude | opencode | codex）────────────────────────────
-// 默认值来自设置里的 taskExecutor（configStore），执行按钮旁可以临时切，
-// 临时选择记 localStorage（见 utils/taskExecutor.ts 的口径注释）。
-const selectedTaskExecutor = ref<TaskExecutorId>(getSelectedTaskExecutor())
-
-// 本地装了哪些执行器；至少要有一个才能执行任务
-const executorAvailability = computed(() => ({
-  claude: toolsStore.claudeAvailable,
-  opencode: toolsStore.opencodeAvailable,
-  codex: toolsStore.codexAvailable
-}))
-const hasAnyExecutor = computed(() =>
-  TASK_EXECUTOR_OPTIONS.some(o => executorAvailability.value[o.id])
-)
-
-// 工具检测结果变化后纠偏：临时选的执行器被卸载时回落到另一个可用的，避免
-// 点执行才发现后端 spawn ENOENT。
-watch(executorAvailability, (avail) => {
-  if (avail[selectedTaskExecutor.value]) return
-  const fallback = (Object.keys(avail) as TaskExecutorId[]).find(id => avail[id])
-  if (fallback) selectedTaskExecutor.value = fallback
-}, { immediate: true })
-
-function pickExecutor(id: TaskExecutorId) {
-  if (!executorAvailability.value[id]) return
-  selectedTaskExecutor.value = id
-  setSelectedTaskExecutor(id)
-}
+// 「上次用过哪个」与「设置里的默认值」都收口在 composables/useTaskExecutorSelection：
+// 执行按钮旁临时切一下即落 config.json（ui.lastTaskExecutor），下次打开还停在这儿。
+// 选中项没装时的回落也在那儿（纯计算，不写回），这里不再自己纠偏一遍。
+const {
+  active: selectedTaskExecutor,
+  availability: executorAvailability,
+  hasAnyExecutor,
+  choose: pickExecutor,
+  executorModelText,
+  executorModelTitle,
+} = useTaskExecutorSelection()
 
 function executorLabel(id: TaskExecutorId): string {
   return taskExecutorName(id)
-}
-
-/** 该执行器当前配置的模型（下拉项右侧）。空串 = 还没探测到，渲染时整块跳过 */
-function executorModelText(id: TaskExecutorId): string {
-  return toolsStore.executorModelText(id)
-}
-
-/** 模型 + 次要信息（CLI 别名 / 服务商），title 用 */
-function executorModelTitle(id: TaskExecutorId): string {
-  return [executorModelText(id), toolsStore.executorModelDetail(id)].filter(Boolean).join(' · ')
 }
 
 // 任务连续对话流的助手名/头像：跟随最近一轮 job 实际用的执行器。

@@ -47,7 +47,8 @@ import AttachmentZone from '@/components/AttachmentZone.vue'
 import AgentChatSurface from '@/components/AgentChatSurface.vue'
 import TaskExecutorPicker from '@/components/TaskExecutorPicker.vue'
 import { useWorkbenchAttachments, type AttachmentTarget } from '@/composables/useWorkbenchAttachments'
-import { getSelectedTaskExecutor, type TaskExecutorId } from '@/utils/taskExecutor'
+import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection'
+import type { TaskExecutorId } from '@/utils/taskExecutor'
 
 const props = defineProps<{
   active: boolean
@@ -123,11 +124,12 @@ const autoRun = ref(true)
 const useDefaultPrompt = ref(true)
 
 // ── 执行器（claude | opencode | codex）─────────────────────────────────
-// 选择的 UI（未安装置灰 / 选中打勾 / 值不可用时回落）全部收口在 TaskExecutorPicker ——
+// 选择的 UI（未安装置灰 / 选中打勾 / 值不可用时回落）全部收口在 TaskExecutorPicker，
 // 它在两处出现：指令模式的派发栏，与对话模式下"g ai 派出去的活由谁跑"。
-// 这里只持"当前值"，派发 / 对话时随 payload 交给服务端。
-// 与工作台执行按钮共用同一份临时选择（localStorage），两边切了互相跟手。
-const selectedExecutor = ref<TaskExecutorId>(getSelectedTaskExecutor())
+// 这里只读当前值，派发 / 对话时随 payload 交给服务端。
+// 与工作台执行按钮、看板卡片「执行」共用同一份选择（config.json 的 ui.lastTaskExecutor），
+// 任何一处切了另外两处立刻跟手 —— 连"换个端口重开还在"也一起做到了（见 composable 头注释）。
+const { active: selectedExecutor } = useTaskExecutorSelection()
 
 // ── 工作方式：对话（g ai 派活）/ 指令（人敲一句话派一条）──────────────────
 // 两种方式落到的都是同一条派发链路与同一条指令流水，差别只在"谁决定派什么"：
@@ -560,7 +562,6 @@ const gitSummary = computed(() => {
 
     <AgentChatSurface
       v-show="!collapsed && mode === 'chat'"
-      v-model:dispatch-executor="selectedExecutor"
       class="oc__chat"
       :active="!collapsed && mode === 'chat'"
       allow-dispatch
@@ -775,10 +776,10 @@ const gitSummary = computed(() => {
           <input type="checkbox" v-model="useDefaultPrompt" />
           <span>{{ $t('@WORKBENCH:默认提示词（{state}）', { state: promptStateLabel }) }}</span>
         </label>
-        <!-- 执行器：与执行按钮共用同一份临时选择，派发时覆盖设置里的默认值。
-             下拉本体收口在 TaskExecutorPicker（对话模式底下那个也是它） -->
+        <!-- 执行器：与工作台执行按钮、看板「执行」共用同一份选择。
+             下拉本体收口在 TaskExecutorPicker（对话模式底下那个也是它），
+             它自己读 composable 的共享状态，这里不用再传 v-model -->
         <TaskExecutorPicker
-          v-model="selectedExecutor"
           :title="$t('@WORKBENCH:本次派发使用的执行器（与执行按钮的临时切换共用）')"
         />
         <button type="button" class="oc__send" :disabled="!canSend" @click="send">

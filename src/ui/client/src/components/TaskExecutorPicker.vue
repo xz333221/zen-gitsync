@@ -18,10 +18,12 @@
 
   为什么单独成组件：主 Agent 控制台里有**两个地方**要选它 —— 指令模式的派发栏，
   与对话模式下"g ai 派出去的活由谁执行"。同一份交互（未安装置灰、选中打勾、
-  与执行按钮共用 localStorage 里的临时选择）在两处各写一遍，迟早会有一边漏了兜底。
+  与工作台执行按钮共用同一份"上次用过"）在两处各写一遍，迟早会有一边漏了兜底。
 
-  选择本身是**全局共享**的（utils/taskExecutor 的 localStorage），不是本组件的私有状态：
-  看板卡片的「执行」按钮、这里的下拉，切了互相跟手 —— 历史行为，别改成组件内部状态。
+  选择本身是**全局共享**的（composables/useTaskExecutorSelection → configStore
+  的 ui.lastTaskExecutor），不是本组件的私有状态，也没有 v-model：
+  看板卡片的「执行」按钮、工作台执行按钮、这里的下拉，切了互相跟手 ——
+  历史行为，别改回组件内部状态。派发时各入口直接读 composable 的 active。
 
   下拉项右侧显示**该执行器当前配置的模型**：工作台派任务不传 --model，模型跟随各 CLI
   的配置文件，"这个执行器现在用什么模型"在界面上别处都看不到（数据来自只读探测，
@@ -29,76 +31,44 @@
   挤进第二段文字会把整行布局带跑；要看当前模型把鼠标停在按钮上，title 里有。
 -->
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { onMounted } from 'vue'
 import { ArrowDown, Check } from '@element-plus/icons-vue'
 import { $t } from '@/lang/static'
 import TaskExecutorIcon from '@components/TaskExecutorIcon.vue'
+import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection'
 import { useToolsStore } from '@/stores/toolsStore'
-import {
-  TASK_EXECUTOR_OPTIONS,
-  setSelectedTaskExecutor,
-  taskExecutorName,
-  type TaskExecutorId,
-} from '@/utils/taskExecutor'
-
-const model = defineModel<TaskExecutorId>({ required: true })
+import { TASK_EXECUTOR_OPTIONS, taskExecutorName } from '@/utils/taskExecutor'
 
 const props = defineProps<{
   /** 主按钮的 title（两个入口想说的话不同，但按钮长相、行为一致） */
   title?: string
 }>()
 
+const { active, availability, choose, executorModelText, executorModelTitle } = useTaskExecutorSelection()
 const toolsStore = useToolsStore()
 
 // 进页面就拉一次模型；store 内部有 TTL 缓存 + 并发去重，本组件在多处实例化也只请求一次
 onMounted(() => { void toolsStore.fetchExecutorModels() })
 
-/** 下拉项右侧的模型名。还没探测到 / 该 CLI 没配模型时的两种空值由 store 解释 */
-function modelText(id: TaskExecutorId): string {
-  return toolsStore.executorModelText(id)
-}
-
-/** 模型 + 次要信息（别名 / 服务商），title 用 */
-function modelTitle(id: TaskExecutorId): string {
-  return [modelText(id), toolsStore.executorModelDetail(id)].filter(Boolean).join(' · ')
-}
+// 可用性 / 模型名 / 兜底全在 composable 里了，这里不再各存一份 ——
+// 之前三处各算一遍，其中一处漏了兜底就会显示出一个没装的执行器。
 
 /** 主按钮 title：入口自己的说明 + 当前模型，不进下拉也知道这活是哪个模型跑的 */
-const btnTitle = computed(() => [props.title, modelTitle(model.value)].filter(Boolean).join(' · '))
-
-const availability = computed<Record<TaskExecutorId, boolean>>(() => ({
-  claude: toolsStore.claudeAvailable,
-  opencode: toolsStore.opencodeAvailable,
-  codex: toolsStore.codexAvailable,
-}))
-
-/**
- * 选中项。原生 select 不会命中 disabled option，但键盘 / localStorage 里的历史脏值
- * 仍可能落进来（比如上次用 opencode，之后卸载了）—— 所以在这里兜一次底，
- * 并顺手把回落结果写回共享选择，免得别处再读到那个已不可用的值。
- */
-function pick(id: TaskExecutorId) {
-  if (!availability.value[id]) return
-  model.value = id
-  setSelectedTaskExecutor(id)
+function btnTitle(): string {
+  return [props.title, executorModelTitle(active.value)].filter(Boolean).join(' · ')
 }
-
-// 首次渲染时如果当前值不可用，同样回落到第一个可用的（不写盘则下次进来看还是坏的）
-const viable = computed(() => (Object.keys(availability.value) as TaskExecutorId[])
-  .find(id => availability.value[id]))
-if (viable.value && !availability.value[model.value]) pick(viable.value)
 </script>
 
 <template>
-  <el-dropdown trigger="click" class="tep" @command="pick">
+  <el-dropdown trigger="click" class="tep" @command="choose">
     <button
       type="button"
       class="tep__btn"
-      :title="btnTitle"
+      :title="btnTitle()"
       :aria-label="$t('@WORKBENCH:任务执行器')"
     >
-      <TaskExecutorIcon :executor="model" class="tep__btn-icon" />
-      <span class="tep__btn-name">{{ taskExecutorName(model) }}</span>
+      <TaskExecutorIcon :executor="active" class="tep__btn-icon" />
+      <span class="tep__btn-name">{{ taskExecutorName(active) }}</span>
       <el-icon class="tep__btn-caret"><ArrowDown /></el-icon>
     </button>
     <template #dropdown>
@@ -113,11 +83,11 @@ if (viable.value && !availability.value[model.value]) pick(viable.value)
             <TaskExecutorIcon :executor="opt.id" class="tep__item-icon" />
             <span class="tep__item-name">{{ opt.name }}</span>
             <span
-              v-if="modelText(opt.id)"
+              v-if="executorModelText(opt.id)"
               class="tep__item-model"
-              :title="modelTitle(opt.id)"
-            >{{ modelText(opt.id) }}</span>
-            <el-icon v-if="model === opt.id" class="tep__item-check"><Check /></el-icon>
+              :title="executorModelTitle(opt.id)"
+            >{{ executorModelText(opt.id) }}</span>
+            <el-icon v-if="active === opt.id" class="tep__item-check"><Check /></el-icon>
             <span v-else-if="!availability[opt.id]" class="tep__item-missing">{{ $t('@42BB9:未安装') }}</span>
           </span>
         </el-dropdown-item>

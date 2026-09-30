@@ -134,7 +134,10 @@ function MEASURE() {
     // 键名与产品实现同源：OrchestratorConsole.vue: MODE_KEY = 'wb.ocMode.v2'
     modeKey: (() => { try { return localStorage.getItem('wb.ocMode.v2') } catch { return null } })(),
     engineKey: (() => { try { return localStorage.getItem('zen-gitsync-agent-engine') } catch { return null } })(),
-    execKey: (() => { try { return localStorage.getItem('zen-gitsync-task-executor') } catch { return null } })(),
+    // ⚠️ 执行器选择**不再**是 localStorage 键（2026-09-30 迁到 config.json 的
+    // ui.lastTaskExecutor：GUI 每次启动换随机端口，origin 一变 localStorage 就是另一个桶，
+    // "记住上次"从来没生效过）。所以这里读不到，也不该假装读得到 ——
+    // 页面侧能观察的只有 DOM 上那个名字（footTepName），落盘那份得从 Node 侧读 config.json。
     rail: info('.oc__rail'),
     collapseBtn: info('.oc__collapse'),
   }

@@ -191,6 +191,14 @@ const defaultConfig = {
     // 白名单式的默认空数组：以后新增工具默认就固定显示，不需要回头改默认值。
     // 未勾选（= 落在本数组里）的工具连同未安装的一起收进顶栏右侧「更多」菜单。
     headerToolsHidden: [],
+    // 工作台任务执行器「上次用过/选过的那个」（claude | opencode | codex），null = 还没选过，
+    // 回落顶层 taskExecutor（设置里配的默认值）。两者**故意分开**：后者是"配置的默认"，
+    // 前者是"上次用的"，语义不同，合并就再也分不清哪个是用户主动配的。
+    // 2026-09-30: 原先记在 localStorage（键 zen-gitsync-task-executor），而 GUI 每次启动都换一个
+    // 随机端口（见 utils/startServerOnAvailablePort.js —— 端口被占就往后找），
+    // 浏览器按 origin（协议+主机+**端口**）隔离 localStorage，所以每开一次就是一个新桶，
+    // "记住上次"从来没生效过。跟本对象其它字段一样落文件。
+    lastTaskExecutor: null,
   }
 };
 

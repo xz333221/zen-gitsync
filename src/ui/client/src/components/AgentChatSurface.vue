@@ -46,6 +46,7 @@ import { ChatContainer, ChatInput, ConversationList } from 'zen-ai-chat-ui'
 // Vite 按各自异步 chunk 注入，工作台这条 chunk 不一定加载过 style.css）
 import 'zen-ai-chat-ui/style.css'
 import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
+import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import { useNarrowPane } from '@/composables/useNarrowPane'
 import { agentEngineName, type AgentEngineId } from '@/utils/agentEngine'
@@ -58,7 +59,6 @@ import {
 } from '@/utils/agentConversations'
 import AgentEngineSelector from '@/components/AgentEngineSelector.vue'
 import TaskExecutorPicker from '@/components/TaskExecutorPicker.vue'
-import type { TaskExecutorId } from '@/utils/taskExecutor'
 
 const props = defineProps<{
   /** 头部标题（各入口自己决定叫"主 Agent 对话"还是别的） */
@@ -73,8 +73,12 @@ const props = defineProps<{
   placeholder?: string
 }>()
 
-/** 派出去的任务由谁跑。与工作台执行按钮共用同一份选择（见 TaskExecutorPicker 的注释） */
-const executor = defineModel<TaskExecutorId>('dispatchExecutor', { default: 'claude' })
+/**
+ * 派出去的任务由谁跑。与工作台执行按钮、看板「执行」、编排台派发栏共用同一份选择，
+ * 所以这里直接读 composable，不再从父组件 v-model 拿一份副本 ——
+ * 副本会各自漂移：父组件初始化早于配置加载时拿到的是 'claude'，之后不会自己跟上。
+ */
+const { active: executor } = useTaskExecutorSelection()
 
 const { theme } = useThemeObserver()
 const chatTheme = computed<'light' | 'dark'>(() => (theme.value === 'dark' ? 'dark' : 'light'))
@@ -294,7 +298,6 @@ onMounted(() => {
       <template v-else>
         <span class="acs__foot-label">{{ $t('@WORKBENCH:派发执行器') }}</span>
         <TaskExecutorPicker
-          v-model="executor"
           :title="$t('@WORKBENCH:它派出去的任务由这个执行器跑（与执行按钮的临时切换共用）')"
         />
         <span class="acs__foot-hint">{{ $t('@WORKBENCH:任务会落到看板，跑完有完成提示') }}</span>

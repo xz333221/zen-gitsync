@@ -1,18 +1,18 @@
-// 工作台任务执行器的选择状态。
+// 工作台任务执行器的**纯口径**：id 集合 / 展示名 / 收口校验。
 //
-// 口径（2026-09-20 与用户对齐）：
+// 这里**只放纯函数**，不引 store / fetch / i18n —— 它被 agentEngine.test.ts 用相对路径
+// 直接 import，不该因为一个类型声明就把 Pinia / 网络拉进单测环境。
+// 「当前选了哪个」那种带状态的部分在 composables/useTaskExecutorSelection.ts。
+//
+// 口径：
 //   - 默认执行器在「设置 → 通用设置 → 任务执行器」里配置（config.taskExecutor，全局）
-//   - 工作台执行按钮旁可以**临时切**，选择记在 localStorage——比"只在内存"多活一次刷新，
-//     又不污染文件配置（文件里那份始终代表"默认值"）
+//   - 「上次用过哪个」记在 config.json 的 ui.lastTaskExecutor（同一个 composable 读写）。
+//     这里曾经用 localStorage 记（键 zen-gitsync-task-executor），但 GUI 每次启动都换一个
+//     随机端口，origin 一变 localStorage 就是另一个桶 —— "记住上次"从来没生效过。
+//     同仓其他 UI 状态（视图模式 / 分割比例）早就为此迁到了 config.json 的 ui 字段。
 //   - 任务续聊不走这里：续哪个执行器由上一轮 job.agent 决定（服务端强制），
 //     否则 claude 的 --resume、opencode 的 --session、codex 的 exec resume 会互不认对方的会话 id
-//
-// localStorage 键沿用 `zen-gitsync-` 前缀（历史上迁移 UI 状态到 config.json 时
-// 保留的命名习惯）；它不进 config.json 的 ui 迁移清单——临时选择就该留在浏览器侧。
-
 export type TaskExecutorId = 'claude' | 'opencode' | 'codex'
-
-const STORAGE_KEY = 'zen-gitsync-task-executor'
 
 export interface TaskExecutorOption {
   id: TaskExecutorId
@@ -28,10 +28,9 @@ export const TASK_EXECUTOR_OPTIONS: TaskExecutorOption[] = [
 
 // ── 执行器当前配置的模型（展示口径）─────────────────────────────────────────
 //
-// 为什么这里只有类型、没有取数逻辑：取数要发请求 + 缓存 + 定时刷新，那套东西
-// 归「本机 CLI 探测」那一个 store（stores/toolsStore），本文件保持纯展示口径 ——
-// 它被 agentEngine.test.ts 用相对路径直接 import，不该因为一个类型声明就把
-// fetch / i18n 拉进单测环境。
+// 这里只有类型、没有取数逻辑：取数要发请求 + 缓存 + 定时刷新，那套东西
+// 归「本机 CLI 探测」那一个 store（stores/toolsStore），取值口在
+// composables/useTaskExecutorSelection 的 executorModelText / executorModelTitle。
 
 /**
  * 某个执行器当前配置的模型。字段来自服务端只读探测
@@ -79,19 +78,4 @@ export function isTaskExecutorId(value: unknown): value is TaskExecutorId {
  */
 export function taskExecutorName(id?: string | null): string {
   return TASK_EXECUTOR_OPTIONS.find(o => o.id === id)?.name || TASK_EXECUTOR_OPTIONS[0].name
-}
-
-/** 读上次的临时选择；没有/损坏时回落 'claude'（与后端默认一致） */
-export function getSelectedTaskExecutor(): TaskExecutorId {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (isTaskExecutorId(raw)) return raw
-  } catch { /* localStorage 不可用（隐私模式等） */ }
-  return 'claude'
-}
-
-export function setSelectedTaskExecutor(value: TaskExecutorId): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, value)
-  } catch { /* 忽略：下次启动回落默认 */ }
 }

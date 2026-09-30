@@ -39,8 +39,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Fold, Expand } from '@element-plus/icons-vue'
 import type { Attachment, BoardTask, ProjectSummary, Task } from '@/types/workbench'
 import { canonicalProjectPath } from '@/utils/path'
-import { getSelectedTaskExecutor, type TaskExecutorId } from '@/utils/taskExecutor'
-import { useToolsStore } from '@/stores/toolsStore'
+import type { TaskExecutorId } from '@/utils/taskExecutor'
+import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection'
 import { useWorkbenchProjects } from '@/composables/useWorkbenchProjects'
 import { useOrchestrator } from '@/composables/useOrchestrator'
 import WorkbenchProjectPanel from './WorkbenchProjectPanel.vue'
@@ -67,6 +67,13 @@ const {
   saveDefaultPrompt, saveProjectPrompt,
   loadReports, generateReport, setReportInterval,
 } = useOrchestrator()
+
+// 看板卡片没有执行器选择器：沿用工作台执行按钮旁那份共享选择
+// （composables/useTaskExecutorSelection → config.json 的 ui.lastTaskExecutor，
+// 换端口重开也还在）。选中的没装时 active 已回落到另一个可用的，一个都没装就
+// 保持原样交给后端报 spawn 失败 —— 界面悄悄显示成一个跑不了的执行器更糟。
+// 变量名带 board 前缀：上面的 useOrchestrator() 已经占用 active（编排台开关）。
+const { active: boardExecutor } = useTaskExecutorSelection()
 
 // ── 选中项目（'' = 全部项目） ────────────────────────────────────────
 const SELECTED_KEY = 'wb.boardProject.v1'
@@ -410,24 +417,11 @@ async function onTaskCreated(payload: { task: Task; openEditor: boolean }) {
 
 async function runTask(t: BoardTask) {
   if (t.runningJobs > 0) return
-  // 看板卡片没有执行器选择器：沿用工作台执行按钮旁的临时选择；
-  // 选的那个没装时回落到另一个可用的（toolsStore 启动即检测），都缺就交给后端报错。
-  const toolsStore = useToolsStore()
-  const avail: Record<TaskExecutorId, boolean> = {
-    claude: toolsStore.claudeAvailable,
-    opencode: toolsStore.opencodeAvailable,
-    codex: toolsStore.codexAvailable
-  }
-  let executor = getSelectedTaskExecutor()
-  if (!avail[executor]) {
-    // 选中的没装：回落到任一可用的执行器；都缺就不换，交给后端报 spawn 失败
-    executor = (Object.keys(avail) as TaskExecutorId[]).find(id => avail[id]) || executor
-  }
   const url = `/api/workbench/tasks/${encodeURIComponent(t.id)}/run`
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ executor })
+    body: JSON.stringify({ executor: boardExecutor.value })
   }).then(r => r.json()).catch(() => null)
   if (!res?.success) {
     ElMessage.error(res?.error || $t('@WORKBENCH:执行失败'))

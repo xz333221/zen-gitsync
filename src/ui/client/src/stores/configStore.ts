@@ -205,8 +205,9 @@ export const useConfigStore = defineStore('config', () => {
   const models = ref<ModelInfo[]>([])
   // AI 智能体单轮最大工具调用次数（全局配置，CLI `g ai` 与 Web 智能体共用）
   const aiMaxToolIterations = ref(200)
-  // 工作台任务执行器默认值（全局配置）：claude | opencode | codex。
-  // 执行按钮旁的临时切换不存这里——那一份在 utils/taskExecutor.ts 的 localStorage 里。
+  // 工作台任务执行器**默认值**（全局配置）：claude | opencode | codex。
+  // 只在「设置 → 通用设置 → 任务执行器」里改。执行入口旁的临时切换记在 ui.lastTaskExecutor，
+  // 两者分开存 —— 前者是"配好的默认"，后者是"上次用的"，互相覆盖就没有各自的意义了。
   const taskExecutor = ref<TaskExecutorId>('claude')
   // 任务执行结束时是否提示（全局配置）。默认开：这个功能只在"用户切到别的窗口"时才有意义，
   // 默认关等于没几个人知道它存在。浏览器通知权限在页面内首次点击时自动申请一次（见 App.vue），
@@ -279,6 +280,11 @@ export const useConfigStore = defineStore('config', () => {
     mindmapDir: string
     /** 顶栏工具图标中隐藏的工具 id（未勾选的收进「更多」菜单） */
     headerToolsHidden: string[]
+    /** 工作台任务执行器「上次用过/选过的那个」（claude | opencode | codex）。
+     *  null = 还没选过，回落顶层 taskExecutor（设置里配的默认值）。
+     *  2026-09-30 从 localStorage 迁来：GUI 每次启动都换一个随机端口，origin 一变
+     *  localStorage 就是另一个桶，"记住上次"从来没生效过（详见 src/config.js 同名字段）。 */
+    lastTaskExecutor: TaskExecutorId | null
     /** 目录/文件选择弹窗(local-file-picker)打开时是否默认开启「全局」搜索。
      *  存的是上次用过的选择，打开弹窗时回传给 defaultGlobalSearch 就是"记住上次"。 */
     pickerGlobalSearch: boolean
@@ -312,6 +318,7 @@ export const useConfigStore = defineStore('config', () => {
     mindmapDirs: [],
     mindmapDir: '',
     headerToolsHidden: [],
+    lastTaskExecutor: null,
     pickerGlobalSearch: false,
     markdownTheme: DEFAULT_MARKDOWN_THEME,
     editorWorkspaceByProject: {},
@@ -725,6 +732,10 @@ export const useConfigStore = defineStore('config', () => {
           headerToolsHidden: Array.isArray(configData.ui.headerToolsHidden)
             ? configData.ui.headerToolsHidden.filter((id: unknown): id is string => typeof id === 'string')
             : [],
+          // 白名单校验：手改配置 / 旧包遗留的脏值都当"没选过"，回落到设置里的默认值
+          lastTaskExecutor: isTaskExecutorId(configData.ui.lastTaskExecutor)
+            ? configData.ui.lastTaskExecutor
+            : defaultUiSettings.lastTaskExecutor,
           pickerGlobalSearch: typeof configData.ui.pickerGlobalSearch === 'boolean'
             ? configData.ui.pickerGlobalSearch
             : defaultUiSettings.pickerGlobalSearch,
@@ -838,6 +849,36 @@ export const useConfigStore = defineStore('config', () => {
     if (_uiSaveTimer) clearTimeout(_uiSaveTimer)
     _uiSaveTimer = setTimeout(() => { flushUiSaveNow() }, UI_SAVE_DEBOUNCE_MS)
   }
+
+  /**
+   * 记下「工作台下一次默认选中哪个执行器」，立刻落文件。
+   *
+   * 为什么必须落文件而不是 localStorage：GUI 每次启动都换一个随机端口
+   * （utils/startServerOnAvailablePort.js —— 端口被占就往后找一个），
+   * 而浏览器按 origin（协议 + 主机 + **端口**）隔离 localStorage，
+   * 于是每开一次应用就是一个新桶，"记住上次"永远记不住。
+   * 本 ui 段其它字段（视图模式 / 分割比例 / 控制台展开态）早就为此迁了过来。
+   *
+   * 与顶层 taskExecutor 分开：后者是"设置里配的默认值"，这里记的是"上次用的"，
+   * 互相覆盖就没有各自的意义了。取值链见 resolvedTaskExecutor。
+   *
+   * immediate：这是**一次性**的用户动作（不是拖拽那种每帧都变），走防抖的话
+   * 选完立刻关窗口就丢了 —— 而"记住上次"正是这个功能的全部意义。
+   */
+  async function setLastTaskExecutor(id: TaskExecutorId) {
+    if (!isTaskExecutorId(id)) return
+    if (ui.value.lastTaskExecutor === id) return
+    ui.value.lastTaskExecutor = id
+    await saveUiSettings({ lastTaskExecutor: id }, { immediate: true })
+  }
+
+  /**
+   * 执行入口该用哪个执行器：上次用过 > 设置里配的默认值。
+   * （再往下的兜底交给 taskExecutor —— 它加载时已白名单校验过，非法的回落 'claude'）
+   */
+  const resolvedTaskExecutor = computed<TaskExecutorId>(() =>
+    isTaskExecutorId(ui.value.lastTaskExecutor) ? ui.value.lastTaskExecutor : taskExecutor.value
+  )
 
   /**
    * 重置布局比例到默认（应用到 DOM + 立即落盘）。
@@ -1591,6 +1632,8 @@ export const useConfigStore = defineStore('config', () => {
     models,
     aiMaxToolIterations,
     taskExecutor,
+    resolvedTaskExecutor,
+    setLastTaskExecutor,
     notifyOnTaskDone,
     notifySoundOnTaskDone,
     defaultCommitMessage,
