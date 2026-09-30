@@ -19,6 +19,7 @@ import LogList from './LogList.vue'
 import { mockGitStore, mockConfigStore, mockLocaleStore } from '@/test-utils/mockStores'
 import { mountWithSetup } from '@/test-utils/mount'
 import { mockFetchResponse, resetFetch } from '@/test-utils/mockFetch'
+import { flushPromises } from '@vue/test-utils'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 let _lastWrapper: any = null
@@ -263,5 +264,44 @@ describe('LogList.vue', () => {
 
   test('LL-24: 组件不抛错地挂载(el-table stub 后)', () => {
     expect(() => mountLogList()).not.toThrow()
+  })
+
+  // ========== git-log-auto-refresh(页面聚焦时状态变了) ==========
+  //
+  // store 侧检测到"工作区状态和聚焦前不同"会派发这个事件(见 gitStore 的
+  // refreshStatusOnFocus)。这里锁定"收到事件 → 用自己的 loadLog 重拉第一页,
+  // 且带上当前筛选参数" —— 走 store.fetchLog 会把筛选整段覆盖掉。
+
+  test('LL-25: 收到 git-log-auto-refresh → 重拉第一页且保留筛选参数', async () => {
+    mockFetchResponse('/api/log', { data: [], total: 0, hasMore: false })
+    const w = mountLogList()
+    // 先让 onMounted 里那次首屏 loadLog 跑完,否则会撞上
+    // handleAutoRefresh 的"正在加载就不插队"守卫
+    await flushPromises()
+    const vm: any = w.vm
+    vm.authorFilter = ['alice']
+    vi.mocked(globalThis.fetch).mockClear()
+
+    window.dispatchEvent(new Event('git-log-auto-refresh'))
+    await flushPromises()
+
+    expect(globalThis.fetch).toHaveBeenCalled()
+    const calls = vi.mocked(globalThis.fetch).mock.calls
+    const url = String(calls[calls.length - 1][0])
+    expect(url).toContain('/api/log')
+    expect(url).toContain('page=1')
+    expect(url).toContain('author=alice')
+  })
+
+  test('LL-26: 组件卸载后不再响应该事件(监听器必须跟着卸载清掉)', async () => {
+    mockFetchResponse('/api/log', { data: [], total: 0, hasMore: false })
+    const w = mountLogList()
+    w.unmount()
+    vi.mocked(globalThis.fetch).mockClear()
+
+    window.dispatchEvent(new Event('git-log-auto-refresh'))
+    await flushPromises()
+
+    expect(globalThis.fetch).not.toHaveBeenCalled()
   })
 })

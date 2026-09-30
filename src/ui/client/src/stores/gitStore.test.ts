@@ -342,6 +342,114 @@ describe('gitStore.createInitialCommit', () => {
 })
 
 // ---------------------------------------------------------------------------
+// refreshStatusOnFocus:页面重新聚焦时的静默刷新。
+//
+// 背景:窗口 focus / 标签页 visible 时会重拉文件状态 + 分支上下游,但右侧
+// 提交历史只 watch gitStore.log,感知不到这些变化 —— 用户在 VSCode / CLI /
+// 本项目的编排台里提交完切回窗口,左侧列表更新了、右侧提交历史还是旧的。
+// 所以聚焦刷新要多做一件事:比对刷新前后的工作区状态指纹,**变了**才派发
+// git-log-auto-refresh 让 LogList 重拉(LogList 那边保留自己的筛选条件)。
+//
+// 本组锁定 3 件事:
+//   1. 状态没变 → 一个事件都不派(alt-tab 是高频路径,不能每次都刷 log);
+//   2. 状态变了 → 派且只派一次(visibilitychange 与 focus 会同时触发);
+//   3. 非 Git 仓库 / 重复调用都不产生额外请求。
+// ---------------------------------------------------------------------------
+describe('gitStore.refreshStatusOnFocus', () => {
+  // porcelain 可变的桩:测试中途改它就能模拟"用户在外面动了仓库"
+  function stubFocusApi(getPorcelain: () => string) {
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const target = String(url)
+      calls.push(target)
+      const json = (payload: unknown) => new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+      if (target.startsWith('/api/status_porcelain')) {
+        return json({ status: getPorcelain() })
+      }
+      if (target.startsWith('/api/branch-status')) {
+        // 恒定不变 → getBranchStatus 自己的自动刷 log 分支不会掺进来
+        return json({ hasUpstream: false, ahead: 0, behind: 0 })
+      }
+      return json({})
+    }))
+    return calls
+  }
+
+  let autoRefreshEvents: Event[] = []
+  const onAutoRefresh = (e: Event) => { autoRefreshEvents.push(e) }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    autoRefreshEvents = []
+    window.addEventListener('git-log-auto-refresh', onAutoRefresh)
+  })
+
+  afterEach(() => {
+    window.removeEventListener('git-log-auto-refresh', onAutoRefresh)
+    vi.unstubAllGlobals()
+  })
+
+  test('工作区状态没变 → 不派事件(切一下窗口不该刷提交历史)', async () => {
+    let porcelain = ' M src/a.ts'
+    const calls = stubFocusApi(() => porcelain)
+    const store = useGitStore()
+    store.isGitRepo = true
+
+    await store.fetchStatus()      // 建立基线:fileList = [src/a.ts]
+    await store.refreshStatusOnFocus()
+
+    expect(autoRefreshEvents.length).toBe(0)
+    // 状态确实重拉了,只是没连带刷 log
+    expect(calls.some(u => u.startsWith('/api/status_porcelain'))).toBe(true)
+  })
+
+  test('工作区状态变了 → 派发事件让右侧提交历史重拉', async () => {
+    // 这正是编排台 agent 的典型流程:提交并 push 后,工作区从"有改动"变干净,
+    // 而 ahead/behind 全程是 0 —— 只靠分支状态永远发现不了 log 该刷
+    let porcelain = ' M src/a.ts'
+    const calls = stubFocusApi(() => porcelain)
+    const store = useGitStore()
+    store.isGitRepo = true
+
+    await store.fetchStatus()
+    porcelain = ''                  // 外部提交完成
+    await store.refreshStatusOnFocus()
+
+    expect(autoRefreshEvents.length).toBe(1)
+    expect(calls.some(u => u.startsWith('/api/status_porcelain'))).toBe(true)
+  })
+
+  test('同一时刻重复调用只跑一轮(visibilitychange 与 window focus 同时触发)', async () => {
+    let porcelain = ' M src/a.ts'
+    const calls = stubFocusApi(() => porcelain)
+    const store = useGitStore()
+    store.isGitRepo = true
+
+    await store.fetchStatus()
+    porcelain = ' M src/a.ts\nA  src/b.ts'
+    await Promise.all([store.refreshStatusOnFocus(), store.refreshStatusOnFocus()])
+
+    // 基线那一次 + 两轮并发里跑成的一轮 = 2 次,不能是 3 次
+    expect(calls.filter(u => u.startsWith('/api/status_porcelain')).length).toBe(2)
+    expect(autoRefreshEvents.length).toBe(1)
+  })
+
+  test('非 Git 仓库直接短路,不发任何请求', async () => {
+    const calls = stubFocusApi(() => '')
+    const store = useGitStore()
+    store.isGitRepo = false
+
+    await store.refreshStatusOnFocus()
+
+    expect(calls.length).toBe(0)
+    expect(autoRefreshEvents.length).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // ensureGitignore:补 .gitignore 的安全边界。
 //
 // 这是"拦截 → 一键补忽略规则"里的写盘环节,风险在于改动用户自己维护的

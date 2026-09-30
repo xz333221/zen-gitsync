@@ -524,10 +524,10 @@ async function unstageFile(filePath: string) {
 async function refreshStatus() {
   try {
     if (!gitStore.isGitRepo) return
-    // 刷新文件状态
-    await gitStore.fetchStatus()
-    // 强制刷新分支状态（绕过30秒缓存），确保 branchAhead/branchBehind 立即更新
-    await gitStore.getBranchStatus(true)
+    // 走 store 的同一个入口：文件状态 + 分支上下游（force=true 绕过后端 5s 缓存）；
+    // 工作区状态和刷新前不同时，右侧提交历史会跟着重拉 —— 与聚焦刷新行为一致，
+    // 不然"手动刷新了状态、右侧 log 还是旧的"会很误导
+    await gitStore.refreshStatusOnFocus(true)
     ElMessage.success($t('@13D1C:Git 状态已刷新'))
   } catch (error) {
     ElMessage.error(`${$t('@13D1C:刷新失败: ')}${(error as Error).message}`)
@@ -1057,27 +1057,21 @@ onMounted(() => {
   window.addEventListener('git-status-refresh', handleGitStatusRefresh);
   
   // 监听页面可见性变化，类似VSCode的做法：标签页激活时自动刷新git状态
+  // 静默刷新，不弹提示；store 内部会比对刷新前后的工作区状态，
+  // 只有真的变了才通知右侧提交历史(LogList)跟着重拉 —— alt-tab 不产生额外请求。
   const handleVisibilityChange = () => {
-    if (document.visibilityState === 'visible' && gitStore.isGitRepo) {
+    if (document.visibilityState === 'visible') {
       console.log('[页面可见性] 标签页已激活，刷新Git状态和分支信息');
-      // 静默刷新，不显示提示信息，同时刷新文件状态和上下游信息
-      Promise.all([
-        gitStore.fetchStatus(),      // 刷新文件状态
-        gitStore.getBranchStatus()   // 刷新上下游信息
-      ]).catch(err => console.error('刷新失败:', err));
+      void gitStore.refreshStatusOnFocus();
     }
   };
   
   // 监听窗口获得焦点事件：从其他应用（如VSCode）切换回浏览器时刷新
+  // 与上面的 visibilitychange 走同一条路（store 内有 in-flight 去重：
+  // 切回标签页时两个事件会同时触发）
   const handleWindowFocus = () => {
-    if (gitStore.isGitRepo) {
-      console.log('[窗口焦点] 浏览器窗口已激活，刷新Git状态和分支信息');
-      // 静默刷新，不显示提示信息，同时刷新文件状态和上下游信息
-      Promise.all([
-        gitStore.fetchStatus(),      // 刷新文件状态
-        gitStore.getBranchStatus()   // 刷新上下游信息
-      ]).catch(err => console.error('刷新失败:', err));
-    }
+    console.log('[窗口焦点] 浏览器窗口已激活，刷新Git状态和分支信息');
+    void gitStore.refreshStatusOnFocus();
   };
   
   document.addEventListener('visibilitychange', handleVisibilityChange);

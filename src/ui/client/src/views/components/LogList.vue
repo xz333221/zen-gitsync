@@ -379,8 +379,21 @@ function handleKeyDown(event: KeyboardEvent) {
   }
 }
 
-// 在组件挂载时添加键盘事件监听
+// 页面聚焦时 gitStore 检测到"工作区状态和上次不同",会派发这个事件
+// (见 stores/gitStore.ts 的 refreshStatusOnFocus 与 GIT_LOG_AUTO_REFRESH_EVENT)。
+//
+// 为什么不直接改 gitStore.log:store.fetchLog 拉的是**不带筛选**的第一页,
+// LogList 的 watch 会把它整段覆盖 —— 用户正按作者/分支筛选看历史,切回窗口
+// 一聚焦,筛选就被悄悄清空了。走事件让本组件用自己的 loadLog 刷新,
+// 作者/分支/关键词/日期筛选全部保留。
+const handleAutoRefresh = () => {
+  if (!gitStore.isGitRepo) return;
+  if (localLoading.value || isLoadingMore.value) return; // 正在加载就不插队
+  void refreshLog();
+};
+
 onMounted(() => {
+  window.addEventListener('git-log-auto-refresh', handleAutoRefresh);
   // 检查gitStore中是否已有数据
   if (gitStore.isGitRepo) {
     if (gitStore.log.length > 0) {
@@ -447,6 +460,7 @@ onBeforeUnmount(() => {
 
   // 移除键盘事件监听
   window.removeEventListener('keydown', handleKeyDown);
+  window.removeEventListener('git-log-auto-refresh', handleAutoRefresh);
 });
 
 

@@ -28,6 +28,15 @@ const GIT_OPERATION_DELAY = 800
 // 的最小间隔(毫秒)。防止 refresh 按钮连点 / 用户连续 commit 时反复触发 fetchLog。
 const AUTO_LOG_REFRESH_INTERVAL_MS = 2000
 
+// 页面重新聚焦时,若"刷新前后的工作区状态"不同,派发这个 window 事件,
+// 让右侧提交历史(LogList)带自己的筛选条件重新拉第一页。
+//
+// 为什么派事件而不是直接调 store.fetchLog():LogList 组件里有作者 / 分支 / 关键词 /
+// 日期筛选,fetchLog 拉的是**不带筛选**的原始第一页,直接写 gitStore.log 会被
+// LogList 的 watch 整段覆盖 —— 用户正按作者筛选看历史,切回窗口一聚焦,筛选就被
+// 悄悄清空了。走事件让 LogList 用自己的 loadLog 刷新,筛选与滚动位置都保留。
+const GIT_LOG_AUTO_REFRESH_EVENT = 'git-log-auto-refresh'
+
 // 获取后端端口
 const backendPort = getBackendPort()
 
@@ -202,6 +211,10 @@ export const useGitStore = defineStore('git', () => {
   // 自动刷新提交历史的节流时间戳(模块级,store 单例共享)
   // 用于 getBranchStatus 内 ahead/behind 变化时,2s 内只刷一次 log
   let lastAutoLogRefresh = 0
+
+  // refreshStatusOnFocus 是否正在跑。visibilitychange 与 window focus 在
+  // 切回标签页时同时触发,靠它去重(见 refreshStatusOnFocus)。
+  let isFocusRefreshing = false
   
   // 在状态部分添加stash相关的状态变量
   const stashes = ref<{ id: string; description: string }[]>([])
@@ -255,6 +268,84 @@ export const useGitStore = defineStore('git', () => {
     currentPage.value = 1
     hasMoreData.value = true
     totalCommits.value = 0
+  }
+
+  // 工作区状态的指纹:文件列表(类型 + 路径)的 32 位 FNV-1a。
+  //
+  // 为什么需要它:页面聚焦只能看到"分支状态 + 文件列表"这两个便宜的信号,
+  // 但用户真正关心的是"这段时间仓库被动过没有"。用户在 VSCode / CLI / 本项目
+  // 的编排台里提交后回来,左侧列表要更新、右侧提交历史也要跟上;
+  // 只靠 ahead/behind 会漏掉"提交后又 push 回同步"和"分支没变但文件变了"的情况。
+  //
+  // 逐字符算而不是 JSON.stringify / join:大仓库下 untracked 能到几千文件,
+  // join 会额外分配几 MB 字符串,而 focus 是 alt-tab 就能触发的高频路径。
+  function statusFingerprint(): string {
+    const list = fileList.value
+    let hash = 0x811c9dc5
+    for (let i = 0; i < list.length; i++) {
+      const key = `${list[i].type}:${list[i].path}`
+      for (let j = 0; j < key.length; j++) {
+        hash = (hash ^ key.charCodeAt(j)) >>> 0
+        hash = Math.imul(hash, 0x01000193) >>> 0
+      }
+      // 条目分隔符:避免 ['a:b','c'] 与 ['a','b:c'] 撞成同一个指纹
+      hash = Math.imul(hash ^ 0x0a, 0x01000193) >>> 0
+    }
+    return `${list.length}:${hash.toString(16)}`
+  }
+
+  // 页面重新聚焦(窗口 focus / 标签页可见)时的静默刷新。
+  //
+  // 刷新文件状态 + 分支上下游;只有"刷新前后的工作区指纹不同"才通知右侧
+  // 提交历史重拉 —— focus 在 alt-tab 时非常频繁,没变化就不该有任何额外请求。
+  // 与 getBranchStatus 里的自动刷 log 共用 lastAutoLogRefresh 节流,
+  // 一次聚焦里两个信号都命中也只刷一次。
+  //
+  // forceBranch:手动点"刷新"时传 true,让分支状态绕过服务端的 5s 缓存
+  // (聚焦刷新用 false,省掉一次多余的 symbolic-ref)。
+  async function refreshStatusOnFocus(forceBranch = false) {
+    // 非 Git 目录连 fileList 都没有,直接短路(下面两处 isGitRepo 判断是
+    // fetchStatus / getBranchStatus 自己的守卫,这里提前返回省掉两次 Promise)
+    if (!isGitRepo.value) return
+
+    // visibilitychange 与 window focus 在"切回标签页"时会**同时**触发,
+    // 不去重就是同一轮刷新跑两遍(两倍 git 子进程 + 两倍网络请求)
+    if (isFocusRefreshing) return
+    isFocusRefreshing = true
+
+    try {
+      const before = statusFingerprint()
+      await Promise.all([
+        fetchStatus(),            // 刷新文件状态
+        getBranchStatus(forceBranch) // 刷新上下游信息
+      ])
+      const after = statusFingerprint()
+
+      // 没变化 = 用户只是切了一下窗口,不该有任何额外请求。
+      // 拿"刷新前的 fileList"当基线是刻意的:启动后第一次聚焦时 fileList 已经有值,
+      // 所以这里天然有"之前"可比,不需要额外的持久化基线字段。
+      if (before === after) return
+
+      const now = Date.now()
+      if (now - lastAutoLogRefresh < AUTO_LOG_REFRESH_INTERVAL_MS) {
+        console.log(
+          `[refreshStatusOnFocus] 工作区状态已变化,但在 ${AUTO_LOG_REFRESH_INTERVAL_MS}ms 节流窗口内,跳过自动刷新提交历史`
+        )
+        return
+      }
+      lastAutoLogRefresh = now
+
+      console.log(
+        `[refreshStatusOnFocus] 检测到工作区状态变化(${before} → ${after}),自动刷新右侧提交历史`
+      )
+      window.dispatchEvent(new CustomEvent(GIT_LOG_AUTO_REFRESH_EVENT, {
+        detail: { reason: 'status-changed-on-focus' }
+      }))
+    } catch (error) {
+      console.error('[refreshStatusOnFocus] 刷新失败:', error)
+    } finally {
+      isFocusRefreshing = false
+    }
   }
 
   // 获取分支状态（领先/落后远程）
@@ -2953,6 +3044,7 @@ export const useGitStore = defineStore('git', () => {
     clearUserConfig,
     restoreUserConfig,
     getBranchStatus,
+    refreshStatusOnFocus,
     gitPull,
     gitFetchAll,
     bootFetch,

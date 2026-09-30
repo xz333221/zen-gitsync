@@ -346,11 +346,9 @@ const pendingEditorFilePath = ref<string | null>(null)
 
 // 切换到 Git 视图时静默刷新状态（与窗口焦点/标签页可见时一致）
 watch(activeView, (view) => {
-  if (view === 'git' && gitStatusRef.value && gitStore.isGitRepo) {
-    Promise.all([
-      gitStore.fetchStatus(),
-      gitStore.getBranchStatus()
-    ]).catch(err => console.error('切换到Git视图刷新失败:', err))
+  if (view === 'git') {
+    // 同一个入口（内部含 isGitRepo 守卫 + 状态变化比对），别在这里另写一份
+    void gitStore.refreshStatusOnFocus()
   }
 })
 
