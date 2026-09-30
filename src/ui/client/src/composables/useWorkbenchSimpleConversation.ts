@@ -3,6 +3,7 @@ import type { Ref, ComputedRef } from 'vue'
 import type { ChatMessage, MessageStatus } from 'zen-ai-chat-ui'
 import type { Job, Task } from '@/types/workbench'
 import { buildJobToolCalls } from '@/utils/jobToolCalls'
+import { userFacingPrompt } from '@/utils/jobUserPrompt'
 
 const SIMPLE_SUB_ID_SUFFIX = '__simple'
 const MAX_LOG_DISPLAY_SIMPLE = 64 * 1024
@@ -47,14 +48,20 @@ export function useWorkbenchSimpleConversation(jobs: Ref<Job[]>, selectedTask: C
     allJobs.forEach((j, idx) => {
       const isLast = idx === allJobs.length - 1
       const createdAt = j.startedAt ? new Date(j.startedAt).getTime() : Date.now()
+      // 气泡只显示用户真正说过的那部分：job.prompt 前面还挂着环境块/记忆块、后面挂着
+      // 附件清单与「续接 #N」（见 utils/jobUserPrompt.ts 里的实测数据 —— 原样渲染会让
+      // 每轮气泡糊一大块重复内容，而且用户复制对话再粘回去时会把这些块一起带回去）。
       if (j.prompt) {
-        msgs.push({
-          id: `${j.id}-u`,
-          role: 'user',
-          content: j.prompt,
-          status: 'done',
-          createdAt
-        })
+        const content = userFacingPrompt(j.prompt)
+        if (content) {
+          msgs.push({
+            id: `${j.id}-u`,
+            role: 'user',
+            content,
+            status: 'done',
+            createdAt
+          })
+        }
       }
       const rawOutput = j.output || ''
       const rawThinking = j.thinking || ''

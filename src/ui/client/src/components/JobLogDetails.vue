@@ -138,6 +138,7 @@ import 'zen-ai-chat-ui/style.css'
 import { avatarForExecutor } from '@/utils/agentAvatar'
 import { taskExecutorName } from '@/utils/taskExecutor'
 import { buildJobToolCalls } from '@/utils/jobToolCalls'
+import { userFacingPrompt } from '@/utils/jobUserPrompt'
 import { $t } from '@/lang/static'
 import CommonDialog from '@/components/CommonDialog.vue'
 import type { Job, JobStatus } from '@/types/workbench'
@@ -246,7 +247,7 @@ const finishedStatusLabel = computed(() => {
 
 // ── zen-ai-chat-ui 消息映射 ────────────────────────────────────────────
 // 把单轮 Job 映射成 ChatContainer 的 messages 数组:
-//   job.prompt        → user 消息(右气泡)
+//   job.prompt        → user 消息(右气泡,经 userFacingPrompt 去掉注入块)
 //   job.thinking      → assistant.reasoning(可折叠思考块)
 //   job.output        → assistant.content(Markdown 正文 + 流式光标)
 //   job.status        → message.status(streaming 光标 / pending 打字点 / done / error)
@@ -273,13 +274,19 @@ const chatMessages = computed<ChatMessage[]>(() => {
   const createdAt = j.startedAt ? new Date(j.startedAt).getTime() : Date.now()
 
   if (j.prompt) {
-    msgs.push({
-      id: `${j.id}-u`,
-      role: 'user',
-      content: j.prompt,
-      status: 'done',
-      createdAt
-    })
+    // 同 useWorkbenchSimpleConversation：气泡只显示用户真正说过的那部分，
+    // 注入的环境块/记忆块/附件清单不进对话流（见 utils/jobUserPrompt.ts）。
+    // 注意「复制日志」（copyAll）仍按 job.prompt 原文导出 —— 那是排查用的全量快照。
+    const content = userFacingPrompt(j.prompt)
+    if (content) {
+      msgs.push({
+        id: `${j.id}-u`,
+        role: 'user',
+        content,
+        status: 'done',
+        createdAt
+      })
+    }
   }
 
   const outputText = displayOutput()
