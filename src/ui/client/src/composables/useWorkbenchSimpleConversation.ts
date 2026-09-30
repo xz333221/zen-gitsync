@@ -4,6 +4,7 @@ import type { ChatMessage, MessageStatus } from 'zen-ai-chat-ui'
 import type { Job, Task } from '@/types/workbench'
 import { buildJobToolCalls } from '@/utils/jobToolCalls'
 import { userFacingPrompt } from '@/utils/jobUserPrompt'
+import { resolveLocalImages } from '@/utils/localImageSrc'
 
 const SIMPLE_SUB_ID_SUFFIX = '__simple'
 const MAX_LOG_DISPLAY_SIMPLE = 64 * 1024
@@ -94,7 +95,9 @@ export function useWorkbenchSimpleConversation(jobs: Ref<Job[]>, selectedTask: C
       msgs.push({
         id: `${j.id}-a`,
         role: 'assistant',
-        content: outputText,
+        // 正文里嵌的本机图片路径 → 后端端点（模型写 `![](c:\…\a.png)` 时才看得见图，
+        // 见 utils/localImageSrc.ts）。放在这里而不是组件里：两个视图共用这一份映射。
+        content: resolveLocalImages(outputText, j.id),
         reasoning: hasThinking ? thinkingText : undefined,
         reasoningStatus: hasThinking
           ? (!isLast && hasOutput ? 'done' : (hasOutput ? 'done' : (status === 'streaming' ? 'streaming' : 'done')))

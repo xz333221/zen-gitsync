@@ -252,6 +252,23 @@ test('注入块带上「克隆优先 SSH」这条用户偏好', () => {
   assert.match(block, /Permission denied \(publickey\)/);
 });
 
+// ── 对话流渲染：正文里嵌的图 ──────────────────────────────────────────────
+//
+// 执行器"展示一张图"的默认写法是贴一条本机路径（它 Read 了那张图，描述得也挺准），
+// 而对话流是 markdown 渲染 —— 用户屏幕上只有一行字。这条提示是唯一能让 Agent 知道
+// "写 ![](路径) 才看得见"的地方，所以两种模式都得带上，且必须点明"仓库内"这个前提
+// （后端端点只服务仓库内的图片，写成仓库外的路径会 403）。
+test('注入块要求 Agent 用 markdown 图片语法展示图，且说明图片须在仓库内', () => {
+  const board = boardOf({ recentDirs: ['D:\\ws\\a'], tasks: [] });
+  for (const [name, block] of [['完整版', build({ board })], ['精简版', build({ board, compact: true })]]) {
+    assert.match(block, /对话流渲染/, `${name}缺少对话流渲染提示`);
+    assert.match(block, /!\[说明\]\(图片绝对路径\)/, `${name}没给出可照抄的写法`);
+    assert.match(block, /仓库内/, `${name}没说清图片必须落在仓库内`);
+    // 只贴路径这个反例要点出来：模型最可能的做法就是它
+    assert.match(block, /只贴路径/, `${name}没点出"只贴路径看不到图"`);
+  }
+});
+
 test('真相源清单来自唯一的 TRUTH_FILES（四个路径一个不落，且不多写）', () => {
   const block = build({ board: boardOf({ recentDirs: ['D:\\ws\\a'], tasks: [] }) });
   const listed = block.split('\n').filter(l => l.startsWith('- ') && l.includes(' —— ') && l.includes('json'));

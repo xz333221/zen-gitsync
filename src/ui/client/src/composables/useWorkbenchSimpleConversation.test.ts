@@ -185,3 +185,36 @@ describe('执行流的工具块真的画出来了', () => {
     expect(wrapper.find('.acu-toolgroup').exists()).toBe(true)
   })
 })
+
+describe('正文里嵌的本机图片真的画成了 <img>', () => {
+  // 这条链路是三段拼起来的：模型在正文里写 `![](c:\…\a.png)` → 这里把它重写成
+  // 后端端点 → 组件库的 markdown 渲染出 <img>。只断言第一步的话，"改完前端还是
+  // 裂图"（比如组件库禁了原始 HTML、或把 image 规则挡掉了）没人发现，所以这里
+  // 把真实的 ChatContainer 挂出来，直接找 DOM 里的那个 img。
+  const proto = Element.prototype as unknown as { scrollTo?: () => void }
+  if (!proto.scrollTo) proto.scrollTo = () => {}
+
+  test('markdown 图片的 src 指向后端端点，而不是本机路径', async () => {
+    const local = 'c:\\proj\\docs\\screenshots\\a.png'
+    const messages = setup([makeJob({ status: 'done', output: `看这张：\n\n![截图](${local})` })])
+
+    const assistant = messages.value.find(m => m.role === 'assistant')!
+    expect(assistant.content).toContain('/api/workbench/jobs/j1/image?path=')
+    expect(assistant.content).not.toContain(local)
+
+    const wrapper = mount(ChatContainer, {
+      props: { messages: messages.value },
+      global: { mocks: { $t: (k: string) => k } }
+    })
+    // MarkdownRenderer 用 rAF 节流渲染，等一帧再找
+    await new Promise(r => setTimeout(r, 80))
+
+    const img = wrapper.find('img.acu-md-img')
+    expect(img.exists()).toBe(true)
+    expect(img.attributes('src')).toBe(`/api/workbench/jobs/j1/image?path=${encodeURIComponent(local)}`)
+    // ⚠️ 这里**故意不**断言 alt：组件库 useMarkdown.ts 覆盖了 markdown-it 的 image
+    // 规则（加 class / loading），但没有像默认规则那样调 renderInlineAsText 回填 alt，
+    // 于是所有 markdown 图片渲染出来 alt 都是空的（实测：markdown-it 单独跑是 `截图`，
+    // 走组件库就是 `""`）。那是 zen-ai-chat-ui 那边的一行修复，改完再回来补这条断言。
+  })
+})

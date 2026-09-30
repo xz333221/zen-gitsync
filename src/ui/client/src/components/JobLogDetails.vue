@@ -139,6 +139,7 @@ import { avatarForExecutor } from '@/utils/agentAvatar'
 import { taskExecutorName } from '@/utils/taskExecutor'
 import { buildJobToolCalls } from '@/utils/jobToolCalls'
 import { userFacingPrompt } from '@/utils/jobUserPrompt'
+import { resolveLocalImages } from '@/utils/localImageSrc'
 import { $t } from '@/lang/static'
 import CommonDialog from '@/components/CommonDialog.vue'
 import type { Job, JobStatus } from '@/types/workbench'
@@ -174,8 +175,11 @@ const MAX_LOG_DISPLAY = 64 * 1024
 function displayOutput(): string {
   const raw = props.job.output || ''
   if (!raw) return ''
-  if (raw.length <= MAX_LOG_DISPLAY) return raw
-  return `${$t('@WORKBENCH:…（前文已截断）')}\n${raw.slice(-MAX_LOG_DISPLAY)}`
+  // 截断之后再重写图片路径：截断是按字符数切的，先重写会把 URL 算进"长度"里
+  const text = raw.length <= MAX_LOG_DISPLAY
+    ? raw
+    : `${$t('@WORKBENCH:…（前文已截断）')}\n${raw.slice(-MAX_LOG_DISPLAY)}`
+  return resolveLocalImages(text, props.job.id)
 }
 /* thinking 也走 64KB 截断,跟 displayOutput 同语义。
    之前没截断的隐患:thinking 在模板里直接展示,50 条全展开时
@@ -341,7 +345,8 @@ const elapsedLabel = computed(() => {
 // 全屏查看：dialog 打开时显示完整 output(无截断),关闭后回到 inline 视图
 const fullscreenOpen = ref(false)
 const hasOutput = computed(() => !!(props.job.output && props.job.output.length))
-const fullscreenSource = computed(() => props.job.output || '')
+// 全屏看的是**完整** output（不截断），图片路径同样要重写，否则全屏里反而看不到图
+const fullscreenSource = computed(() => resolveLocalImages(props.job.output || '', props.job.id))
 const fullscreenContainerRef = ref<HTMLElement | null>(null)
 
 // 进入全屏后,若日志还在流式追加,保持滚到底

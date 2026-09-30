@@ -75,6 +75,12 @@ import {
   cleanupDispatchStaging,
 } from './attachmentUtils.js';
 import {
+  resolveJobImagePath,
+  isInsideRoot,
+  IMAGE_PATH_ERRORS,
+  IMAGE_PATH_STATUS,
+} from './jobImage.js';
+import {
   DEFAULT_INSTRUCTION,
   readInstruction,
   writeInstruction,
@@ -931,6 +937,84 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
     const j = mergedJobs().get(req.params.id);
     if (!j) throw new HttpError(404, 'job 不存在');
     res.json({ success: true, job: serializeJob(j, taskMap) });
+  }));
+
+  // GET /api/workbench/jobs/:id/image?path=…  —— 正文内嵌图片（模型写 ![说明](本机路径)）
+  //
+  // 为什么要有这个端点：执行器在本机干活，"展示一张图"最自然的写法是贴一条本机路径，
+  // 而对话流是 markdown 渲染 —— `<img src="c:\ws\repo\docs\a.png">` 在浏览器里永远是
+  // 裂图。前端把这类路径重写成这个 URL（utils/localImageSrc.ts，两处对话流共用）。
+  //
+  // 权限边界 =「这个 job 所属仓库内的图片文件」（判定见 jobImage.js）：
+  //   · 后缀过 IMAGE_EXTS 白名单；路径必须落在仓库根内（`..` 穿越在那里就挡掉了）；
+  //   · 这里**再按 realpath 校验一次** —— lexical 判定挡不住仓库里一个指向外部的
+  //     符号链接，而仓库内容很可能是从网上 clone 来的；
+  //   · 响应带 nosniff + CSP(sandbox)：同上前提下，一份恶意 SVG 被直接在浏览器里
+  //     打开时，它的脚本不能跑在本应用的源上（<img> 里本来就不会执行，这里防的是直接访问）。
+  app.get('/api/workbench/jobs/:id/image', asyncRoute(async (req, res) => {
+    const id = req.params.id;
+    // 优先内存；退回「磁盘历史 ∪ 别的实例正在跑」的合并表 —— 看板上能看到、日志也能
+    // 在本实例渲染的 job，它的图不该因为"不是这个进程起的"就裂掉（与 GET /jobs/:id 同源）。
+    let job = jobs.get(id);
+    if (!job) {
+      await refreshJobsFromDisk();
+      job = mergedJobs().get(id);
+    }
+    if (!job) throw new HttpError(404, 'job 不存在');
+
+    const tasksData = await readJson(TASKS_FILE, { tasks: [] });
+    const task = (tasksData.tasks || []).find(t => t.id === job.taskId);
+    const root = resolveTaskRepoPath(
+      task,
+      typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '',
+    );
+
+    const resolved = resolveJobImagePath({ root, requested: req.query.path });
+    if (!resolved.ok) {
+      throw new HttpError(
+        IMAGE_PATH_STATUS[resolved.reason] || 400,
+        IMAGE_PATH_ERRORS[resolved.reason] || '图片路径不合法',
+      );
+    }
+
+    let realFile;
+    try {
+      realFile = await fsp.realpath(resolved.absPath);
+    } catch {
+      throw new HttpError(404, '图片不存在（模型给的路径在本机读不到）');
+    }
+    let realRoot;
+    try {
+      realRoot = await fsp.realpath(root);
+    } catch {
+      realRoot = root; // 仓库根都没了的话，下面那次 stat 也会失败，不必在这里另报一种错
+    }
+    if (!isInsideRoot(realRoot, realFile)) {
+      throw new HttpError(IMAGE_PATH_STATUS['outside-root'], IMAGE_PATH_ERRORS['outside-root']);
+    }
+
+    let stat;
+    try {
+      stat = await fsp.stat(realFile);
+    } catch {
+      throw new HttpError(404, '图片不存在（模型给的路径在本机读不到）');
+    }
+    if (!stat.isFile()) throw new HttpError(404, '路径不是一个文件');
+    // 与附件同一个上限：正文里嵌一张 20MB 以上的图只会把页面拖死
+    if (stat.size > MAX_IMAGE_BYTES) {
+      throw new HttpError(413, `图片超过 ${MAX_IMAGE_BYTES / 1024 / 1024}MB，未加载`);
+    }
+
+    // mime 按**后缀**给（不读文件头）：后缀已过白名单，且这条内容只喂给 <img>
+    res.set('Content-Type', resolved.mime);
+    res.set('Content-Length', String(stat.size));
+    res.set('Content-Disposition', 'inline');
+    res.set('Cache-Control', 'private, max-age=300');
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    const stream = fs.createReadStream(realFile);
+    stream.on('error', () => res.end());
+    stream.pipe(res);
   }));
 
   app.delete('/api/workbench/jobs/:id', asyncRoute(async (req, res) => {
