@@ -50,6 +50,8 @@
     "verify:wb-task-duration": "node scripts/verify-wb-task-duration.cjs",
     "verify:wb-card-executor-icon": "node scripts/verify-wb-card-executor-icon.cjs",
     "verify:wb-card-opened": "node scripts/verify-wb-card-opened.cjs",
+    "verify:wb-card-stop": "node scripts/verify-wb-card-stop.cjs",
+    "verify:wb-card-stop:reverse": "node scripts/verify-wb-card-stop.cjs --reverse",
     "verify:wb-list-view": "node scripts/verify-wb-list-view.cjs",
     "verify:wb-executor-models": "node scripts/verify-wb-executor-models.cjs",
     "verify:wb-task-sound": "node scripts/verify-wb-task-sound.cjs",

@@ -26,7 +26,9 @@
   关掉就回到原来的位置和筛选，本身就不会丢上下文。
   （曾经这里先弹一个只读详情弹窗、再从里面点「打开编辑器」——那多出来的一跳，
    在编辑器还是独立页面时是为了保住看板位置；编辑器改成弹窗之后这个理由就不成立了，
-   2026-09-20 去掉。执行 / 删除仍然留在卡片上，扫全局时就地处理的路子没变。）
+   2026-09-20 去掉。执行 / 停止 / 删除仍然留在卡片上，扫全局时就地处理的路子没变。
+   其中「停止」是 2026-09-30 补的：一条任务卡了半小时，用户在看板上看着它转，
+   想停却只能点进编辑器翻到那一栏 —— 「就地处理」在"任务正在跑"这个最需要它的场景上恰恰是缺的。）
 
   工具条上只有一个搜索框：原来并排的「仅看报错」勾选框 2026-09-29 去掉——
   "哪条任务报过错"卡片自己就有标记（.kb-card.has-error + 小红点），
@@ -40,10 +42,10 @@
   现在时间列与排序键都统一到 cardTime（与看板卡片同一口径），排序键 = 显示键。
 
   被点开过的那张卡片（.kb-card.is-opened，id 由上层给的 openedTaskId）取消 hover：
-  「执行 / ×」不再随鼠标浮出、卡片也不再抬升、正文右侧的渐隐一并撤掉。
-  理由是这条任务已经在编辑器里了（执行 / 删除在那儿都有），卡片上再摆一份
+  「执行 / 停止 / ×」不再随鼠标浮出、卡片也不再抬升、正文右侧的渐隐一并撤掉。
+  理由是这条任务已经在编辑器里了（执行 / 停止 / 删除在那儿都有），卡片上再摆一份
   只会跟正文抢右下角那块地方 —— 顺带把"鼠标恰好停在这张上"的误触也堵掉。
-  键盘仍然可达（:focus-within 照旧浮出），否则 Tab 过去就摸不到这两个按钮。
+  键盘仍然可达（:focus-within 照旧浮出），否则 Tab 过去就摸不到这几个按钮。
 -->
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
@@ -73,6 +75,8 @@ const emit = defineEmits<{
   /** 打开任务编辑器（上层把编辑器弹窗顶起来，不换页） */
   'open-task': [task: BoardTask]
   'run-task': [task: BoardTask]
+  /** 停止这条任务正在跑的那一轮（与编辑器的「停止」同一个接口，确认弹窗也在上层统一） */
+  'stop-task': [task: BoardTask]
   'delete-task': [task: BoardTask]
   'create-task': []
 }>()
@@ -420,6 +424,13 @@ function liveSummary(live: BoardTaskLive): string {
             </p>
 
             <div class="kb-card__actions">
+              <!--
+                这一格是「对这条任务现在能做什么」，空闲与在跑各一个，**不并排**：
+                空闲时能做的只有"跑一轮"，在跑时能做的只有"停掉这一轮"，
+                两个按钮同时摆着会让人以为"在跑也能再跑一轮"（服务端也确实拒绝）。
+                位置固定在同一格还有个几何上的理由：两个标签都是 2 个汉字、同字号同内边距，
+                操作组宽度因此**一个像素都不变** —— 下面那段按组宽反推的渐隐距离不用跟着改。
+              -->
               <button
                 v-if="t.runningJobs === 0"
                 type="button"
@@ -428,6 +439,23 @@ function liveSummary(live: BoardTaskLive): string {
                 @click.stop="emit('run-task', t)"
                 @keydown.stop
               >{{ $t('@WORKBENCH:执行') }}</button>
+              <!--
+                停止：只有真在跑（runningJobs > 0 ⟺ 服务端推导出的「进行中」列）时才在。
+                条件用 runningJobs 而不是 `!!t.live`：两者在服务端同源（都是"有 running/pending
+                的 job"），但 runningJobs 是这张卡片列归属的判据本身，跟着它走不会出现
+                "卡片在待处理列却带个停止按钮"这种自相矛盾的状态。
+                点了做什么（确认弹窗、调哪个接口、jobId 从哪来）全在上层 —— 卡片只管发出意图，
+                与 run / delete 一致。
+              -->
+              <button
+                v-else
+                type="button"
+                class="kb-card__btn kb-card__btn--stop"
+                :title="$t('@WORKBENCH:停止')"
+                :aria-label="$t('@WORKBENCH:停止')"
+                @click.stop="emit('stop-task', t)"
+                @keydown.stop
+              >{{ $t('@WORKBENCH:停止') }}</button>
               <button
                 type="button"
                 class="kb-card__btn kb-card__btn--danger"
@@ -976,7 +1004,7 @@ function liveSummary(live: BoardTaskLive): string {
  * 用 `:not(.is-opened)` 改**触发侧**而不是事后去覆盖 opacity / mask ——
  * 遮罩与浮层是成对的（遮罩是遮**字**的），只撤一个就会留下"按钮没了但字白少一截"的半吊子状态。
  * :focus-within 那一路**不加**这个条件：Tab 进卡片里的按钮时操作组照旧浮出，
- * 否则「执行 / ×」对键盘用户就等于消失了（它们 pointer-events 也归零，鼠标和键盘都点不到）。
+ * 否则「执行 / 停止 / ×」对键盘用户就等于消失了（它们 pointer-events 也归零，鼠标和键盘都点不到）。
  */
 .kb-card:not(.is-opened):hover .kb-card__actions,
 .kb-card:focus-within .kb-card__actions {
@@ -997,7 +1025,9 @@ function liveSummary(live: BoardTaskLive): string {
  * （padding-left 12 + 「执行」32 + gap 2 + ×16），即组左边缘在内容盒右侧 60px 处。
  * 所以让 mask 在「距右侧 64px」处就完全透明 —— 留 4px 余量，按钮（含 padding）
  * 整个落在全透明区里，不会露出半截字形；再往左 16px 是淡出段。
- * 英文标签（Run）比中文窄，组更小、左边缘更靠右，同样被完全透明区覆盖，不会失效。
+ * 英文标签（Run / Stop）比中文窄，组更小、左边缘更靠右，同样被完全透明区覆盖，不会失效。
+ * 「停止」不用另算：它与「执行」同为 2 个汉字、同字号同内边距，宽度一模一样
+ * （英文下 Stop 比 Run 宽约 3px，仍远小于那 4px 余量），组宽不因卡片在跑而变。
  */
 .kb-card:not(.is-opened):hover .kb-card__title,
 .kb-card:focus-within .kb-card__title,
@@ -1025,6 +1055,15 @@ function liveSummary(live: BoardTaskLive): string {
 .kb-card__btn:hover { color: var(--color-primary); background: var(--bg-subtle-hover); }
 .kb-card__btn--danger { font-size: var(--font-size-base); padding: 0 4px; }
 .kb-card__btn--danger:hover { color: var(--color-danger-light); }
+/*
+ * 「停止」**不用红色**：它跟 × 永远同框（一条在跑的任务卡上就这两个按钮），
+ * 两颗都染红就只剩位置能区分了，而位置恰恰是最不该被依赖的那个线索。
+ * 用告警色（--color-warning）：这张卡的边框/底色本来就是它染的（.kb-card.is-running），
+ * 同一行最右边的「静默 x 分」也是它 —— 停止是这个状态自带的动作，
+ * 让它跟"正在跑"共用一套颜色，读起来是"对当前状态下手"；
+ * 红留给 ×，含义收窄成唯一一个：把任务整个删掉。
+ */
+.kb-card__btn--stop:hover { color: var(--color-warning); background: var(--bg-subtle-hover); }
 .kb-card__btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
 .kb-col__empty {

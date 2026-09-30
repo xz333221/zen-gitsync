@@ -436,6 +436,63 @@ async function runTask(t: BoardTask) {
   await refresh(true)
 }
 
+/**
+ * 已经发出停止请求的任务 id。刻意**不是** ref：它只用来去重，不驱动任何渲染
+ * （按钮在停止过程中照旧是那个样子 —— 服务端立刻回 cancelled，卡片下一次
+ * refresh 就翻回"待处理"，没有值得画出来的中间态）。
+ */
+const stoppingTaskIds = new Set<string>()
+
+/**
+ * 停止这条任务正在跑的那一轮（卡片 hover 出来的「停止」）。
+ *
+ * 与编辑器的「停止」走**同一个接口同一段文案**（useWorkbenchExecution.cancelJob）：
+ * 同一个动作在两个入口里长得不一样、说的话不一样，用户会以为是两件事。
+ * 差别只在 jobId 的来源 —— 那里手上有整条 Job，这里的卡片只带得到 `live.jobId`
+ * （服务端随卡片一起发的，见 decorateTaskForBoard）。因此不在这里自己从 jobs 列表里
+ * 反查"哪一条在跑"：卡片上的"在跑"和 jobs 列表里的"在跑"晚一拍就会分叉。
+ *
+ * 两个已知不是 bug 的失败：
+ *   · 任务在**另一个 g ui 实例**里跑 —— child 句柄只活在跑它的那个进程里，停不了。
+ *     服务端给的是 404 + 一句明确的话，原样透出去，别用笼统的"停止失败"盖掉。
+ *   · 点得太快（前一个请求还没回来）—— 这里用 stoppingTaskIds 挡住第二次，
+ *     顺带避免确认弹窗叠成两层。
+ */
+async function stopTask(t: BoardTask) {
+  if (stoppingTaskIds.has(t.id)) return
+  const jobId = t.live?.jobId
+  if (!jobId) {
+    ElMessage.error($t('@WORKBENCH:停止失败'))
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      $t('@WORKBENCH:确认停止执行？已输出的内容会保留。'),
+      $t('@WORKBENCH:停止执行'),
+      {
+        confirmButtonText: $t('@WORKBENCH:停止'),
+        cancelButtonText: $t('@WORKBENCH:取消'),
+        type: 'warning'
+      }
+    )
+  } catch {
+    return
+  }
+  stoppingTaskIds.add(t.id)
+  try {
+    const res = await fetch(`/api/workbench/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' })
+      .then(r => r.json()).catch(() => null)
+    if (!res?.success) {
+      ElMessage.error(res?.error || $t('@WORKBENCH:停止失败'))
+      return
+    }
+    ElMessage.success($t('@WORKBENCH:已发送停止信号'))
+    await refresh(true)
+  } finally {
+    stoppingTaskIds.delete(t.id)
+  }
+}
+
 async function deleteTask(t: BoardTask) {
   const name = (t.title || '').trim() || $t('@WORKBENCH:未命名任务')
   try {
@@ -657,6 +714,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
           :opened-task-id="props.openedTaskId"
           @open-task="onOpenTask"
           @run-task="runTask"
+          @stop-task="stopTask"
           @delete-task="deleteTask"
           @create-task="onCreateClick"
         />
