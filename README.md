@@ -347,9 +347,10 @@ A full IDE-like editor (fourth icon in the activity bar) for browsing and editin
 
 | Feature | Description |
 |---|---|
-| File tree | Collapsible directory tree with file-type icons; **auto-refreshes every 15s** to pick up changes made outside the GUI (skipped when the tab is hidden or the search box is non-empty) |
+| File tree | Collapsible directory tree with file-type icons; **auto-refreshes every 60s** to pick up changes made outside the GUI (skipped when the tab is hidden or the search box is non-empty) |
 | File search | Type in the sidebar search box to filter the tree (180 ms debounce); matched substrings are highlighted in node names; `Ctrl+F` / `Cmd+F` focuses the box; `Esc` clears the query or blurs the input |
 | Multi-tab editing | Open multiple files simultaneously; tabs show unsaved (●) indicator |
+| Sync with disk | The current tab re-checks the file on disk when the window regains focus, when you switch to that tab, or when you come back to the Editor view; a 30s fallback poll covers the case where something in the same window (the `g ai` panel) rewrote the file with no focus change. If it changed and you have no unsaved edits, it reloads silently (cursor position and undo history preserved); if you do have unsaved edits it asks first and never overwrites on its own |
 | Workspace restore | The tree's expanded folders and the open tabs (their order plus which one is active) are remembered **per project** and put back on reload, and when you switch back to that project. The snapshot lives in `~/.zen-gitsync/config.json` under `ui.editorWorkspaceByProject`; only paths are stored — files are re-read from disk, so unsaved edits do not survive a reload, and files that no longer exist are skipped silently |
 | Sidebar width | Drag the divider to resize the file tree pane; unlike the workspace snapshot the width is **global** (one value for every project) and is stored in `~/.zen-gitsync/config.json` under `ui.editorSidebarWidth`, restored on reload. Clamped to 140–400px |
 | Monaco editor | Syntax highlighting for JS, TS, Vue, Python, Go, JSON, CSS, and more |
@@ -1012,9 +1013,10 @@ Activity Bar 第四个视图，在 GUI 内直接浏览并编辑项目文件：
 
 | 功能 | 说明 |
 |---|---|
-| 文件树 | 可折叠的目录树，附带文件类型图标；**每 15 秒自动刷新一次**，捕获 GUI 外部对文件的改动（标签页隐藏或搜索框非空时跳过） |
+| 文件树 | 可折叠的目录树，附带文件类型图标；**每 60 秒自动刷新一次**，捕获 GUI 外部对文件的改动（标签页隐藏或搜索框非空时跳过） |
 | 文件搜索 | 在侧边栏搜索框中输入关键字过滤文件树（180ms 防抖），命中片段会在节点名中高亮；`Ctrl+F` / `Cmd+F` 聚焦搜索框，`Esc` 清空内容或失焦 |
 | 多标签页 | 同时打开多个文件，未保存文件显示 ● 标记 |
+| 跟盘同步 | 窗口重新聚焦、切到某个标签、或切回文件空间时，当前标签会跟盘上对一次账；另有 30 秒兜底轮询，盖住"同窗口里 AI 面板写了文件、用户全程没切焦点"的情况。变了且没有未保存改动就静默换成最新正文（光标位置与撤销栈都保留）；有未保存改动则先问一次，绝不自动覆盖 |
 | 工作区恢复 | **按项目**记住文件树展开了哪些目录、开了哪些标签（顺序 + 当前激活的那个），刷新页面或切回该项目时自动恢复；快照存在 `~/.zen-gitsync/config.json` 的 `ui.editorWorkspaceByProject`。只记路径 —— 文件按盘上最新内容重开，未保存的改动不跨会话保留，已被删除的文件静默跳过 |
 | 侧边栏宽度 | 拖拽分隔条调整文件树栏宽度；与工作区快照不同，宽度是**全局**一份（所有项目共用），存在 `~/.zen-gitsync/config.json` 的 `ui.editorSidebarWidth`，刷新后自动恢复，取值夹在 140–400px |
 | Monaco 编辑器 | 支持 JS、TS、Vue、Python、Go、JSON、CSS 等语法高亮 |

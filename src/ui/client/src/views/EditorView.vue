@@ -16,7 +16,7 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
 import { ref, shallowRef, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
-import { ElMessage, ElTooltip } from 'element-plus'
+import { ElMessage, ElMessageBox, ElTooltip } from 'element-plus'
 import * as monaco from 'monaco-editor'
 import { useConfigStore, EDITOR_SIDEBAR_MIN_WIDTH, EDITOR_SIDEBAR_MAX_WIDTH } from '@/stores/configStore'
 import { useEditorTabsStore } from '@/stores/editorTabs'
@@ -103,6 +103,7 @@ watch(searchQuery, (val) => {
 onBeforeUnmount(() => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
   stopTreePolling()
+  stopDiskSyncPolling()
 })
 
 // ── 文件树轮询:默认每 60s 静默刷新一次,捕获外部修改 ───────
@@ -417,6 +418,10 @@ interface Tab {
   originalContent: string
   isDirty: boolean
   language: string
+  // 手上这份正文对应盘上哪个版本（GET /api/editor/file 给的 mtimeMs）。
+  // 聚焦 / 切标签时拿它跟盘上比一次，不等就说明文件被外部改过。
+  // null = 不参与对账（图片 / Office 标签，正文在预览面板里，没有可比的文本）。
+  diskMtimeMs: number | null
 }
 
 const tabs = ref<Tab[]>([])
@@ -450,6 +455,7 @@ async function openFile(node: TreeNode) {
       originalContent: '',
       isDirty: false,
       language: 'plaintext',
+      diskMtimeMs: null,
     }
     tabs.value.push(tab)
     activeTabPath.value = node.path
@@ -465,6 +471,7 @@ async function openFile(node: TreeNode) {
       originalContent: '',
       isDirty: false,
       language: 'office',
+      diskMtimeMs: null,
     }
     tabs.value.push(tab)
     activeTabPath.value = node.path
@@ -481,6 +488,14 @@ async function openFile(node: TreeNode) {
       return
     }
     const lang = getLanguageByExt(ext)
+    // 缓存里可能还留着这个路径的旧 model（关标签时不 dispose —— 编辑器可能仍攥着它）。
+    // 这次正文是从盘上刚读的，直接写进旧 model，而不是新建一个：
+    //   - 复用旧 model（getOrCreateModel 拿到的那份）显示的就是过期文本，
+    //     正是"关掉标签 → 外部改了文件 → 再打开还是旧内容"的根因；
+    //   - 若改成「先 setModel(null) 再 dispose 旧 model」，等于把 Monaco 的视图状态
+    //     整个拆掉重建，会牵动它内部一堆 delayer（实测会冒 unhandled rejection）。
+    const cached = modelCache.get(node.path)
+    if (cached && !cached.isDisposed()) cached.setValue(data.content)
     const tab: Tab = {
       path: node.path,
       name: node.name,
@@ -488,6 +503,7 @@ async function openFile(node: TreeNode) {
       originalContent: data.content,
       isDirty: false,
       language: lang,
+      diskMtimeMs: typeof data.mtimeMs === 'number' ? data.mtimeMs : null,
     }
     console.log('[debug-open-in-editor] EditorView pushing tab:', { path: tab.path, name: tab.name, contentLen: tab.content.length, lang: tab.language })
     tabs.value.push(tab)
@@ -564,11 +580,11 @@ async function restoreTab(path: string) {
   const ext = (name.split('.').pop() || '').toLowerCase()
   // 图片/Office 与 openFile 口径一致：不读文本内容，建只读 tab，内容交给预览面板
   if (IMAGE_EXTS.has(ext)) {
-    tabs.value.push({ path, name, content: '', originalContent: '', isDirty: false, language: 'plaintext' })
+    tabs.value.push({ path, name, content: '', originalContent: '', isDirty: false, language: 'plaintext', diskMtimeMs: null })
     return
   }
   if (isOfficeFile(name)) {
-    tabs.value.push({ path, name, content: '', originalContent: '', isDirty: false, language: 'office' })
+    tabs.value.push({ path, name, content: '', originalContent: '', isDirty: false, language: 'office', diskMtimeMs: null })
     return
   }
   try {
@@ -590,6 +606,7 @@ async function restoreTab(path: string) {
       originalContent: data.content,
       isDirty: false,
       language: getLanguageByExt(ext),
+      diskMtimeMs: typeof data.mtimeMs === 'number' ? data.mtimeMs : null,
     })
   } catch {
     // 网络抖动/后端重启：少恢复一个标签不影响使用，下次变更会把这个路径从快照里剔掉
@@ -739,6 +756,8 @@ watch(activeTabPath, (path) => {
   //   - 焦点在 body 上时，空格键会触发页面滚动（无法输入）。
   // 这是用户反馈"编辑器不能输入空格"的根因。
   nextTick(() => focusEditor())
+  // 切过来的这个标签可能在后台被改过，顺手对一次账（详见 syncActiveTabWithDisk）
+  void syncActiveTabWithDisk(path)
 })
 
 // 把键盘焦点交还给 Monaco。
@@ -755,6 +774,138 @@ function focusEditor() {
   if (ec && document.activeElement !== ec) {
     // 不能在每个 tick 都抢焦点，只在 Monaco 已 focus 但 activeElement 漂移时纠正一次。
     requestAnimationFrame(() => ec.focus?.())
+  }
+}
+
+// ── 与磁盘对账：外部改动自动进到当前标签 ────────────────────────
+// 背景：编辑器只在"打开一个此前没打开过的文件"时读一次盘。AI 面板写文件、别的编辑器、
+// 命令行工具改完之后，已打开的标签会一直显示旧正文，一保存还把外部改动覆盖回去。
+// 这里补一条"用户看得见就对一次账"的路径，触发点是三个：
+//   ① 窗口重新聚焦（切出去用别的工具改完再切回来）
+//   ② 切到某个标签（后台被改过的文件切过来就是新的）
+//   ③ 切回文件空间视图（在别的视图 / AI 面板里改完再切回来）
+// 不给每个标签挂常驻轮询：对账只在用户正看着这个文件时才有意义，
+// 而且一次只 stat 一个文件，比文件树那套 60s 整树轮询便宜得多。
+//
+// 对账结果：盘上变了且标签没有未保存改动 → 静默换成新正文（保住光标位置与撤销栈）；
+//           有未保存改动 → 绝不自动覆盖，弹一次让用户选"重新加载 / 保留我的"。
+let diskSyncSeq = 0
+// path → 已经提示过的盘上 mtime。同一版只烦用户一次；盘上再变（新 mtime）会重新提示。
+const diskConflictPromptedAt = new Map<string, number>()
+
+async function fetchFileMeta(path: string): Promise<{ mtimeMs: number } | null> {
+  try {
+    const resp = await fetch(`/api/editor/file?path=${encodeURIComponent(path)}&meta=1`)
+    const data = await resp.json()
+    if (!data?.success || typeof data.mtimeMs !== 'number') return null
+    return { mtimeMs: data.mtimeMs }
+  } catch {
+    // 网络抖动 / 后端重启：当作"这轮没对上"，下次触发再试
+    return null
+  }
+}
+
+async function fetchFileContent(path: string): Promise<{ content: string; mtimeMs: number | null } | null> {
+  try {
+    const resp = await fetch(`/api/editor/file?path=${encodeURIComponent(path)}`)
+    const data = await resp.json()
+    if (!data?.success) return null
+    return { content: data.content, mtimeMs: typeof data.mtimeMs === 'number' ? data.mtimeMs : null }
+  } catch {
+    return null
+  }
+}
+
+// 把盘上的新正文写进标签。有 model 时走 pushEditOperations 而不是 setValue ——
+// setValue 会清空撤销栈，用户接着按 Ctrl+Z 就回不去了；顺带保住光标 / 滚动位置。
+function applyDiskContent(tab: Tab, content: string, mtimeMs: number | null) {
+  tab.content = content
+  // 先落 originalContent 再动 model：model 变更会同步回调 onDidChangeModelContent，
+  // 那里按 originalContent 重算 isDirty，顺序反了会闪一下"未保存"
+  tab.originalContent = content
+  tab.isDirty = false
+  tab.diskMtimeMs = mtimeMs
+  const model = modelCache.get(tab.path)
+  if (!model || model.isDisposed()) return
+  const editor = editorInstance.value
+  if (!editor || editor.getModel() !== model) {
+    // 没挂在编辑器上（后台标签）：换掉正文即可，光标无从谈起
+    model.setValue(content)
+    return
+  }
+  const viewState = editor.saveViewState()
+  model.pushEditOperations([], [{ range: model.getFullModelRange(), text: content }], () => null)
+  editor.restoreViewState(viewState)
+}
+
+// 对当前标签做一次"盘上还是不是这份"的检查。传进来的 path 一律是当时激活的标签 ——
+// 只对账用户正看着的这个文件；切到别的标签时各自会触发一次。
+async function syncActiveTabWithDisk(path: string | null) {
+  if (!path) return
+  const tab = tabs.value.find(t => t.path === path)
+  // diskMtimeMs 为 null = 不参与对账（图片 / Office 标签，正文在预览面板里）
+  if (!tab || tab.diskMtimeMs === null) return
+  const seq = ++diskSyncSeq
+  const meta = await fetchFileMeta(path)
+  // 期间用户切走了 / 又点了别的标签 → 这轮作废，别拿过期结果去改标签
+  if (seq !== diskSyncSeq) return
+  if (tabs.value.find(t => t.path === path) !== tab) return
+  if (!meta || meta.mtimeMs === tab.diskMtimeMs) return
+
+  // 有未保存改动：不自动覆盖，让用户决定（同一版只弹一次）
+  if (tab.isDirty) {
+    if (diskConflictPromptedAt.get(path) === meta.mtimeMs) return
+    diskConflictPromptedAt.set(path, meta.mtimeMs)
+    try {
+      await ElMessageBox.confirm(
+        $t('@EDITOR:这个文件在磁盘上已被改动，你这边也有未保存的编辑。重新加载会丢弃你的改动。'),
+        $t('@EDITOR:文件已被外部改动'),
+        {
+          confirmButtonText: $t('@EDITOR:重新加载'),
+          cancelButtonText: $t('@EDITOR:保留我的'),
+          type: 'warning',
+        },
+      )
+    } catch {
+      // 选了"保留我的"：基线不动，用户接着保存就是他说了算
+      return
+    }
+    // 用户在弹窗上停留期间可能又敲了几个字 → 重新确认一次
+    if (tab.isDirty) return
+  }
+
+  const fresh = await fetchFileContent(path)
+  if (!fresh || tabs.value.find(t => t.path === path) !== tab) return
+  applyDiskContent(tab, fresh.content, fresh.mtimeMs)
+}
+
+// 窗口重新聚焦 / 页面由后台转前台 → 对当前标签对一次账
+function handleWindowFocus() {
+  // visibilitychange 在"转后台"那一下也会触发，那种时候没什么可对的
+  if (document.hidden) return
+  void syncActiveTabWithDisk(activeTabPath.value)
+}
+
+// 上面三个触发点都是"用户做了什么"（切窗口 / 切标签 / 切回本视图）。
+// 盖不住"同一个窗口里 AI 面板把文件改了、用户全程没切焦点"—— 那正是最常撞上的场景。
+// 补一个 30s 兜底：最坏半分钟内也能看到外部改动，代价是每分钟两次 stat。
+// 独立于「文件树自动刷新」那个开关 —— 名字对不上，关掉树刷新不该顺手废掉跟盘同步。
+const DISK_SYNC_POLL_MS = 30000
+let diskSyncTimer: ReturnType<typeof setInterval> | null = null
+
+function startDiskSyncPolling() {
+  stopDiskSyncPolling()
+  diskSyncTimer = setInterval(() => {
+    // 标签页隐藏时不发请求（浏览器会节流，而且用户看不到）
+    if (document.hidden) return
+    void syncActiveTabWithDisk(activeTabPath.value)
+  }, DISK_SYNC_POLL_MS)
+}
+
+function stopDiskSyncPolling() {
+  if (diskSyncTimer) {
+    clearInterval(diskSyncTimer)
+    diskSyncTimer = null
   }
 }
 
@@ -796,6 +947,10 @@ function setupViewVisibilityObserver() {
   viewVisibilityObserver = new MutationObserver(() => {
     const visible = containerRef.value && containerRef.value.offsetParent !== null
     if (visible && activeTabPath.value && editorInstance.value) {
+      // 切回文件空间时也对一次账：在别的视图 / AI 面板里改完再切回来的场景（详见
+      // syncActiveTabWithDisk）。这里会在每次 display 变化时触发，但一次只 stat 一个
+      // 文件、mtime 没变就直接 return，代价可以忽略。
+      void syncActiveTabWithDisk(activeTabPath.value)
       // 延迟一帧，确保 display 切换已应用
       requestAnimationFrame(() => {
         // 仅当当前焦点不在输入框（搜索框/重命名/内联新建）时才抢焦点，
@@ -831,6 +986,12 @@ onMounted(async () => {
   setupViewVisibilityObserver()
   // 启动文件树 60s 轮询,捕获外部修改(详见 startTreePolling 注释)
   startTreePolling()
+  // 窗口重新聚焦 / 页面由后台转前台时对当前标签对一次账(详见 syncActiveTabWithDisk)。
+  // visibilitychange 与 focus 都要挂:同一窗口内切标签页不触发 focus,只触发前者。
+  window.addEventListener('focus', handleWindowFocus)
+  document.addEventListener('visibilitychange', handleWindowFocus)
+  // 同窗口里的外部改动（AI 面板写文件）没人切焦点，靠这个 30s 兜底
+  startDiskSyncPolling()
   // 首次 mount 时若已有打开的文件，主动把焦点交给 Monaco，避免初次进入编辑器视图时空格键失效。
   if (activeTabPath.value) {
     nextTick(() => focusEditor())
@@ -841,6 +1002,8 @@ onBeforeUnmount(() => {
   // useThemeObserver 自动 disconnect,无需手动清理
   viewVisibilityObserver?.disconnect()
   viewVisibilityObserver = null
+  window.removeEventListener('focus', handleWindowFocus)
+  document.removeEventListener('visibilitychange', handleWindowFocus)
   editorInstance.value?.dispose()
   modelCache.forEach(m => m.dispose())
   modelCache.clear()
@@ -863,6 +1026,8 @@ async function saveCurrentFile(silent = false) {
     }
     tab.originalContent = tab.content
     tab.isDirty = false
+    // 推进基线：这一笔是我们自己写的，不该在下次聚焦时被当成外部改动再重载一遍
+    if (typeof data.mtimeMs === 'number') tab.diskMtimeMs = data.mtimeMs
     if (!silent) ElMessage.success($t('@EDITOR:已保存'))
   } catch (e: any) {
     ElMessage.error(`${$t('@EDITOR:保存失败: ')}${e.message}`)

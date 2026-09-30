@@ -791,12 +791,19 @@ export function registerFsRoutes({
       const resolved = safe.safePath;
       const stat = await fs.stat(resolved);
       if (!stat.isFile()) throw new HttpError(400, '目标不是文件');
+      // meta=1：只回答"盘上这份还是不是客户端手上那份"，不回正文。
+      // 文件空间在窗口重新聚焦 / 切标签 / 切回本视图时用它做一次廉价比对 ——
+      // 一个 stat 就够，不必每个来回都重读整个文件（大文件尤其明显）。
+      if (req.query.meta === '1') {
+        return res.json({ success: true, mtimeMs: stat.mtimeMs, size: stat.size });
+      }
       // 超过 2MB 不读取
       if (stat.size > 2 * 1024 * 1024) {
         return res.json({ success: false, error: '文件过大（> 2 MB），暂不支持在线编辑' });
       }
       const content = await fs.readFile(resolved, 'utf-8');
-      res.json({ success: true, content });
+      // mtimeMs 随正文一起给：客户端拿它当"我手上这份对应盘上哪个版本"的基线
+      res.json({ success: true, content, mtimeMs: stat.mtimeMs });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
@@ -915,7 +922,10 @@ export function registerFsRoutes({
       const safe = await safePathInProject(filePath);
       if (!safe) throw new HttpError(403, '禁止写入工作目录以外的文件');
       await fs.writeFile(safe.safePath, content, 'utf-8');
-      res.json({ success: true });
+      // 回写后的 mtime 一并返回：客户端据此推进自己那份比对基线。
+      // 不给的话，下一次聚焦同步会把"自己刚保存的这一笔"误判成外部改动而重载一遍。
+      const after = await fs.stat(safe.safePath);
+      res.json({ success: true, mtimeMs: after.mtimeMs });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
