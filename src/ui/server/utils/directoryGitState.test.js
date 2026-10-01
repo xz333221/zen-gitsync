@@ -28,6 +28,7 @@ import {
   probeDirectoryGitStates,
   probeDirectoryOrigin,
   probeDirectoryOrigins,
+  probeHasRemote,
   clearGitStateCache,
 } from './directoryGitState.js';
 
@@ -259,6 +260,96 @@ test('probeDirectoryGitState: 真实远端 → 读出上游分支与领先/落�
     assert.equal(diverged.ahead, 1);
     assert.equal(diverged.behind, 1);
     assert.equal(diverged.hasUpstream, true);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+// ── 「有没有配远程仓库」(列表卡片的「未配远程」徽标靠它) ────────────────────
+// 三条口径必须分清:配了 / 一个都没配 / 没探到。塌成两态就会把"没探到"
+// 谎报成"没配远程",用户白去配一个其实已经配好的仓库。
+test('probeHasRemote: 配了 remote 为 true,一个都没配为 false,非仓库为 false', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'zen-remote-'));
+  const withRemote = path.join(root, 'with');
+  const noRemote = path.join(root, 'without');
+  const plain = path.join(root, 'plain');
+  try {
+    await fs.mkdir(withRemote);
+    await fs.mkdir(noRemote);
+    await fs.mkdir(plain);
+    await git(['init', '-q'], withRemote);
+    await git(['init', '-q'], noRemote);
+    await git(['remote', 'add', 'origin', 'git@github.com:o/r.git'], withRemote);
+
+    assert.equal(await probeHasRemote(withRemote), true);
+    assert.equal(await probeHasRemote(noRemote), false);
+    // 不是仓库是明确答案(不是 null):调用方已经知道 isGitRepo,这里不用再判一次
+    assert.equal(await probeHasRemote(plain), false);
+    // 目录压根不存在 → git 报的是 "cannot change to ...",不是"不是仓库",
+    // 属于没探到,必须留 null —— 塌成 false 就成了"这个路径没配远程"
+    assert.equal(await probeHasRemote(path.join(root, 'ghost')), null);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('probeDirectoryGitState: hasRemote 跟着实际情况走(没配 / 配了但没上游 / 有上游)', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'zen-hremote-'));
+  try {
+    // 1) 仓库一个 remote 都没配 → false(卡片要挂「未配远程」)
+    const bare = path.join(root, 'bare');
+    await fs.mkdir(bare);
+    await git(['init', '-q', '-b', 'main'], bare);
+    assert.equal((await probeDirectoryGitState(bare)).hasRemote, false);
+
+    // 2) 配了 origin 但当前分支没设上游 → 仍然是 true,
+    //    这正是"有上游就不必多跑一次 git remote"那条捷径要覆盖的分支
+    const noUpstream = path.join(root, 'no-upstream');
+    await fs.mkdir(noUpstream);
+    await git(['init', '-q', '-b', 'main'], noUpstream);
+    await git(['remote', 'add', 'origin', 'git@github.com:o/r.git'], noUpstream);
+    const withRemoteNoUpstream = await probeDirectoryGitState(noUpstream);
+    assert.equal(withRemoteNoUpstream.hasUpstream, false);
+    assert.equal(withRemoteNoUpstream.hasRemote, true, '配了 remote 就不能报 false');
+
+    // 3) 有上游(克隆出来的) → hasRemote 直接由 hasUpstream 推出 true
+    const originDir = path.join(root, 'origin.git');
+    const seed = path.join(root, 'seed');
+    const work = path.join(root, 'work');
+    await git(['init', '-q', '--bare', '-b', 'main', originDir], root);
+    await git(['init', '-q', '-b', 'main', seed], root);
+    await fs.writeFile(path.join(seed, 'README.md'), 'seed\n');
+    await git(['add', '.'], seed);
+    await gitCommit(seed, 'init');
+    await git(['remote', 'add', 'origin', asRemote(originDir)], seed);
+    await git(['push', '-q', '-u', 'origin', 'main'], seed);
+    await git(['clone', '-q', asRemote(originDir), work], root);
+    const cloned = await probeDirectoryGitState(work);
+    assert.equal(cloned.hasUpstream, true);
+    assert.equal(cloned.hasRemote, true);
+
+    // 4) 非仓库 / 不存在的目录:hasRemote 落回 false,不显示任何 Git 标记
+    const plain = path.join(root, 'plain');
+    await fs.mkdir(plain);
+    assert.equal((await probeDirectoryGitState(plain)).hasRemote, false);
+    assert.equal((await probeDirectoryGitState(path.join(root, 'ghost'))).exists, false);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('probeDirectoryGitStates: 批量结果里的 hasRemote 也对(卡片徽标靠它)', async () => {
+  clearGitStateCache();
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'zen-batch-remote-'));
+  try {
+    const repo = path.join(root, 'repo');
+    const plain = path.join(root, 'plain');
+    await fs.mkdir(repo);
+    await fs.mkdir(plain);
+    await git(['init', '-q'], repo);
+    const results = await probeDirectoryGitStates([repo, plain], { useCache: false });
+    assert.equal(results[repo].hasRemote, false);
+    assert.equal(results[plain].isGitRepo, false);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

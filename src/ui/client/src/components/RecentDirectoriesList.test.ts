@@ -68,6 +68,9 @@ function gitState(overrides: Record<string, unknown> = {}) {
     upstream: 'origin/main',
     ahead: 0,
     behind: 0,
+    // 默认"配了远程仓库":与真实探测一致(有上游 ⇒ 必然有 remote),
+    // 没配的那几条用例显式覆盖成 false
+    hasRemote: true,
     ...overrides,
   }
 }
@@ -327,6 +330,65 @@ describe('RecentDirectoriesList.vue 「刷新全部」', () => {
       message: '@13D1C:刷新完成：成功 12 · 跳过 0 · 失败 0',
       type: 'success',
     })
+  })
+})
+
+// ── 「未配远程」徽标 ──────────────────────────────────────────────────────
+// 后端 hasRemote 三态:true=配了 / false=一个都没配 / null=没探到。
+// 卡片只在**明确 false** 时挂徽标 —— null(超时没探到)挂上去就是把未知
+// 谎报成"没配远程",用户会去白配一个其实已经配好的仓库。
+describe('RecentDirectoriesList.vue 未配远程徽标', () => {
+  test('RCL-20: 没配远程 → 挂徽标 + tooltip 说明,并且顶掉中性的 Git 标签', async () => {
+    setupFetch({
+      dirs: [{ path: 'D:\\solo', exists: true }],
+      gitStates: {
+        'D:\\solo': gitState({ hasRemote: false, upstream: null, branch: 'main' }),
+      },
+    })
+    const w = mountList()
+    await flushAll()
+
+    const tag = w.find('.dir-card__tag--noremote')
+    expect(tag.exists()).toBe(true)
+    expect(tag.text()).toContain('未配远程')
+    // 「未配远程」本身已经说明了这是仓库,不该再挂一个中性的 Git 标签占宽度
+    expect(w.find('.dir-card__tag--git').exists()).toBe(false)
+    expect(w.find('.dir-card').attributes('title')).toContain('未配置远程仓库，推送与拉取都不可用')
+  })
+
+  test('RCL-21: 配了远程 → 不挂;hasRemote 为 null(没探到)→ 也不挂', async () => {
+    setupFetch({
+      dirs: [
+        { path: 'D:\\ok', exists: true },
+        { path: 'D:\\unknown', exists: true },
+      ],
+      gitStates: {
+        'D:\\ok': gitState({ hasRemote: true }),
+        // 没探到远程:后端给 null,前端必须当作"不知道"
+        'D:\\unknown': gitState({ hasRemote: null, upstream: null }),
+      },
+    })
+    const w = mountList()
+    await flushAll()
+
+    expect(w.findAll('.dir-card__tag--noremote').length).toBe(0)
+    // 两条都是干净仓库 → 各挂一个中性的 Git 标签(证明只是没挂"未配远程")
+    expect(w.findAll('.dir-card__tag--git').length).toBe(2)
+  })
+
+  test('RCL-22: 没配远程但有未提交改动 → 两个徽标同时在,互不顶掉', async () => {
+    setupFetch({
+      dirs: [{ path: 'D:\\solo', exists: true }],
+      gitStates: {
+        'D:\\solo': gitState({ hasRemote: false, upstream: null, changed: 2, unstaged: 2 }),
+      },
+    })
+    const w = mountList()
+    await flushAll()
+
+    expect(w.find('.dir-card__tag--noremote').text()).toContain('未配远程')
+    expect(w.find('.dir-card__tag--dirty').text()).toContain('未提交 2 项')
+    expect(w.find('.dir-card').attributes('title')).toContain('已暂存 0 · 未暂存 2 · 未跟踪 0')
   })
 })
 

@@ -18,6 +18,8 @@
 // 因此这里做四件事:
 //   1. 每个目录只跑**一次** git(status 成功即说明是仓库,失败即非仓库),
 //      并用 --branch 顺带拿到分支与领先/落后,避免额外 3 次 spawn;
+//      唯一的例外是"没配远程仓库"这一条(见 hasRemote),它只在 status 没能
+//      给出上游时才补一次 `git remote`,不在常见路径上;
 //   2. 并发上限 + 单目录超时,别让某个大仓库(或网络盘)拖死整个请求;
 //   3. 结果短 TTL 缓存,弹窗反复打开不必重复扫盘;
 //   4. 领先/落后只读**本地 remote-tracking 引用,不联网 fetch** —— 探测十几个目录
@@ -55,6 +57,9 @@ function emptyState(extra = {}) {
     changed: 0, staged: 0, unstaged: 0, untracked: 0,
     // 分支与上游跟踪
     branch: null, upstream: null, hasUpstream: false, detached: false, ahead: 0, behind: 0,
+    // hasRemote: true=配了 remote / false=一个都没配 / null=没探到(超时等)。
+    // 列表卡片据此挂「未配远程」徽标 —— null 不挂,不把未知谎报成"没配"。
+    hasRemote: false,
     ...extra,
   };
 }
@@ -209,11 +214,17 @@ export async function probeDirectoryGitState(dirPath, { timeoutMs = DEFAULT_PROB
         },
       }
     );
+    const tracking = parseBranchTracking(stdout);
+    // 「有没有配远程仓库」:有上游(`origin/main` 这种)就说明 remote 一定在,
+    // 不必再起进程;没有上游时才补跑一次 `git remote` —— 列表里十个仓库
+    // 九个都有上游,这一条因此不在常见路径上。
+    const hasRemote = tracking.hasUpstream ? true : await probeHasRemote(dirPath, timeoutMs);
     return {
       exists: true,
       isGitRepo: true,
       ...parsePorcelainStatus(stdout),
-      ...parseBranchTracking(stdout),
+      ...tracking,
+      hasRemote,
     };
   } catch (error) {
     const text = `${error?.stderr || ''}\n${error?.message || ''}`;
@@ -223,6 +234,35 @@ export async function probeDirectoryGitState(dirPath, { timeoutMs = DEFAULT_PROB
     }
     // 超时 / 权限 / git 不存在等 —— 状态未知
     return emptyState({ isGitRepo: null, error: String(error?.message || error).split('\n')[0] });
+  }
+}
+
+/**
+ * 这个仓库配了 remote 吗?
+ *
+ * 与 probeDirectoryGitState 同口径:一次 spawn、超时即放弃、**不联网**
+ * (`git remote` 只读 .git/config,不请求远端)。
+ *
+ * 三态:true=至少有一个 / false=一个都没配 / null=没探到(超时、git 不存在等)。
+ * null 不能塌成 false —— 列表卡片要靠它决定挂不挂「未配远程」徽标,
+ * 把"没探到"说成"没配"就是谎报。
+ *
+ * 已知是仓库时调用;非仓库也会直接失败并返回 null,不会给出错误的 false。
+ */
+export async function probeHasRemote(dirPath, { timeoutMs = DEFAULT_PROBE_TIMEOUT_MS } = {}) {
+  try {
+    const { stdout } = await execFileAsync(
+      'git',
+      ['-C', dirPath, 'remote'],
+      { timeout: timeoutMs, maxBuffer: MAX_BUFFER, windowsHide: true }
+    );
+    // 有输出就是有 remote(每个 remote 一行);空输出 = 一个都没配
+    return String(stdout || '').trim().length > 0;
+  } catch (error) {
+    const text = `${error?.stderr || ''}\n${error?.message || ''}`;
+    // 不是仓库是明确答案(不是"没探到"),返回 false 让调用方不必再判 isGitRepo
+    if (/not a git repository|not a git repo/i.test(text)) return false;
+    return null;
   }
 }
 

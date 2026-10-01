@@ -59,6 +59,12 @@ interface DirectoryGitState {
   ahead: number;
   /** 本地落后上游的提交数 = 远端有新提交,该 pull 了 */
   behind: number;
+  /**
+   * 配了远程仓库吗。
+   * true=配了 / false=一个 remote 都没配 / null=没探到(超时等) —— null 时不挂
+   * 「未配远程」徽标,不把"没探到"说成"没配"。
+   */
+  hasRemote?: boolean | null;
   error?: string;
 }
 
@@ -220,13 +226,17 @@ const items = computed<DirectoryItem[]>(() => {
     : allItems.value;
 });
 
-// 悬浮提示里的 Git 附加信息:按"需要动作"的顺序排 —— 落后(要拉) → 领先(要推) → 工作区明细。
+// 悬浮提示里的 Git 附加信息:按"需要动作"的顺序排 —— 没配远程(推不出去、拉不到)
+// → 落后(要拉) → 领先(要推) → 工作区明细。
 // 非仓库/未知不补充(徽标已表达);一切正常时明确说一句干净,避免"没内容"看起来像没探测。
 function gitSummaryLines(item: DirectoryItem): string[] {
   const g = item.git;
   if (!g || g.isGitRepo !== true) return [];
 
   const lines: string[] = [];
+  if (g.hasRemote === false) {
+    lines.push($t("@13D1C:未配置远程仓库，推送与拉取都不可用"));
+  }
   if (g.upstream && g.behind > 0) {
     lines.push($t("@13D1C:落后 {upstream} {count} 个提交", { upstream: g.upstream, count: g.behind }));
   }
@@ -244,12 +254,13 @@ function gitSummaryLines(item: DirectoryItem): string[] {
   return lines;
 }
 
-// 仓库"有话说"吗?有的话就用具体信息(未提交/领先/落后)替代那个中性的 Git 标签 ——
-// 否则满屏 "Git" 徽标会白占宽度,把长路径挤成省略号。
+// 仓库"有话说"吗?有的话就用具体信息(未提交/领先/落后/未配远程)替代那个中性的
+// Git 标签 —— 否则满屏 "Git" 徽标会白占宽度,把长路径挤成省略号。
 function hasGitSignal(item: DirectoryItem) {
   const g = item.git;
   if (!g || g.isGitRepo !== true) return false;
-  return g.changed > 0 || g.ahead > 0 || g.behind > 0;
+  // hasRemote 只有 false(明确没配)才算信号;null 是"没探到",不能当成信号
+  return g.changed > 0 || g.ahead > 0 || g.behind > 0 || g.hasRemote === false;
 }
 
 // 整张卡片的悬浮提示:pick 形态下把"Ctrl+点击"的用法讲在这里
@@ -610,6 +621,13 @@ defineExpose({
               {{ $t('@13D1C:非 Git 仓库') }}
             </span>
             <template v-else-if="item.git">
+              <!-- 没配远程仓库:推送与拉取都用不了,属于"需要你做事"的信号,
+                   排在最前面 —— 它比未提交/领先/落后更根本(那些都推不出去)。
+                   hasRemote 为 null(没探到)时不显示,不谎报。 -->
+              <span
+                v-if="item.git.hasRemote === false"
+                class="dir-card__tag dir-card__tag--noremote"
+              >{{ $t('@13D1C:未配远程') }}</span>
               <span
                 v-if="item.git.changed > 0"
                 class="dir-card__tag dir-card__tag--dirty"
@@ -1052,6 +1070,12 @@ defineExpose({
 .dir-card__tag--behind {
   background: var(--tint-primary-12);
   color: var(--color-primary);
+}
+/* 没配远程仓库:警示色 —— 它意味着 push / pull 都用不了,比"落后 N 个提交"
+   更需要用户动手。与"未提交""领先"同色系,表示同一类"本地有东西出不去"。 */
+.dir-card__tag--noremote {
+  background: var(--tint-warning-14);
+  color: var(--text-warning);
 }
 /* 不是仓库:中性灰,说明"这里没有 Git 可看" */
 .dir-card__tag--plain {

@@ -1748,6 +1748,8 @@ export default {
   '@13D1C:不存在': 'missing',
   '@13D1C:Git': 'Git',
   '@13D1C:非 Git 仓库': 'Not a Git repo',
+  '@13D1C:未配远程': 'No remote',
+  '@13D1C:未配置远程仓库，推送与拉取都不可用': 'No remote configured — push and pull are unavailable',
   '@13D1C:未提交 {count} 项': '{count} uncommitted',
   '@13D1C:领先 {count}': 'Ahead {count}',
   '@13D1C:落后 {count}': 'Behind {count}',
