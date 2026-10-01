@@ -6,6 +6,13 @@ import { prepareRequestMessages } from './context.js'
 import { createTurnStats, addUsage, accumulateSessionStats } from './telemetry.js'
 import * as terminal from './termui.js'
 
+// 「等人」型工具:执行期间会接管输入行、停下来等用户作答(目前只有 ask_user)。
+// 这类工具不能转工具 spinner —— ora 每 80ms 在同一行 clearLine + 重绘,会把
+// readline 刚画出的提示符(「请输入序号或直接输入回答:」)连同用户正在敲的字
+// 一起清掉,屏幕上只剩下一个不断跳秒数的「执行 ask_user...」,看起来就像"选不了"。
+// 它自己的交互界面(问题 + 编号选项 + 提示符)就是进度提示,不需要再叠一层。
+const INTERACTIVE_TOOLS = new Set(['ask_user'])
+
 export async function runAgentTurn(state, userText, t, images = [], dependencies = {}) {
   const chat = dependencies.chat || streamChatOnce
   const baseExecute = dependencies.execute || executeTool
@@ -113,11 +120,11 @@ export async function runAgentTurn(state, userText, t, images = [], dependencies
           catch { output = '错误: 工具参数不是合法 JSON，请修正后重试。' }
           if (output === undefined) {
             ui.printToolHeader(name, ui.summarizeToolArgs(name, args, { chars: t.chars }), undefined, { locale: state.locale })
-            const toolSpinner = ui.startSpinner(t.toolRunning(name))
+            const toolSpinner = INTERACTIVE_TOOLS.has(name) ? null : ui.startSpinner(t.toolRunning(name))
             const toolStart = performance.now()
             stats.toolCalls++
             try { output = await execute(name, args, { ...state.ctx, signal: state.abortController?.signal }) }
-            finally { toolSpinner.stop(); stats.toolsMs += performance.now() - toolStart }
+            finally { toolSpinner?.stop(); stats.toolsMs += performance.now() - toolStart }
             ui.printToolResult(output, undefined, performance.now() - toolStart, { full: state.fullTools, locale: state.locale })
             // 工具级的收尾渲染(目前只有 update_plan 画计划清单)。
             // 走钩子而不是在这里写 if (name === 'x'):再加工具时这一行不用动。
