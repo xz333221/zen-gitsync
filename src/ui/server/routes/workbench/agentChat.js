@@ -22,9 +22,14 @@
 //   - { type: 'thinking', delta }          — 推理过程增量
 //   - { type: 'content', delta }           — 正文增量
 //   - { type: 'tool_call_start', toolCallId, name, argsPreview, arguments }
-//       arguments 只在计划类工具(update_plan 等)上出现:前端要拿原始 steps 渲染
-//       计划清单,argsPreview 是截断过的摘要拆不出步骤。其他工具不带全文,免得
-//       write_file 那种几十 KB 的 content 灌进 SSE。
+//       两个字段服务的是工具块的两副面孔，别混用:
+//       · argsPreview —— 收起态那一行摘要，故意截断(200 字)，前端拿它当副标题；
+//       · arguments   —— 展开后「参数」框里的原文，**一律发全文**。
+//       全文要全给：展开态本来就是"我要看它到底传了什么"，而会话历史里存的
+//       (session.messages 的 tool_calls.function.arguments)本来就是全文 ——
+//       只发摘要会让「正在跑」和「刷新后重放」看到两份不同的参数
+//       (useAgentChat 的历史回放分支直接读 arguments)。SSE 走本地回环，
+//       代价只是把同一份字符串多发一遍。
 //   - { type: 'tool_output', toolCallId, chunk }       — 命令执行中的增量输出(仅展示)
 //   - { type: 'tool_result', toolCallId, name, result }
 //   - { type: 'ask_user', interactionId, question, options, allowFreeText, multiple }
@@ -36,7 +41,7 @@ import os from 'os';
 import { logger } from './shared.js';
 
 // 从 CLI 侧导入工具定义、执行器与 LLM 传输层（同一 monorepo，路径可达）
-import { TOOL_DEFINITIONS, executeTool, normalizePlanSteps, summarizePlan, isPlanToolName } from '../../../../cli/ai/tools.js';
+import { TOOL_DEFINITIONS, executeTool, normalizePlanSteps, summarizePlan } from '../../../../cli/ai/tools.js';
 import { prepareRequestMessages } from '../../../../cli/ai/context.js';
 import { streamChatOnce } from '../../../../cli/ai/transport.js';
 import { checkDangerousCommand } from '../../../../cli/ai/safety.js';
@@ -407,19 +412,16 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
         args = rawArgs ? JSON.parse(rawArgs) : {};
       } catch {
         const errResult = `错误: 工具参数不是合法 JSON: ${rawArgs.slice(0, 200)}`;
-        send({ type: 'tool_call_start', toolCallId, name, argsPreview: rawArgs.slice(0, 200) });
+        send({ type: 'tool_call_start', toolCallId, name, argsPreview: rawArgs.slice(0, 200), arguments: rawArgs });
         send({ type: 'tool_result', toolCallId, name, result: errResult });
         session.messages.push({ role: 'tool', tool_call_id: toolCallId, name, content: errResult });
         continue;
       }
 
-      // 工具参数预览(给前端展示)
+      // 工具参数预览(前端收起态那一行副标题)。这里截断是**故意的** ——
+      // 摘要只负责"一眼看出它在干嘛"。
       const argsPreview = summarizeArgs(name, args);
-      // 计划类工具额外发**完整参数**:前端要拿原始 steps 渲染清单,而 argsPreview
-      // 是截断过的摘要,拆不出步骤。只给计划类工具发完整参数 ——
-      // write_file 的 content 可能几十 KB,为它开一路全文等于给 SSE 带宽找麻烦。
-      const rawArgsForClient = isPlanToolName(name) ? rawArgs : undefined;
-      send({ type: 'tool_call_start', toolCallId, name, argsPreview, arguments: rawArgsForClient });
+      send({ type: 'tool_call_start', toolCallId, name, argsPreview, arguments: rawArgs });
 
       const toolCtx = {
         ...ctx,

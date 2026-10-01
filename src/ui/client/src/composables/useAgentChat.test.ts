@@ -262,6 +262,35 @@ describe('useAgentChat parallel sessions', () => {
     await sendPromise
   })
 
+  // 工具块的两副面孔：收起态那行副标题用 argsPreview(截断摘要)，展开后的
+  // 「参数」框用 arguments(全文)。服务端现在每种工具都发 arguments，前端必须
+  // 优先用它 —— 退回摘要就等于展开后看到的还是那 200 字。
+  test('tool_call_start：arguments 优先于 argsPreview，缺了才退回摘要', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const sendPromise = chat.sendMessage('跑个长命令')
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    const fullArgs = JSON.stringify({ command: 'powershell -NoProfile ' + 'x'.repeat(300) })
+    chatStreams[0].send({
+      type: 'tool_call_start', toolCallId: 't1', name: 'run_command',
+      argsPreview: fullArgs.slice(0, 200), arguments: fullArgs,
+    })
+    chatStreams[0].send({ type: 'tool_call_start', toolCallId: 't2', name: 'run_command', argsPreview: 'npm install' })
+    await flush()
+
+    const msg = chat.messages.value[chat.messages.value.length - 1]
+    expect(msg.toolCalls?.[0].arguments).toBe(fullArgs)
+    expect(msg.toolCalls?.[0].argsPreview).toHaveLength(200)
+    expect(msg.toolCalls?.[1].arguments).toBe('npm install')
+
+    chatStreams[0].send({ type: 'done', content: '好了' })
+    chatStreams[0].close()
+    await sendPromise
+  })
+
   // 提问面板：ask_user 带 multiple 时，提交给服务端的 answer 是数组
   // （多选序列化成 JSON 数组字符串、拼进 tool 结果是服务端的事）
   test('ask_user 多选：提交数组给 /api/agent/respond', async () => {

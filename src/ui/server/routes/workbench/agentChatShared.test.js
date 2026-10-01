@@ -180,12 +180,14 @@ test('400 且正文提到 tool/function 时提示换模型,而不是甩网关 JS
   assert.match(error.error, /换用支持工具调用的模型/)
 })
 
-// ── 计划工具的透传契约 ──────────────────────────────────────
-// 前端要拿原始 steps 渲染计划清单，而它拿到的是 argsPreview（截断过的摘要）——
-// 摘要里拆不出步骤，所以服务端必须为计划类工具额外带一份完整 arguments。
-// 这条钉死了「只给计划类发全文」的口径：多发会让 write_file 的 content
-// 几十 KB 灌进 SSE，少发则前端永远退化成普通工具块。
-test('计划类工具的 tool_call_start 带完整 arguments,其他工具不带', async () => {
+// ── 工具参数的透传契约 ──────────────────────────────────────
+// 两个字段分工不同，两边都不能少：
+//   · arguments —— 展开后「参数」框里的原文，**每种工具都发全文**。前端历史回放
+//     (useAgentChat 读 session.messages)拿到的本来就是全文，只在流式这一路发摘要，
+//     就会让"正在跑"和"刷新后"看到两份不同的参数。
+//   · argsPreview —— 收起态那一行副标题，故意截到 200 字。
+// 计划类工具的 steps 也在 arguments 里（不再单独开一条透传路径）。
+test('tool_call_start 每种工具都带完整 arguments,argsPreview 仍是截断摘要', async () => {
   const planArgs = JSON.stringify({
     steps: [
       { content: '读代码', status: 'completed' },
@@ -219,8 +221,9 @@ test('计划类工具的 tool_call_start 带完整 arguments,其他工具不带'
   // 计划：全文必须一字不差地带到前端（前端靠它渲染清单）
   assert.equal(planStart.arguments, planArgs)
   assert.match(planStart.argsPreview, /1\/2|1 完成/)
-  // 其他工具：只给摘要，不灌全文
-  assert.equal(writeStart.arguments, undefined)
+  // 其他工具：展开态同样要看到原文，不再只给摘要
+  assert.equal(writeStart.arguments, JSON.stringify({ path: 'a.js', content: 'x'.repeat(50) }))
+  assert.ok(writeStart.argsPreview.length < writeStart.arguments.length, '摘要仍应是截断过的')
 
   const planResult = events.find(e => e.type === 'tool_result' && e.name === 'update_plan')
   assert.match(planResult.result, /计划已更新/)

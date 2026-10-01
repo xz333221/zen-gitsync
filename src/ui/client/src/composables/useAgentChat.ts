@@ -801,9 +801,8 @@ export function useAgentChat() {
                 id: evt.toolCallId || uid(),
                 name: evt.name || '',
                 argsPreview: evt.argsPreview || '',
-                // 计划类工具服务端会额外发完整 arguments(见 agentChat.js 的
-                // tool_call_start 注释);拿不到就退回摘要,组件那边会自己判断
-                // 能不能解析出步骤 —— 摘要解析不出计划,就退回普通工具块
+                // 服务端每种工具都发完整 arguments(见 agentChat.js 的 tool_call_start
+                // 注释);这里兜底退回摘要,只为老会话 / 字段缺失时不至于空着
                 arguments: evt.arguments || evt.argsPreview || '',
                 status: 'running',
                 result: ''
