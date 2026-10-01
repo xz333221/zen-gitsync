@@ -612,6 +612,17 @@ function isTaskRunning(t: Task): boolean {
   return !!job && (job.status === 'running' || job.status === 'pending')
 }
 
+/** 这条任务跑过没有 —— 决定执行按钮叫「执行任务」还是「重新执行任务」 */
+const selectedTaskHasRun = computed(() => simpleAllJobsFor(selectedTask.value).length > 0)
+const selectedTaskRunning = computed(() => isTaskRunning(selectedTask.value as Task))
+
+/** 执行按钮的悬停说明：只在"文案与行为不一致会让人误判"的两种状态下给 */
+const runButtonTitle = computed(() => {
+  if (!selectedTask.value) return ''
+  if (selectedTaskRunning.value) return $t('@WORKBENCH:正在执行中,请先「停止」再重新执行')
+  return selectedTaskHasRun.value ? $t('@WORKBENCH:重新跑一轮:上一轮的执行记录会被清空') : ''
+})
+
 // clearExecutionForSelectedTask → 来自 useWorkbenchExecution
 
 // ── 提示词 CRUD ─────────────────────────────────────────────────────────────
@@ -1188,17 +1199,25 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
             <option :value="null">{{ $t('@WORKBENCH:不绑定预置提示词') }}</option>
             <option v-for="p in availablePrompts" :key="p.id" :value="p.id">{{ p.name }}</option>
           </select>
-          <!-- 执行：split button —— 主体按当前选中执行器直接跑，下拉临时切换执行器 -->
+          <!--
+            执行：split button —— 主体按当前选中执行器直接跑，下拉临时切换执行器。
+            文案随执行状态变（2026-10-01）：这条任务已经有执行记录时改叫「重新执行任务」，
+            因为 runTask 会先清掉旧 job 再开新一轮 —— 挂着「执行任务」会让人以为是接着上一轮跑。
+            在跑的时候直接禁用：服务端本来就拒（400 该任务已有正在执行的 job），
+            点了只是白跑一趟，还想让人误以为新起了一轮。
+          -->
           <el-dropdown
             v-if="hasAnyExecutor"
             split-button
             type="primary"
             class="wb-executor-split"
             trigger="click"
+            :disabled="selectedTaskRunning"
+            :title="runButtonTitle"
             @click="runTask(selectedTask)"
             @command="pickExecutor"
           >
-            {{ $t('@WORKBENCH:执行任务') }}
+            {{ selectedTaskHasRun ? $t('@WORKBENCH:重新执行任务') : $t('@WORKBENCH:执行任务') }}
             <span class="wb-executor-split__hint" :title="executorModelTitle(selectedTaskExecutor)">
               <TaskExecutorIcon :executor="selectedTaskExecutor" class="wb-executor-split__hint-icon" />
               {{ executorLabel(selectedTaskExecutor) }}
