@@ -138,6 +138,12 @@ import {
   buildRunningFacts,
   generateProgressReport,
 } from './progressReport.js';
+import {
+  applyStallVerdict,
+  buildStallFact,
+  judgeStalledJob,
+  shouldCheckStall,
+} from './stallWatchdog.js';
 import { detectExecutorModels, formatExecutorModel } from './executorModels.js';
 
 /**
@@ -149,6 +155,9 @@ let jobSettledHandler = null;
 
 /** 自动进度报告的定时器。同上：重复装配路由时先清掉上一个 */
 let reportTimer = null;
+
+/** 静默看门狗的定时器（与报告同一个粒度，各自独立装配/清理） */
+let stallTimer = null;
 
 /** 自动报告的检查粒度。它**不等于**报告间隔 —— 见 tickProgressReport 的注释 */
 const REPORT_TICK_MS = 30 * 1000;
@@ -1482,6 +1491,69 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
   }, REPORT_TICK_MS);
   // 定时器不该把进程吊着不退出
   reportTimer.unref?.();
+
+  /**
+   * 静默看门狗的一跳：把**本进程**跑着的、已经静默够久的 job 挨个判一次，
+   * 判成"已经做完了"就把这条执行落成终态（卡片随即从「进行中」挪到「已完成」）。
+   *
+   * 与自动报告的三点不同，都是有意的：
+   *   · **不吃报告开关**：报告间隔是"隔多久汇报一次"的偏好，不是"允不允许后台打模型"
+   *     的总闸。用户关掉报告之后，卡了 54 分钟的任务仍然该被收掉。
+   *   · **只判本进程的 job**：别人的 job 只在 live-jobs 缓存里，终态由它的 owner 落盘 ——
+   *     从这边改会被下一轮刷新盖回去（见 stallWatchdog 文件头的第 4 条）。
+   *   · **串行判**：一次模型往返几秒到几十秒，同时跑好几条就是同时打十几次模型。
+   *     排队判的代价只是排在后面的那几条晚几十秒，而它们已经静默十分钟了。
+   *
+   * 判定的准入条件（该不该判）全在 stallWatchdog.shouldCheckStall 里，这里只负责
+   * "把模型的话落到 job 上"，免得同一套门槛出现两份。
+   */
+  let stallTickInFlight = false;
+  async function tickStallWatchdog() {
+    if (stallTickInFlight) return;
+    stallTickInFlight = true;
+    try {
+      // 每判完一条都重新取一次时间：判定本身要花几秒，用 tick 开始时的 now
+      // 会让"刚刚已经恢复产出"的任务在第二次静默检查里蒙混过关
+      const pending = Array.from(jobs.values()).filter(j => shouldCheckStall(j, Date.now()));
+      if (!pending.length) return;
+
+      const data = await readJson(TASKS_FILE, { tasks: [] });
+      const taskMap = new Map((data.tasks || []).filter(t => t && t.id).map(t => [t.id, t]));
+      const ctx = await readReportContext();
+
+      for (const job of pending) {
+        if (!shouldCheckStall(job, Date.now())) continue;
+        const fact = buildStallFact(job, taskMap.get(job.taskId), Date.now());
+        const verdict = await judgeStalledJob({ fact, locale: ctx.locale, model: ctx.model });
+        const settled = applyStallVerdict(job, { at: nowIso(), verdict });
+        if (settled) {
+          // 先告诉前端（SSE）再落盘：卡片该立刻动，而不是等下一次 5s 轮询
+          publish('job:update', job);
+          logger.info(`[workbench] 静默看门狗判定任务已完成，自动收尾 (job=${job.id}): ${job.autoCompleted.reason || '（模型未给依据）'}`);
+          try {
+            await flushJobsSaveNow();
+          } catch (err) {
+            logger.warn('[workbench] 自动收尾落盘失败:', (err && err.message) || err);
+          }
+        } else if (verdict.errorCode) {
+          logger.info(`[workbench] 静默判定未采纳 (job=${job.id}): ${verdict.errorCode} ${verdict.errorDetail}`.trim());
+        } else if (verdict.done) {
+          // 判成完成但没落成终态 —— 判定期间它又动了（见 applyStallVerdict）
+          logger.info(`[workbench] 静默判定为已完成，但期间任务又有产出，本次不改状态 (job=${job.id})`);
+        }
+      }
+    } finally {
+      stallTickInFlight = false;
+    }
+  }
+
+  if (stallTimer) { clearInterval(stallTimer); stallTimer = null; }
+  stallTimer = setInterval(() => {
+    tickStallWatchdog().catch(err => {
+      logger.warn('[workbench] 静默看门狗失败:', (err && err.message) || err);
+    });
+  }, REPORT_TICK_MS);
+  stallTimer.unref?.();
 
   app.post('/api/workbench/orchestrator/state', asyncRoute(async (req, res) => {
     const active = req.body?.active;

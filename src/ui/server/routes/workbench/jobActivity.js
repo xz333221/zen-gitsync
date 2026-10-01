@@ -167,15 +167,27 @@ export function describeToolMix(toolCalls) {
 }
 
 /**
- * 距最后一次产出（正文 / 思考 / 工具调用）多久。
- * 没有 `lastActivityAt`（老记录、别实例上的旧版进程）或还没到阈值 → null，
+ * 距最后一次产出（正文 / 思考 / 工具调用）的**原始**毫秒数，不设阈值。
+ *
+ * 两个调用方要的是不同的问题：卡片/报告问的是"静默到值得说出来了吗"（用下面的
+ * silentMsOf，60s 起），静默看门狗问的是"静默到该判一次了吗"（10 分钟起）。
+ * 阈值各留各的，但**计时口径必须只有一份** —— 各写一份 `now - lastActivityAt`
+ * 迟早会在"取不到时间戳算什么"上分叉（这里定了：null，不拿 startedAt 兜底，
+ * 也不给假的 0）。没有 `lastActivityAt`（老记录、别实例上的旧版进程）→ null。
+ */
+export function silentMsRaw(job, now) {
+  const last = Date.parse((job && job.lastActivityAt) || '');
+  if (!Number.isFinite(last)) return null;
+  return Math.max(0, now - last);
+}
+
+/**
+ * 静默到**值得写进事实**的毫秒数（不到阈值就是 null）。
  * 调用方据此决定"这条不显示"，而不是显示一个假的 0。
  */
 export function silentMsOf(job, now) {
-  const last = Date.parse((job && job.lastActivityAt) || '');
-  if (!Number.isFinite(last)) return null;
-  const ms = Math.max(0, now - last);
-  return ms >= SILENT_NOTABLE_MS ? ms : null;
+  const ms = silentMsRaw(job, now);
+  return ms !== null && ms >= SILENT_NOTABLE_MS ? ms : null;
 }
 
 /** job 是否算"正在跑"（看板卡片只在此时显示活动摘要） */

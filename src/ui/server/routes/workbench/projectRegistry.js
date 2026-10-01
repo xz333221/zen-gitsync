@@ -364,6 +364,21 @@ export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now() 
     lastDurationMs: jobDurationMs(last),
     /** 那条 job 的启动时刻，配合 lastJobEndedAt 给悬停提示里的「几点到几点」 */
     lastJobStartedAt: last ? (last.startedAt || null) : null,
+    /**
+     * 「这条不是跑完的，是**判**完的」——静默看门狗给的 `{at, reason, silentMs}`，没判过是 null。
+     *
+     * 为什么要专门给卡片一个字段：自动收尾和"进程自己正常退出"在看板上长得一模一样
+     * （都是「已完成」+ 一段用时），但它俩的含义差很远 —— 前者是模型读了思考与最后那段话
+     * 后认为活已经干完，用户多半想扫一眼依据再决定要不要信。没有这个字段，卡片只会
+     * 不声不响地换个列，模型那句依据就永远躺在 jobs.json 里没人看得到。
+     */
+    autoCompleted: (last && last.autoCompleted && typeof last.autoCompleted === 'object')
+      ? {
+        at: last.autoCompleted.at || null,
+        reason: typeof last.autoCompleted.reason === 'string' ? last.autoCompleted.reason : '',
+        silentMs: Number.isFinite(last.autoCompleted.silentMs) ? last.autoCompleted.silentMs : null,
+      }
+      : null,
     createdAt: task.createdAt || null,
     updatedAt: task.updatedAt || null,
   };

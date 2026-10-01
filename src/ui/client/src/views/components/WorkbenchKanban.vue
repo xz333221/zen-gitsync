@@ -183,6 +183,19 @@ function cardTimeTitle(t: BoardTask): string {
 }
 
 /**
+ * 「AI 判定完成」那个小标的悬停提示：把模型给的依据原样摆出来。
+ *
+ * 标本身只有四个字，看不出"凭什么说它完成了" —— 而依据正是用户唯一能判断
+ * 该不该信这次自动收尾的东西。没给依据时退回一句"模型未给依据"，
+ * 而不是把标也一起藏掉：藏了的话卡片就和不声不响换列没区别了。
+ */
+function autoDoneTitle(t: BoardTask): string {
+  const reason = (t.autoCompleted?.reason || '').trim()
+  const head = $t('@WORKBENCH:静默超时后由 AI 核对，判定这条任务已经完成')
+  return reason ? `${head}\n${reason}` : head
+}
+
+/**
  * 列表视图的行序：最新的在最上边。
  *
  * 排序键 = 显示键（cardTime），理由同上面那段：按 A 排、显示 B 的话，
@@ -349,6 +362,24 @@ function liveSummary(live: BoardTaskLive): string {
             -->
             <p v-if="cardDuration(t)" class="kb-card__spent" :title="cardTimeTitle(t)">
               {{ $t('@WORKBENCH:用时 {d}', { d: cardDuration(t) }) }}
+            </p>
+
+            <!--
+              「这条不是跑完的，是**判**完的」—— 紧跟在那行用时下面（它修饰的就是上面那个时长）。
+
+              为什么**另起一行**、而不是挂在那行用时后面：那行有探针按逐字相等断言
+              （verify-wb-task-duration 的 A1「与服务端 lastDurationMs 逐字一致」，A3 还要求
+              它不被裁掉尾巴），往里面塞一枚标会同时踩到这两条 —— 而且那行本来就窄。
+              竖着放只多一行 16px，横向一个字节都不占。
+
+              为什么要标出来：自动收尾与"进程自己正常退出"在看板上长得一模一样
+              （都是「已完成」+ 一段用时），但含义差很远 —— 后者是跑完了，
+              前者是**模型读了它的思考与最后那段话，认为活已经干完**。不标的话，
+              用户看到的就是一条任务不声不响换了列，而模型给的依据（悬停可见）
+              只躺在 jobs.json 里没人看得到。
+            -->
+            <p v-if="t.autoCompleted" class="kb-card__auto-done" :title="autoDoneTitle(t)">
+              {{ $t('@WORKBENCH:AI 判定完成') }}
             </p>
 
             <!--
@@ -558,6 +589,14 @@ function liveSummary(live: BoardTaskLive): string {
               <span class="kb-table__time" :title="cardTimeTitle(t)">
                 <template v-if="cardDuration(t)">
                   <span class="kb-table__dur">{{ $t('@WORKBENCH:用时 {d}', { d: cardDuration(t) }) }}</span>
+                  <span class="kb-table__time-sep" aria-hidden="true">·</span>
+                </template>
+                <!-- 「AI 判定完成」在列表视图里也得有：同一批任务的两种画法，
+                     一边有一边没有会让人以为是两份数据（卡片那边见 .kb-card__spent 的注释） -->
+                <template v-if="t.autoCompleted">
+                  <span class="kb-table__auto-done" :title="autoDoneTitle(t)">
+                    {{ $t('@WORKBENCH:AI 判定完成') }}
+                  </span>
                   <span class="kb-table__time-sep" aria-hidden="true">·</span>
                 </template>
                 <span>{{ relativeTimeFromIso(cardTime(t)) }}</span>
@@ -782,6 +821,35 @@ function liveSummary(live: BoardTaskLive): string {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+/*
+ * 「AI 判定完成」：卡片上紧跟「用时 x」的那一枚小标（模板那段的理由写在那里）。
+ * 配色照抄项目色标那套（跟 surface-elevated 混，深浅两套主题自动成立），
+ * 色相固定用成功色 —— 它说的是"这条已经落进「已完成」列了"这个事实。
+ * 形状用圆角矩形而**不是胶囊**：胶囊在这张卡上是「项目名」的专用形状，
+ * 两者会同时出现（卡片顶部一枚、这里一枚），同形状会让人以为它们是一类东西。
+ * 宽度按内容收（inline-block）：整行铺满的话会看着像一条分隔线，而不是一枚标记。
+ */
+.kb-card__auto-done {
+  display: inline-block;
+  /* 悬停提示（模型给的依据）挂在整个 <p> 上，所以内边距留在 p 上而不是标自己身上 ——
+     鼠标移到标右边的空白也要能出提示 */
+  margin: -4px 0 8px;
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--color-success) 24%, var(--surface-elevated));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-success) 9%, var(--surface-elevated));
+  color: color-mix(in srgb, var(--color-success) 62%, var(--text-primary));
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+}
+/*
+ * 列表视图里那一枚**不带框**：那一格有探针按"整格只有一行"断言
+ * （verify-wb-task-duration 的 E2 量的是格高 / line-height），带上边框和内边距
+ * 就有把行高顶出去的风险 —— 而它要说的信息（"这条是判完成的"）只靠颜色 + 文字就说清了。
+ */
+.kb-table__auto-done {
+  color: color-mix(in srgb, var(--color-success) 62%, var(--text-primary));
 }
 .kb-card__title {
   margin: 0;

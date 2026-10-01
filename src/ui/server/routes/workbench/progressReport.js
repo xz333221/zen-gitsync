@@ -130,6 +130,12 @@ export function buildRunningFacts({ jobs = [], tasks = [], now = Date.now() } = 
     const started = Date.parse(job.startedAt || '');
     out.push({
       taskId: job.taskId || null,
+      /**
+       * 这条事实对应哪次执行。报告本身用不到（一张卡片一条事实），
+       * 但静默看门狗要拿着判定结果**回到那条 job 上改状态** ——
+       * 同一个任务可能有好几条 job（重跑 / 并行子任务），按 taskId 改会改错人。
+       */
+      jobId: job.id || null,
       taskTitle: String((task && task.title) || '').slice(0, MAX_TITLE_CHARS),
       projectName: projectName(projectPath),
       startedAt: job.startedAt || null,

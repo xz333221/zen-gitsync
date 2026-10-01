@@ -2503,6 +2503,8 @@ export default {
   '@WORKBENCH:N 分 M 秒': '{n} min {m} s',
   '@WORKBENCH:N 秒': '{n} s',
   '@WORKBENCH:用时 {d}': 'took {d}',
+  '@WORKBENCH:AI 判定完成': 'AI marked done',
+  '@WORKBENCH:静默超时后由 AI 核对，判定这条任务已经完成': 'The task went silent, so an AI check reviewed it and judged it finished',
   '@WORKBENCH:打开文件夹': 'Open folder',
   '@WORKBENCH:已在文件管理器中打开文件夹': 'Opened the folder in your file manager',
   '@WORKBENCH:打开文件夹失败': 'Failed to open folder',

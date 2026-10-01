@@ -242,6 +242,13 @@ export interface BoardTask {
   lastDurationMs?: number | null
   /** 那条 job 的启动时刻（悬停提示里的「几点到几点」），从没执行过时为 null */
   lastJobStartedAt?: string | null
+  /**
+   * 「这条不是跑完的，是**判**完的」（服务端静默看门狗写的）。
+   * 最近一条 job 静默超过 10 分钟后由模型核对、判成已完成时才有值；其余情况 null。
+   * 卡片据此标一个「AI 判定完成」，悬停看模型给的依据 —— 自动收尾与"进程自己正常退出"
+   * 在看板上长得一样，不标出来用户会以为那条是自己跑完的。
+   */
+  autoCompleted?: { at: string | null; reason: string; silentMs: number | null } | null
   createdAt: string | null
   updatedAt: string | null
 }

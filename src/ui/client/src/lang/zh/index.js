@@ -2512,6 +2512,8 @@ export default {
   '@WORKBENCH:N 分 M 秒': '{n} 分 {m} 秒',
   '@WORKBENCH:N 秒': '{n} 秒',
   '@WORKBENCH:用时 {d}': '用时 {d}',
+  '@WORKBENCH:AI 判定完成': 'AI 判定完成',
+  '@WORKBENCH:静默超时后由 AI 核对，判定这条任务已经完成': '静默超时后由 AI 核对，判定这条任务已经完成',
   '@WORKBENCH:打开文件夹': '打开文件夹',
   '@WORKBENCH:已在文件管理器中打开文件夹': '已在文件管理器中打开文件夹',
   '@WORKBENCH:打开文件夹失败': '打开文件夹失败',

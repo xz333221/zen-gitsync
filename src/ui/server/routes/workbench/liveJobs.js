@@ -100,7 +100,13 @@ export function projectJob(j) {
     // 前端靠它画工具块;刷新页面 / 换实例后仍然可见,所以必须过白名单。
     toolCalls: Array.isArray(j.toolCalls) ? j.toolCalls : [],
     // 续接对话用:claude --output-format stream-json 的 system.init 事件捕获到的 session_id
-    claudeSessionId: j.claudeSessionId || null
+    claudeSessionId: j.claudeSessionId || null,
+    /**
+     * 「这条是我判成完成的」（静默看门狗写的，见 stallWatchdog.js）。`{at, reason, silentMs}`，
+     * 没判过就是 null。**必须过白名单**：看板卡片靠它显示"为什么它自己跳到已完成列了"——
+     * 没有这个字段，用户看到的就是一条任务不声不响换了列，模型给的依据也无处可看。
+     */
+    autoCompleted: (j.autoCompleted && typeof j.autoCompleted === 'object') ? j.autoCompleted : null
   };
 }
 

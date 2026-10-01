@@ -30,8 +30,16 @@ import { buildAiChatRequest, describeAiHttpError } from '../../../../utils/aiEnd
 //
 // 图片支持：opts.images 是 data URL 数组（如 'data:image/png;base64,...'）。
 // 非多模态模型遇到 image_url 会忽略图片块，相当于退化成纯文本，不会报错。
+//
+// opts.maxTokens / opts.systemPrompt 是 2026-10-01 为静默看门狗补的（此前这个函数
+// 既不带 system，也不限制输出长度）。两个都是**可选**：不传就与改前逐字一致，
+// 现有调用点（targetResolver / aiContext 摘要 / 提示词生成）不受影响。
+//   · maxTokens：推理模型的 max_tokens 是"思考 + 正文"共用的，不设的话就等于把
+//     上限交给网关默认值 —— 判定这种"只要一个布尔值"的调用不值得赌那个默认值。
+//   · systemPrompt：把判定口径（不可信数据 / 宁可不判）与用户消息分开，
+//     免得跟任务正文混在同一段里被当成数据的一部分。
 export async function callLlmJson(model, prompt, opts = {}) {
-  const { timeoutMs = 60000, images = [] } = opts;
+  const { timeoutMs = 60000, images = [], maxTokens, systemPrompt } = opts;
   const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }));
   const { url, headers } = buildAiChatRequest({
     baseURL: model.baseURL,
@@ -49,13 +57,21 @@ export async function callLlmJson(model, prompt, opts = {}) {
     userContent = prompt;
   }
 
-  const body = JSON.stringify({
+  const messages = [];
+  if (systemPrompt) messages.push({ role: 'system', content: String(systemPrompt) });
+  messages.push({ role: 'user', content: userContent });
+
+  const payload = {
     model: model.model,
-    messages: [{ role: 'user', content: userContent }],
+    messages,
     temperature: 0.4,
     response_format: { type: 'json_object' },
     stream: false,
-  });
+  };
+  // 只在调用方真给了正整数时才写进 body：传 undefined 会序列化成 `"max_tokens": null`，
+  // 有的网关把它当 0 处理 → 直接返回空正文
+  if (Number.isFinite(maxTokens) && maxTokens > 0) payload.max_tokens = Math.floor(maxTokens);
+  const body = JSON.stringify(payload);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
