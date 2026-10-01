@@ -438,7 +438,9 @@ async function handleEnterKey(event: KeyboardEvent) {
   );
   const hasConflicts = gitStore.hasConflictedFiles;
 
-  // 检查是否满足推送条件（与QuickPushButton.vue中的isDisabled逻辑一致）
+  // 回车只负责「有东西要提交」时的暂存→提交→推送；
+  // 纯推送（本地已提交、只差推送）不在这里兜底 —— 那一步交给「一键推送所有」按钮，
+  // 免得在空表单里回车就静默把已有提交推出去
   if (
     !hasAnyChangesValue ||
     !hasUserCommitMessage.value ||

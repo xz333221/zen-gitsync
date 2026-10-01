@@ -49,6 +49,14 @@ const hasSelectedToStage = computed(() => {
     && gitStore.selectedUnstagedPaths.length > 0;
 });
 
+// 纯推送：本地已提交、只差推送。这条路径不生成提交信息（见 CommitForm.handleAiQuickPush），
+// 副标题要跟着说实话，否则一片「AI 生成信息 + 推送」会让人以为会新生成一条提交。
+const isPushOnly = computed(() => {
+  return !gitStore.isSelectionMode
+    && !hasAnyChanges.value
+    && gitStore.branchAhead > 0;
+});
+
 // 与 QuickPushButton 的关键差异：**不要求 hasUserCommitMessage**——
 // 提交信息由 AI 现场生成，用户不必先手写一条才能点。
 const isDisabled = computed(() => {
@@ -114,6 +122,9 @@ const buttonTitle = computed(() => {
 
 const buttonDesc = computed(() => {
   if (props.from !== 'form') return '';
+  if (isPushOnly.value) {
+    return $t('@2E184:本地已提交，直接推送');
+  }
   return $t('@2E184:AI 生成信息 + 推送');
 });
 

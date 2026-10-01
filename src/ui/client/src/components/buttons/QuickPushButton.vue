@@ -64,6 +64,16 @@ const hasSelectedToStage = computed(() => {
     && gitStore.selectedUnstagedPaths.length > 0
 });
 
+// 纯推送：本地没有待提交的改动，只有领先远程的提交。
+// 这条路径根本不走暂存/提交（见 handleQuickPush 里的 hasLocalChanges），
+// 所以不能拿「必须先填提交信息」去拦它 —— 否则最需要推送的场景反而点不动，
+// 还弹一句和当前动作无关的「请输入提交信息」。
+const isPushOnly = computed(() => {
+  return !gitStore.isSelectionMode
+    && !hasAnyChanges.value
+    && gitStore.branchAhead > 0;
+});
+
 // 计算最终的禁用状态
 const isDisabled = computed(() => {
   // 如果有冲突文件，禁用一键推送按钮
@@ -71,21 +81,22 @@ const isDisabled = computed(() => {
     return true;
   }
 
-  // 选择模式：要求所选文件有可暂存内容
-  if (gitStore.isSelectionMode) {
-    return (
-      !hasSelectedToStage.value
-      || !props.hasUserCommitMessage
-      || !gitStore.hasUpstream
-    );
+  if (!gitStore.hasUpstream) {
+    return true;
   }
 
-  // 如果没有本地变更，也没有领先提交，禁用
-  const noWorkToDo = !hasAnyChanges.value && gitStore.branchAhead === 0;
+  // 选择模式：要求所选文件有可暂存内容
+  if (gitStore.isSelectionMode) {
+    return !hasSelectedToStage.value || !props.hasUserCommitMessage;
+  }
 
-  return (
-    noWorkToDo || !props.hasUserCommitMessage || !gitStore.hasUpstream
-  );
+  // 纯推送不需要提交信息（这条路径不提交任何东西）
+  if (isPushOnly.value) {
+    return false;
+  }
+
+  // 没有本地变更、也没有领先提交 → 无事可做
+  return !hasAnyChanges.value || !props.hasUserCommitMessage;
 });
 
 // 计算最终的加载状态
@@ -99,6 +110,10 @@ const tooltipText = computed(() => {
     return $t('@2E184:存在冲突文件，请先解决冲突');
   }
 
+  if (!gitStore.hasUpstream) {
+    return $t('@2E184:当前分支没有上游分支');
+  }
+
   if (gitStore.isSelectionMode) {
     if (gitStore.selectedFiles.size === 0) {
       return $t('@2E184:请先勾选要推送的文件');
@@ -109,31 +124,23 @@ const tooltipText = computed(() => {
     if (!props.hasUserCommitMessage) {
       return $t('@2E184:请输入提交信息');
     }
-    if (!gitStore.hasUpstream) {
-      return $t('@2E184:当前分支没有上游分支');
-    }
     return $t('@2E184:一键完成：仅暂存所选文件 → 提交 → 推送到远程仓库');
   }
 
-  const hasCommitsToPush = gitStore.branchAhead > 0;
-
-  if (!hasAnyChanges.value && !hasCommitsToPush) {
+  if (!hasAnyChanges.value && gitStore.branchAhead === 0) {
     return $t('@2E184:没有需要提交或推送的更改');
+  }
+
+  // 纯推送：这次点击只会推送，不会暂存也不会提交
+  if (isPushOnly.value) {
+    return $t('@2E184:本地已提交，一键推送到远程仓库');
   }
 
   if (!props.hasUserCommitMessage) {
     return $t('@2E184:请输入提交信息');
   }
 
-  if (!gitStore.hasUpstream) {
-    return $t('@2E184:当前分支没有上游分支');
-  }
-
-  if (hasAnyChanges.value) {
-    return $t('@2E184:一键完成：暂存所有更改 → 提交 → 推送到远程仓库');
-  } else {
-    return $t('@2E184:本地已提交，一键推送到远程仓库');
-  }
+  return $t('@2E184:一键完成：暂存所有更改 → 提交 → 推送到远程仓库');
 });
 
 // 按钮标题与副标题：随选择模式动态切换
@@ -145,6 +152,10 @@ const buttonTitle = computed(() => {
 
 const buttonDesc = computed(() => {
   if (props.from !== 'form') return '';
+  // 纯推送时副标题不能还写着「暂存 + 提交」——这次点击不会暂存也不会提交
+  if (isPushOnly.value) {
+    return $t('@2E184:推送到远程仓库');
+  }
   return gitStore.isSelectionMode && hasSelectedToStage.value
     ? $t('@2E184:暂存所选 + 提交 + 推送')
     : $t('@2E184:暂存 + 提交 + 推送');

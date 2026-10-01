@@ -141,6 +141,8 @@ export default {
   '@2E184:没有需要提交或推送的更改': 'No changes to commit or push',
   '@2E184:没有需要提交的更改': 'No changes to commit',
   '@2E184:本地已提交，一键推送到远程仓库': 'Local changes committed, push to remote',
+  '@2E184:推送到远程仓库': 'Push to remote',
+  '@2E184:本地已提交，直接推送': 'Already committed locally, push directly',
   '@2E184:一键完成：暂存所有更改 → 提交 → 推送到远程仓库': 'One-click: Stage all changes → Commit → Push to remote',
   '@2E184:一键完成：仅暂存所选文件 → 提交 → 推送到远程仓库': 'One-click: Stage selected files → Commit → Push to remote',
   '@2E184:一键完成：暂存所有更改 → 提交': 'One-click: Stage all changes → Commit',

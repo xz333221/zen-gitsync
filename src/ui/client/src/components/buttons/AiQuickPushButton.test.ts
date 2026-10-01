@@ -112,4 +112,15 @@ describe('AiQuickPushButton.vue', () => {
     expect(w.emitted('trigger')).toBeFalsy()
     vi.mocked(isFilePathLocked).mockReturnValue(false)
   })
+
+  test('AIQ-11: 纯推送时副标题不再声称会「AI 生成信息」', async () => {
+    mockGitStore.branchAhead = 2
+    const pushOnly = mountBtn()
+    expect(pushOnly.find('.one-ai-push-desc').text()).toBe('@2E184:本地已提交，直接推送')
+
+    mockGitStore.branchAhead = 0
+    mockGitStore.fileList = [{ path: 'a.ts' }]
+    const withChanges = mountBtn()
+    expect(withChanges.find('.one-ai-push-desc').text()).toBe('@2E184:AI 生成信息 + 推送')
+  })
 })
