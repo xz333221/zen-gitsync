@@ -63,6 +63,7 @@ npm install -g zen-gitsync
 - **Skill / MCP marketplace** — install skills and MCP servers from the Agent view into the current project or the `g ai` agent
 - **Reset to remote** — One-click `git reset --hard origin/<branch>` from the Git panel (auto-refreshes branch info first to avoid wrong-target resets)
 - **AI commit message** — Generate commit message from staged diff automatically
+- **AI commit & push** — One click does the whole loop: AI writes the commit message from the diff, then stages → commits → pushes (no need to type a message first)
 - **Selection-scoped diff** — AI commit message and quick commit/push use only the diff of currently selected files when the Git view is the active tab
 - **Commit templates** — Save type/scope/description/message templates
 - **Theme & language** — Light/dark theme and Chinese/English UI; one-click theme toggle in the header (no need to dig into settings)
@@ -151,6 +152,7 @@ The GUI runs as a local web server and opens in your default browser on the firs
 | AI commit message | Generate commit message from staged diff using an AI model |
 | Push | Push to remote with live progress modal |
 | Quick commit+push | One-click stage → commit → push |
+| AI commit & push | One-click **AI writes the message → stage → commit → push** (form is filled in first, so you can see what was committed). When the branch is already committed and only needs pushing, AI is skipped and it pushes directly |
 | Pull / Fetch | Pull from or fetch the upstream branch |
 | Reset to remote | One-click `git reset --hard origin/<branch>`; auto-refreshes branch info first to avoid stale-branch targets; hidden when working tree is clean and no unpushed commits |
 | Merge | Merge another branch; detects and surfaces in-progress merge state |
@@ -716,6 +718,7 @@ npm install -g zen-gitsync
 - **Skill / MCP 广场** — 在智能体页把 Skill 与 MCP 服务安装到当前项目或 `g ai` 智能体
 - **重置到远程** — 在 Git 面板一键执行 `git reset --hard origin/<branch>`（点击前会先自动刷新分支信息，避免重置到陈旧分支）
 - **AI 生成提交信息** — 基于 staged diff 自动生成提交消息
+- **AI 提交并推送** — 一键跑完整条链路：AI 从 diff 写好提交信息 → 暂存 → 提交 → 推送（不必先自己敲一条提交信息）
 - **选择模式差异** — 当 Git 视图为当前激活标签时，AI 生成提交信息与一键提交/推送仅作用于当前勾选文件的 diff
 - **提交模板** — 保存类型/范围/描述/完整提交信息模板
 - **主题与语言** — 支持明/暗主题，中英文界面切换;header 一键切换主题(无需进入设置)
@@ -835,6 +838,7 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 | AI 生成提交信息 | 基于 staged diff 自动生成提交消息 |
 | 推送 | 推送到远程，实时显示进度弹窗 |
 | 快速提交+推送 | 一键完成暂存 → 提交 → 推送 |
+| AI 提交并推送 | 一键完成 **AI 写提交信息 → 暂存 → 提交 → 推送**（信息会先填进表单，能看见到底提了什么）。本地已提交、只差推送时跳过 AI 直接推 |
 | 拉取 / Fetch | 从上游拉取或仅获取远程信息 |
 | 重置到远程 | 一键执行 `git reset --hard origin/<branch>`；点击前会先刷新分支信息，避免重置到陈旧分支；当工作区干净且无未推送提交时按钮自动隐藏 |
 | 合并 | 合并其他分支，自动检测并引导处理合并中间状态 |

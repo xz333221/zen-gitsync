@@ -15,7 +15,7 @@
   -->
 <script setup lang="ts">
 import { $t } from "@/lang/static";
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, computed, watch, onMounted, nextTick } from "vue";
 import { ElMessage } from "element-plus";
 import { Loading, ArrowDown } from "@element-plus/icons-vue";
 import GlobalLoading from "@/components/GlobalLoading.vue";
@@ -34,62 +34,120 @@ import IconButton from "@components/IconButton.vue";
 
 // AI 生成提交信息
 const aiGenerating = ref(false);
+// AI 提交并推送的「AI 生成信息」阶段（之后的暂存/提交/推送由按钮自己的
+// gitStore.isAddingFiles / isCommiting / isPushing 驱动 loading）
+const aiQuickPushing = ref(false);
+
+/**
+ * 请求 AI 生成提交信息并写入表单字段（标准化模式写 类型/范围/描述，
+ * 普通模式写整条 message）。返回是否成功——失败时已经弹过 ElMessage。
+ */
+async function requestAiCommitMessage(): Promise<boolean> {
+  // 选择模式下：仅按所选文件生成,把路径下发后端,后端在 git 层面裁剪 diff
+  const isSelectedMode = gitStore.isSelectionMode && gitStore.selectedFiles.size > 0;
+  const selectedPaths = isSelectedMode ? [...gitStore.selectedFiles] : [];
+
+  const localeStore = useLocaleStore();
+  const res = await fetch('/api/config/generate-commit-message', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ selectedPaths, locale: localeStore.currentLocale })
+  });
+  const data = await res.json();
+  if (!data.success) {
+    // 后端按 code 返回结构化错误: TIMEOUT / GENERATE_FAILED / NO_MODEL / NO_JSON / PARSE_FAILED / HTTP_ERR
+    // 前端按 code 走 i18n,error 字段仅在无法识别时兜底展示(比如 HTTP 502 等)
+    const code = (data as { code?: string }).code;
+    const fallback = data.error || $t('@76872:AI生成失败');
+    const i18nByCode: Record<string, string> = {
+      TIMEOUT: '@76872:AI生成超时，请重试或检查模型响应速度',
+      NO_MODEL: '@76872:未配置AI模型，请先在通用设置中添加模型',
+      NO_JSON: '@76872:AI未返回有效结果，请重试',
+      PARSE_FAILED: '@76872:AI返回格式无法解析，请重试',
+      GENERATE_FAILED: '@76872:AI生成失败',
+      HTTP_ERR: '@76872:AI生成失败'
+    };
+    const key = code ? i18nByCode[code] : null;
+    ElMessage.error(key ? $t(key) : fallback);
+    return false;
+  }
+
+  const validTypes = ['feat', 'fix', 'docs', 'style', 'refactor', 'test', 'chore'];
+  if (isStandardCommit.value) {
+    if (data.type && validTypes.includes(data.type)) {
+      commitType.value = data.type;
+    }
+    if (data.scope !== undefined) {
+      commitScope.value = data.scope;
+    }
+    if (data.description) {
+      commitDescription.value = data.description;
+    }
+  } else {
+    const msg = data.type && data.description
+      ? (data.scope ? `${data.type}(${data.scope}): ${data.description}` : `${data.type}: ${data.description}`)
+      : (data.description || '');
+    if (msg) commitMessage.value = msg;
+  }
+  return true;
+}
 
 async function handleAiGenerateCommit() {
   if (aiGenerating.value) return;
   aiGenerating.value = true;
   try {
-    // 选择模式下：仅按所选文件生成,把路径下发后端,后端在 git 层面裁剪 diff
-    const isSelectedMode = gitStore.isSelectionMode && gitStore.selectedFiles.size > 0;
-    const selectedPaths = isSelectedMode ? [...gitStore.selectedFiles] : [];
-
-    const localeStore = useLocaleStore();
-    const res = await fetch('/api/config/generate-commit-message', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ selectedPaths, locale: localeStore.currentLocale })
-    });
-    const data = await res.json();
-    if (!data.success) {
-      // 后端按 code 返回结构化错误: TIMEOUT / GENERATE_FAILED / NO_MODEL / NO_JSON / PARSE_FAILED / HTTP_ERR
-      // 前端按 code 走 i18n,error 字段仅在无法识别时兜底展示(比如 HTTP 502 等)
-      const code = (data as { code?: string }).code;
-      const fallback = data.error || $t('@76872:AI生成失败');
-      const i18nByCode: Record<string, string> = {
-        TIMEOUT: '@76872:AI生成超时，请重试或检查模型响应速度',
-        NO_MODEL: '@76872:未配置AI模型，请先在通用设置中添加模型',
-        NO_JSON: '@76872:AI未返回有效结果，请重试',
-        PARSE_FAILED: '@76872:AI返回格式无法解析，请重试',
-        GENERATE_FAILED: '@76872:AI生成失败',
-        HTTP_ERR: '@76872:AI生成失败'
-      };
-      const key = code ? i18nByCode[code] : null;
-      ElMessage.error(key ? $t(key) : fallback);
-      return;
-    }
-
-    const validTypes = ['feat', 'fix', 'docs', 'style', 'refactor', 'test', 'chore'];
-    if (isStandardCommit.value) {
-      if (data.type && validTypes.includes(data.type)) {
-        commitType.value = data.type;
-      }
-      if (data.scope !== undefined) {
-        commitScope.value = data.scope;
-      }
-      if (data.description) {
-        commitDescription.value = data.description;
-      }
-    } else {
-      const msg = data.type && data.description
-        ? (data.scope ? `${data.type}(${data.scope}): ${data.description}` : `${data.type}: ${data.description}`)
-        : (data.description || '');
-      if (msg) commitMessage.value = msg;
-    }
+    const ok = await requestAiCommitMessage();
+    if (!ok) return;
     ElMessage.success($t('@76872:AI已生成提交信息'));
   } catch (error) {
     ElMessage.error(`${$t('@76872:AI生成失败')}: ${(error as Error).message}`);
   } finally {
     aiGenerating.value = false;
+  }
+}
+
+/**
+ * AI 提交并推送：AI 现场写提交信息 → 填进表单 → 复用「一键推送」那条链路
+ * （暂存 → 提交 → 推送全员走 QuickPushButton，不另起一套）。
+ * 本地已提交、只差推送时跳过 AI，直接推。
+ */
+async function handleAiQuickPush() {
+  if (aiQuickPushing.value) return;
+  aiQuickPushing.value = true;
+  try {
+    const isSelectedMode = gitStore.isSelectionMode && gitStore.selectedFiles.size > 0;
+    const hasChanges = gitStore.fileList.some(
+      (file) => !isFilePathLocked(file.path, configStore.lockedFiles)
+    );
+
+    if (isSelectedMode || hasChanges) {
+      showLoading({ text: $t("@76872:AI 正在生成提交信息…"), showProgress: false });
+      let ok = false;
+      try {
+        ok = await requestAiCommitMessage();
+      } finally {
+        hideLoading();
+      }
+      if (!ok) return;
+
+      // finalCommitMessage / hasUserCommitMessage 是 computed，要等这一帧的
+      // props 传导下去，QuickPushButton 才拿得到新的提交信息
+      await nextTick();
+      if (!hasUserCommitMessage.value) {
+        // AI 回了条空描述——没有提交信息就提交，git 会直接失败
+        ElMessage.error($t('@76872:AI生成失败'));
+        return;
+      }
+    }
+
+    // 复用「一键推送」那条链路；组件被 stub / 未挂载时静默跳过，
+    // 不要因为拿不到 ref 就误报成「AI 生成失败」
+    await gitActionButtonsRef.value?.triggerQuickPush?.();
+  } catch (error) {
+    console.error("AI 提交并推送失败:", error);
+    ElMessage.error(`${$t('@76872:AI生成失败')}: ${(error as Error).message}`);
+  } finally {
+    aiQuickPushing.value = false;
   }
 }
 
@@ -622,6 +680,7 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
           :has-user-commit-message="hasUserCommitMessage"
           :final-commit-message="finalCommitMessage"
           :skip-hooks="skipHooks"
+          :ai-generating="aiQuickPushing"
           @after-commit="
             (success) => {
               if (success) clearCommitFields();
@@ -631,6 +690,7 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
           @before-push="handleQuickPushBefore"
           @push-start="handlePushStart"
           @clear-fields="clearCommitFields"
+          @ai-quick-push="handleAiQuickPush"
         />
       </div>
       <div class="header-right">

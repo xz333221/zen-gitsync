@@ -290,4 +290,54 @@ describe('CommitForm.vue', () => {
     vm.handleDescriptionSelect({ value: '', isSettings: true })
     expect(vm.descriptionDialogVisible).toBe(true)
   })
+
+  // ========== AI 提交并推送 ==========
+
+  test('CF-25: handleAiQuickPush 有变更 → 先请求 AI 并填字段', async () => {
+    mockGitStore.fileList = [{ path: 'a.ts' }]
+    mockFetchResponse('/api/config/generate-commit-message', {
+      success: true, type: 'fix', scope: 'ui', description: '修复按钮',
+    })
+    const w = mountCommitForm()
+    const vm: any = w.vm
+    await vm.handleAiQuickPush()
+    expect(globalThis.fetch).toHaveBeenCalled()
+    expect(vm.commitType).toBe('fix')
+    expect(vm.commitDescription).toBe('修复按钮')
+    expect(vm.aiQuickPushing).toBe(false)
+  })
+
+  test('CF-26: handleAiQuickPush AI 失败 → 不抛错、提示错误、不填字段', async () => {
+    mockGitStore.fileList = [{ path: 'a.ts' }]
+    mockFetchResponse('/api/config/generate-commit-message', { success: false, code: 'NO_MODEL' })
+    const w = mountCommitForm()
+    const vm: any = w.vm
+    vm.commitDescription = '原样保留'
+    await vm.handleAiQuickPush()
+    expect(ElMessage.error).toHaveBeenCalled()
+    expect(vm.commitDescription).toBe('原样保留')
+    expect(vm.aiQuickPushing).toBe(false)
+  })
+
+  test('CF-27: handleAiQuickPush 无本地变更(纯推送) → 不请求 AI', async () => {
+    mockGitStore.fileList = []
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const w = mountCommitForm()
+    const vm: any = w.vm
+    await vm.handleAiQuickPush()
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  test('CF-28: handleAiQuickPush 非标准模式 → 生成整条 commitMessage', async () => {
+    mockGitStore.fileList = [{ path: 'a.ts' }]
+    mockConfigStore.isStandardCommit = false
+    mockFetchResponse('/api/config/generate-commit-message', {
+      success: true, type: 'fix', scope: 'core', description: '修复 bug',
+    })
+    const w = mountCommitForm()
+    const vm: any = w.vm
+    await vm.handleAiQuickPush()
+    expect(vm.commitMessage).toContain('fix(core)')
+    expect(vm.commitMessage).toContain('修复 bug')
+  })
 })

@@ -20,19 +20,23 @@ import CommitButton from '@/components/buttons/CommitButton.vue'
 import PushButton from '@/components/buttons/PushButton.vue'
 import QuickPushButton from '@/components/buttons/QuickPushButton.vue'
 import QuickCommitButton from '@/components/buttons/QuickCommitButton.vue'
+import AiQuickPushButton from '@/components/buttons/AiQuickPushButton.vue'
 
 interface Props {
   hasUserCommitMessage?: boolean
   finalCommitMessage?: string
   skipHooks?: boolean
   from?: 'form' | 'drawer'
+  // AI 生成提交信息的进行中状态（由父组件持有，按钮只负责显示 loading）
+  aiGenerating?: boolean
 }
 
 withDefaults(defineProps<Props>(), {
   hasUserCommitMessage: false,
   finalCommitMessage: '',
   skipHooks: false,
-  from: 'form'
+  from: 'form',
+  aiGenerating: false
 })
 
 const emit = defineEmits<{
@@ -41,6 +45,7 @@ const emit = defineEmits<{
   beforePush: []
   pushStart: []
   clearFields: []
+  aiQuickPush: []
 }>()
 
 const quickPushRef = ref<InstanceType<typeof QuickPushButton> | null>(null)
@@ -68,6 +73,12 @@ function handlePushStart() {
 // 处理清空字段的事件
 function handleClearFields() {
   emit('clearFields')
+}
+
+// AI 提交并推送：生成逻辑在父组件（CommitForm 持有提交表单状态），
+// 这里只把点击透上去
+function handleAiQuickPush() {
+  emit('aiQuickPush')
 }
 
 async function triggerQuickPush() {
@@ -117,7 +128,7 @@ defineExpose({
           @after-commit="handleAfterCommit"
           @clear-fields="handleClearFields"
         />
-        <QuickPushButton 
+        <QuickPushButton
           ref="quickPushRef"
           :from="from"
           :has-user-commit-message="hasUserCommitMessage"
@@ -127,6 +138,11 @@ defineExpose({
           @push-start="handlePushStart"
           @after-push="handleAfterPush"
           @clear-fields="handleClearFields"
+        />
+        <AiQuickPushButton
+          :from="from"
+          :generating="aiGenerating"
+          @trigger="handleAiQuickPush"
         />
       </div>
     </div>
@@ -199,6 +215,9 @@ defineExpose({
      一档 一键提交        —— 唯一实心主色（产品核心动作：一条命令完成提交）
      二档 一键推送所有    —— 主色浅底 + 描边（见 QuickPushButton.vue）
      三档 暂存 / 提交 / 推送 —— 中性描边，保留逐步显式控制
+     另档 AI 提交并推送   —— 紫罗兰渐变（见 AiQuickPushButton.vue）。用紫不用蓝是
+                            刻意的：它不是"更快的提交"，而是"不用自己写提交信息"，
+                            颜色区分开才不会和上面两颗蓝按钮混成一条梯队。
    只改视觉权重，不动任何按钮的功能与位置。 */
 :deep(.left-actions .el-button) {
   background: var(--bg-container);
