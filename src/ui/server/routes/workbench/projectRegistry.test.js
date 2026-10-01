@@ -23,6 +23,7 @@ import {
   projectName,
   resolveTaskRepoPath,
   deriveTaskColumn,
+  manualDoneHolds,
   latestJob,
   summarizeProjectTasks,
   buildProjectEntries,
@@ -111,6 +112,56 @@ test('latestJob 按 startedAt 取最新的一条', () => {
   ];
   assert.equal(latestJob(list).id, 'j2');
   assert.equal(latestJob([]), null);
+});
+
+// ── 手动「已完成」标记（看板卡片右下角的「完成」） ──────────────────
+
+test('deriveTaskColumn: 手动标的已完成能盖住"从没跑过"与"上一轮报错"', () => {
+  const marked = { manualDoneAt: '2026-01-02T00:00:00Z' };
+  assert.equal(deriveTaskColumn(marked, []), 'done');
+  // 上一轮报错/被取消的任务，本来退回待处理 —— 手动标完就留在已完成
+  const err = [job('j1', 't1', 'error', '2026-01-01T00:00:00Z', '2026-01-01T00:01:00Z')];
+  assert.equal(deriveTaskColumn({ manualDoneAt: '2026-01-02T00:00:00Z' }, err), 'done');
+});
+
+test('deriveTaskColumn: 标记之后又起过一轮，这次标记作废', () => {
+  // 用户标完成时看到的是"上一轮报错"，之后又跑了一轮 —— 那次执行才是最新的事实。
+  // 用时间比较而不是"起 job 时清标记"：起 job 的入口有四个，漏一处就会留下
+  // 一张"刚跑完却还挂在已完成"的卡片，而且不报错。
+  const jobs = [
+    job('j1', 't1', 'running', '2026-01-03T00:00:00Z'),
+  ];
+  assert.equal(manualDoneHolds({ manualDoneAt: '2026-01-02T00:00:00Z' }, jobs), false);
+  // 新一轮跑挂了 → 回到待处理，不是已完成（那条错误正等着人看）
+  const later = [job('j2', 't1', 'error', '2026-01-03T00:00:00Z', '2026-01-03T00:01:00Z')];
+  assert.equal(deriveTaskColumn({ manualDoneAt: '2026-01-02T00:00:00Z' }, later), 'todo');
+});
+
+test('deriveTaskColumn: 在跑永远压过手动标记（卡片不能说"已完成"而进程还在写代码）', () => {
+  const jobs = [job('j1', 't1', 'running', '2026-01-01T00:00:00Z')];
+  // 正常路径下走不到：路由会先把这一轮停掉再落标记，停不掉（别的实例在跑）直接拒绝。
+  assert.equal(deriveTaskColumn({ manualDoneAt: '2026-01-02T00:00:00Z' }, jobs), 'doing');
+});
+
+test('manualDoneHolds: 缺 startedAt 的老记录不算"标记过期"', () => {
+  // 宁可让标记继续成立，也不能凭空认为它过期、把用户手动收掉的任务弹回待处理
+  const legacy = [{ id: 'j1', taskId: 't1', status: 'error', startedAt: '' }];
+  assert.equal(manualDoneHolds({ manualDoneAt: '2026-01-02T00:00:00Z' }, legacy), true);
+  // 从没标过 / 字段不是字符串 → 一律不成立
+  assert.equal(manualDoneHolds({}, []), false);
+  assert.equal(manualDoneHolds({ manualDoneAt: 12345 }, []), false);
+});
+
+test('decorateTaskForBoard: manualDoneAt 给的是"成立与否"，不是原始字段', () => {
+  const now = Date.parse('2026-01-05T00:00:00Z');
+  const task = { id: 't1', manualDoneAt: '2026-01-02T00:00:00Z' };
+  // 标记之后没跑过 → 卡片拿到它，据此显示「撤销」并把完成时间显示成标记时刻
+  assert.equal(decorateTaskForBoard(task, [], { now }).manualDoneAt, '2026-01-02T00:00:00Z');
+  // 标记之后又跑了一轮 → 给 null：卡片上那颗按钮该变回「完成」，不能还挂着「撤销」
+  const later = [job('j2', 't1', 'done', '2026-01-03T00:00:00Z', '2026-01-03T00:01:00Z')];
+  assert.equal(decorateTaskForBoard(task, later, { now }).manualDoneAt, null);
+  // 没标过就是 null（不是 undefined —— 前端按 truthy 判断）
+  assert.equal(decorateTaskForBoard({ id: 't2' }, [], { now }).manualDoneAt, null);
 });
 
 // ── 项目合并去重 ────────────────────────────────────────────────────

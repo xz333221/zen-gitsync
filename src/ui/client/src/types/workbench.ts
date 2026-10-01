@@ -249,6 +249,16 @@ export interface BoardTask {
    * 在看板上长得一样，不标出来用户会以为那条是自己跑完的。
    */
   autoCompleted?: { at: string | null; reason: string; silentMs: number | null } | null
+  /**
+   * 用户手动标的「已完成」时刻（卡片右下角的「完成」）。
+   *
+   * 服务端给的是**成立与否**而不是原始字段：标记之后又跑过一轮，这次标记就作废，
+   * 这里回到 null（判据见服务端 projectRegistry.manualDoneHolds）。
+   * 卡片拿它做两件事：① 已完成的卡上是显示「撤销」还是不给这颗按钮；
+   * ② 手动收掉的任务没有"跑完的时刻"（最后一条 job 可能是三天前那次报错），
+   * 完成时间得按这个标记显示，否则用户刚点完完成、卡片上写着「3 天前」。
+   */
+  manualDoneAt?: string | null
   createdAt: string | null
   updatedAt: string | null
 }

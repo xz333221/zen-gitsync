@@ -125,20 +125,51 @@ export function latestJob(jobsForTask) {
 }
 
 /**
+ * 用户手动标的「已完成」（`task.manualDoneAt`，由 POST /tasks/:id/done 写）现在还成不成立。
+ *
+ * 为什么要这么个字段：列本来纯靠执行事实推导，但有**两件事只有人知道** ——
+ * 一条待在「待处理」里的任务其实早在别处干完了；一条「进行中」的任务模型已经不说话了，
+ * 用户比静默看门狗更早判断它干完了。这两件事推导不出来，只能由人落一个标记。
+ *
+ * 为什么写成"时间比较"而不是"起新一轮时把标记清掉"：
+ * 起 job 的入口不止一处（看板「执行」、编辑器「执行任务」、续聊、主 Agent 自动派发），
+ * 每处都去清一遍，漏掉任何一处就会留下一张"明明刚跑完却还挂在已完成"的卡片 —— 而且不报错。
+ * 时间比较把判据收在一个纯函数里：**标记之后又跑过一轮，这次标记就作废**
+ * （那次执行才是最新的事实，用户标完成时看到的不是它）。
+ *
+ * jobsForTask 里没有 startedAt 的老记录不算数：宁可让标记继续成立，
+ * 也不能凭空认为"标记过期了"而把用户手动收掉的任务又弹回待处理。
+ */
+export function manualDoneHolds(task, jobsForTask = []) {
+  const at = task && typeof task.manualDoneAt === 'string' ? task.manualDoneAt : '';
+  if (!at) return false;
+  return !(Array.isArray(jobsForTask) ? jobsForTask : [])
+    .some(j => j && typeof j.startedAt === 'string' && j.startedAt > at);
+}
+
+/**
  * 把一个任务推导到看板的四列之一。纯函数，单测覆盖。
  *
  * 口径（按优先级，逐条短路）：
  *   1. 有 job 处于 running/pending → `doing`
- *   2. 从没执行过 → `todo`
- *   3. 最近一条 job 是 done → `done`；其余终态（error/cancelled）→ `todo`
+ *   2. 有成立的手动「已完成」标记 → `done`
+ *   3. 从没执行过 → `todo`
+ *   4. 最近一条 job 是 done → `done`；其余终态（error/cancelled）→ `todo`
  *
  * error/cancelled 不再单列：列表示任务是否仍待处理，错误是这一轮执行的结果，
  * 具体错误继续通过卡片标记和任务详情展示。
+ *
+ * 「在跑」为什么排在手写标记前面：手动完成一条**正在跑**的任务时，路由会先把这一轮停掉
+ * 再落标记（见 /tasks/:id/done）。停不掉的那种（任务跑在另一个 g ui 实例里）路由会直接
+ * 拒绝，所以正常情况下走不到这条 —— 真走到了，也宁可继续显示「进行中」：
+ * 卡片说"已完成"而进程还在写代码，是比列不准更难发现的一种撒谎。
  */
 export function deriveTaskColumn(task, jobsForTask = []) {
   const jobs = Array.isArray(jobsForTask) ? jobsForTask : [];
 
   if (jobs.some(j => j && (j.status === 'running' || j.status === 'pending'))) return 'doing';
+
+  if (manualDoneHolds(task, jobs)) return 'done';
 
   if (jobs.length === 0) return 'todo';
   const last = latestJob(jobs);
@@ -379,6 +410,16 @@ export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now() 
         silentMs: Number.isFinite(last.autoCompleted.silentMs) ? last.autoCompleted.silentMs : null,
       }
       : null,
+    /**
+     * 用户手动标的「已完成」时刻（`POST /tasks/:id/done`），没标过 / 已经被新一轮执行作废 → null。
+     *
+     * 给的是**成立与否**（manualDoneHolds）而不是原始字段：卡片拿它做两件事 ——
+     * ① 决定右下角那颗按钮是「完成」还是「撤销」（撤销只该出现在"手动标的"那种卡上，
+     * 撤销一个自己跑完的任务什么都不会发生）；② 当完成时刻显示。
+     * ② 是必须的：手动收掉的任务没有"跑完的时刻"，最近一条 job 可能是三天前那次报错，
+     * 照旧取 lastJobEndedAt 的话，用户刚点完完成，卡片上写的是「3 天前」。
+     */
+    manualDoneAt: manualDoneHolds(task, jobs) ? task.manualDoneAt : null,
     createdAt: task.createdAt || null,
     updatedAt: task.updatedAt || null,
   };

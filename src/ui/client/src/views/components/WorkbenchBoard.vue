@@ -493,6 +493,85 @@ async function stopTask(t: BoardTask) {
   }
 }
 
+/**
+ * 已经发出「标记完成」请求的任务 id。理由同 stoppingTaskIds：只用来去重，
+ * 不驱动渲染 —— 服务端落完标记，卡片下一次 refresh 就换列了，没有值得画出来的中间态。
+ */
+const completingTaskIds = new Set<string>()
+
+/**
+ * 手动把这条任务标成「已完成」（卡片右下角的「完成」）。
+ *
+ * 看板列本来是纯执行事实推导的，这个入口补的是**只有人知道的两件事**：
+ * 一条待处理的任务其实早在别处干完了；一条进行中的任务模型已经不说话了，
+ * 用户比静默看门狗更早判断它干完了。
+ *
+ * 在跑的那张卡会**先弹确认框**，因为这一下不只是改个标记 —— 服务端会把这一轮一起停掉
+ * （一张卡片不能既"已完成"又还在跑）。其余情况直接落标记，不弹：
+ * 这个动作是可逆的（已完成列上那颗按钮当场变成「撤销」），
+ * 给一个能撤销的动作加确认框，只会让"扫一遍看板、把干完的都收掉"变成一路点弹窗。
+ *
+ * 失败要把服务端的原话透出来：最典型的一条是"这个任务正在另一个 g ui 实例里执行"
+ * （child 句柄只活在跑它的那个进程里，停不掉就别假装标成功）——
+ * 吞成笼统的"标记失败"，用户会以为是按钮坏了。
+ */
+async function completeTask(t: BoardTask) {
+  if (completingTaskIds.has(t.id)) return
+  if (t.runningJobs > 0) {
+    try {
+      await ElMessageBox.confirm(
+        $t('@WORKBENCH:这条任务还在执行，标记完成会同时把它停掉。已输出的内容会保留。'),
+        $t('@WORKBENCH:标记为已完成'),
+        {
+          confirmButtonText: $t('@WORKBENCH:标记完成'),
+          cancelButtonText: $t('@WORKBENCH:取消'),
+          type: 'warning'
+        }
+      )
+    } catch {
+      return
+    }
+  }
+  completingTaskIds.add(t.id)
+  try {
+    const res = await fetch(`/api/workbench/tasks/${encodeURIComponent(t.id)}/done`, { method: 'POST' })
+      .then(r => r.json()).catch(() => null)
+    if (!res?.success) {
+      ElMessage.error(res?.error || $t('@WORKBENCH:标记失败'))
+      return
+    }
+    ElMessage.success($t('@WORKBENCH:已标记为已完成'))
+    await refresh(true)
+  } finally {
+    completingTaskIds.delete(t.id)
+  }
+}
+
+/**
+ * 撤销手动标的完成标记（已完成列上那颗「撤销」），退回待处理。
+ *
+ * 不弹确认：它本身就是"点错了要退回来"的那一下，再拦一层就等于没得退。
+ * 撤销之后回到哪一列由执行事实说了算 —— 所以这颗按钮只出现在**手动标进去**的卡片上
+ * （服务端给的 manualDoneAt 只在标记决定列的时候才有值），
+ * 自己跑完的任务上不会有它，那会是个点下去什么都不发生的假按钮。
+ */
+async function reopenTask(t: BoardTask) {
+  if (completingTaskIds.has(t.id)) return
+  completingTaskIds.add(t.id)
+  try {
+    const res = await fetch(`/api/workbench/tasks/${encodeURIComponent(t.id)}/done`, { method: 'DELETE' })
+      .then(r => r.json()).catch(() => null)
+    if (!res?.success) {
+      ElMessage.error(res?.error || $t('@WORKBENCH:撤销失败'))
+      return
+    }
+    ElMessage.success($t('@WORKBENCH:已撤销完成标记'))
+    await refresh(true)
+  } finally {
+    completingTaskIds.delete(t.id)
+  }
+}
+
 async function deleteTask(t: BoardTask) {
   const name = (t.title || '').trim() || $t('@WORKBENCH:未命名任务')
   try {
@@ -715,6 +794,8 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
           @open-task="onOpenTask"
           @run-task="runTask"
           @stop-task="stopTask"
+          @complete-task="completeTask"
+          @reopen-task="reopenTask"
           @delete-task="deleteTask"
           @create-task="onCreateClick"
         />

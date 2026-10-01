@@ -22,6 +22,13 @@
   所以卡片不支持拖动换列——拖过去也没有对应的写操作可做，
   与其做一个拖了就弹回去的假交互，不如让动作落在「执行 / 查看详情」这两个真按钮上。
 
+  「手动标完成」是 2026-10-01 补的，它是上面那句话唯一的例外，而且不违反它的理由：
+  推导不出来的是**两件只有人知道的事** —— 一条待在「待处理」里的任务其实早在别处干完了；
+  一条「进行中」的任务模型已经不说话了，用户比静默看门狗更早判断它干完了。
+  这两件事有对应的写操作（后端 POST/DELETE /tasks/:id/done，落到 task.manualDoneAt），
+  所以卡片右下角给了一颗真按钮（.kb-card__btn--done），而不是让它去拖列。
+  列本身仍然是推导的：撤销标记之后回到哪一列，还是执行事实说了算。
+
   点卡片 = 直接进任务编辑器（open-task）：编辑器是"浮在看板之上的弹窗"，
   关掉就回到原来的位置和筛选，本身就不会丢上下文。
   （曾经这里先弹一个只读详情弹窗、再从里面点「打开编辑器」——那多出来的一跳，
@@ -77,6 +84,10 @@ const emit = defineEmits<{
   'run-task': [task: BoardTask]
   /** 停止这条任务正在跑的那一轮（与编辑器的「停止」同一个接口，确认弹窗也在上层统一） */
   'stop-task': [task: BoardTask]
+  /** 手动把这条任务标成「已完成」（在跑的会连这一轮一起停掉，代价说明在上层） */
+  'complete-task': [task: BoardTask]
+  /** 撤销手动标的完成标记，退回待处理 */
+  'reopen-task': [task: BoardTask]
   'delete-task': [task: BoardTask]
   'create-task': []
 }>()
@@ -125,12 +136,15 @@ const columns = computed(() =>
  *
  * 排序键刻意和卡片上显示的时间是同一个值（见 cardTime）——
  * 拿 A 排、显示 B 的话，用户看到的会是一列时间乱跳的卡片，看着就像没排过。
- * 回退链：最近一条 job 的结束时间 → updatedAt → createdAt。
- * 需要回退是因为一条任务可能在"没有 job 记录"的情况下进入已完成列
- * （例如完成任务后执行记录被清空），这种任务的"完成时刻"只能退到它最后一次被改动的时刻。
+ * 回退链：手动完成标记 → 最近一条 job 的结束时间 → updatedAt → createdAt。
+ * 手动标记排在最前：手动收掉的任务往往**没有**"跑完的时刻"（最近一条 job 可能是
+ * 三天前那次报错），拿它当完成时间，用户刚点完完成、卡片上写着「3 天前」，
+ * 排序也会把它沉到底下 —— 而他刚做的那件事本该在最上面。
+ * 更后面两级是给"没有 job 记录却进了已完成列"的任务兜底的
+ * （例如完成任务后执行记录被清空），它们的完成时刻只能退到最后一次被改动的时刻。
  */
 function doneAt(t: BoardTask): string {
-  return String(t.lastJobEndedAt || t.updatedAt || t.createdAt || '')
+  return String(t.manualDoneAt || t.lastJobEndedAt || t.updatedAt || t.createdAt || '')
 }
 
 function byDoneAtDesc(a: BoardTask, b: BoardTask): number {
@@ -456,11 +470,13 @@ function liveSummary(live: BoardTaskLive): string {
 
             <div class="kb-card__actions">
               <!--
-                这一格是「对这条任务现在能做什么」，空闲与在跑各一个，**不并排**：
+                这一格是「对这条任务现在能做什么」。头两颗互斥、**不并排**：
                 空闲时能做的只有"跑一轮"，在跑时能做的只有"停掉这一轮"，
                 两个按钮同时摆着会让人以为"在跑也能再跑一轮"（服务端也确实拒绝）。
                 位置固定在同一格还有个几何上的理由：两个标签都是 2 个汉字、同字号同内边距，
                 操作组宽度因此**一个像素都不变** —— 下面那段按组宽反推的渐隐距离不用跟着改。
+                （2026-10-01 加的「完成 / 撤销」也是 2 个汉字、且每张卡上最多出现一颗，
+                 组宽仍是常数：96px。改动组宽就必须同步改那两组数字，否则按钮会露出半截字形。）
               -->
               <button
                 v-if="t.runningJobs === 0"
@@ -487,6 +503,38 @@ function liveSummary(live: BoardTaskLive): string {
                 @click.stop="emit('stop-task', t)"
                 @keydown.stop
               >{{ $t('@WORKBENCH:停止') }}</button>
+              <!--
+                手动「完成」：这颗按钮是看板上唯一一个**不由执行事实决定**的动作源头
+                （列仍然是推导的，只是推导时多听一句人话 —— 详见文件头那段）。
+                待处理 / 进行中都给：待处理里那条可能早在别处干完了，
+                进行中那条可能只是模型不说话了，两件都只有用户知道。
+
+                已完成列上的卡片不给这颗按钮 —— 列本身已经是答案了；真正需要它的只有
+                **手动标进去**的那种卡（它的最近一条 job 并不是 done，撤销才有意义），
+                所以那里换成一个「撤销」。自己跑完的卡上放撤销会是个骗人的按钮：
+                撤掉标记它还是"最近一条 job 跑完了"，下次刷新照样在已完成列。
+
+                在跑的那张卡上点「完成」会连这一轮一起停掉（一张卡不能既已完成又在跑），
+                代价说明与确认弹窗在上层 —— 卡片只管发出意图，与 run / stop / delete 一致。
+              -->
+              <button
+                v-if="t.column !== 'done'"
+                type="button"
+                class="kb-card__btn kb-card__btn--done"
+                :title="$t('@WORKBENCH:标记为已完成')"
+                :aria-label="$t('@WORKBENCH:标记为已完成')"
+                @click.stop="emit('complete-task', t)"
+                @keydown.stop
+              >{{ $t('@WORKBENCH:完成') }}</button>
+              <button
+                v-else-if="t.manualDoneAt"
+                type="button"
+                class="kb-card__btn"
+                :title="$t('@WORKBENCH:撤销完成标记，退回待处理')"
+                :aria-label="$t('@WORKBENCH:撤销完成标记')"
+                @click.stop="emit('reopen-task', t)"
+                @keydown.stop
+              >{{ $t('@WORKBENCH:撤销') }}</button>
               <button
                 type="button"
                 class="kb-card__btn kb-card__btn--danger"
@@ -1101,16 +1149,19 @@ function liveSummary(live: BoardTaskLive): string {
  *
  * 渐隐位置按操作组的实际占位反推：
  *   · 正文行（活动区最后一行 / 引文）的元素右边缘 = 内容盒右边缘，组左边缘在内容盒
- *     右侧 60px 处（padding-left 12 + 「执行」32 + gap 2 + ×16… 实测组宽 62），
- *     所以 mask 在「距右侧 64px」处就完全透明 —— 留 4px 余量，按钮（含 padding）
+ *     右侧 ~92px 处（padding-left 12 + 「执行」32 + gap 2 + 「完成」32 + gap 2 + ×16… 实测组宽 96），
+ *     所以 mask 在「距右侧 102px」处就完全透明 —— 留 4px 余量，按钮（含 padding）
  *     整个落在全透明区里，不会露出半截字形；再往左 16px 是淡出段。
  *   · 标题的右边缘**不是**内容盒右边缘：它右边还并排着一枚时间（`.kb-card__time`
- *     是 `margin-left: auto`），照搬 64px 会把标题多洗掉整整一枚时间那么宽（实测
+ *     是 `margin-left: auto`），照搬 102px 会把标题多洗掉整整一枚时间那么宽（实测
  *     41px 宽的时间 = 多空 54px）。它真正要盖住的只有 [操作组左边缘 + 那 12px 内边距,
- *     标题右边缘] 这十来 px（时间串最短时最坏 ~20px），所以透明区取 24px、淡出段 16px。
- * 英文标签（Run / Stop）比中文窄，组更小、左边缘更靠右，同样被完全透明区覆盖，不会失效。
+ *     标题右边缘] 这十来 px（时间串最短时最坏 ~20px），所以透明区取 52px、淡出段 16px。
+ * 英文标签（Run / Stop / Done）比中文窄，组更小、左边缘更靠右，同样被完全透明区覆盖，不会失效。
  * 「停止」不用另算：它与「执行」同为 2 个汉字、同字号同内边距，宽度一模一样
  * （英文下 Stop 比 Run 宽约 3px，两处余量都吃得下），组宽不因卡片在跑而变。
+ * 「完成 / 撤销」（2026-10-01 加）同理：两颗都是 2 个汉字，且在每张卡上最多出现一颗，
+ * 所以**最宽的那种卡**（三颗按钮，实测组宽 96）仍是常数 —— 上面两组数字按它反推即可。
+ * 只有两颗按钮的那张（自己跑完的已完成卡：执行 + ×）更窄，窄不会露字形，不用另算。
  */
 /* 活动区的那一行：它渲染在哪一行取决于哪个字段有值（工具 / 思考 / 回复 / 只有时长），
    所以对**最后渲染出来的那个孩子**渐隐，而不是逐个类名去猜 */
@@ -1119,15 +1170,15 @@ function liveSummary(live: BoardTaskLive): string {
 /* 「最后回复」是卡片的最后一块，操作组正压在它右下角 */
 .kb-card:not(.is-opened):hover .kb-card__reply,
 .kb-card:focus-within .kb-card__reply {
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 80px), transparent calc(100% - 64px));
-  mask-image: linear-gradient(to right, #000 calc(100% - 80px), transparent calc(100% - 64px));
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 118px), transparent calc(100% - 102px));
+  mask-image: linear-gradient(to right, #000 calc(100% - 118px), transparent calc(100% - 102px));
 }
 /* 标题：只在它自己是卡片最后一行时才遮（判据与理由见上），位置按标题自己的右边缘另算。
    `~ *:not(.kb-card__actions)` = 「row1 后面还有别的兄弟节点」，操作组本身不算。 */
 .kb-card:not(.is-opened):hover .kb-card__row1:not(:has(~ *:not(.kb-card__actions))) .kb-card__title,
 .kb-card:focus-within .kb-card__row1:not(:has(~ *:not(.kb-card__actions))) .kb-card__title {
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent calc(100% - 24px));
-  mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent calc(100% - 24px));
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 68px), transparent calc(100% - 52px));
+  mask-image: linear-gradient(to right, #000 calc(100% - 68px), transparent calc(100% - 52px));
 }
 .kb-card__btn {
   border: none;
@@ -1152,6 +1203,12 @@ function liveSummary(live: BoardTaskLive): string {
  * 红留给 ×，含义收窄成唯一一个：把任务整个删掉。
  */
 .kb-card__btn--stop:hover { color: var(--color-warning); background: var(--bg-subtle-hover); }
+/*
+ * 「完成」用成功色、「撤销」用主色 —— 与「停止」用告警色同一条思路：
+ * 颜色说明**这一下会对任务做什么**（收进已完成 / 只是把标记退回来），
+ * 而不是给按钮排名次。红仍然只留给 ×。
+ */
+.kb-card__btn--done:hover { color: var(--color-success); background: var(--bg-subtle-hover); }
 .kb-card__btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
 .kb-col__empty {

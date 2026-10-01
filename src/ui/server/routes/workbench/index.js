@@ -609,6 +609,72 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
   }));
 
   // ════════════════════════════════════════════════════════════════════════
+  // §12.5 手动标记「已完成」/ 撤销这个标记
+  //   POST   /api/workbench/tasks/:id/done
+  //   DELETE /api/workbench/tasks/:id/done
+  //
+  // 列本来是纯推导的（projectRegistry.deriveTaskColumn），但有两件事推不出来 ——
+  // 一条待在「待处理」里的任务其实早在别处干完了；一条「进行中」的任务模型已经不说话了、
+  // 用户比静默看门狗更早判断它干完了。这两件事只有人知道，所以给一个人工落点：
+  // 写 task.manualDoneAt，列由它推导（判据与失效条件都在 deriveTaskColumn 的注释里）。
+  //
+  // 为什么标记写在 task 上、而不是补一条 job：job 是「这轮执行发生了什么」的事实记录，
+  // 混进人工判断之后，"跑了多久 / 谁跑的 / 输出了什么"就再也分不清真假了。
+  // ════════════════════════════════════════════════════════════════════════
+
+  app.post('/api/workbench/tasks/:id/done', asyncRoute(async (req, res) => {
+    const taskId = req.params.id;
+    const data = await readJson(TASKS_FILE, { tasks: [] });
+    const task = (data.tasks || []).find(t => t && t.id === taskId);
+    if (!task) throw new HttpError(404, '任务不存在');
+
+    // 标「已完成」的同时把这一轮停掉：一张卡片不能既是"已完成"又还在跑
+    // （列的口径是"在跑 ⇔ 进行中"，不先停就会当场翻回去，用户以为按钮坏了）。
+    // 先刷磁盘再取快照 —— 别的实例刚起的 job 也要看得到（与 /tasks/:id/run 同一口径）。
+    await refreshJobsFromDisk();
+    const liveJobs = [];
+    for (const j of mergedJobs().values()) {
+      if (!j || j.taskId !== taskId) continue;
+      if (j.status !== 'running' && j.status !== 'pending') continue;
+      const local = jobs.get(j.id);
+      // child 句柄只活在跑它的那个进程里，别的实例起的 job 这里停不掉 ——
+      // 那就别假装标成功。这句话与 §14 的取消路由**逐字一致**：
+      // 同一个事实在两个入口有两种说法，用户会以为是两件事。
+      if (!local) throw new HttpError(404, '这个任务正在另一个 g ui 实例里执行，请到那个窗口停止它');
+      liveJobs.push(local);
+    }
+    for (const j of liveJobs) {
+      try {
+        cancelRunningJob(j);
+      } catch (err) {
+        throw new HttpError(500, '停止这一轮执行失败: ' + err.message);
+      }
+    }
+
+    const now = nowIso();
+    task.manualDoneAt = now;
+    task.updatedAt = now;
+    await writeJson(TASKS_FILE, data);
+    publish('task:update', task);
+    res.json({ success: true, task, stoppedJobs: liveJobs.length });
+  }));
+
+  app.delete('/api/workbench/tasks/:id/done', asyncRoute(async (req, res) => {
+    const data = await readJson(TASKS_FILE, { tasks: [] });
+    const task = (data.tasks || []).find(t => t && t.id === req.params.id);
+    if (!task) throw new HttpError(404, '任务不存在');
+    // 幂等：没标过也回成功。撤销是"点错了要退回来"的动作，为它再弹一个错误没有意义。
+    // 撤销之后回到哪一列由执行事实说了算 —— 最近一条 job 是跑完的，它本来就该在「已完成」。
+    if (task.manualDoneAt) {
+      delete task.manualDoneAt;
+      task.updatedAt = nowIso();
+      await writeJson(TASKS_FILE, data);
+      publish('task:update', task);
+    }
+    res.json({ success: true, task });
+  }));
+
+  // ════════════════════════════════════════════════════════════════════════
   // §13. Job 查询（兜底，SSE 断了也能拉）
   // ════════════════════════════════════════════════════════════════════════
   app.get('/api/workbench/jobs', asyncRoute(async (_req, res) => {
@@ -621,6 +687,50 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
   // ════════════════════════════════════════════════════════════════════════
   // §14. 取消正在执行的 job
   // ════════════════════════════════════════════════════════════════════════
+
+  /**
+   * 停掉**本进程**里正在跑的一个 job：先落终态 + 广播，再杀进程树。
+   *
+   * 抽出来是因为 §12.5 的「手动标记完成」也要用它（标完成时这一轮必须先停下来）——
+   * 两处各写一份杀进程的逻辑，早晚会分叉成"一个入口停得掉、另一个停不干净"，
+   * 而且分叉了不报错，只有用户能看见：一张卡片停在「进行中」不动。
+   *
+   * **调用方负责判断这个 job 归不归本进程管**：child 句柄只活在跑它的那个进程里，
+   * 别的 g ui 实例起的 job 在这里只有一条磁盘记录（§14 的路由为这种情况单独给了 404
+   * 与一句明确的话；§12.5 则直接拒绝落标记）。
+   *
+   * @returns {boolean} 是否真的发了信号（false = 只是改了状态，进程句柄不在手上）
+   */
+  function cancelRunningJob(job) {
+    cancelledJobs.add(job.id);
+    // 立即给前端一个状态反馈（不等 child 真正退出）
+    job.status = 'cancelled';
+    job.error = '用户已停止执行';
+    job.endedAt = nowIso();
+    publish('job:update', { ...job }); // 浅拷贝避免序列化 child 引用
+    // 终态：fire-and-forget 同步落盘
+    flushJobsSaveNow().catch(err => logger.warn('[workbench] jobs save failed:', err.message));
+
+    const child = job.child;
+    if (!child) return false;
+    try {
+      if (process.platform === 'win32') {
+        // Windows: child.kill(SIGTERM) 经常无效，用 taskkill 杀进程树
+        execFile('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }, (err) => {
+          if (err) {
+            logger.warn(`[workbench] taskkill ${child.pid} 失败: ${err.message}`);
+          }
+        });
+      } else {
+        child.kill('SIGTERM');
+      }
+      return true;
+    } catch (err) {
+      cancelledJobs.delete(job.id);
+      throw err;
+    }
+  }
+
   app.post('/api/workbench/jobs/:id/cancel', asyncRoute(async (req, res) => {
     const job = jobs.get(req.params.id);
     if (!job) {
@@ -635,34 +745,16 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
     if (job.status !== 'running' && job.status !== 'pending') {
       throw new HttpError(400, `当前状态 ${job.status} 不可取消`);
     }
-    cancelledJobs.add(job.id);
-    // 立即给前端一个状态反馈（不等 child 真正退出）
-    job.status = 'cancelled';
-    job.error = '用户已停止执行';
-    job.endedAt = nowIso();
-    publish('job:update', { ...job }); // 浅拷贝避免序列化 child 引用
-    // 终态：fire-and-forget 同步落盘
-    flushJobsSaveNow().catch(err => logger.warn('[workbench] jobs save failed:', err.message));
-    const child = job.child;
-    if (!child) {
-      return res.json({ success: true, message: '已标记取消，进程将尽快结束' });
-    }
+    let signalled;
     try {
-      if (process.platform === 'win32') {
-        // Windows: child.kill(SIGTERM) 经常无效，用 taskkill 杀进程树
-        execFile('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }, (err) => {
-          if (err) {
-            logger.warn(`[workbench] taskkill ${child.pid} 失败: ${err.message}`);
-          }
-        });
-      } else {
-        child.kill('SIGTERM');
-      }
-      res.json({ success: true, message: '已发送停止信号' });
+      signalled = cancelRunningJob(job);
     } catch (err) {
-      cancelledJobs.delete(job.id);
       throw new HttpError(500, '发送停止信号失败: ' + err.message);
     }
+    res.json({
+      success: true,
+      message: signalled ? '已发送停止信号' : '已标记取消，进程将尽快结束'
+    });
   }));
 
   // ════════════════════════════════════════════════════════════════════════
