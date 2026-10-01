@@ -1081,7 +1081,7 @@ function liveSummary(live: BoardTaskLive): string {
 }
 
 /*
- * 操作组（绝对定位在右下角）会压在标题/项目名的右端。这里**不用"给它加背景"的办法去盖**：
+ * 操作组（绝对定位在右下角）会压在**卡片最后一行**的右端。这里**不用"给它加背景"的办法去盖**：
  *   · 面板/容器类底色 token 在深色主题下本身就是半透明的
  *     （--bg-panel-dark = rgba(255,255,255,.06)），拿它当浮层背景等于没挡；
  *   · 换成不透明的 --bg-container 又比卡片暗，左边缘会留一道色阶；
@@ -1089,17 +1089,30 @@ function liveSummary(live: BoardTaskLive): string {
  * 改成把**底下的文字在右侧渐隐掉**：不涉及任何颜色，深浅主题都成立，也没有接缝。
  * （组内按钮本身是 transparent，所以必须让它所在区域完全透明，不能只减淡。）
  *
- * 渐隐位置按操作组的实际占位反推：组右边缘距卡片右内边 8px、组宽 ≈ 62px
- * （padding-left 12 + 「执行」32 + gap 2 + ×16），即组左边缘在内容盒右侧 60px 处。
- * 所以让 mask 在「距右侧 64px」处就完全透明 —— 留 4px 余量，按钮（含 padding）
- * 整个落在全透明区里，不会露出半截字形；再往左 16px 是淡出段。
+ * ⚠️ 遮的必须是「压在操作组底下的那一行」，**不是无脑遮标题**（2026-10-01 修）。
+ * 操作组是 `bottom: 6px`，它压住的永远是卡片**最后一行**：卡片底下有活动区 / 引文时，
+ * 那一行离标题隔着整整一段正文（实测标题墨迹带与按钮墨迹带相差 18~122px），
+ * 再遮标题就是遮空气 —— 用户看到的是「hover 一下，标题右半截白掉了，而右下角的
+ * 按钮根本没碰到它」。所以标题只在**它自己就是最后一行**时（从没跑过的待处理卡，
+ * 卡里只有 row1 那一行）才渐隐：那种卡实测标题墨迹带下沿与按钮墨迹带上沿只差 1px
+ * （`×` 是 14px 字号，往上探了 3.5px），尾巴确实压在按钮上。
+ * 判据写成 `:has(~ ...)` 而不是在模板里算一个 is-sole-row 传进来：后者要跟四处 v-if
+ * 手工对齐，以后卡片再加一行正文，漏改一处就又是同一个 bug。
+ *
+ * 渐隐位置按操作组的实际占位反推：
+ *   · 正文行（活动区最后一行 / 引文）的元素右边缘 = 内容盒右边缘，组左边缘在内容盒
+ *     右侧 60px 处（padding-left 12 + 「执行」32 + gap 2 + ×16… 实测组宽 62），
+ *     所以 mask 在「距右侧 64px」处就完全透明 —— 留 4px 余量，按钮（含 padding）
+ *     整个落在全透明区里，不会露出半截字形；再往左 16px 是淡出段。
+ *   · 标题的右边缘**不是**内容盒右边缘：它右边还并排着一枚时间（`.kb-card__time`
+ *     是 `margin-left: auto`），照搬 64px 会把标题多洗掉整整一枚时间那么宽（实测
+ *     41px 宽的时间 = 多空 54px）。它真正要盖住的只有 [操作组左边缘 + 那 12px 内边距,
+ *     标题右边缘] 这十来 px（时间串最短时最坏 ~20px），所以透明区取 24px、淡出段 16px。
  * 英文标签（Run / Stop）比中文窄，组更小、左边缘更靠右，同样被完全透明区覆盖，不会失效。
  * 「停止」不用另算：它与「执行」同为 2 个汉字、同字号同内边距，宽度一模一样
- * （英文下 Stop 比 Run 宽约 3px，仍远小于那 4px 余量），组宽不因卡片在跑而变。
+ * （英文下 Stop 比 Run 宽约 3px，两处余量都吃得下），组宽不因卡片在跑而变。
  */
-.kb-card:not(.is-opened):hover .kb-card__title,
-.kb-card:focus-within .kb-card__title,
-/* 活动区同理：它渲染在哪一行取决于哪个字段有值（工具 / 思考 / 回复 / 只有时长），
+/* 活动区的那一行：它渲染在哪一行取决于哪个字段有值（工具 / 思考 / 回复 / 只有时长），
    所以对**最后渲染出来的那个孩子**渐隐，而不是逐个类名去猜 */
 .kb-card:not(.is-opened):hover .kb-card__live > :last-child,
 .kb-card:focus-within .kb-card__live > :last-child,
@@ -1108,6 +1121,13 @@ function liveSummary(live: BoardTaskLive): string {
 .kb-card:focus-within .kb-card__reply {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 80px), transparent calc(100% - 64px));
   mask-image: linear-gradient(to right, #000 calc(100% - 80px), transparent calc(100% - 64px));
+}
+/* 标题：只在它自己是卡片最后一行时才遮（判据与理由见上），位置按标题自己的右边缘另算。
+   `~ *:not(.kb-card__actions)` = 「row1 后面还有别的兄弟节点」，操作组本身不算。 */
+.kb-card:not(.is-opened):hover .kb-card__row1:not(:has(~ *:not(.kb-card__actions))) .kb-card__title,
+.kb-card:focus-within .kb-card__row1:not(:has(~ *:not(.kb-card__actions))) .kb-card__title {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent calc(100% - 24px));
+  mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent calc(100% - 24px));
 }
 .kb-card__btn {
   border: none;

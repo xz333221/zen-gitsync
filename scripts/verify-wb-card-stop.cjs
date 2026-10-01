@@ -14,8 +14,10 @@
  *   E 确认框点「取消」：一个请求都不发
  *   F 服务端拒绝（任务在另一个 g ui 实例里跑 → 404 + 一句明确的话）：原话透出，
  *     不吞成笼统的"停止失败"
- *   G 几何：在跑卡与空闲卡的操作组同宽（正文右侧那 64px 渐隐区是按组宽反推的，
- *     标签一变长就会露出半截按钮），且组左边缘确实落在那 64px 里
+ *   G 几何：在跑卡与空闲卡的操作组同宽；渐隐遮罩挂在「压在操作组底下的那一行」上
+ *     （在跑卡 = 活动区最后一行，空闲卡 = 标题），且组左边缘确实落在那一行的完全透明区里。
+ *     G4 单独守一条 2026-10-01 的修复：有活动区的卡片上标题**不许**带遮罩 ——
+ *     否则 hover 时标题右半截会被洗成空白，而操作组离标题隔着整整一段正文。
  *   H 页面无 console / page 错误
  *   R 负控（--reverse）：把 fixture 换回**没有 live / runningJobs=0 的卡片数据**（即
  *     "这轮执行没有任何在跑的事实"），此时必须看不到「停止」、只剩「执行」。
@@ -129,26 +131,59 @@ function fixture() {
 
 /**
  * 读一张卡片的操作组：按钮文案、透明度、几何。
- * `gapToMask` = 操作组左边缘到标题盒右边缘的距离。标题是携带渐隐遮罩的那个元素
- * （.kb-card:hover .kb-card__title 的 mask 在"距右 64px"处就完全透明），
- * 所以这个值必须 ≤ 64，否则按钮会露出半截字形（样式注释里那段推导守的就是它）。
+ *
+ * 渐隐遮罩（mask）挂在**被操作组压住的那一行**上 —— 也就是卡片的最后一行：
+ * 有活动区时是活动区最后一行，有引文时是引文，两者都没有（从没跑过的待处理卡）
+ * 才是标题。这里把「实际带 mask 的那个元素」连同它的透明区宽度一起读回来，
+ * 由 G 组断言「操作组左边缘确实落在那个元素的完全透明区里」。
+ *
+ * ⚠️ 断言必须按**实际被遮的元素**算，不能写死标题：2026-10-01 之前标题是无条件
+ * 带 mask 的，于是任何一张长卡片（活动区 / 引文在下面）hover 时标题右半截都会白掉 ——
+ * 而操作组离它整整一段正文那么远。写死标题的断言在那时是"绿"的，什么都没守住。
+ * `transparent` 直接从计算后的 mask-image 里抠出来（`calc(100% - 64px)` 的那个数），
+ * 所以样式里改数字，这里自动跟着走，不会两边对不上。
  */
 function readCard(page, id) {
   return page.evaluate((taskId) => {
     const el = document.querySelector(`.kb-card[data-task-id="${taskId}"]`)
     if (!el) return { found: false }
     const actions = el.querySelector('.kb-card__actions')
-    const title = el.querySelector('.kb-card__title')
     const ar = actions.getBoundingClientRect()
-    const tr = title.getBoundingClientRect()
     const r = el.getBoundingClientRect()
+
+    // 真正被遮的那一行（正常情况下最多一个元素带 mask）
+    const maskedEl = [...el.querySelectorAll('*')].find(e => getComputedStyle(e).maskImage !== 'none')
+    const maskVal = maskedEl ? getComputedStyle(maskedEl).maskImage : ''
+    const stops = [...maskVal.matchAll(/calc\(100% - (\d+(?:\.\d+)?)px\)/g)].map(m => Number(m[1]))
+    const mr = maskedEl ? maskedEl.getBoundingClientRect() : null
+
+    // 按 DOM 推「本该被遮的那一行」：卡片里最后一个内容块（操作组本身不算）。
+    // 两个容器要往下钻一层 —— 活动区渲染在哪一行取决于哪个字段有值（取最后一个孩子），
+    // 单行卡则是 row1 里的标题（时间那枚在旁边，遮它没有意义）。
+    const blocks = [...el.children].filter(k => !k.classList.contains('kb-card__actions'))
+    const lastBlock = blocks[blocks.length - 1]
+    const expectEl = !lastBlock ? null
+      : lastBlock.classList.contains('kb-card__live') ? lastBlock.lastElementChild
+      : lastBlock.classList.contains('kb-card__row1') ? lastBlock.querySelector('.kb-card__title')
+      : lastBlock
+
     return {
       found: true,
       opacity: getComputedStyle(actions).opacity,
       buttons: [...actions.querySelectorAll('.kb-card__btn')].map(b => b.textContent.trim()),
       width: ar.width,
-      gapToMask: tr.right - ar.left,
       box: { x: r.x + r.width / 2, y: r.y + r.height / 2 },
+      masked: maskedEl ? String(maskedEl.className) : null,
+      maskedIsExpected: maskedEl === expectEl,
+      expectedCls: expectEl ? String(expectEl.className) : null,
+      /** 操作组左边缘到被遮元素右边缘的距离；必须 ≤ transparent 才不露半截字形 */
+      gapToMask: mr ? mr.right - ar.left : null,
+      transparent: stops.length ? stops[stops.length - 1] : null,
+      /** 标题上有没有渐隐遮罩 —— G4 守的就是这条（长卡片 hover 时标题不该被洗白） */
+      titleMasked: (() => {
+        const t = el.querySelector('.kb-card__title')
+        return !!t && getComputedStyle(t).maskImage !== 'none'
+      })(),
     }
   }, id)
 }
@@ -273,12 +308,25 @@ async function main() {
     check('B1 空闲卡片上是「执行」', idle.buttons.includes('执行'), `buttons=${JSON.stringify(idle.buttons)}`)
     check('B2 空闲卡片上没有「停止」', !idle.buttons.includes('停止'), `buttons=${JSON.stringify(idle.buttons)}`)
 
-    // ── G 几何：两个标签同宽，组都落在 64px 渐隐区里 ────────────────
-    check('G1 在跑卡的操作组落在正文右侧 64px 渐隐区内',
-      run.gapToMask <= 64, `gap=${run.gapToMask.toFixed(1)}px`)
-    check('G2 空闲卡同理', idle.gapToMask <= 64, `gap=${idle.gapToMask.toFixed(1)}px`)
+    // ── G 几何：被遮的是「压在操作组底下的那一行」，且组落在它的透明区里 ──
+    // G1/G2 守两件事：① 遮的是卡片最后一行（不是无脑遮标题 —— 那会让长卡片的标题白半截）；
+    // ② 组左边缘落在该行的完全透明区里（标签变长 / 遮罩距离改小都会在这里翻红）。
+    check('G1 在跑卡：被遮的是压在操作组底下的那一行（活动区最后一行）',
+      run.maskedIsExpected && (REVERSE || /kb-card__live/.test(run.masked || '')),
+      `被遮=${run.masked} 应为=${run.expectedCls}${REVERSE ? '（--reverse 时这张卡没有 live，退化成单行卡，与 G3 同形）' : ''}`)
+    check('G2 在跑卡：操作组左边缘落在该行的完全透明区内',
+      run.gapToMask != null && run.transparent != null && run.gapToMask <= run.transparent,
+      `gap=${run.gapToMask != null ? run.gapToMask.toFixed(1) : '?'}px ≤ 透明区 ${run.transparent}px`)
+    check('G3 空闲卡（只有标题）：被遮的是标题，且组落在它的透明区内',
+      idle.maskedIsExpected && /kb-card__title/.test(idle.masked || '')
+      && idle.gapToMask != null && idle.gapToMask <= idle.transparent,
+      `被遮=${idle.masked} gap=${idle.gapToMask != null ? idle.gapToMask.toFixed(1) : '?'}px ≤ ${idle.transparent}px`)
+    // G4 就是用户 2026-10-01 报的那条：有活动区的长卡片，hover 时标题右半截白掉。
+    // --reverse 时那张卡没有 live（退化成单行卡），标题本来就该被遮 —— 这条不适用。
+    check('G4 有活动区的卡片上，标题不带渐隐遮罩（hover 不会把标题洗白）',
+      REVERSE || run.titleMasked === false, `标题 mask=${run.titleMasked ? '有' : '无'}`)
     // 英文下 Stop 比 Run 宽约 3px，中文两者完全同宽；再大就说明有人换成更长的标签了
-    check('G3 「停止」与「执行」的操作组同宽（渐隐距离按组宽反推，不能变胖）',
+    check('G5 「停止」与「执行」的操作组同宽（渐隐距离按组宽反推，不能变胖）',
       Math.abs(run.width - idle.width) <= 6,
       `在跑卡=${run.width.toFixed(1)} 空闲卡=${idle.width.toFixed(1)}`)
 
