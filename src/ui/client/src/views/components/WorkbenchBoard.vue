@@ -61,7 +61,7 @@ const emit = defineEmits<{
 
 const {
   projects, boardTasks, currentProjectPath, loading,
-  loadProjects,
+  loadProjects, removeProject,
 } = useWorkbenchProjects()
 const {
   active, activity, running, dispatching, togglingSchedule,
@@ -572,6 +572,25 @@ async function reopenTask(t: BoardTask) {
   }
 }
 
+/**
+ * 把一个项目条目从工作台清单里移除（左栏「目录不存在」那行的删除按钮）。
+ * 确认框在面板里弹（那是那一行的上下文），这里只负责发请求 + 说清结果。
+ *
+ * 成功提示一定要带上"任务还在"：用户按下这颗按钮时最怕顺手清了历史，
+ * 而这个动作**确实**一条任务都没删 —— 不说出来，一次误操作就能毁掉对工具的信任。
+ * 服务端把还挂在那个项目上的任务条数一并回传（keptTasks），这里原样讲给用户。
+ *
+ * 移除之后选中项会失效，watch(projects) 那条会自动退回「全部项目」，不用在这里管。
+ */
+async function onRemoveProject(p: ProjectSummary) {
+  const { ok, keptTasks } = await removeProject(p.path)
+  if (!ok) return
+  ElMessage.success(keptTasks > 0
+    ? $t('@WORKBENCH:已移除项目，{n} 条任务仍保留在「全部项目」下', { n: keptTasks })
+    : $t('@WORKBENCH:已移除项目'))
+  await refresh(true)
+}
+
 async function deleteTask(t: BoardTask) {
   const name = (t.title || '').trim() || $t('@WORKBENCH:未命名任务')
   try {
@@ -754,6 +773,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
           :selected-key="selectedKey"
           :loading="loading"
           @select="onSelectProject"
+          @remove="onRemoveProject"
         />
       </aside>
 

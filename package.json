@@ -66,6 +66,7 @@
     "verify:wb-task-sound": "node scripts/verify-wb-task-sound.cjs",
     "verify:wb-proj-branch": "node scripts/verify-workbench-proj-branch.cjs",
     "verify:wb-proj-filter": "node scripts/verify-wb-proj-filter.cjs",
+    "verify:wb-proj-remove": "node scripts/verify-wb-project-remove.cjs",
     "verify:wb-panel-resize": "node scripts/verify-wb-panel-resize.cjs",
     "verify:wb-toolcalls": "node scripts/verify-workbench-toolcalls.mjs",
     "verify:wb-responsive": "node scripts/verify-wb-responsive.cjs",

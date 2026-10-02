@@ -66,6 +66,14 @@ export const ORCHESTRATOR_REPORTS_FILE = path.join(DATA_DIR, 'orchestrator-repor
 export const MAX_PROGRESS_REPORTS = 20;
 
 /**
+ * 用户从工作台项目清单里手动移除掉的那些条目（存的是归一化后的项目 key）。
+ * 独立成文件而不是塞进 config.json：它一份最多几百字节，却会被 5s 轮询的项目清单
+ * 接口读到 —— 走 config.json 就得让每次读项目列表都解析一遍主配置。
+ * 语义与"为什么不能靠改任务达成"见 hiddenProjects.js 的文件头注释。
+ */
+export const HIDDEN_PROJECTS_FILE = path.join(DATA_DIR, 'hidden-projects.json');
+
+/**
  * 自动进度报告允许的间隔（毫秒），0 = 关闭。
  *
  * 用白名单而不是"任意正整数"：这个值直接决定**每隔多久烧一次模型额度**，

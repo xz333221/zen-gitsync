@@ -57,5 +57,34 @@ export function useWorkbenchProjects() {
     }
   }
 
-  return { projects, boardTasks, currentProjectPath, loading, loaded, loadProjects }
+  /**
+   * 从工作台项目清单里移除一个条目（左栏「目录不存在」那一行的删除按钮）。
+   *
+   * 服务端做两件事：从常用目录（config.json 的 recentDirectories）摘掉 + 记进隐藏名单。
+   * 只删前者的话，只要还有任务记着这个路径，它会立刻从「任务」那半边重新生成，
+   * 用户看到的就是"点了没反应"（语义见服务端 hiddenProjects.js 的文件头注释）。
+   *
+   * **一条任务都不会被删**，所以成功提示必须把这件事说出来：用户按下这颗按钮时
+   * 最怕的就是"顺手把历史也清了"。keptTasks 一并回传就是给这句话用的。
+   */
+  async function removeProject(path: string): Promise<{ ok: boolean; keptTasks: number }> {
+    if (!path) return { ok: false, keptTasks: 0 }
+    try {
+      const res = await fetch('/api/workbench/projects/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      }).then(r => r.json()).catch(() => null)
+      if (!res?.success) {
+        ElMessage.error(res?.error || $t('@WORKBENCH:移除项目失败'))
+        return { ok: false, keptTasks: 0 }
+      }
+      return { ok: true, keptTasks: Number.isFinite(res.keptTasks) ? res.keptTasks : 0 }
+    } catch (err: any) {
+      ElMessage.error($t('@WORKBENCH:网络错误: ') + (err?.message || err))
+      return { ok: false, keptTasks: 0 }
+    }
+  }
+
+  return { projects, boardTasks, currentProjectPath, loading, loaded, loadProjects, removeProject }
 }

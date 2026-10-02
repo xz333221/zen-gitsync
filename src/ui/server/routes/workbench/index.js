@@ -115,6 +115,7 @@ import {
   canonicalProjectPath,
 } from './projectRegistry.js';
 import { buildEnvContextBlock } from './envContext.js';
+import { readHiddenProjects, hideProject, filterHiddenProjects } from './hiddenProjects.js';
 import { ensureMemoryStore } from '../../../../memory/store.js';
 import { createJobSettledRefresher } from '../aiContext/jobRefresh.js';
 import {
@@ -1251,6 +1252,7 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
   // ════════════════════════════════════════════════════════════════════════
   // §16. 多项目编排台（L1 看板 + 主 Agent 控制台）
   //   GET  /api/workbench/projects               项目清单 + 看板任务
+  //   POST /api/workbench/projects/remove        从清单里移除一个项目条目
   //   GET  /api/workbench/orchestrator           调度开关 + 指令存档 + 活动流 + 默认提示词
   //   POST /api/workbench/orchestrator/state     暂停 / 恢复调度
   //   POST /api/workbench/orchestrator/dispatch  派发一条人类干预指令
@@ -1292,7 +1294,13 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
     const currentProjectPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
     // Git 探测自带 15s TTL 缓存（directoryGitState.js），看板 5s 轮询里有 2/3 是命中缓存，
     // 实际 spawn 频率被自然限制在 15s 一次，不需要再给这个接口加"跳过一次探测"的开关。
-    const projects = await listProjects({ recentDirs, tasks, jobs: jobsSnap, currentProjectPath });
+    const allProjects = await listProjects({ recentDirs, tasks, jobs: jobsSnap, currentProjectPath });
+    // 滤掉用户手动移除、且目录确实已经不在了的那些条目（语义见 hiddenProjects.js）。
+    // 放在 listProjects 之后而不是之前：Git 探测得照常跑完 —— 目录有没有回来，
+    // 正是"该不该继续藏着"这条判据的依据。
+    let projects = allProjects;
+    const hidden = await readHiddenProjects();
+    if (hidden.length) projects = filterHiddenProjects(allProjects, hidden);
     const jobsByTask = groupJobsByTask(jobsSnap);
     const boardTasks = tasks.map(t => decorateTaskForBoard(t, jobsByTask.get(t.id) || []));
     return { projects, tasks: boardTasks, currentProjectPath };
@@ -1385,6 +1393,66 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
   app.get('/api/workbench/projects', asyncRoute(async (_req, res) => {
     const payload = await loadBoardPayload();
     res.json({ success: true, ...payload });
+  }));
+
+  /**
+   * 把一个项目条目从工作台清单里移除（左栏「目录不存在」那一行的删除按钮）。
+   *
+   * 做两件事，缺一不可：
+   *   ① 从常用目录（config.json 的 recentDirectories）里摘掉；
+   *   ② 记进 hidden-projects.json —— 只删 ① 的话，只要还有任务记着这个路径，
+   *      它会立刻从「任务」那半边被重新生成，用户看到的是"点了没反应"。
+   *   语义、为什么不去改任务的 projectPath，见 hiddenProjects.js 的文件头注释。
+   *
+   * **不删任何任务/job/历史**：只是让这一行不再出现在清单里。
+   * 它在目录仍然不存在期间一直藏着；哪天目录被重新克隆回来，它会自己回来。
+   *
+   * 路径只认"当前清单里确实有"的那一个（用与 buildProjectEntries 同一份归一口径比对），
+   * 不接受任意路径 —— 与 GET /projects 的安全边界一致，这个端点不是任意路径写配置的入口。
+   */
+  app.post('/api/workbench/projects/remove', asyncRoute(async (req, res) => {
+    const rawPath = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
+    const key = canonicalProjectPath(rawPath);
+    if (!key) throw new HttpError(400, '缺少项目路径');
+    if (!configManager || typeof configManager.removeRecentDirectory !== 'function') {
+      throw new HttpError(500, '配置管理不可用，无法移除项目');
+    }
+
+    const tasksData = await readJson(TASKS_FILE, { tasks: [] });
+    const tasks = tasksData.tasks || [];
+    let recentDirs = [];
+    try {
+      recentDirs = (await configManager.getRecentDirectories()) || [];
+    } catch (err) {
+      logger.warn('[workbench] 移除项目时读取最近目录失败:', err?.message || err);
+    }
+
+    // 只承认清单里真实存在的条目：key 归一后必须命中 buildProjectEntries 的某一条，
+    // 否则 404 —— 否则这个端点就成了"往 config.json 删任意字符串"的通道。
+    const entry = buildProjectEntries({ recentDirs, tasks }).find(e => e.key === key);
+    if (!entry) throw new HttpError(404, '项目不在清单里，可能已经被移除');
+
+    // ① 常用目录。同一目录可能有多种写法（大小写 / 斜杠），逐条摘干净 ——
+    //    漏掉任何一种，那一条就会在下一轮轮询里把项目重新"复活"成 source:'recent'。
+    let removedFromRecent = 0;
+    for (const dir of recentDirs) {
+      if (canonicalProjectPath(dir) !== key) continue;
+      await configManager.removeRecentDirectory(dir);
+      removedFromRecent += 1;
+    }
+
+    // ② 隐藏名单。idempotent：重复点第二次不会把它顶到最前面之外的地方。
+    await hideProject(key);
+
+    // 通知别的 g ui 实例：它们的看板是 5s 轮询，晚一轮刷新而已，不值得推 SSE。
+    publish('projects:removed', { key, path: entry.path, removedFromRecent });
+
+    res.json({
+      success: true,
+      removedFromRecent,
+      // 回给前端说清楚"任务一条都没删"，好让它把这句话原样讲给用户听
+      keptTasks: tasks.filter(t => canonicalProjectPath(t.projectPath) === key).length,
+    });
   }));
 
   /**

@@ -31,9 +31,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { $t } from '@/lang/static'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   CopyDocument,
+  Delete,
   Folder,
   FolderOpened,
   Grid,
@@ -69,6 +70,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   /** project 为 null 表示选中「全部项目」 */
   select: [project: ProjectSummary | null]
+  /** 请求把这一行从工作台清单里移除（目录已不存在那行的删除按钮） */
+  remove: [project: ProjectSummary]
 }>()
 
 /** 有活跃执行的排前面，再按最后活跃时间倒序，最后是路径名——保证"正在动的"永远在第一屏 */
@@ -244,6 +247,33 @@ async function copyFolderName(p: ProjectSummary) {
 }
 
 /**
+ * 「从清单移除」：目录已经不在了，这一行留着只会一直占位，而用户唯一想做的就是把它清掉。
+ *
+ * 弹确认框，而且**必须把"任务不会被删"写进去**：这个动作看着像删除，
+ * 而项目清单里有一半条目是靠任务撑着的（服务端 hiddenProjects.js 有完整说明），
+ * 用户不点这一下就会以为那些任务也跟着没了。不确认反而更糟：误点一次就没有退路。
+ *
+ * 有任务和无任务用两句文案：后者少一段解释，但更重要的是**不谎报影响面**——
+ * 统一一句"你的 N 条任务还在"在 N=0 时读起来像出了 bug。
+ */
+async function confirmRemove(p: ProjectSummary) {
+  const name = p.name || p.path
+  const msg = p.stats.total > 0
+    ? $t('@WORKBENCH:移除项目「{name}」？会从常用目录和项目列表中去掉它。该项目的 {n} 条任务不会被删除，仍可在「全部项目」下查看。', { name, n: p.stats.total })
+    : $t('@WORKBENCH:移除项目「{name}」？会从常用目录和项目列表中去掉它。', { name })
+  try {
+    await ElMessageBox.confirm(msg, $t('@WORKBENCH:移除项目'), {
+      confirmButtonText: $t('@WORKBENCH:移除'),
+      cancelButtonText: $t('@WORKBENCH:取消'),
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  emit('remove', p)
+}
+
+/**
  * 用某个编辑器 / AI 工具打开项目目录。
  * 没装的走安装引导（和顶栏一致）：这里不直接打开，因为命令必然失败，
  * 而"为什么失败"用户只有看到安装方式才解决得了。
@@ -408,16 +438,28 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
         </div>
 
         <!-- 打开动作：与行主体平级，绝对定位锚在 row1 右端（不占位，否则「当前」徽标
-             永远离右边缘一条）；.stop 阻止冒泡到行的选中逻辑。目录都不存在了就不渲染——
-             点了只会弹一个「无法打开目录」的报错。
+             永远离右边缘一条）；.stop 阻止冒泡到行的选中逻辑。目录都不存在时**一个打开
+             动作都不给** —— 点了只会弹一个「无法打开目录」的报错 —— 只留一颗「从清单移除」：
+             那一行存在的唯一理由就是提醒这里有个没了的目录，能做的也只有把它清掉。
              两个按钮：最常用的「打开文件夹」留一键直达，其余打开方式（终端 / 编辑器 /
              AI 工具 / 新标签页跑 g ui）收进「打开方式」菜单 —— 一行放不下七个图标，
              而项目名被挤成省略号比多点一次更难受。
              ⚠️ 行上的 keydown 必须带 .self：事件从按钮冒泡上来，不带 .self 时
              焦点在按钮上按回车会「选中该行 + preventDefault 掉按钮自己的激活」，
              键盘用户反而打不开文件夹。 -->
-        <div v-if="p.exists !== false" class="proj-item__actions">
+        <div class="proj-item__actions">
           <button
+            v-if="p.exists === false"
+            type="button"
+            class="proj-item__action proj-item__action--danger"
+            :title="$t('@WORKBENCH:从清单移除')"
+            :aria-label="`${$t('@WORKBENCH:从清单移除')} ${p.name}`"
+            @click.stop="confirmRemove(p)"
+          >
+            <el-icon aria-hidden="true"><Delete /></el-icon>
+          </button>
+          <button
+            v-else
             type="button"
             class="proj-item__action"
             :title="$t('@WORKBENCH:打开文件夹')"
@@ -428,6 +470,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
           </button>
 
           <el-popover
+            v-if="p.exists !== false"
             :visible="openMenuKey === p.key"
             :trigger="('manual' as any)"
             placement="right-start"
@@ -825,9 +868,11 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 }
 /* ⚠️ 用 `:has(按钮:focus-visible)` 而不是 `.proj-item:focus-within`：
    点击行主体后 Chrome 把焦点留在行上，用 :focus-within 会让信号点击之后一直隐身；
-   只有键盘 Tab 真正落到按钮上才需要让位。 */
-.proj-item:not(.is-missing):hover .proj-item__signals,
-.proj-item:not(.is-missing):has(.proj-item__action:focus-visible) .proj-item__signals {
+   只有键盘 Tab 真正落到按钮上才需要让位。
+   目录不存在的行也在内 —— 它现在也有按钮了（就是「从清单移除」），
+   信号组同样要让位，否则那颗运行中的小圆点会被按钮压在底下。 */
+.proj-item:hover .proj-item__signals,
+.proj-item:has(.proj-item__action:focus-visible) .proj-item__signals {
   opacity: 0;
 }
 .proj-item__running {
@@ -904,6 +949,15 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   color: var(--color-primary);
   background: var(--tint-primary-12);
 }
+/* 破坏性动作（从清单移除）：平时就用危险色，不必等 hover 才变色 ——
+   这一行已经标着「目录不存在」，按下去的后果需要一眼可辨。
+   hover 反过来加深底色，给出与另外两个"打开"按钮不同的手感。 */
+.proj-item__action--danger { color: var(--color-danger); }
+.proj-item__action--danger:hover {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+}
+.proj-item__action--danger:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
 /* ── 「打开方式」菜单（el-popover 内容，随 popover 一起 teleport 到 body） ──
    scoped 仍然生效：弹层节点由本组件渲染，data-v 属性照样带着。
