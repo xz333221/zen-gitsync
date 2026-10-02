@@ -122,3 +122,33 @@ test('CLI help lists thinking modes and /think full shows reasoning beyond the p
   assert.doesNotMatch(output, /first 12 lines shown/)
   assert.equal(f.requests.length, 2, 'display commands must not call the model')
 })
+
+// 多行粘贴:终端开了 bracketed paste 之后,一次粘贴是 `\x1b[200~…\x1b[201~` 包起来的一整段。
+// 这里用真进程验证最关键的那条契约 —— 里面 3 个换行**不会**被当成 3 次回车,
+// 模型收到的是一条消息,内容是带真实换行的原文。
+test('multi-line paste is sent as one message with real newlines', { timeout: 15000 }, async t => {
+  const f = await fixture(t)
+  let stage = 0
+  const output = await run(f, [], (stdout, child) => {
+    if (stage === 0 && stdout.includes('Zen GitSync')) {
+      stage++
+      child.stdin.write('\x1b[200~RADAR_BASE_URL=https://example.test/v1\nRADAR_API_KEY=sk-secret\nRADAR_MODEL=deepseek\x1b[201~\n')
+    } else if (stage === 1 && stdout.includes('Token 180')) {
+      stage++
+      child.stdin.write('/exit\n')
+    }
+  })
+  assert.equal(stage, 2)
+
+  // 管道模式下 readline 不回显输入行,所以这里看不到 [paste #N] 占位符(TTY 里由
+  // readline 自己回显);占位符的生成/还原与 TTY 回显在 paste.test.js / termui.test.js 里单测覆盖。
+  // 这里只钉住真进程链路上最关键的两条:没有第 2、3 次提交,以及模型拿到的是带换行的原文。
+  assert.doesNotMatch(output, /Agent is working/)
+
+  const userMessage = f.requests[0].messages.at(-1)
+  assert.equal(userMessage.role, 'user')
+  assert.equal(
+    userMessage.content,
+    'RADAR_BASE_URL=https://example.test/v1\nRADAR_API_KEY=sk-secret\nRADAR_MODEL=deepseek'
+  )
+})

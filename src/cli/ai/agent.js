@@ -51,10 +51,11 @@ import { repairToolHistory, loadProjectInstructions } from './context.js'
 import {
   printBanner, printHelpPanel,
   filterSlashCommands, renderSlashHintBody, parseKeyForSlashHint,
-  printTurnSummary,
+  printTurnSummary, renderPasteEcho,
   printOk, printWarn, printError, printDim,
 } from './termui.js'
 import { readClipboardImage, checkImageFile, formatBytes } from './images.js'
+import { installPasteCapture, enableBracketedPaste, disableBracketedPaste } from './paste.js'
 import { runModelSetup, collectModelInput, buildModelConfig, selectFromList } from './modelSetup.js'
 import { genSessionId, autoTitle, writeSession, enforceRetention, listSessions } from './sessionStore.js'
 
@@ -113,6 +114,8 @@ const STRINGS = {
     imageListEmpty: '当前没有待发送的图片(Alt+V 粘贴或 /image <路径> 附加)',
     imageCleared: '已清除待发送的图片',
     imageSending: (n) => `📎 附带 ${n} 张图片`,
+    pasteToken: (n, lines) => `[粘贴 #${n} · ${lines} 行]`,
+    pasteExpired: (n) => `有 ${n} 段粘贴内容已从内存回收，无法还原；如仍需要请重新粘贴`,
     addModelTitle: '添加模型配置',
     addModelSaved: (name) => `✓ 模型 "${name}" 已添加并切换为当前模型`,
     addModelCancelled: '已取消添加模型',
@@ -170,6 +173,8 @@ const STRINGS = {
     imageListEmpty: 'No pending images (Alt+V to paste, or /image <path>)',
     imageCleared: 'Pending images cleared',
     imageSending: (n) => `📎 ${n} image(s) attached`,
+    pasteToken: (n, lines) => `[paste #${n} · ${lines} lines]`,
+    pasteExpired: (n) => `${n} pasted block(s) were dropped from memory and could not be restored; paste again if still needed`,
     addModelTitle: 'Add Model Configuration',
     addModelSaved: (name) => `✓ Model "${name}" added and switched to`,
     addModelCancelled: 'Add model cancelled',
@@ -416,6 +421,7 @@ function printSlashHelp(t, locale) {
     '  /exit, /quit      退出',
     '',
     '  Alt+V             粘贴剪贴板图片,随下一条消息发送(需视觉模型)',
+    '  多行粘贴          直接粘贴多行文本:整段作为一条消息发送,输入行里显示 [粘贴 #N] 占位符',
     '',
     '权限说明: 工作目录内全部操作直接执行;其他目录可读写;',
     '命令守卫识别部分系统级危险操作，不是隔离沙箱。',
@@ -437,6 +443,7 @@ function printSlashHelp(t, locale) {
     '  /exit, /quit      Quit',
     '',
     '  Alt+V             Paste clipboard image (needs a vision-capable model)',
+    '  Multi-line paste  Paste a block as one message; the input line shows a [paste #N] placeholder',
     '',
     'Permissions: full access in the working directory; other dirs readable/writable;',
     'the command guard detects some dangerous operations; it is not a sandbox.',
@@ -824,6 +831,9 @@ export async function runAiAgent(argv = []) {
     state.cancelRequested = true
     try { state.abortController?.abort() } catch (_) {}
     await terminateCommand(state.currentChild)
+    // Ctrl+C 硬退时终端仍停在 bracketed paste 模式 → 之后 shell 里粘贴会带出 200~/201~ 乱码。
+    // 这个开关是终端层的,进程死了没人替它关,必须在这里补一刀。
+    disableBracketedPaste()
     // MCP 子进程必须显式收掉:它们挂在 stdio 上,不收会让进程无法自然退出
     await extensions.close()
     await persistSession()
@@ -866,6 +876,13 @@ export async function runAiAgent(argv = []) {
     historySize: 200,
   })
   state.rl = rl  // 供 /addmodel 等需要 rl.question 的斜杠命令复用
+
+  // 多行粘贴:终端里粘一整段文本时,readline 会把每个 \n 当 Enter —— 一次粘贴变成多次提交,
+  // 第 2 条起还会撞上下面的 busy 分支被丢掉。这里在数据进 readline 之前把整段捕获成占位符,
+  // 提交时再还原(详见 paste.js)。必须在处理 line 事件之前装好。
+  const pasteCapture = installPasteCapture(rl, {
+    formatToken: ({ index, lines }) => t.pasteToken(index, lines),
+  })
 
   // ask_user pauses the tool loop inside the same readline session. The REPL
   // line handler is bypassed while this small wizard owns the input line.
@@ -995,6 +1012,9 @@ export async function runAiAgent(argv = []) {
     if (process.stdin.isTTY && !process.stdin.readableFlowing) {
       process.stdin.resume()
     }
+    // bracketed paste 是终端层的开关,跑过的外部命令(全屏 TUI 之类)退出时可能把它关掉,
+    // 之后粘贴又会退回"每个 \n 一次提交"。它是幂等的,每次画提示符时重申一次。
+    enableBracketedPaste()
     if (process.stdout.isTTY) {
       // 确保光标在新行第 0 列(\r 回行首,\n 换行)
       process.stdout.write('\r\n')
@@ -1017,6 +1037,7 @@ export async function runAiAgent(argv = []) {
   const safeRefreshPrompt = () => {
     try {
       if (rl.closed) return
+      enableBracketedPaste()
       rl.prevRows = 0
       rl.prompt()
     } catch (_) {
@@ -1232,7 +1253,11 @@ export async function runAiAgent(argv = []) {
     // /addmodel 等交互式向导进行中时,用户的回答由向导自身的 rl.question 处理,
     // 不应进入 REPL 的正常输入流程(否则会把向导的答案当成命令/消息发给模型)
     if (state.inWizard) return
-    const input = line.trim()
+    // 把输入行里的粘贴占位符还原成原文(带真实换行)—— 在判断是不是斜杠命令之前,
+    // 这样 `请写进 .env [粘贴 #1]` 这种混排也能正确展开
+    const pasted = pasteCapture.expand(line)
+    if (pasted.stale.length > 0) printWarn(t.pasteExpired(pasted.stale.length))
+    const input = pasted.text.trim()
 
     if (input.startsWith('/')) {
       const r = await handleSlashCommand(state, input, t)
@@ -1251,6 +1276,12 @@ export async function runAiAgent(argv = []) {
     // 取出待发送图片(取出即清空队列,用户每条消息独立决定带不带图)
     const images = state.pendingImages.splice(0)
     if (images.length > 0) printDim(t.imageSending(images.length))
+
+    // 用了粘贴的这条消息:输入行里只有占位符,这里把真正发出去的内容亮一遍,
+    // 否则回看终端记录只剩一个 [粘贴 #N],等于把内容藏起来了。
+    // 只在 TTY 里回显 —— 管道/CI 下 readline 本来就不回显输入行(没有占位符这回事),
+    // 再补一块只会粘在提示符后面变成半行。
+    if (pasted.used > 0 && process.stdout.isTTY) process.stdout.write(renderPasteEcho(input, { locale: state.locale }))
 
     state.busy = true
     state.cancelRequested = false
@@ -1275,6 +1306,7 @@ export async function runAiAgent(argv = []) {
       void terminateCommand(state.currentChild)
     }
     rl.input.removeListener('keypress', interceptInteractiveControlKeys)
+    pasteCapture.dispose()   // 卸载数据改写 + 把终端从 bracketed paste 模式里放出来
     printWarn('\n' + t.bye)
   })
 

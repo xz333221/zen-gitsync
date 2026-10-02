@@ -24,7 +24,7 @@ import {
   stripAnsi, truncateDisplay, summarizeToolArgs,
   createAssistantWriter, printToolHeader, printToolResult, startSpinner,
   renderPlan, afterTool,
-  formatDuration, wrapTerminalText, renderTurnSummary,
+  formatDuration, wrapTerminalText, renderTurnSummary, renderPasteEcho,
   filterSlashCommands, renderSlashHintBody, parseKeyForSlashHint, SLASH_COMMANDS,
   renderSelectableListBody, parseKeyForSelectableList,
 } from './termui.js'
@@ -457,6 +457,27 @@ test('turn summaries distinguish missing and partial usage, and show cancellatio
   assert.match(text, /Token 120/)
   assert.match(text, /部分用量（1\/2/)
   assert.match(text, /输入含缓存 80/)
+})
+
+test('renderPasteEcho: 多行粘贴内容逐行回显,带独立槽线', () => {
+  const rows = stripAnsi(renderPasteEcho('第一行\n第二行\n第三行', { width: 60 })).split('\n')
+  assert.deepEqual(rows.slice(0, 3), ['  │ 第一行', '  │ 第二行', '  │ 第三行'])
+})
+
+test('renderPasteEcho: 超长内容掐中间,保留末行(尾部常是最后一个配置项/最后一行日志)', () => {
+  const text = Array.from({ length: 30 }, (_, i) => `line${i + 1}`).join('\n')
+  const rows = stripAnsi(renderPasteEcho(text, { width: 60, maxRows: 8 })).split('\n').filter(Boolean)
+  assert.equal(rows.length, 8)
+  assert.equal(rows[0], '  │ line1')
+  assert.equal(rows[6], '  │ … 还有 23 行')
+  assert.equal(rows[7], '  │ line30')
+})
+
+test('renderPasteEcho: en locale 的省略提示,且 CRLF 归一成换行', () => {
+  const text = Array.from({ length: 30 }, (_, i) => `l${i}`).join('\r\n')
+  const rows = stripAnsi(renderPasteEcho(text, { width: 60, maxRows: 8, locale: 'en-US' })).split('\n').filter(Boolean)
+  assert.equal(rows.length, 8)
+  assert.equal(rows[6], '  │ … 23 more lines')
 })
 
 test('filterSlashCommands: 单个 / 返回全部命令', () => {

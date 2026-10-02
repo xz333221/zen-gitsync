@@ -511,6 +511,13 @@ selection + Enter to confirm** (typing a number also jumps directly; `0` selects
 "custom / manual input" entry). Non-TTY environments (CI, piped input) automatically fall back
 to numeric input. `Esc` or `Ctrl+C` cancels the wizard cleanly.
 
+Paste a whole block of text and it goes out as **one** message with its line breaks intact — the
+input line shows a short placeholder (`[paste #1 · 4 lines]`) instead of stretching to dozens of
+rows, and the content actually sent is echoed above the prompt as soon as you hit Enter. Recalling
+that line with ↑ re-expands the same text. Terminals without bracketed-paste support (e.g. the
+legacy Windows console host) fall back to readline's native behaviour: the paste submits line by
+line, and only the first line starts a turn.
+
 `/skills` (alias `/mcp`) lists the skills and MCP servers already installed for the agent and
 where they came from. Installation itself happens in the GUI's **Skill / MCP plaza** (Agent
 view): pick the current project or the `g ai` agent as the target, and the entry becomes usable
@@ -1191,6 +1198,11 @@ $ g ai --model=2                # 使用第 2 个已配置的模型（序号或�
 启动配置向导与 `/addmodel` 的"服务商 / 模型"列表支持 **↑↓ 键切换 + Enter 确认**（也可
 直接输入数字跳转，`0` = 列表底部的"自定义 / 手动输入"）；非 TTY 环境下自动回退为数字输入。
 `Esc` 或 `Ctrl+C` 一键取消整个向导。
+
+**多行粘贴**：直接粘一整段文本即可 —— 整段作为**一条**消息发出，换行原样保留。输入行里只显示
+一个短占位符（`[粘贴 #1 · 4 行]`），不会被撑成几十行；回车那一刻会把真正发出去的内容回显在提示
+符上方。用 ↑ 召回该行再回车，占位符会再次展开成同一段原文。终端不支持 bracketed paste 时
+（例如旧版 Windows 控制台宿主）回退为 readline 原生行为：粘贴逐行提交，且只有第一行会真正执行。
 
 `/skills`（`/mcp` 为别名）列出智能体当前已安装的 Skill 与 MCP 服务及来源。安装本身在 GUI 的
 **Skill / MCP 广场**（智能体视图）里完成：选择安装到当前项目或 `g ai` 智能体，装好后对应一侧即可使用。

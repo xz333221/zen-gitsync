@@ -655,6 +655,39 @@ export function printTurnSummary(stats, options, write = s => process.stdout.wri
 }
 
 // ──────────────────────────────────────────────
+// 粘贴内容回显
+// ──────────────────────────────────────────────
+//
+// 开了多行粘贴之后,输入行里只剩一个占位符(`[粘贴 #1 · 4 行]`),原文在内存里。
+// 提交时要把"实际发出去的内容"亮一遍 —— 否则回看终端记录只有一行占位符,
+// 等于把用户粘的东西藏起来了。
+//
+// 用与工具结果同款的 `  │ ` 槽线(缩进一致、看着整齐),但槽线走青色 ——
+// 这条是用户自己的消息,不该和工具输出一个色系。超长时掐中间:头几行 + "还有 N 行" + 末行,
+// 因为粘贴内容的尾部(配置项的最后一个键、日志的最后一行)通常最需要确认。
+
+export function renderPasteEcho(text, {
+  locale = 'zh-CN',
+  width = Math.min(100, termWidth() - 6),
+  maxRows = 16,
+} = {}) {
+  const zh = !String(locale || '').startsWith('en')
+  const rows = wrapTerminalText(normalizeTerminalNewlines(text), Math.max(8, width))
+  let body = rows
+  if (rows.length > maxRows) {
+    const omitted = rows.length - maxRows + 1
+    body = [
+      ...rows.slice(0, maxRows - 2),
+      zh ? `… 还有 ${omitted} 行` : `… ${omitted} more lines`,
+      rows[rows.length - 1],
+    ]
+  }
+  return body
+    .map(row => chalk.cyan('  │ ') + chalk.hex('#cbd5e1')(row))
+    .join('\n') + '\n'
+}
+
+// ──────────────────────────────────────────────
 // 工具调用块(Claude Code 风格)
 // ──────────────────────────────────────────────
 
@@ -842,6 +875,7 @@ export default {
   afterTool,
   printTurnSummary,
   renderTurnSummary,
+  renderPasteEcho,
   wrapTerminalText,
   printOk,
   printWarn,
