@@ -227,15 +227,30 @@ test('writer: 标题与列表渲染', () => {
   assert.ok(text.includes('- 列表项'))
 })
 
-test('writer: 代码围栏内容带槽线,围栏标记不原样显示', () => {
+test('writer: 代码围栏内容顶格输出,不带任何行内前缀(复制即原文)', () => {
   const c = collect()
   const w = createAssistantWriter({ write: c.write })
   w.writeContent('```js\nconst x = 1\n```\n围栏外\n')
   w.finish()
   const lines = c.lines()
-  assert.ok(lines.some(l => l.includes('│ const x = 1')), '代码行应有 │ 槽线')
+  // 顶格 = 行首没有空格/槽线,从行首选中复制出来就是能直接跑的原文
+  assert.ok(lines.includes('const x = 1'), `代码行应顶格原样输出,实际: ${JSON.stringify(lines)}`)
+  assert.ok(!lines.some(l => l.includes('│')), '不应再出现 │ 槽线(会被一起复制走)')
   assert.ok(!lines.some(l => l.trim() === '```js' || l.trim() === '```'), '裸围栏标记不应出现')
   assert.ok(lines.some(l => l.includes('围栏外')))
+})
+
+test('writer: 代码块内不折行 —— 长命令复制出来仍是一整行', () => {
+  const c = collect()
+  const w = createAssistantWriter({ width: 40, write: c.write })
+  const cmd = 'sudo cp /etc/nginx/conf.d/xz_server.conf /etc/nginx/conf.d/xz_server.conf.bak-$(date +%Y%m%d-%H%M%S) && sudo systemctl reload nginx'
+  w.writeContent('```bash\n' + cmd + '\n```\n')
+  w.finish()
+  const lines = c.lines()
+  // 硬折行会把一条命令截成几行,粘回 shell 就成了几条互不相干的命令
+  assert.ok(lines.includes(cmd), '超宽命令必须原样一整行,交给终端软折')
+  const fragments = lines.filter(l => l.trim() && l.trim() !== cmd && cmd.includes(l.trim()))
+  assert.deepEqual(fragments, [], '不应出现被拦腰折断的命令碎片行')
 })
 
 test('writer: ** 标记跨 chunk 也能正确渲染(行缓冲)', () => {

@@ -491,23 +491,27 @@ export function createAssistantWriter({
   }
 
   const emitContentLine = (raw, withNewline = true) => {
-    // 围栏标记行:切换状态,用一个淡淡的槽线代替裸 ```
+    // 围栏标记行:切换状态,用一个淡淡的拐角代替裸 ```
+    // 这里刻意不画边框线:命令行是给用户复制去终端里跑的,任何行内前缀都会被
+    // 一起复制进剪贴板 —— 早期版本给每行加 `│ ` 槽线,复制出来就是带竖线的残废命令。
     if (/^\s*```/.test(raw)) {
       inFence = !inFence
       const bullet = contentLines === 0 ? BULLET_FIRST : BULLET_REST
       contentLines++
       lastBlank = false
-      const language = raw.trim().slice(3).trim() || 'code'
-      writeContentRows(bullet, chalk.gray(inFence ? '┌─ ' + language : '└' + '─'.repeat(12)), withNewline)
+      const language = raw.trim().slice(3).trim()
+      writeContentRows(bullet, chalk.gray(inFence ? '┌ ' + (language || 'code') : '└'), withNewline)
       return
     }
-    // 围栏内:代码行原样带槽线(空行也保留,代码格式不能动)
+    // 围栏内:原文顶格输出 —— 不加前缀、不按终端宽度折行。
+    // 折行在这里是**硬折行**(真的写 \n 字节),一条长命令会被拦腰截成几行,
+    // 复制粘回 shell 就成了几条互不相干的命令。宁可让终端自己软折:
+    // 软折只是显示层的,终端复制时给出的仍是模型写的那一行。
     if (inFence) {
-      const bullet = contentLines === 0 ? BULLET_FIRST : BULLET_REST
       contentLines++
       lastBlank = false
       showAnswerHeader()
-      write(wrapTerminalText(raw, Math.max(8, width - 2)).map(row => bullet + chalk.gray('│ ') + row).join('\n') + (withNewline ? '\n' : ''))
+      write(chalk.hex('#cbd5e1')(normalizeTerminalNewlines(raw)) + (withNewline ? '\n' : ''))
       return
     }
     // 空白行:首个正文行之前不输出;连续空行合并为一行
