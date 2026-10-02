@@ -8,7 +8,8 @@
  *   W4  900：左栏改成浮层抽屉且默认收起 —— 右缘退到看板容器左缘之外、pointer-events:none
  *           （不吞点击），看板因此拿到 ≥500px（这是"窄屏先收左栏"这一档真正要换来的东西）
  *   W5  900 + 点开抽屉：左栏**浮在看板上方**（有重叠）且**不把看板挤窄**（宽度与收起时一致）
- *   W6  780：上下排列 —— 看板铺满、右栏铺满并落在看板**下方**、看板三列竖排、
+ *   W6  780：上下排列 —— 看板铺满、右栏铺满并落在看板**上方**（竖排时看板三列
+ *           摞起来有一万多像素，右栏落在它后面就够不着了）、看板三列竖排、
  *           且右栏输入区可直接点到用（可见、够宽、能滚进视口）
  *   W7  反向验证：把"旧写法"（无媒体查询的固定 264/300 + 左栏 static）用 !important 注回去，
  *           同尺寸下 W4e / W6b 的判据必须**失败** —— 证明这些断言守的是媒体查询本身，
@@ -233,8 +234,9 @@ async function main() {
     check('W6a 780：三栏改成纵向排列', m.colsDir === 'column', `flexDirection=${m.colsDir}`)
     check('W6b 780：右栏铺满宽度', m.oc && m.cols && m.oc.width >= m.cols.width - 4,
       `oc.width=${m.oc?.width} cols.width=${m.cols?.width}`)
-    check('W6c 780：右栏落在看板下方（不是并排）', m.oc && m.main && m.oc.top >= m.main.bottom - 2,
-      `oc.top=${m.oc?.top} main.bottom=${m.main?.bottom}`)
+    check('W6c 780：右栏落在看板**上方**（看板竖排后一万多像素，落在它后面等于够不着）',
+      m.oc && m.main && m.oc.bottom <= m.main.top + 2,
+      `oc.bottom=${m.oc?.bottom} main.top=${m.main?.top}`)
     check('W6d 780：看板本身也铺满', m.main && m.cols && m.main.width >= m.cols.width - 4,
       `main.width=${m.main?.width} cols.width=${m.cols?.width}`)
     check('W6e 780：看板三列竖排（第二列在第一列下方）',

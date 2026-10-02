@@ -19,6 +19,8 @@
  *      **没有进度时留空但占位**；**没给百分比就一条都不画**（反证：桩一份 percent=null 的报告）
  *   P10 空正文的原因码：LLM_EMPTY（模型答了但没写正文）与通用失败说两句不同的话，
  *     悬停带服务端写的 errorDetail；认不出来的码仍然退回通用文案（反证）
+ *   P11 小屏（780）：控制台排在看板**前面**、长正文不再被 6 行上限截断、
+ *     没有「展开全文」入口；把旧写法注回去这批判据必须全部失败（反证）
  *   P8 无 JS 运行时异常 / 无控制台错误
  *   P9 截图存证
  *
@@ -444,6 +446,64 @@ async function main() {
     check('P10c 没见过的码仍然退回通用的「生成失败」',
       /生成失败/.test(em.notice) && !em.notice.includes('没有返回正文'),
       `notice="${em.notice}"`)
+    await page.unroute('**/api/workbench/orchestrator/report')
+
+    /* ══ P11 小屏：报告是主角，别被压成"一截能滚的小窗口"（2026-10-02 反馈）══ */
+    // 反馈原话："我在小屏上基本看不到任务报告"。两件事凑一起：
+    //   ① 竖排时看板三列摞起来一万多像素（120 张卡），控制台排在它后面 → 够不着；
+    //   ② 报告正文被 6 行上限截掉（宽屏那道限制是为 300px 窄栏设的，小屏不该沿用它）。
+    // 宽度桩成 780（= WorkbenchBoard 的竖排断点以内），正文桩成一段肯定超过 6 行的长文。
+    const LONG_TEXT = '桩：正在核对 zen-gitsync 的收尾验证。'.repeat(28)
+    await page.setViewportSize({ width: 780, height: 900 })
+    await sleep(400)
+    await stubOnce(stubReport(STUB_PERCENT, [70], LONG_TEXT))
+    await sleep(400)
+
+    const readSmall = () => page.evaluate(() => {
+      const oc = document.querySelector('.oc')
+      const main = document.querySelector('.board__main')
+      const t = document.querySelector('.rp__text')
+      const r = (n) => n ? n.getBoundingClientRect() : null
+      return {
+        ocBottom: oc ? +r(oc).bottom.toFixed(1) : null,
+        mainTop: main ? +r(main).top.toFixed(1) : null,
+        textScrollH: t ? t.scrollHeight : null,
+        textClientH: t ? t.clientHeight : null,
+        moreCount: document.querySelectorAll('.rp__more').length,
+        hasText: !!t,
+      }
+    })
+
+    let sm = await readSmall()
+    check('P11a 小屏：控制台排在看板**前面**（竖排时看板一万多像素，落在它后面就够不着）',
+      sm.ocBottom !== null && sm.mainTop !== null && sm.ocBottom <= sm.mainTop + 2,
+      `oc.bottom=${sm.ocBottom} main.top=${sm.mainTop}`)
+    check('P11b 小屏：长正文不再被 6 行上限截断（scrollHeight = clientHeight）',
+      sm.hasText && sm.textScrollH - sm.textClientH <= 2,
+      `scrollH=${sm.textScrollH} clientH=${sm.textClientH}（差 ${sm.textScrollH - sm.textClientH}px）`)
+    // 判定是量出来的：上限解开后 measureText 自然量成"没截断"，按钮就不该再挂着
+    check('P11c 小屏：没有「展开全文」入口（正文没截就不该有它）',
+      sm.moreCount === 0, `数量=${sm.moreCount}`)
+
+    /* 反证：把旧写法注回去（order 归 0 + 恢复 6 行上限），同一批判据必须**失败** ——
+       否则上面那两条只是"页面没崩"，守不住这两条规则本身 */
+    await page.evaluate(() => {
+      const el = document.createElement('style')
+      el.id = '__oc_legacy'
+      el.textContent = '.oc { order: 0 !important; } .rp__text { max-height: calc(6 * 1.6em) !important; }'
+      document.head.appendChild(el)
+    })
+    await sleep(500)
+    sm = await readSmall()
+    check('P11d 反证：注回旧写法后，控制台重新掉到看板后面（P11a 不成立）',
+      !(sm.ocBottom <= sm.mainTop + 2), `oc.bottom=${sm.ocBottom} main.top=${sm.mainTop}`)
+    check('P11e 反证：正文重新被 6 行截断（P11b 不成立），且「展开全文」重新出现',
+      sm.textScrollH - sm.textClientH > 2 && sm.moreCount > 0,
+      `差 ${sm.textScrollH - sm.textClientH}px，按钮=${sm.moreCount}`)
+
+    await page.evaluate(() => document.getElementById('__oc_legacy')?.remove())
+    await page.setViewportSize({ width: 1600, height: 950 })
+    await sleep(500)
     await page.unroute('**/api/workbench/orchestrator/report')
 
     /* ══ P8 无异常 ══ */

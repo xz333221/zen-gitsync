@@ -1146,8 +1146,10 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   }
 }
 
-/* 手机宽度：看板在上、主 Agent 控制台在下，整块纵向滚动。
-   输入区仍可直接用 —— 控制台自带 min-height（见 OrchestratorConsole），
+/* 手机宽度：主 Agent 控制台在上、看板在下，整块纵向滚动。
+   顺序反过来是刻意的：竖排时看板三列摞起来有一万多像素（120 张卡实测 1.25 万），
+   控制台落在它后面就够不着了 —— 而小屏上真正要看的正是报告与派发。
+   控制台自带 min-height（见 OrchestratorConsole 的 order: -1 那条），
    展开后不用先滚动定位就能点到输入框和派发按钮。 */
 @media (max-width: 860px) {
   .board { --wb-right-w: 100%; }
@@ -1157,6 +1159,8 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
     flex-direction: column;
     overflow-y: auto;
   }
+  /* 控制台的 order 是 -1（见 OrchestratorConsole 的同名媒体查询），这里给它留个记号：
+     看板保持 0，两者谁前谁后由那条决定 */
   .board__main {
     flex: 0 0 auto;
     min-height: 72vh;
