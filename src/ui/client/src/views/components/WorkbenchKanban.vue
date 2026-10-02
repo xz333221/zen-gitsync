@@ -803,6 +803,26 @@ function liveSummary(live: BoardTaskLive): string {
 /* ── 卡片：浮起表面 + 静息阴影，hover 抬升 ── */
 .kb-card {
   position: relative;
+  /*
+   * hover 渐隐的**纵向那层**：条带之外一律不透明，条带之内全透明。
+   * 横向那层（见 .kb-card__actions 附近）照旧只管"右侧渐隐"，两层 **add** 起来正好是
+   * 「只把操作组压住的那一条带洗掉，上面几行照旧读得到」。
+   * ⚠️ 2026-10-02 修：遮罩原先只有横向一层，三行引文的卡 hover 一下，
+   * **每一行**的右端都被洗掉 102px —— 按钮只压着最后一行，上面两行的尾巴却一起没了，
+   * 右上角于是空出一大块（用户报的"hover 一片空白"）。
+   * ⚠️ 合成方式必须是 **add**，不能是 intersect：intersect 只能把两层相乘，
+   * 横向层在行 1、行 2 上本来就是 0（那正是要渐隐的），一相交它们就永远是 0 ——
+   * 交集写出来跟单层一模一样（第一版就踩了这个，改完 11 条断言全绿、截图却没变）。
+   * 两个数字都是从真实 DOM 量出来的（scripts/verify-wb-card-fade-band.cjs 守着几何，
+   * 同脚本还直接数像素，守住"上面几行的字真的还在"）：
+   *   · 19px：倒数第二行的行盒下沿 = 末行行高 16.5，更深一点的墨迹（中英混排的下伸部）
+   *     实测在 18.3px —— 过渡带从它**下面**开始，那行就一像素都不受影响。
+   *   · 14px：末行墨迹上沿实测 15.5px，按钮盒顶实测 12px —— 终点在墨迹上沿之下，
+   *     整组按钮连同它的内边距都落在全透明区里，不会露出半截字形。
+   * 元素比条带还矮时（单行引文 / 单行标题）两个 stop 都会被 clamp，等价于整行渐隐 ——
+   * 那本来就是想要的结果。
+   */
+  --kb-mask-outside-band: linear-gradient(to bottom, #000 calc(100% - 19px), transparent calc(100% - 14px));
   padding: 12px;
   margin-bottom: 8px;
   border: 1px solid var(--border-color-light);
@@ -1137,6 +1157,12 @@ function liveSummary(live: BoardTaskLive): string {
  * 改成把**底下的文字在右侧渐隐掉**：不涉及任何颜色，深浅主题都成立，也没有接缝。
  * （组内按钮本身是 transparent，所以必须让它所在区域完全透明，不能只减淡。）
  *
+ * ⚠️ 渐隐必须**同时**限在纵向那条带里（`--kb-mask-outside-band` + 两层 add，
+ * 2026-10-02 修）：操作组只压着**最后一行**（高 18px），而引文能到 3 行、活动区那行能到 2 行。
+ * 只挂一层横向渐隐的话，**每一行**的右端都会被洗掉同样的宽度 —— 一张三行引文的卡，
+ * hover 一下右上角就空出两大块空白（用户 2026-10-02 报的"hover 上一片空白"）。
+ * 加上纵向那层之后，只有按钮真正压住的那一条带渐隐，上面几行照旧读得到。
+ *
  * ⚠️ 遮的必须是「压在操作组底下的那一行」，**不是无脑遮标题**（2026-10-01 修）。
  * 操作组是 `bottom: 6px`，它压住的永远是卡片**最后一行**：卡片底下有活动区 / 引文时，
  * 那一行离标题隔着整整一段正文（实测标题墨迹带与按钮墨迹带相差 18~122px），
@@ -1170,15 +1196,23 @@ function liveSummary(live: BoardTaskLive): string {
 /* 「最后回复」是卡片的最后一块，操作组正压在它右下角 */
 .kb-card:not(.is-opened):hover .kb-card__reply,
 .kb-card:focus-within .kb-card__reply {
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 118px), transparent calc(100% - 102px));
-  mask-image: linear-gradient(to right, #000 calc(100% - 118px), transparent calc(100% - 102px));
+  /* 层序 = 「上面横向渐隐、下面带外不透明」，两层 add（= mask-composite 的默认值，
+     这里显式写出来：这一行是这个效果的全部机关所在，写出来才看得见）。
+     推导见 .kb-card 上 --kb-mask-outside-band 那段 —— **不能改成 intersect**。 */
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 118px), transparent calc(100% - 102px)), var(--kb-mask-outside-band);
+  mask-image: linear-gradient(to right, #000 calc(100% - 118px), transparent calc(100% - 102px)), var(--kb-mask-outside-band);
+  -webkit-mask-composite: source-over;
+  mask-composite: add;
 }
 /* 标题：只在它自己是卡片最后一行时才遮（判据与理由见上），位置按标题自己的右边缘另算。
-   `~ *:not(.kb-card__actions)` = 「row1 后面还有别的兄弟节点」，操作组本身不算。 */
+   `~ *:not(.kb-card__actions)` = 「row1 后面还有别的兄弟节点」，操作组本身不算。
+   单行元素：纵向那层的两个 stop 都被 clamp 掉 → 与改动前的整行渐隐等价。 */
 .kb-card:not(.is-opened):hover .kb-card__row1:not(:has(~ *:not(.kb-card__actions))) .kb-card__title,
 .kb-card:focus-within .kb-card__row1:not(:has(~ *:not(.kb-card__actions))) .kb-card__title {
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 68px), transparent calc(100% - 52px));
-  mask-image: linear-gradient(to right, #000 calc(100% - 68px), transparent calc(100% - 52px));
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 68px), transparent calc(100% - 52px)), var(--kb-mask-outside-band);
+  mask-image: linear-gradient(to right, #000 calc(100% - 68px), transparent calc(100% - 52px)), var(--kb-mask-outside-band);
+  -webkit-mask-composite: source-over;
+  mask-composite: add;
 }
 .kb-card__btn {
   border: none;

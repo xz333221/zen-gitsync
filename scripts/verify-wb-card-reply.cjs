@@ -9,7 +9,8 @@
  *   C 没有正文的任务（从没跑过 / 那次没写正文）不出现该段落 —— 不写"暂无"、也不拿旧话顶
  *   D `…` 只在**真被截断**时出现（它是"这句话从中间开始"的标记，没截就不该标）
  *   E 卡片上没有 markdown 标记（`**` / 反引号 / 表格竖线）—— 卡片没有富文本，留着没法读
- *   F 引用样式：左侧竖线 + 次亮色，与标题（正文色）区分得开
+ *   F 引用样式：左侧竖线 + 次亮色，与标题（正文色）区分得开；hover 时右下角的操作组浮出，
+ *     摘录**只把最后一行**渐隐（按钮只压着最后一行，几何由 verify-wb-card-fade-band 量）
  *   G 列表视图同一行也有（同一批任务的两种画法，一边有一边没有会让人以为是两份数据）
  *   H 页面无 console / page 错误
  * F1–F3 是前置事实而不是 UI 契约：F1 fixture 与运行中后端口径无漂移（否则后面的断言
@@ -323,11 +324,24 @@ async function main() {
       const reply = el.querySelector('.kb-card__reply')
       const actions = el.querySelector('.kb-card__actions')
       const cs = getComputedStyle(reply)
-      return { mask: cs.maskImage || cs.webkitMaskImage, actions: getComputedStyle(actions).opacity }
+      const mask = cs.maskImage || cs.webkitMaskImage
+      return {
+        mask, actions: getComputedStyle(actions).opacity,
+        composite: cs.maskComposite || cs.webkitMaskComposite,
+        layers: (mask.match(/linear-gradient\(/g) || []).length,
+      }
     }, target.title)
     check('F6 悬停时操作组浮出，且摘录在它底下渐隐（按钮不压在字上）',
       hovered.actions === '1' && /gradient/.test(hovered.mask || ''),
       `actions=${hovered.actions} mask=${String(hovered.mask).slice(0, 40)}`)
+    // F7 摘录能到 3 行，而操作组只压着最后一行 —— 遮罩因此必须**同时**带一层
+    // 「条带之外一律不透明」的纵向层（--kb-mask-outside-band），两层按 add 合成：
+    // 只剩一层横向渐隐时，每一行的右端都会被洗掉，右上角空出一大块
+    // （2026-10-02 用户报的那条）。渐隐带的具体几何、以及"倒数第二行右端确实还有墨"
+    // 由 verify-wb-card-fade-band 验（真实数据里这张卡未必折到 3 行，这里只钉住结构）。
+    check('F7 摘录的遮罩是「横向渐隐 + 带外不透明」两层，且按 add 合成（只有最后一行渐隐）',
+      hovered.layers === 2 && /^add/.test(hovered.composite || ''),
+      `layers=${hovered.layers} composite=${hovered.composite}`)
 
     // ── 截图存证：把「已完成」列整列拍下来 ────────────────────────────
     const col = page.locator('.kb-col--done').first()

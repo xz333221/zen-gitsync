@@ -145,7 +145,7 @@ function fixture() {
  * 这里守的是**组宽**——加了「完成 / 撤销」之后组必须还是常数宽，那两个数字才对得上）。
  *
  * `transparent` 直接从计算后的 mask-image 里抠出来（`calc(100% - 102px)` 的那个数），
- * 所以样式里改数字，这里自动跟着走。
+ * 所以样式里改数字，这里自动跟着走（只取横向那层 —— 遮罩已是两层，见下面 readCard）。
  */
 function readCard(page, id) {
   return page.evaluate((taskId) => {
@@ -157,7 +157,14 @@ function readCard(page, id) {
 
     const maskedEl = [...el.querySelectorAll('*')].find(e => getComputedStyle(e).maskImage !== 'none')
     const maskVal = maskedEl ? getComputedStyle(maskedEl).maskImage : ''
-    const stops = [...maskVal.matchAll(/calc\(100% - (\d+(?:\.\d+)?)px\)/g)].map(m => Number(m[1]))
+    // 只取横向那层（`to right`）：遮罩是「横向渐隐 ∩ 纵向条带」两层（--kb-fade-band，
+    // 2026-10-02），纵向那层的数字不是"横向能洗掉多少"，别把它当成最后一个 stop。
+    // 从 `to right` 切到下一层 `linear-gradient(` —— 不能按 ')' 截：计算值里颜色是
+    // rgb(0, 0, 0)，按 ')' 截会正好截在颜色函数中间，把后面的 calc() 丢掉。
+    const hAt = maskVal.indexOf('to right')
+    const hNext = maskVal.indexOf('linear-gradient(', hAt + 1)
+    const hLayer = hAt < 0 ? '' : maskVal.slice(hAt, hNext < 0 ? undefined : hNext)
+    const stops = [...hLayer.matchAll(/calc\(100% - (\d+(?:\.\d+)?)px\)/g)].map(m => Number(m[1]))
     const mr = maskedEl ? maskedEl.getBoundingClientRect() : null
 
     return {

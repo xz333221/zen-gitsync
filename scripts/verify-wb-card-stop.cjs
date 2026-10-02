@@ -140,8 +140,11 @@ function fixture() {
  * ⚠️ 断言必须按**实际被遮的元素**算，不能写死标题：2026-10-01 之前标题是无条件
  * 带 mask 的，于是任何一张长卡片（活动区 / 引文在下面）hover 时标题右半截都会白掉 ——
  * 而操作组离它整整一段正文那么远。写死标题的断言在那时是"绿"的，什么都没守住。
- * `transparent` 直接从计算后的 mask-image 里抠出来（`calc(100% - 64px)` 的那个数），
+ * `transparent` 直接从计算后的 mask-image 里抠出来（`calc(100% - 102px)` 的那个数），
  * 所以样式里改数字，这里自动跟着走，不会两边对不上。
+ * ⚠️ 遮罩现在是**两层**（横向渐隐 ∩ 纵向条带，见 --kb-fade-band，2026-10-02）：
+ * 横向能洗掉多少只由 `to right` 那层决定，所以只从那一层里抠 stop；
+ * 拿"最后一个数字"会把纵向条带的 15px 当成横向透明区，G2 立刻假红。
  */
 function readCard(page, id) {
   return page.evaluate((taskId) => {
@@ -154,7 +157,14 @@ function readCard(page, id) {
     // 真正被遮的那一行（正常情况下最多一个元素带 mask）
     const maskedEl = [...el.querySelectorAll('*')].find(e => getComputedStyle(e).maskImage !== 'none')
     const maskVal = maskedEl ? getComputedStyle(maskedEl).maskImage : ''
-    const stops = [...maskVal.matchAll(/calc\(100% - (\d+(?:\.\d+)?)px\)/g)].map(m => Number(m[1]))
+    // 只取横向那层（`to right`）：遮罩是「横向渐隐 ∩ 纵向条带」两层，纵向那层的数字
+    // 不是"横向能洗掉多少"（见文件头 readCard 那段）。
+    // 从 `to right` 切到下一层 `linear-gradient(` —— 不能按 ')' 截：计算值里颜色是
+    // rgb(0, 0, 0)，按 ')' 截会正好截在颜色函数中间，把后面的 calc() 丢掉。
+    const hAt = maskVal.indexOf('to right')
+    const hNext = maskVal.indexOf('linear-gradient(', hAt + 1)
+    const hLayer = hAt < 0 ? '' : maskVal.slice(hAt, hNext < 0 ? undefined : hNext)
+    const stops = [...hLayer.matchAll(/calc\(100% - (\d+(?:\.\d+)?)px\)/g)].map(m => Number(m[1]))
     const mr = maskedEl ? maskedEl.getBoundingClientRect() : null
 
     // 按 DOM 推「本该被遮的那一行」：卡片里最后一个内容块（操作组本身不算）。
