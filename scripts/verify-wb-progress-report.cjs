@@ -21,6 +21,9 @@
  *     悬停带服务端写的 errorDetail；认不出来的码仍然退回通用文案（反证）
  *   P11 小屏（780）：控制台排在看板**前面**、长正文不再被 6 行上限截断、
  *     没有「展开全文」入口；把旧写法注回去这批判据必须全部失败（反证）
+ *   P12 「项目概览 / 历史报告」默认折成一行（标题行仍带份数 / 分支·工作区），
+ *     折起来后报告窗口 ≥340px（原来只有 200 出头）；点标题行能开能合、
+ *     选择记在 localStorage；**展开回去报告窗口必须掉回去**（反证高度出自这两块）
  *   P8 无 JS 运行时异常 / 无控制台错误
  *   P9 截图存证
  *
@@ -131,6 +134,21 @@ async function clearToasts(page) {
   const cmdTab = page.locator('.oc__mode-btn').filter({ hasText: '指令' }).first()
   await cmdTab.click()
   await sleep(400)
+}
+
+/**
+ * 展开一个默认折起来的区块（历史报告 / 项目概览）。
+ *
+ * 这两块 2026-10-02 起默认收起（它们固定占着高度，把报告卡挤成一条缝，
+ * 见 OrchestratorConsole 里 SECT_KEY 的注释）—— 想点里面的行，得先像用户那样点开标题行。
+ */
+async function expandSect(page, sel) {
+  const btn = page.locator(`${sel} .oc__sect`)
+  if (await btn.count() === 0) return false
+  if (await btn.first().getAttribute('aria-expanded') === 'true') return true
+  await btn.first().click()
+  await sleep(250)
+  return true
 }
 
 async function main() {
@@ -316,6 +334,8 @@ async function main() {
     if (historyCount >= 2) {
       m = await readPanel(page)
       const beforeIndex = m.historyActiveIndex
+      // 历史区默认折着，先点开标题行（这一步本身就是用户现在的操作路径）
+      await expandSect(page, '.oc__history')
       await page.locator('.oc__history-item').last().click()
       await sleep(400)
       m = await readPanel(page)
@@ -504,6 +524,96 @@ async function main() {
     await page.evaluate(() => document.getElementById('__oc_legacy')?.remove())
     await page.setViewportSize({ width: 1600, height: 950 })
     await sleep(500)
+    await page.unroute('**/api/workbench/orchestrator/report')
+
+    /* ══ P12 项目概览 / 历史报告默认折起来，把高度让给报告（2026-10-02 反馈）══ */
+    // 反馈原话："我希望我的项目概览和历史报告可以收起，不然小屏上基本看不到进度报告"。
+    // 病根不是宽度而是**高度**：这两块是固定高度（历史 ≤132 + 概览 114），
+    // 列高不够时报告卡只能拿到"剩下的那点" —— 实测 1600×950 下报告窗口只有 201px，
+    // 而卡片本身 476px，于是报告得缩在自己的小窗口里滚，看着就是"正文被截了一半"。
+    // 所以默认折成一行（标题行仍带份数 / 分支·工作区），点开即恢复原样。
+    // 先把两个偏好键清掉再刷新：前面 P6b 点过历史，那个动作已经把它写成展开了
+    await page.evaluate(() => {
+      try {
+        localStorage.removeItem('wb.ocHistoryOpen.v1')
+        localStorage.removeItem('wb.ocGitOpen.v1')
+      } catch { /* 隐私模式：本来也没有偏好可清 */ }
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await openCommandMode(page)
+    await stubOnce(stubReport(STUB_PERCENT, [70, 30], '桩：两块固定块折起来之后，报告窗口有多大。'))
+
+    const readSect = () => page.evaluate(() => {
+      const list = document.querySelector('.oc__report-list')
+      const sect = (sel, bodySel) => {
+        const root = document.querySelector(sel)
+        const btn = root ? root.querySelector('.oc__sect') : null
+        const body = root ? root.querySelector(bodySel) : null
+        return {
+          exists: !!root,
+          expanded: btn ? btn.getAttribute('aria-expanded') : null,
+          bodyVisible: !!body && getComputedStyle(body).display !== 'none',
+          brief: (btn?.querySelector('.oc__sect-brief')?.textContent || '').trim(),
+          h: root ? +root.getBoundingClientRect().height.toFixed(1) : null,
+        }
+      }
+      return {
+        reportWin: list ? list.clientHeight : null,
+        history: sect('.oc__history', '.oc__history-list'),
+        git: sect('.oc__git', '.oc__git-list'),
+      }
+    })
+
+    let sc = await readSect()
+    check('P12a 历史报告默认折着，标题行上留着份数（折起来不等于藏起来）',
+      sc.history.exists && sc.history.expanded === 'false' && !sc.history.bodyVisible
+        && /\d/.test(sc.history.brief),
+      `expanded=${sc.history.expanded} 可见=${sc.history.bodyVisible} brief="${sc.history.brief}"`)
+    check('P12b 项目概览默认折着，标题行上留着分支 / 工作区',
+      sc.git.expanded === 'false' && !sc.git.bodyVisible && sc.git.brief.length > 0,
+      `expanded=${sc.git.expanded} 可见=${sc.git.bodyVisible} brief="${sc.git.brief}"`)
+    const winCollapsed = sc.reportWin
+    check('P12c 折起来后进度报告的窗口够看（≥340px，原来是 200 出头）',
+      typeof winCollapsed === 'number' && winCollapsed >= 340, `窗口=${winCollapsed}px`)
+
+    await expandSect(page, '.oc__history')
+    await expandSect(page, '.oc__git')
+    await sleep(500)
+    sc = await readSect()
+    check('P12d 点标题行能展开（aria 与列表可见性一起跟着走）',
+      sc.history.expanded === 'true' && sc.history.bodyVisible
+        && sc.git.expanded === 'true' && sc.git.bodyVisible,
+      `history=${sc.history.expanded}/${sc.history.bodyVisible} git=${sc.git.expanded}/${sc.git.bodyVisible}`)
+    // 反证：展开回去，报告窗口必须掉回去 —— 高度确实是这两块让出来的，
+    // 不是"窗口本来就变大了"（少了这条，上面 P12c 完全可能是别的原因）
+    check('P12e 反证：展开两块后报告窗口明显变小（折起来省的正是这里的高度）',
+      winCollapsed - sc.reportWin >= 120,
+      `折起=${winCollapsed}px 展开=${sc.reportWin}px`)
+
+    // 展开是一次选择，刷新后得还在（控制台是常驻栏，每次跳回默认值会很烦）
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await openCommandMode(page)
+    await sleep(300)
+    sc = await readSect()
+    check('P12f 展开过的两块刷新后仍是展开的（选择记在 localStorage）',
+      sc.history.expanded === 'true' && sc.git.expanded === 'true',
+      `history=${sc.history.expanded} git=${sc.git.expanded}`)
+
+    await page.click('.oc__git .oc__sect')
+    await page.click('.oc__history .oc__sect')
+    await sleep(300)
+    sc = await readSect()
+    check('P12g 再点一下能收回去（不是只能展不能收）',
+      sc.history.expanded === 'false' && sc.git.expanded === 'false' && !sc.git.bodyVisible
+        && sc.reportWin > 340,
+      `expanded=${sc.history.expanded}/${sc.git.expanded} 窗口=${sc.reportWin}px`)
+    const stored = await page.evaluate(() => {
+      try {
+        return [localStorage.getItem('wb.ocHistoryOpen.v1'), localStorage.getItem('wb.ocGitOpen.v1')]
+      } catch { return ['(无 localStorage)', ''] }
+    })
+    check('P12h 收起同样落盘（下次打开还是收起）',
+      stored[0] === '0' && stored[1] === '0', `keys=${JSON.stringify(stored)}`)
     await page.unroute('**/api/workbench/orchestrator/report')
 
     /* ══ P8 无异常 ══ */

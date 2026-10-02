@@ -29,7 +29,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
-import { Paperclip, Promotion, Expand, Fold, Setting, Refresh } from '@element-plus/icons-vue'
+import { Paperclip, Promotion, Expand, Fold, Setting, Refresh, ArrowDown, ArrowRight } from '@element-plus/icons-vue'
 import type {
   Attachment,
   ProgressReport,
@@ -558,6 +558,42 @@ const gitSummary = computed(() => {
   }
   return out
 })
+
+// ── 下面那两个区块（历史报告 / 项目概览）默认收起 ────────────────────────────
+/**
+ * 这块面板的主角是**进度报告**，而列高是有限的：报告卡拿到的永远是"剩下的那点"。
+ * 小屏笔记本（1366×768）实测列高只有 ~620px，而它下面这三块是固定高度 ——
+ * 历史报告 132 + 项目概览 114 + 派发栏 213 —— 留给报告卡的只剩二三十像素，
+ * 报告得缩在自己的小窗口里滚，看起来就是"报告的正文被截了一半"
+ * （2026-10-02 用户反馈："项目概览和历史报告可以收起，不然小屏上基本看不到进度报告"）。
+ *
+ * 所以两个区块默认折成一行。折起来不是"藏起来"：标题行本身带着最该一眼看到的信息
+ * （历史的份数 / 概览的分支 + 工作区），要全量内容再点开。
+ * 选择记在 localStorage —— 控制台是常驻栏，每次刷新都跳回默认值会很烦
+ * （与 MODE_KEY / INPUT_H_KEY 同一套做法，隐私模式下不记偏好但不影响用）。
+ */
+const SECT_KEY = { history: 'wb.ocHistoryOpen.v1', git: 'wb.ocGitOpen.v1' } as const
+
+function readSectOpen(key: string): boolean {
+  try { return localStorage.getItem(key) === '1' } catch { return false }
+}
+
+const historyOpen = ref(readSectOpen(SECT_KEY.history))
+const gitOpen = ref(readSectOpen(SECT_KEY.git))
+
+function toggleSect(which: 'history' | 'git') {
+  const target = which === 'history' ? historyOpen : gitOpen
+  target.value = !target.value
+  try { localStorage.setItem(SECT_KEY[which], target.value ? '1' : '0') } catch { /* 同上 */ }
+}
+
+/**
+ * 概览收起时标题行上剩下的那点内容：头两项（分支 / 工作区）。
+ * 这两项是"这个仓库现在什么状态"的全部答案，其余（与上游 / 今日完成 / 最后活跃）
+ * 都得点开看。非 Git 仓库、目录不存在、没选中项目时 gitSummary 会短于两项，
+ * 有几项显示几项 —— 不要为了凑数去编一句"未知"。
+ */
+const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).join(' · '))
 </script>
 
 <template>
@@ -806,10 +842,28 @@ const gitSummary = computed(() => {
       </ul>
 
       <!-- 历史：一行一份，点一条就把它换到上面看。只在有两份以上时出现 ——
-           只有一份时这个列表纯粹是噪音 -->
-      <div v-if="(reports || []).length > 1" class="oc__history">
-        <p class="oc__history-title">{{ $t('@WORKBENCH:历史报告') }}</p>
-        <ul class="oc__history-list">
+           只有一份时这个列表纯粹是噪音。
+           默认折起来：它是"回看"，不该跟正在看的那份抢高度（见 script 里 SECT_KEY 的注释） -->
+      <div
+        v-if="(reports || []).length > 1"
+        class="oc__history"
+        :class="{ 'is-collapsed': !historyOpen }"
+      >
+        <button
+          type="button"
+          class="oc__sect"
+          :aria-expanded="historyOpen"
+          :title="historyOpen ? $t('@WORKBENCH:收起') : $t('@WORKBENCH:展开')"
+          @click="toggleSect('history')"
+        >
+          <el-icon class="oc__sect-caret"><component :is="historyOpen ? ArrowDown : ArrowRight" /></el-icon>
+          <span class="oc__sect-title">{{ $t('@WORKBENCH:历史报告') }}</span>
+          <!-- 折起来时这一行就是全部内容：份数是它唯一值得一眼看到的信息 -->
+          <span class="oc__sect-meta">
+            <span class="oc__sect-brief">{{ $t('@WORKBENCH:共 {n} 份', { n: (reports || []).length }) }}</span>
+          </span>
+        </button>
+        <ul v-show="historyOpen" class="oc__history-list">
           <li v-for="r in reports" :key="r.id">
             <button
               type="button"
@@ -828,13 +882,29 @@ const gitSummary = computed(() => {
       </div>
     </div>
 
-    <div v-show="!collapsed && mode === 'command'" class="oc__git">
-      <p class="oc__panel-title">
-        {{ $t('@WORKBENCH:项目概览') }}
-        <!-- 无选中项目即「全部项目」：显式标出来，否则底下只剩「今日完成」一行，看着像数据没加载出来 -->
-        <span class="oc__git-name">{{ selectedProject ? selectedProject.name : $t('@WORKBENCH:全部项目') }}</span>
-      </p>
-      <dl class="oc__git-list">
+    <div
+      v-show="!collapsed && mode === 'command'"
+      class="oc__git"
+      :class="{ 'is-collapsed': !gitOpen }"
+    >
+      <button
+        type="button"
+        class="oc__sect"
+        :aria-expanded="gitOpen"
+        :title="gitOpen ? $t('@WORKBENCH:收起') : $t('@WORKBENCH:展开')"
+        @click="toggleSect('git')"
+      >
+        <el-icon class="oc__sect-caret"><component :is="gitOpen ? ArrowDown : ArrowRight" /></el-icon>
+        <span class="oc__sect-title">{{ $t('@WORKBENCH:项目概览') }}</span>
+        <span class="oc__sect-meta">
+          <!-- 无选中项目即「全部项目」：显式标出来，否则底下只剩「今日完成」一行，看着像数据没加载出来 -->
+          <span class="oc__git-name">{{ selectedProject ? selectedProject.name : $t('@WORKBENCH:全部项目') }}</span>
+          <!-- 折起来时再补上"这个仓库现在什么状态"：分支 + 工作区。
+               不补的话，收起等于把这块唯一要扫的信息也一起收了 -->
+          <span v-if="!gitOpen && gitBrief" class="oc__sect-brief">{{ gitBrief }}</span>
+        </span>
+      </button>
+      <dl v-show="gitOpen" class="oc__git-list">
         <template v-for="row in gitSummary" :key="row.label">
           <dt class="oc__git-label">{{ row.label }}</dt>
           <dd class="oc__git-value" :class="{ 'is-warn': row.tone === 'warn', 'is-danger': row.tone === 'danger' }">
@@ -1479,6 +1549,56 @@ const gitSummary = computed(() => {
 }
 .rpt__line.is-thought .rpt__tag { font-weight: 500; }
 
+/* ── 可收起的区块标题行（历史报告 / 项目概览共用）──────────
+   标题自己就是开关：窄栏里再塞一枚"收起"按钮就是再挤一处，
+   而这两块的内容（回看用的历史、Git 状态）都不是每眼都要读的。
+   折起来后这一行仍然带关键信息（各自的 .oc__sect-brief），
+   所以收起是"压缩"而不是"藏起来"。 */
+.oc__sect {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  margin: 0 0 4px;
+  padding: 2px;
+  border: none;
+  border-radius: var(--radius-base);
+  background: transparent;
+  color: var(--text-meta);
+  font-size: var(--font-size-xs);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--transition-fast) var(--ease-custom),
+              background var(--transition-fast) var(--ease-custom);
+}
+.oc__sect:hover { color: var(--text-secondary); background: var(--bg-subtle); }
+.oc__sect:focus-visible { outline: var(--focus-outline); outline-offset: -2px; }
+/* 箭头跟着开合转（ArrowRight ⇄ ArrowDown），与左栏任务分组同一套 */
+.oc__sect-caret { flex-shrink: 0; font-size: var(--font-size-xs); }
+.oc__sect-title { flex-shrink: 0; }
+/* 行尾那一段。**整行只有这一个 flex 项吃 margin-left: auto** ——
+   两个 auto 会把剩余空间对半分，项目名就飘到行中间去了 */
+.oc__sect-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  min-width: 0;
+}
+/* 名称这类可长的内容让它自己省略号，短的那截（份数 / 分支状态）不参与压缩 */
+.oc__sect-meta .oc__git-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.oc__sect-brief {
+  flex-shrink: 0;
+  color: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── 历史报告 ─────────────────────────────────────────── */
 .oc__history {
   flex-shrink: 0;
@@ -1486,11 +1606,6 @@ const gitSummary = computed(() => {
   overflow-y: auto;
   padding: 6px 10px 8px;
   border-top: 1px solid var(--border-color-light);
-}
-.oc__history-title {
-  margin: 0 2px 4px;
-  font-size: var(--font-size-xs);
-  color: var(--text-meta);
 }
 .oc__history-list { list-style: none; margin: 0; padding: 0; }
 .oc__history-item {
@@ -1563,6 +1678,14 @@ const gitSummary = computed(() => {
 }
 .oc__git-value.is-warn { color: var(--color-warning); }
 .oc__git-value.is-danger { color: var(--color-danger-light); }
+
+/* 折起来时只剩一行标题：把上下留白和列表的滚动框一起收掉，
+   否则"收起"名义上收了、高度还是赖着不走（这正是这次要修的东西） */
+.oc__git.is-collapsed,
+.oc__history.is-collapsed { padding-top: 4px; padding-bottom: 4px; }
+.oc__history.is-collapsed { max-height: none; overflow: visible; }
+.oc__git.is-collapsed .oc__sect,
+.oc__history.is-collapsed .oc__sect { margin-bottom: 0; }
 
 .oc__compose {
   padding: 8px 12px 10px;

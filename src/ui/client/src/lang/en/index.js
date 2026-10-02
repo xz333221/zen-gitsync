@@ -2472,6 +2472,7 @@ export default {
   '@WORKBENCH:上面是主 Agent 的判断，下面这些是从正在跑的任务里抄出来的事实': 'The block above is the master agent\'s own reading; the cards below are facts copied from the running tasks',
   '@WORKBENCH:暂无进度报告': 'No progress reports yet',
   '@WORKBENCH:历史报告': 'History',
+  '@WORKBENCH:共 {n} 份': '{n} saved',
   '@WORKBENCH:当时没有任务在执行': 'No tasks were running',
   '@WORKBENCH:生成这份报告时没有任务在执行': 'No tasks were running when this report was generated',
   '@WORKBENCH:当前没有正在执行的任务，没有可汇报的进度': 'No task is running right now — nothing to report',
