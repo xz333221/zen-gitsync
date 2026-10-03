@@ -204,7 +204,8 @@ export const useConfigStore = defineStore('config', () => {
   // AI 模型列表
   const models = ref<ModelInfo[]>([])
   // AI 智能体单轮最大工具调用次数（全局配置，CLI `g ai` 与 Web 智能体共用）
-  const aiMaxToolIterations = ref(200)
+  // 默认值必须与 src/config.js 的 aiMaxToolIterations 一致，配置读取前的首屏也靠它兜底。
+  const aiMaxToolIterations = ref(1000)
   // 工作台任务执行器**默认值**（全局配置）：claude | opencode | codex。
   // 只在「设置 → 通用设置 → 任务执行器」里改。执行入口旁的临时切换记在 ui.lastTaskExecutor，
   // 两者分开存 —— 前者是"配好的默认"，后者是"上次用的"，互相覆盖就没有各自的意义了。

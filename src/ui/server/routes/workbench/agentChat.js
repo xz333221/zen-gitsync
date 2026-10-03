@@ -50,7 +50,7 @@ import configManager from '../../../../config.js';
 
 // 单轮工具调用循环数的兜底值(防失控);实际值取全局配置 aiMaxToolIterations,
 // 与 CLI 侧 src/cli/ai/agent.js 共用同一个配置项。
-const DEFAULT_MAX_TOOL_ITERATIONS = 200;
+const DEFAULT_MAX_TOOL_ITERATIONS = 1000;
 
 // 读取全局配置里的单轮工具调用上限。
 // 读配置失败不该把整轮对话打挂 —— 退回默认值继续跑,比用户消息直接发不出去好。

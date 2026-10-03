@@ -467,7 +467,7 @@
                 <el-input-number
                   v-model="aiMaxToolIterationsInput"
                   :min="1"
-                  :max="2000"
+                  :max="10000"
                   :step="10"
                   :disabled="savingAiSettings"
                   class="ai-iterations-input"
@@ -872,7 +872,7 @@ const aiModels = ref<ModelInfo[]>([])
 const editingModelId = ref<string | null | undefined>(undefined) // undefined=隐藏, null=新增, string=编辑
 
 // AI 智能体运行时（全局设置，立即持久化，与模型列表一样不走"保存"按钮）
-const aiMaxToolIterationsInput = ref(200)
+const aiMaxToolIterationsInput = ref(1000)
 const savingAiSettings = ref(false)
 
 async function handleAiMaxToolIterationsChange(value: number | undefined) {

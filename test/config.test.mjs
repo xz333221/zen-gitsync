@@ -116,8 +116,9 @@ test('normalizeAiMaxToolIterations: 数字字符串与小数被接受', () => {
 })
 
 test('normalizeAiMaxToolIterations: 越界值夹取到区间而不是回退默认', () => {
-  // 用户改成 5000 的意图是"想更大",夹到 2000 比悄悄退回 200 更贴近意图
-  assert.equal(normalizeAiMaxToolIterations(5000), 2000)
+  // 用户改成 50000 的意图是"想更大",夹到上限比悄悄退回默认小值更贴近意图
+  assert.equal(normalizeAiMaxToolIterations(50000), 10000)
+  assert.equal(normalizeAiMaxToolIterations(2000), 2000)
   assert.equal(normalizeAiMaxToolIterations(0), 1)
   assert.equal(normalizeAiMaxToolIterations(-10), 1)
 })

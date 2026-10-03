@@ -539,8 +539,8 @@ Progress is saved after each tool result; `/resume` restores the working directo
 
 Tool-call budget: one message may trigger up to N tool calls in a row before the turn is
 force-ended with a "max tool iterations reached" notice (send another message to continue).
-N defaults to **200** and is configurable in **Settings → AI models → Agent Runtime**
-(`aiMaxToolIterations` in `~/.zen-gitsync/config.json`, range 1–2000) — the Web agent shares
+N defaults to **1000** and is configurable in **Settings → AI models → Agent Runtime**
+(`aiMaxToolIterations` in `~/.zen-gitsync/config.json`, range 1–10000) — the Web agent shares
 the same value.
 
 Images: press `Alt+V` in the REPL to paste a clipboard image (screenshot), or attach a
@@ -1222,9 +1222,9 @@ $ g ai --model=2                # 使用第 2 个已配置的模型（序号或�
 每个工具结果后保存进度，`/resume` 同时恢复工作目录和用量统计。
 
 工具调用预算：一条消息内智能体最多连续调用 N 次工具，触顶后本轮被强制结束并提示
-"已达单轮最大工具调用次数"，再发一条消息即可继续。N 默认 **200**，可在
+"已达单轮最大工具调用次数"，再发一条消息即可继续。N 默认 **1000**，可在
 **设置 → AI 模型配置 → 智能体运行时** 修改（即 `~/.zen-gitsync/config.json` 的
-`aiMaxToolIterations`，范围 1–2000），Web 端智能体共用同一项设置。
+`aiMaxToolIterations`，范围 1–10000），Web 端智能体共用同一项设置。
 
 图片：在 REPL 中按 `Alt+V` 粘贴剪贴板图片（截图），或用 `/image <路径>` 附加本地图片；
 图片以多模态 `image_url` 部件随下一条消息发送（需视觉模型）。单独 `/image` 查看待发送图片，
