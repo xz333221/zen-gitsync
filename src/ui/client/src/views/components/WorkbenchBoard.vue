@@ -835,7 +835,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
       <OrchestratorConsole
         ref="consoleRef"
         :active="active"
-        :running-count="running.length"
+        :running="running"
         :selected-project="selectedProject"
         :dispatching="dispatching"
         :toggling-schedule="togglingSchedule"

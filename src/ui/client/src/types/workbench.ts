@@ -378,6 +378,13 @@ export interface RunningAgent {
  */
 export interface ProgressReportFact {
   taskId: string | null
+  /**
+   * 这一轮执行的 job id（老记录没有，那时是 null）。
+   *
+   * 面板靠它判"这份报告讲的活还在不在跑"（见 OrchestratorConsole 的 reportIsLive）：
+   * 同一个任务重跑一轮会换一个 job，只比 taskId 会把上一轮的报告认成当前的。
+   */
+  jobId?: string | null
   taskTitle: string
   projectName: string
   startedAt: string | null

@@ -222,3 +222,29 @@ test('老报告（没有 percent 这个字段）读出来是 null，不是 0', a
   // 字段本身得在：前端拿 undefined 和拿 null 是两种分支，缺字段会让"不画"那条路走不到
   assert.ok('percent' in r.tasks[0]);
 });
+
+// ── jobId（面板判"这份报告讲的活还在不在跑"）────────────────────────────
+//
+// 2026-10-03：面板改成"报告只在它讲的任务还在跑时才挂在主位"，判据就是事实里的 jobId
+// 对上 running 里的 jobId（同一个任务重跑一轮会换一个 job，只比 taskId 会把上一轮
+// 的报告认成当前的）。而 jobId 是 buildRunningFacts 早就写好的，**只差 normalizeReport
+// 没把它留下来** —— 归一时被抹掉的话，面板永远退化成"拿不到 id"，这个判据形同虚设。
+
+test('事实里的 jobId 写进去、读回来都还在（别在归一那一步抹掉）', async () => {
+  await seed([]);
+  await appendReport(rawReport({
+    text: '正在收尾。',
+    tasks: [{ ...fact('t1', '任务 A'), jobId: 'job-1' }],
+  }));
+  const [r] = await readReports();
+  assert.equal(r.tasks[0].jobId, 'job-1');
+  // 落盘那份也得带着（读的那条可能来自内存缓存，写错字段要到下一次读盘才暴露）
+  assert.equal((await onDisk())[0].tasks[0].jobId, 'job-1');
+});
+
+test('老记录没有 jobId 时是 null（不是 undefined —— 前端两种走的是不同分支）', async () => {
+  await seed([rawReport({ id: 'legacy', tasks: [fact('t1', '老任务')] })]);
+  const [r] = await readReports();
+  assert.ok('jobId' in r.tasks[0], '字段本身必须在');
+  assert.equal(r.tasks[0].jobId, null);
+});

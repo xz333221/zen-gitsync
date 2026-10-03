@@ -363,6 +363,10 @@ function normalizeReport(raw) {
       .filter(t => t && typeof t === 'object')
       .map(t => ({
         taskId: typeof t.taskId === 'string' ? t.taskId : null,
+        // 这一轮执行的 job id。**别再把它归一掉**（2026-10-03 补）：面板靠它判断
+        // 「这份报告讲的活还在不在跑」—— 同一个任务重跑一轮会换一个 job，
+        // 只比 taskId 会把上一轮的报告认成当前的。老记录没有这一项，留 null。
+        jobId: typeof t.jobId === 'string' && t.jobId ? t.jobId : null,
         taskTitle: typeof t.taskTitle === 'string' ? t.taskTitle : '',
         projectName: typeof t.projectName === 'string' ? t.projectName : '',
         startedAt: typeof t.startedAt === 'string' ? t.startedAt : null,

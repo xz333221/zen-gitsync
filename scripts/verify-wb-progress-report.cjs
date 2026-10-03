@@ -24,6 +24,10 @@
  *   P12 「项目概览 / 历史报告」默认折成一行（标题行仍带份数 / 分支·工作区），
  *     折起来后报告窗口 ≥340px（原来只有 200 出头）；点标题行能开能合、
  *     选择记在 localStorage；**展开回去报告窗口必须掉回去**（反证高度出自这两块）
+ *   P13 报告只在它讲的任务**还在跑**时挂在主位（2026-10-03 反馈："我任务完成的时候
+ *     还显示之前的进度报告"）：跑完 → 主位空着并说实话；空闲时从历史点开 → 卡片回来
+ *     且标「已结束」；有别的任务在跑但没有覆盖到它们的报告 → 第三句实话。
+ *     P13a / P13b 是同一组断言的一对：唯一的差别就是那个 job 还在不在跑
  *   P8 无 JS 运行时异常 / 无控制台错误
  *   P9 截图存证
  *
@@ -81,7 +85,14 @@ async function readPanel(page) {
       historyActiveIndex: Array.from(document.querySelectorAll('.oc__history-item'))
         .findIndex(e => e.classList.contains('is-active')),
       historyActive: (document.querySelector('.oc__history-item.is-active .oc__history-sum')?.textContent || '').trim(),
-      empty: (document.querySelector('.oc-empty')?.textContent || '').trim(),
+      /** 空态那句话：三种原因（从没有过报告 / 全跑完了 / 有新任务但还没报告）说的是三件事 */
+  empty: (document.querySelector('.oc-empty')?.textContent || '').trim(),
+  /** 上面那句的悬停说明：交代"上一份去哪了" */
+  emptyTitle: document.querySelector('.oc-empty')?.getAttribute('title') || '',
+  /** 「已结束」那枚标：只有用户点开一份过期报告时才该出现 */
+  stale: (document.querySelector('.rp__stale')?.textContent || '').trim(),
+  /** 控制台顶栏那个实时计数（「{n} 个执行中」），用来判断桩有没有生效 */
+  runningMeta: (document.querySelector('.oc__state-meta')?.textContent || '').trim(),
       /** 进度条：卡片整体那条（`.rpt__bar` 是每个任务各自的那条，别混） */
       hasBar: !!card?.querySelector('.rp__bar'),
       barRole: card?.querySelector('.rp__bar')?.getAttribute('role') || '',
@@ -151,6 +162,99 @@ async function expandSect(page, sel) {
   return true
 }
 
+// ── 在跑列表的桩（2026-10-03）────────────────────────────────────────────
+// 面板判「这份报告还算不算当前」看的是报告里那个 job 在不在 running 里
+// （OrchestratorConsole 的 reportIsLive）。本机空闲时真实 running 恒为空，
+// 于是"自动挂载"那批断言会全红 —— 红的原因不是面板坏了，是环境里没有在跑的任务。
+//
+// 透传真实响应、只改 running 字段：interval / defaultPrompt / instructions
+// 还有别的断言在读真实值，整份写死会把那些一起弄瞎。
+// 真实 running **保留**再加桩 job（而不是替换）：本机真有任务在跑时，
+// P4 那批用真实报告的断言才成立。
+const PROBE_JOB = {
+  jobId: 'probe-job-1',
+  taskId: 'probe-0',
+  subId: null,
+  taskTitle: '桩任务 1',
+  status: 'running',
+  pid: 4242,
+  startedAt: new Date().toISOString(),
+  projectPath: 'C:\\workspace\\probe',
+  projectName: 'probe',
+}
+/** 另一个任务：用来造"确实有东西在跑，但手上那份报告讲的不是它" */
+const PROBE_OTHER_JOB = { ...PROBE_JOB, jobId: 'probe-job-other', taskId: 'probe-other' }
+
+/** 追加到真实 running 后面的桩 job（空数组 = 不追加）；null = 不桩 */
+let extraRunning = [PROBE_JOB]
+/** true = 把真实 running 一并丢掉，只留 extraRunning（验"空闲"要用它，否则本机真有任务就没法验） */
+let dropRealRunning = false
+/** 钉在报告列表最前的那份桩（null = 不钉，列表原样透传） */
+let pinnedReport = null
+
+async function installRunningStub(page) {
+  await page.route('**/api/workbench/orchestrator', async route => {
+    // 只吃 GET：写接口（/state /dispatch /report-interval…）另走各自的桩或真实链路
+    if (route.request().method() !== 'GET') return route.fallback()
+    const res = await route.fetch()
+    const json = await res.json().catch(() => null)
+    if (!json || typeof json !== 'object') return route.fulfill({ response: res })
+    const real = dropRealRunning ? [] : (Array.isArray(json.running) ? json.running : [])
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ...json, running: real.concat(extraRunning) }),
+    })
+  })
+}
+
+/**
+ * 把桩报告钉在列表最前。
+ *
+ * 面板的报告列表只被两样东西改写：「立即报告」的就地插入，和 30s 一次的 loadReports。
+ * 后者是**整体替换** —— 桩进去的那份 30 秒内就被抹掉，而本机真有任务在跑时
+ * 服务端还会时不时真出一份新报告顶上来，于是 P7 那批判据会读到别人的报告（偶发红，
+ * 红的原因不是面板坏了，是桩没活到断言那一刻）。
+ * 真实列表照旧透传，只在最前面插一份桩；不钉的时候（pinnedReport = null）完全不介入。
+ */
+async function installReportsStub(page) {
+  await page.route('**/api/workbench/orchestrator/reports', async route => {
+    if (route.request().method() !== 'GET' || !pinnedReport) return route.fallback()
+    const res = await route.fetch()
+    const json = await res.json().catch(() => null)
+    if (!json || !Array.isArray(json.reports)) return route.fulfill({ response: res })
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ...json,
+        reports: [pinnedReport, ...json.reports.filter(r => r && r.id !== pinnedReport.id)].slice(0, 20),
+      }),
+    })
+  })
+}
+
+/**
+ * 换一份桩状态并等它生效。
+ *
+ * running 走的是 5s 轮询，所以只能等 —— 用顶栏那个实时计数当"桩已生效"的信号，
+ * 而不是固定 sleep（慢机器上固定 sleep 会读到上一轮的旧状态，报出假 FAIL）。
+ */
+async function setRunning(page, jobs, { dropReal = true, want = null } = {}) {
+  extraRunning = jobs
+  dropRealRunning = dropReal
+  if (want === null) { await sleep(300); return }
+  await page.waitForFunction(
+    n => {
+      const el = document.querySelector('.oc__state-meta')
+      return !!el && /(\d+)/.test(el.textContent || '') && Number(el.textContent.match(/(\d+)/)[1]) === n
+    },
+    want,
+    { timeout: 20000 }
+  ).catch(() => {})
+  await sleep(300)
+}
+
 async function main() {
   const boot = await getJson('/api/workbench/orchestrator')
   if (!boot?.success) { console.error('读不到编排状态，dev server 起了吗？', boot); process.exit(2) }
@@ -175,6 +279,10 @@ async function main() {
 
   try {
     await page.goto(BASE, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    // 桩先装上：本机空闲时没有在跑的任务，"自动挂载"那批断言一条都不成立
+    // （详见 installRunningStub 的注释）
+    await installRunningStub(page)
+    await installReportsStub(page)
     await openCommandMode(page)
 
     /* ══ P1 面板在，活动日志不在 ══ */
@@ -392,8 +500,10 @@ async function main() {
         body: JSON.stringify({ success: true, report }),
       }))
     }
-    /** 点一次「立即报告」，把桩那份插到面板最前 */
+    /** 点一次「立即报告」，把桩那份插到面板最前。
+     *  同时钉进列表接口：30s 一次的整体刷新会把就地插入的那份抹掉（见 installReportsStub） */
     const stubOnce = async (report) => {
+      pinnedReport = report
       await stubPost(report)
       await clearToasts(page)
       await page.click('.oc__report-run')
@@ -615,6 +725,64 @@ async function main() {
     check('P12h 收起同样落盘（下次打开还是收起）',
       stored[0] === '0' && stored[1] === '0', `keys=${JSON.stringify(stored)}`)
     await page.unroute('**/api/workbench/orchestrator/report')
+
+    /* ══ P13 报告只在它讲的任务还在跑时才挂在主位（2026-10-03 反馈）══ */
+    // 反馈原话："我现在任务完成的时候还显示之前的进度报告"。
+    // 病根不在"报告留得太久"，而在主位**无条件**跟着最新那份走：报告是"生成那一刻"的
+    // 事实快照，任务收工之后卡片头上那句「1 个任务进行中」就是一句谎话 ——
+    // 而顶栏同一处正写着「0 个执行中」，两个数自己打起来了。
+    // 修法：跟着最新走时只认"还活着"的那份（报告事实的 jobId 对上 running 里的 jobId，
+    // 老记录没这个字段时退回 taskId）；用户从历史里点开的那份是明确的选择，照常显示。
+    // 这一组四步只改一件事：**手上那份报告讲的 job 在不在跑** ——
+    // P13a 与 P13d 就是同一组断言的一对，差别只有那一个变量。
+    await setRunning(page, [PROBE_JOB])
+    await stubOnce(stubReport(STUB_PERCENT, [70], '桩：这一轮还在跑。'))
+    let xm = await readPanel(page)
+    check('P13a 报告讲的 job 还在跑 → 挂在主位（不是一律藏起来）',
+      xm.trigger !== '' && /桩：这一轮还在跑/.test(xm.text),
+      `trigger="${xm.trigger}" text="${xm.text.slice(0, 30)}"`)
+    check('P13b 正在跑的那份**不标**「已结束」（那枚标只给过期报告）',
+      xm.stale === '', `stale="${xm.stale}"`)
+
+    // 换一个任务在跑（手上那份报告讲的还是已经收工的那个）→ 主位必须空出来，
+    // 而且要说"这批还没报告"，不能说"没有任务在跑"（此刻确实有一个在跑）
+    await setRunning(page, [PROBE_OTHER_JOB], { want: 1 })
+    await sleep(600)
+    xm = await readPanel(page)
+    check('P13c 有别的任务在跑、手上这份讲的不是它 → 不挂（否则又变成"之前的报告"）',
+      xm.trigger === '' && /还没有进度报告/.test(xm.empty),
+      `trigger="${xm.trigger}" empty="${xm.empty}" 顶栏="${xm.runningMeta}"`)
+
+    // 全跑完了 → 主位空着，并把话说清楚
+    await setRunning(page, [], { want: 0 })
+    await sleep(600)
+    xm = await readPanel(page)
+    check('P13d 任务跑完之后不再显示之前那份进度报告（这次反馈的那一条）',
+      xm.trigger === '' && /当前没有正在执行的任务/.test(xm.empty),
+      `trigger="${xm.trigger}" empty="${xm.empty}" 顶栏="${xm.runningMeta}"`)
+    check('P13e 空闲时那句话带一句说明（上一份去哪了，不会被当成加载失败）',
+      /已经跑完/.test(xm.emptyTitle), `title="${xm.emptyTitle.slice(0, 60)}"`)
+    // 存证：空闲态长什么样（用户反馈的就是这个画面）
+    await page.locator('.oc').screenshot({ path: path.resolve(__dirname, '../.tmp/verify-wb-progress-report-idle.png') }).catch(() => {})
+
+    // 空闲时从历史里点开一份 → 卡片回来，并标上「已结束」
+    // （"明确选择"优先于"自动跟随"，但得让人看得出它讲的那批已经收工了）
+    if (xm.historyCount < 2) {
+      await stubOnce(stubReport(30, [20], '桩：这份是上一轮跑完的。'))
+      await sleep(400)
+    }
+    await expandSect(page, '.oc__history')
+    await page.locator('.oc__history-item').first().click()
+    await sleep(400)
+    xm = await readPanel(page)
+    check('P13f 空闲时从历史里点一份：卡片回来 + 标「已结束」（不是白屏，也不是谎称还在跑）',
+      xm.trigger !== '' && xm.stale !== '' && xm.historyActiveIndex === 0,
+      `trigger="${xm.trigger}" stale="${xm.stale}" active=${xm.historyActiveIndex}`)
+    await page.locator('.oc').screenshot({ path: path.resolve(__dirname, '../.tmp/verify-wb-progress-report-stale.png') }).catch(() => {})
+    // 收尾：桩撤掉，别让它跟着截图存证（存证要的是真实状态）
+    await page.unroute('**/api/workbench/orchestrator')
+    extraRunning = [PROBE_JOB]
+    dropRealRunning = false
 
     /* ══ P8 无异常 ══ */
     check('P8a 无 JS 运行时异常', pageErrors.length === 0, pageErrors.join(' | ').slice(0, 300))

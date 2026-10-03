@@ -35,6 +35,7 @@ import type {
   ProgressReport,
   ProjectPromptEntry,
   ProjectSummary,
+  RunningAgent,
 } from '@/types/workbench'
 import { clockFromIso, formatDurationMs, relativeTimeFromIso } from '@/utils/relativeTime'
 import {
@@ -55,7 +56,15 @@ import type { TaskExecutorId } from '@/utils/taskExecutor'
 
 const props = defineProps<{
   active: boolean
-  runningCount: number
+  /**
+   * 正在执行的执行体（5s 轮询下发的 running 列表）。
+   *
+   * 传**列表**而不是只传一个数字：面板判"这份报告还算不算当前"要看的是
+   * "它讲的那个 job 还在不在跑"（见 reportIsLive），光有个数字判不出来。
+   * 「{n} 个执行中」那个数是这份列表长度的投影，面板里直接读 length，
+   * 不再单独收第二个来源（两个来源必然对不上）。
+   */
+  running: RunningAgent[]
   selectedProject: ProjectSummary | null
   dispatching: boolean
   togglingSchedule: boolean
@@ -407,17 +416,90 @@ onBeforeUnmount(() => {
 /** 当前展示的是哪一份。null = 跟着最新走（新报告落地后自动换上来） */
 const selectedReportId = ref<string | null>(null)
 
+/** 「{n} 个执行中」那个数。唯一的出处是 props.running 的长度（见 props 上的注释） */
+const runningCount = computed(() => (props.running || []).length)
+
+/**
+ * 正在跑的 job / 任务两套 id。
+ *
+ * 两边同源：报告事实（progressReport.buildRunningFacts）与在跑列表
+ * （index.js 的 buildRunningAgents）读的是同一份合并后的执行记录，所以 id 能直接比。
+ */
+const runningIds = computed(() => {
+  const list = props.running || []
+  return {
+    job: new Set(list.map(j => j.jobId).filter(Boolean)),
+    task: new Set(list.map(j => j.taskId).filter(Boolean)),
+  }
+})
+
+/**
+ * 这份报告讲的活**现在还在不在跑**。
+ *
+ * 报告是"生成那一刻"的事实快照：任务跑完之后它描述的一切都已经过期，
+ * 而卡片头上那句「{n} 个任务进行中」会变成一句谎话
+ * （用户 2026-10-03 反馈："我任务完成的时候还显示之前的进度报告"）。
+ *
+ * 判据用 jobId：同一个任务重跑一轮会换一个 job，只比 taskId 会把上一轮的报告
+ * 认成当前的。老记录没有 jobId，退回比 taskId；两个都没有就当它过期。
+ */
+function reportIsLive(r: ProgressReport | null | undefined): boolean {
+  if (!r) return false
+  const ids = runningIds.value
+  return (r.tasks || []).some(t =>
+    (t.jobId && ids.job.has(t.jobId)) || (!t.jobId && !!t.taskId && ids.task.has(t.taskId))
+  )
+}
+
+/**
+ * 跟着最新走时该挂哪一份：**最新那份还"活着"的**报告。
+ *
+ * 只按"最新的"取会踩同一个坑：任务 A 跑完、任务 B 刚起，而最新那份讲的是 A，
+ * 于是主位立刻又挂回上一轮的报告 —— 换个由头重复用户抱怨的那件事。
+ * 从新的那批往回找，找不到就空着（面板会说实话，见 idleHint）。
+ */
+const liveReport = computed<ProgressReport | null>(() => {
+  const list = props.reports || []
+  return list.find(reportIsLive) || null
+})
+
 /**
  * 正在展示的那份报告。
  *
- * selectedId 指向的那份被历史淘汰（上限 20 份）时自动退回最新一份 ——
- * 用的是「找不到就取第一份」而不是「找不到就显示空」，免得面板莫名其妙变白。
+ * 优先级：用户从历史里点的那份 → 最新那份还活着的。
+ * 点过的那份即便被历史淘汰（上限 20 份）找不到了，也只是退回"跟随活着的"，
+ * 而不是凭空显示一份过期的（那正是这次要修掉的行为）。
  */
 const currentReport = computed<ProgressReport | null>(() => {
   const list = props.reports || []
   if (!list.length) return null
-  return list.find(r => r.id === selectedReportId.value) || list[0]
+  if (selectedReportId.value) {
+    const picked = list.find(r => r.id === selectedReportId.value)
+    if (picked) return picked
+  }
+  return liveReport.value
 })
+
+/** 主位上这份已经过期（只有用户主动点开历史时才会出现这种情况） */
+const currentReportStale = computed(() => !!currentReport.value && !reportIsLive(currentReport.value))
+
+/**
+ * 主位空着时说的那句话 —— 两种"现在没有当前报告"的原因完全不是一回事：
+ *   · 一份报告都没有 → 说"暂无"；
+ *   · 有历史但最新的那份讲的任务都跑完了 → 说"当前没有正在执行的任务"
+ *     （此刻确实还有新任务在跑，只是还没有覆盖到它们的那份 → 第三句）。
+ * 一律写"暂无"会让人以为面板坏了，或者白等一份永远不会来的报告。
+ */
+const idleHint = computed(() => {
+  if (!(props.reports || []).length) return $t('@WORKBENCH:暂无进度报告')
+  return runningCount.value > 0
+    ? $t('@WORKBENCH:这批任务还没有进度报告')
+    : $t('@WORKBENCH:当前没有正在执行的任务')
+})
+/** 上面那句话的悬停说明：交代"上一份去哪了"，免得被当成加载失败 */
+const idleHintTitle = computed(() =>
+  (props.reports || []).length ? $t('@WORKBENCH:最新那份报告讲的任务已经跑完了，要回看可以从历史报告里点开') : ''
+)
 
 function pickReport(r: ProgressReport) { selectedReportId.value = r.id }
 
@@ -718,6 +800,13 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
             <span class="rp__trigger" :class="{ 'is-auto': currentReport.trigger === 'auto' }">
               {{ currentReport.trigger === 'auto' ? $t('@WORKBENCH:自动') : $t('@WORKBENCH:手动') }}
             </span>
+            <!-- 用户从历史里点开一份已经过期的报告时标一下：下面那句「N 个任务进行中」
+                 是生成那一刻的事实，现在早就跑完了，不标会看着像还在跑 -->
+            <span
+              v-if="currentReportStale"
+              class="rp__stale"
+              :title="$t('@WORKBENCH:这份报告讲的任务已经跑完了，内容只反映生成那一刻的情况')"
+            >{{ $t('@WORKBENCH:已结束') }}</span>
             <span class="rp__count">
               {{ $t('@WORKBENCH:{n} 个任务进行中', { n: currentReport.tasks.length }) }}
             </span>
@@ -836,8 +925,8 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
             </ul>
           </div>
         </li>
-        <li v-else class="oc-empty">
-          {{ $t('@WORKBENCH:暂无进度报告') }}
+        <li v-else class="oc-empty" :title="idleHintTitle">
+          {{ idleHint }}
         </li>
       </ul>
 
@@ -1313,6 +1402,14 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 /* 自动那份是"系统自己说的"，手动那份才是"你刚才要的" —— 颜色分得开，
    回看历史时一眼能认出哪几份是自己点出来的 */
 .rp__trigger.is-auto { color: var(--text-meta); font-weight: 400; }
+/* 「已结束」：只有用户主动点开一份过期报告时才出现，所以用中性色而不是告警色——
+   那不是异常，是历史。位置紧跟触发方式，让"自动/手动 + 已结束"连成一枚状态读数 */
+.rp__stale {
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-active);
+  color: var(--text-meta);
+}
 /* 任务数给一枚淡底小标：它是这张卡"覆盖了几个任务"的一眼答案，
    不做底色的话会和右边的时间戳混成同一行的普通文字 */
 .rp__count {
