@@ -51,7 +51,9 @@ export async function runAgentTurn(state, userText, t, images = [], dependencies
     }
     state.messages.push({ role: 'user', content: userContent })
     await checkpoint()
-    const maxIterations = state.maxToolIterations > 0 ? state.maxToolIterations : 200
+    // 兜底只在 state.maxToolIterations 缺失/非正数时生效,正常路径由 loadConfig 规范化后传入。
+    // 默认值与 config.js 的 aiMaxToolIterations 保持一致(1000),别让两处悄悄分叉。
+    const maxIterations = state.maxToolIterations > 0 ? state.maxToolIterations : 1000
     for (let iter = 0; iter < maxIterations; iter++) {
       if (cancelled()) { stats.status = 'cancelled'; return stats }
       const spinner = ui.startSpinner(t.waiting)
