@@ -409,8 +409,9 @@ function onBeforeUnloadPersist() {
 
 const promptDialog = reactive({ visible: false, editing: null as Prompt | null, name: '', content: '', aiLoading: false, projectPath: '' })
 const instructionDialog = reactive({ visible: false, text: '', loading: false, saving: false })
-// 任务描述（主任务 desc + 附件）默认展开，用户编辑时一眼可见,不必每次点开
-const taskDescExpanded = ref(true)
+// 任务描述（主任务 desc + 附件）默认折叠，避免撑满首屏、把对话区挤到折叠线以下
+// （内容不空也不自动展开：有内容时摘要行右侧有「已填写」徽标 + 附件数作为信号）
+const taskDescExpanded = ref(false)
 
 // ── 提示词按项目过滤 ────────────────────────────────────────────────────
 // 全局提示词的 projectPath = '' (空串);右侧下拉只展示「当前项目专属 + 全局」两部分。
@@ -789,16 +790,16 @@ function autoGrowTextarea(ev?: Event) {
   el.style.overflowY = el.scrollHeight > maxPx ? 'auto' : 'hidden'
 }
 
-// 切换/新建任务时,如果描述折叠展开着,需要重新计算一次高度
-// (上一任务写入的 height 可能不是新任务的最佳值)
+// 默认折叠时首屏不渲染 textarea 高度；一旦展开（含首屏是展开态的历史会话）都补一次 recalc，
+// 否则切换任务后 textarea 会沿用上一个任务写入的 height。
 watch(taskDescExpanded, async (open) => {
   if (open) {
     await nextTick()
     autoGrowTextarea()
   }
 })
-// 默认展开后,首屏直接渲染 textarea 但 watch 不会触发(initial value 不算 change)。
-// 这里兜底:selectedTask 切换 / 首次加载时,如果已展开就 recalc 一次高度。
+// 切换/新建任务时,如果描述是展开着的,需要重新计算一次高度
+// (上一任务写入的 height 可能不是新任务的最佳值)
 watch(
   () => selectedTask.value?.id,
   async () => {
