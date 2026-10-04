@@ -1,21 +1,29 @@
 /**
- * 看板角色色 —— 浓度分层 + 列头/首卡间距。
+ * 角色色 —— 浓度分层 + 列头/首卡间距 + 进度条填充亮度。
  *
- * 守的契约（对应 variables.scss / dark-theme.scss 的 `--role-*` 与 WorkbenchKanban.vue）：
- *   C1  角色色的 surface / wash **不许从 ink 调**。
+ * 守的契约（对应 variables.scss / dark-theme.scss 的 `--role-*` 与
+ * WorkbenchKanban.vue / WorkbenchProjectPanel.vue / OrchestratorConsole.vue）：
+ *   C1  角色色的 surface / wash / **bar** 一律**不许从 ink 调**。
  *       ink 是为小字过 AA 4.5:1 刻意压暗的档（active 的 ink 是 #b45309 深棕），
  *       拿它当调色源，4~14% 兑出来是灰褐 / 灰绿 —— 这正是用户 2026-10-04 报的
  *       "白色主题下颜色偏深偏暗"。调色源必须是 hue。
- *   C2  五个角色 × hue / ink / surface / wash / edge 齐全，且
- *       dark-theme.scss 必须**整套**覆盖 surface + wash ——
+ *       同日第四轮的"进度条还是偏深"是同一个错的另一个出口：
+ *       进度条**整条**吃了 ink，所以这里把 bar 也一并纳进 C1。
+ *   C2  五个角色 × hue / ink / surface / wash / edge / bar 齐全，且
+ *       dark-theme.scss 必须**整套**覆盖 surface + wash + bar ——
  *       浅色那套是不透明的（基底是白的 --surface-elevated），漏覆盖 = 暗色下满屏白板。
  *   C3  列身 / 列头 / 首卡之间得分得开：列头色带必须比列身浓，列身必须比底板亮。
  *   C4  列头与首卡之间要有间距 —— 曾是 0（`padding: 0 12px 12px`），
  *       首卡和列头色带贴死，用户报"卡片和上边的看板类型的 title 之间没有间距"。
+ *   C5  进度条填充不许直接吃 ink（三个消费点：项目列表 / 控制台进度报告 /
+ *       任务事实每条进度），必须走 --role-*-bar。
+ *   C6  进度条填充**实测亮度**（WCAG 相对亮度）：亮于同角色 ink ≥1.6×
+ *       （pending 档 ≥1.05×，它的 hue 与 ink 同族）、对轨道 ≥2.0:1。
+ *       两头都卡 —— 见 C6 处的取舍说明。
  *
  * ⚠️ 断言用**几何量 + 合成后的实际底色**（getComputedStyle 一路往父层合成到不透明为止），
- *   不是"截图看着对"。--reverse 把旧写法（ink 调色 + 透明 + 上边距 0）注回去，
- *   C1 / C3 / C4 必须变红 —— 证明这些断言守的是这套值本身，而不是"页面没崩"。
+ *   不是"截图看着对"。--reverse 把旧写法（ink 调色 + 透明 + 上边距 0 + 进度条吃 ink）
+ *   注回去，C1 / C3 / C4 / C6 必须变红 —— 证明这些断言守的是这套值本身，而不是"页面没崩"。
  */
 const path = require('node:path')
 const fs = require('node:fs')
@@ -46,18 +54,23 @@ const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\
 // ─────────────────────────────────────────────────────────────
 console.log('── A. 静态断言 ──')
 
-// C1 淡底必须调自 hue，不能调自 ink
+// C1 淡底 / 进度条填充必须调自 hue，不能调自 ink
 //    这里**只**管角色令牌表，不去扫组件 —— 组件里从 ink 调色有正当用法
 //    （AiQuickPushButton 的 hover 是 `color-mix(--role-ai-ink 86%, #000)`，
 //    那是在把实心色压暗，不是拿它当淡底）。会渲染成"脏"的是**低浓度的大面积底**，
 //    那部分由下面的 C3 用真实合成色去守。
+//    bar 只在**浅色**表里查 hue（暗色的 bar 故意就是 ink，理由见下面那个 slots）。
 {
   const tables = ['styles/variables.scss', 'styles/dark-theme.scss']
     .map((p) => [p, stripComments(fs.readFileSync(path.join(SRC, p), 'utf8'))])
   const bad = []
   for (const [name, t] of tables) {
+    // 暗色那张表**不查 bar**：暗色里 bar 就是 ink（ink 在暗色走亮档 #34d399 / #fbbf24），
+    // 把浅色那套"hue 兑 ink"搬过去只会把条压暗 —— 这是设计决定，不是漏改。
+    // 对应地 C2b 仍然要求暗色表里有 bar，别把覆盖整条删了。
+    const slots = name.endsWith('dark-theme.scss') ? ['surface', 'wash'] : ['surface', 'wash', 'bar']
     for (const r of ROLES) {
-      for (const slot of ['surface', 'wash']) {
+      for (const slot of slots) {
         const m = t.match(new RegExp(`--role-${r}-${slot}\\s*:([^;]+);`))
         if (!m) continue
         if (!new RegExp(`var\\(--role-${r}-hue`).test(m[1])) {
@@ -66,7 +79,7 @@ console.log('── A. 静态断言 ──')
       }
     }
   }
-  check('C1 角色淡底一律调自 hue（从 ink 调出来的是灰褐/灰绿）', bad.length === 0,
+  check('C1 角色的淡底与进度条填充一律调自 hue（从 ink 调出来的是灰褐/灰绿/发沉）', bad.length === 0,
     bad.length ? bad.slice(0, 4).join(' | ') : '')
 }
 
@@ -77,15 +90,35 @@ console.log('── A. 静态断言 ──')
   const missingLight = []
   const missingDark = []
   for (const r of ROLES) {
-    for (const slot of ['hue', 'ink', 'surface', 'wash', 'edge']) {
+    for (const slot of ['hue', 'ink', 'surface', 'wash', 'edge', 'bar']) {
       if (!new RegExp(`--role-${r}-${slot}\\s*:`).test(v)) missingLight.push(`--role-${r}-${slot}`)
     }
-    for (const slot of ['surface', 'wash']) {
+    for (const slot of ['surface', 'wash', 'bar']) {
       if (!new RegExp(`--role-${r}-${slot}\\s*:`).test(d)) missingDark.push(`--role-${r}-${slot}`)
     }
   }
-  check('C2a 五个角色 × hue/ink/surface/wash/edge 齐全', missingLight.length === 0, missingLight.join(' '))
-  check('C2b dark-theme.scss 整套覆盖 surface + wash（否则暗色下白板）', missingDark.length === 0, missingDark.join(' '))
+  check('C2a 五个角色 × hue/ink/surface/wash/edge/bar 齐全', missingLight.length === 0, missingLight.join(' '))
+  check('C2b dark-theme.scss 整套覆盖 surface + wash + bar（否则暗色下白板 / 条被压暗）', missingDark.length === 0, missingDark.join(' '))
+}
+
+// C5 进度条填充不许吃 ink。三个消费点各是一条 `background:`，这里按选择器抓那一条，
+//    不去全文 grep —— 同文件里 ink 还有正当用法（文字/图标/图标底色）。
+{
+  const consumers = [
+    ['views/components/WorkbenchProjectPanel.vue', /\.proj-item__bar-fill\s*\{([^}]*)\}/g, 3],
+    ['views/components/OrchestratorConsole.vue', /\.rp__bar-fill\s*\{([^}]*)\}/g, 1],
+    ['views/components/OrchestratorConsole.vue', /\.rpt__bar-fill\s*\{([^}]*)\}/g, 1],
+  ]
+  const bad = []
+  for (const [rel, re, atLeast] of consumers) {
+    const t = stripComments(fs.readFileSync(path.join(SRC, rel), 'utf8'))
+    const hits = [...t.matchAll(re)].map((m) => m[1])
+    const okOnes = hits.filter((b) => /background:\s*var\(--role-[a-z]+-bar\)/.test(b))
+    if (okOnes.length < atLeast) {
+      bad.push(`${rel} ${re.source.split('\\')[0]} 命中 ${hits.length} 条、走 bar 的 ${okOnes.length} 条（要 ≥${atLeast}）`)
+    }
+  }
+  check('C5 三个进度条消费点都走 --role-*-bar（不吃 ink）', bad.length === 0, bad.join(' | '))
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -134,7 +167,25 @@ const MEASURE = () => {
     return acc
   }
   const lum = (c) => (c ? +((0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255).toFixed(4) : null)
+  /* C6 用的是**真正的 WCAG 相对亮度**（先线性化），不是上面那个加权平均。
+     上面那个当"谁比谁亮"的排序够用（C3a/C3b 都是同一把尺子比大小），
+     但它不是对比度公式的输入 —— 拿它算出来的"对比度"会比真值低一档
+     （实测 done 1.7 vs 真值 2.46），照着调阈值就等于把标准定错了。 */
+  const lin = (v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4) }
+  const wcag = (c) => (c ? 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b) : null)
   const rgb = (c) => (c ? `rgb(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)})` : 'none')
+  const contrast = (a, b) => {
+    const [x, y] = [wcag(a), wcag(b)].sort((p, q) => q - p)
+    return +((x + 0.05) / (y + 0.05)).toFixed(2)
+  }
+  /** 令牌表里的 ink 是 `var(--color-*-dark)` 链，getComputedStyle 读自定义属性时
+      已经做过替换，所以这里只会拿到 `#rrggbb` 字面量。 */
+  const hexc = (s) => {
+    const m = String(s).trim().match(/^#([0-9a-f]{6})$/i)
+    return m
+      ? { r: parseInt(m[1].slice(0, 2), 16), g: parseInt(m[1].slice(2, 4), 16), b: parseInt(m[1].slice(4, 6), 16), a: 1 }
+      : null
+  }
 
   const cols = Array.from(document.querySelectorAll('.kb-col'))
   const out = { canvas: null, cols: [], running: null, error: null, plain: null, gap: null, padTop: null }
@@ -161,6 +212,39 @@ const MEASURE = () => {
   out.error = st(e)
   out.plain = st(p)
   if (out.cols[0]) { out.gap = out.cols[0].gap; out.padTop = out.cols[0].padTop }
+
+  /* 进度条填充：**强制**把三行分别摆成 idle / 在跑 / 已完成再量。
+     实时数据里三种状态不一定同时在场（没有在跑的活儿时琥珀条压根不渲染），
+     顺着数据量就会出现"这条断言今天没测、明天才红"的假象。 */
+  out.bars = []
+  const barRows = Array.from(document.querySelectorAll('.proj-item')).filter(
+    (n) => n.querySelector('.proj-item__bar-fill') && n.querySelector('.proj-item__bar'),
+  )
+  const rootCS = getComputedStyle(document.documentElement)
+  const ROLE_UI = [
+    ['pending', (n) => n.classList.remove('is-running', 'is-complete')],
+    ['active', (n) => { n.classList.remove('is-complete'); n.classList.add('is-running') }],
+    ['done', (n) => { n.classList.remove('is-running'); n.classList.add('is-complete') }],
+  ]
+  ROLE_UI.forEach(([role, apply], i) => {
+    const row = barRows[i]
+    if (!row) return
+    apply(row)
+    const f = parse(getComputedStyle(row.querySelector('.proj-item__bar-fill')).backgroundColor)
+    const track = resolveBg(row.querySelector('.proj-item__bar'))
+    const ink = hexc(rootCS.getPropertyValue(`--role-${role}-ink`))
+    out.bars.push({
+      role,
+      fill: rgb(f),
+      fillLum: +wcag(f).toFixed(4),
+      ink: ink ? rgb(ink) : null,
+      inkLum: ink ? +wcag(ink).toFixed(4) : null,
+      // 记的是实时墨水色而不是硬编码 —— 令牌表改了这里跟着改，比值才一直有意义
+      ratio: ink ? +(wcag(f) / wcag(ink)).toFixed(2) : null,
+      track: rgb(track),
+      contrast: contrast(f, track),
+    })
+  })
   return out
 }
 
@@ -168,7 +252,8 @@ const MEASURE = () => {
  *  列身 = 各角色 4~6% 的**透明**淡底（落在深灰底板上再掉一档明度）；
  *  列头 = `color-mix(--col-ink 14%)` —— 从压暗过的 ink 调色（灰褐/灰绿的来源）；
  *  状态卡 = 同一个 6% 透明淡底直接当卡片自己的背景（盖掉卡片的白底）；
- *  列表上内边距 = 0。 */
+ *  列表上内边距 = 0；
+ *  进度条 = 三条直接吃 ink（第四轮"进度条还是偏深"的来源）。 */
 const LEGACY_CSS = `
   .kb-col { background: color-mix(in srgb, #64748b 6%, transparent) !important; }
   .kb-col.kb-col--doing { background: color-mix(in srgb, var(--color-warning) 6%, transparent) !important; }
@@ -177,6 +262,10 @@ const LEGACY_CSS = `
   .kb-card.is-running { background: color-mix(in srgb, var(--color-warning) 6%, transparent) !important; }
   .kb-card.has-error { background: color-mix(in srgb, var(--color-danger) 6%, transparent) !important; }
   .kb-col__list { padding: 0 12px 12px !important; }
+  /* 进度条吃 ink —— 2026-10-04 第四轮前的写法（"黄色和绿色的进度条还是感觉有点深"） */
+  .proj-item__bar-fill { background: var(--role-pending-ink) !important; }
+  .proj-item.is-running .proj-item__bar-fill { background: var(--role-active-ink) !important; }
+  .proj-item.is-complete .proj-item__bar-fill { background: var(--role-done-ink) !important; }
 `
 
 async function main() {
@@ -200,6 +289,15 @@ async function main() {
     await page.waitForSelector('.board', { timeout: 20000 })
     await page.waitForSelector('.kb-col .kb-card', { timeout: 20000 })
     await sleep(1500)
+
+    /* ① 本文件所有运行时常量都是**浅色**口径（C3c/C3d 要求 lum ≥ 0.90、
+          C6 要求进度条亮于 ink）—— 用户机器上如果是暗色主题，这些断言会集体假红。
+          量之前钉死浅色，比"看运气"强。
+       ② 底色 / 进度条都挂了 transition，改完 class 立刻读拿到的是**过渡中的当前值**
+          （等于读到改之前那一版）。先把过渡关掉，读数才是落点。 */
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'))
+    await page.addStyleTag({ content: '*, *::before, *::after { transition: none !important; }' })
+    await sleep(200)
 
     if (REVERSE) {
       await page.evaluate((css) => {
@@ -247,6 +345,29 @@ async function main() {
       `gaps=${gaps.join(',')} padTop=${m.padTop}`)
     check('C4b .kb-col__list 上内边距不为 0', m.padTop !== '0px' && m.padTop !== null, `padding-top=${m.padTop}`)
 
+    // C6 进度条填充的**实测亮度**。两头都卡，因为用户报过两次"深"，
+    //    而"浅到看不见"是它的对称失败：
+    //   下限方向（不许再深）：填充亮度 ≥ 同角色 ink 亮度 × 1.6
+    //   上限方向（不许糊）：填充对轨道 ≥ 2.0:1
+    //   ⚠️ 只有 1.6× 这条能在 --reverse 里变红（旧写法 = ink，比值恒为 1.0）。
+    //      2.0:1 那条旧写法反而更高（4.1~4.4:1），拿它做反向证据是错的 ——
+    //      它的边界是**反方向**的：注一版 `--role-*-hue` 纯色进去（比值 2.7~3.0×，
+    //      C6a 反而更绿）才会把 C6b 顶红，实测 amber 1.78:1 / done 2.02:1 越界。
+    const bars = m.bars || []
+    bars.forEach((b) => console.log(`        进度条 ${b.role.padEnd(7)} 填充 ${b.fill} lum=${b.fillLum} | ink ${b.ink} lum=${b.inkLum} 亮 ${b.ratio}× | 轨道 ${b.track} 对比 ${b.contrast}:1`))
+    /* 每档的下限不同：pending 的 hue(#64748b) 与 ink(#5b6472) 本来就同族，
+       浅色档不该为了"亮"把它洗成灰白 —— 它答的是"这个项目没在跑"，静默是它的语义。
+       所以那档只卡"不许退回 ink"，有色的两档才卡 1.6×。 */
+    const BAR_FLOOR = { pending: 1.05, active: 1.6, done: 1.6 }
+    const deep = bars.filter((b) => !(b.ratio >= (BAR_FLOOR[b.role] || 1.6)))
+    check('C6a 进度条填充亮于同角色 ink（active/done ≥1.6×，pending ≥1.05×）',
+      bars.length === 3 && deep.length === 0,
+      bars.length !== 3
+        ? `只量到 ${bars.length} 条（.proj-item 不够三条）`
+        : bars.map((b) => `${b.role} ${b.ratio}×/≥${BAR_FLOOR[b.role]}`).join(' '))
+    check('C6b 进度条填充对轨道 ≥2.0:1', bars.length === 3 && bars.every((b) => b.contrast >= 2.0),
+      bars.map((b) => `${b.role} ${b.contrast}:1`).join(' '))
+
     await page.locator('.kb__columns').first().screenshot({ path: path.join(SHOT_DIR, REVERSE ? 'kanban-legacy.png' : 'kanban.png') })
     await browser.close()
   } catch (err) {
@@ -271,6 +392,7 @@ async function main() {
     'C3d 出错的卡是浅红底（lum ≥ 0.90 且 r > g）',
     'C4a 列头与首卡之间有间距（≥ 8px）',
     'C4b .kb-col__list 上内边距不为 0',
+    'C6a 进度条填充亮于同角色 ink（active/done ≥1.6×，pending ≥1.05×）',  // 旧写法直接吃 ink，比值恒 1.0
   ]
   let okOverall
   if (REVERSE) {

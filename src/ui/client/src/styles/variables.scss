@@ -846,6 +846,25 @@
      这里只是把那个既有身份收进角色表，不是新增色相。 */
   --role-ai-ink: var(--color-think-dark);
 
+  /* bar —— 进度条填充。
+     第七支槽位，起因是 2026-10-04 第四轮反馈：**「白色主题下黄色和绿色的进度条
+     还是感觉有点深」**。进度条过去是直接吃 ink 的，而 ink 是为小字过 AA 4.5:1
+     刻意压暗的档（active = #b45309 深棕、done = #047857 墨绿）——
+     4px 高、一屏 30 条排下来整列发沉。这和"淡底从 ink 调"是同一个错，
+     只是换了个元素：**实心色块（不是文字）不该继承文字的对比度预算**。
+     改成从 hue 兑 30% ink：保住"实心块要有体量"，亮度抬一倍
+     （active L 0.159 → 0.336、done 0.141 → 0.290）。
+     ⚠️ 与轨道的对比度因此从 4.1~4.4:1 降到 2.2~2.5:1，**这是有意的折中**：
+     近白轨道上"用户要的轻"和 WCAG 非文本 3:1 不可能同时成立 ——
+     3:1 要求填充亮度 ≤0.25，那正是 #059669 以下的深档。
+     两头由 verify:wb-colors 的 C6 卡住：亮于 ink 1.6×（不许再深）、
+     对轨道 ≥2.0:1（不许浅到糊在轨道里）。 */
+  --role-pending-bar: color-mix(in srgb, var(--role-pending-hue) 70%, var(--role-pending-ink));
+  --role-active-bar:  color-mix(in srgb, var(--role-active-hue) 70%, var(--role-active-ink));
+  --role-done-bar:    color-mix(in srgb, var(--role-done-hue) 70%, var(--role-done-ink));
+  --role-error-bar:   color-mix(in srgb, var(--role-error-hue) 70%, var(--role-error-ink));
+  --role-ai-bar:      color-mix(in srgb, var(--role-ai-hue) 70%, var(--role-ai-ink));
+
   --role-pending-surface: color-mix(in srgb, var(--role-pending-hue) 9%, var(--surface-elevated));
   --role-active-surface:  color-mix(in srgb, var(--role-active-hue) 9%, var(--surface-elevated));
   --role-done-surface:    color-mix(in srgb, var(--role-done-hue) 9%, var(--surface-elevated));

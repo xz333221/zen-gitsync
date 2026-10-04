@@ -1122,13 +1122,16 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   /* 2026-10-04：原本是 var(--gradient-progress)（primary→primary-light 蓝渐变），
      30 个项目排下来是一条条同一个蓝，进度条完全没传递信息。
      改成按角色上色（父级 .proj-item.is-running / .is-complete 决定），
-     于是"哪个项目有活儿在跑""哪个已经收尾"扫一眼就知道。 */
-  background: var(--role-pending-ink);
+     于是"哪个项目有活儿在跑""哪个已经收尾"扫一眼就知道。
+     同日第四轮：颜色从 `--role-*-ink` 换成 `--role-*-bar` ——
+     用户反馈"白色主题下黄色和绿色的进度条还是感觉有点深"，
+     ink 是给文字过 AA 的暗档，当 4px 实心块用会把整列压沉。 */
+  background: var(--role-pending-bar);
   transition: width var(--transition-base) var(--ease-custom),
               background var(--transition-fast) var(--ease-custom);
 }
-.proj-item.is-running .proj-item__bar-fill { background: var(--role-active-ink); }
-.proj-item.is-complete .proj-item__bar-fill { background: var(--role-done-ink); }
+.proj-item.is-running .proj-item__bar-fill { background: var(--role-active-bar); }
+.proj-item.is-complete .proj-item__bar-fill { background: var(--role-done-bar); }
 .proj-item__progress-text {
   flex-shrink: 0;
   font-size: var(--font-size-xs);

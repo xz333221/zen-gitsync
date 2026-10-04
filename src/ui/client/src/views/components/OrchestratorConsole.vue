@@ -1460,12 +1460,13 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   overflow: hidden;
 }
 /* 2026-10-04：原本是 --gradient-progress（蓝渐变）。这条进度表示
-   「正在跑的活儿到哪一步」，跟看板「进行中」是同一件事，于是走同一个角色。 */
+   「正在跑的活儿到哪一步」，跟看板「进行中」是同一件事，于是走同一个角色。
+   同日第四轮：从 ink 换成 bar（ink 是文字的暗档，4px 实心块吃它整屏发沉）。 */
 .rp__bar-fill {
   display: block;
   height: 100%;
   border-radius: var(--radius-pill);
-  background: var(--role-active-ink);
+  background: var(--role-active-bar);
   transition: width var(--transition-base) var(--ease-custom);
 }
 .rp__percent {
@@ -1620,7 +1621,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   display: block;
   height: 100%;
   border-radius: var(--radius-pill);
-  background: var(--role-active-ink);
+  background: var(--role-active-bar);
   transition: width var(--transition-base) var(--ease-custom);
 }
 .rpt__percent {

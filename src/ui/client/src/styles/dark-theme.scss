@@ -216,6 +216,14 @@ html[data-theme="dark"] {
   --role-error-surface: color-mix(in srgb, var(--role-error-hue) 9%, transparent);
   --role-error-wash: color-mix(in srgb, var(--role-error-hue) 16%, transparent);
   --role-ai-ink: #a78bfa;
+  /* bar 在暗色 = ink 本身：暗色里 ink 走的是**亮**档
+     （emerald #34d399 / amber #fbbf24），本来就不存在"发沉"的问题；
+     浅色那套 hue 兑 ink 的混法搬到暗底上反而会把条压暗。 */
+  --role-pending-bar: var(--role-pending-ink);
+  --role-active-bar: var(--role-active-ink);
+  --role-done-bar: var(--role-done-ink);
+  --role-error-bar: var(--role-error-ink);
+  --role-ai-bar: var(--role-ai-ink);
   --role-ai-surface: color-mix(in srgb, var(--role-ai-hue) 9%, transparent);
   --role-ai-wash: color-mix(in srgb, var(--role-ai-hue) 16%, transparent);
 
