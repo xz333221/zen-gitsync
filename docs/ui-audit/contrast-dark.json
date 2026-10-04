@@ -1,0 +1,47 @@
+{
+  "--text-tertiary": {
+    "value": "#cbd0d6",
+    "onPanel": 1.55
+  },
+  "--text-meta": {
+    "value": "#cbd0d6",
+    "onPanel": 1.55
+  },
+  "--text-secondary": {
+    "value": "#d8dce2",
+    "onPanel": 1.38
+  },
+  "--text-primary": {
+    "value": "#fff",
+    "onPanel": 1
+  },
+  "--color-success": {
+    "value": "#67c23a",
+    "onPanel": 2.24
+  },
+  "--color-warning": {
+    "value": "#e6a23c",
+    "onPanel": 2.19
+  },
+  "--color-danger": {
+    "value": "#f56c6c",
+    "onPanel": 2.9
+  },
+  "--color-info": {
+    "value": "#909399",
+    "onPanel": 3.08
+  },
+  "--color-success-dark": {
+    "value": "#34d399",
+    "onPanel": 1.92
+  },
+  "--color-warning-dark": {
+    "value": "#fbbf24",
+    "onPanel": 1.67
+  },
+  "--color-danger-dark": {
+    "value": "#fca5a5",
+    "onPanel": 1.9
+  },
+  "_bg-panel": "rgba(255, 255, 255, 0.06)"
+}
