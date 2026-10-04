@@ -67,7 +67,7 @@ const props = defineProps<{
   active?: boolean
   /** 这一轮对话是否允许派发工作台任务（服务端按它决定注不注入 dispatch_task） */
   allowDispatch?: boolean
-  /** 派发时要不要附加编排台的默认提示词（跟随控制台那个勾选） */
+  /** 派发时要不要附加编排台的预设提示词（跟随控制台那个勾选） */
   dispatchUseDefaultPrompt?: boolean
   /** 输入框占位文案 */
   placeholder?: string

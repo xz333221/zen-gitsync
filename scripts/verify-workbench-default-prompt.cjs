@@ -1,15 +1,15 @@
 /**
- * 派发默认提示词（全局 / 各项目）的验证。
+ * 派发预设提示词（全局 / 各项目）的验证。
  *
  * 验收契约（改这块时别破坏）：
- *   A 一条提示词都没设过时，控制台**不出现**"默认提示词"勾选 ——
+ *   A 一条提示词都没设过时，控制台**不出现**"预设提示词"勾选 ——
  *     一个永远勾着、点了没区别的开关只是占地方
  *   B 在弹窗里存下全局提示词 -> 勾选出现且标为「全局」
  *   C 选中具体项目再存项目提示词 -> 标为「全局 + 本项目」
  *   D 派发请求体带 useDefaultPrompt=true；取消勾选后为 false（本次不带）
  *   E 服务端按**落点项目**解析：任务 simpleOverride = 全局 + 空行 + 项目，
  *     指令流水里 promptSource=both（回答"这段话是谁加的"）
- *   F 活动流 UI 真的把「附带全局 + 项目默认提示词」渲染出来
+ *   F 活动流 UI 真的把「附带全局 + 项目预设提示词」渲染出来
  *   G 选中「全部项目」时弹窗里的项目栏禁用（落点未定，不给设）
  *   H 无 JS 运行时异常 / 控制台错误
  *
@@ -107,10 +107,10 @@ async function main() {
   /** 这一轮真建出来的任务，收尾时串行删掉 */
   const createdTaskIds = []
 
-  /** 读控制台里"默认提示词"那个勾选的文案与勾选态 */
+  /** 读控制台里"预设提示词"那个勾选的文案与勾选态 */
   const readPromptToggle = () => page.evaluate(() => {
     const el = Array.from(document.querySelectorAll('.oc__compose-foot .oc__autorn'))
-      .find(l => l.textContent.includes('默认提示词'))
+      .find(l => l.textContent.includes('预设提示词'))
     if (!el) return null
     const input = el.querySelector('input')
     return { text: el.textContent.trim(), checked: !!input && input.checked }
@@ -140,10 +140,10 @@ async function main() {
     // ── A 一条都没设过：入口在，勾选不在 ─────────────────────────────
     await page.locator('.proj-item--all').first().click()
     await sleep(900)
-    const entry = page.locator('[aria-label="默认提示词设置"]')
-    check('A1 控制台有「默认提示词设置」入口', await entry.count() === 1,
+    const entry = page.locator('[aria-label="预设提示词设置"]')
+    check('A1 控制台有「预设提示词设置」入口', await entry.count() === 1,
       `count=${await entry.count()}`)
-    check('A2 没设过提示词时不出现"默认提示词"勾选', (await readPromptToggle()) === null,
+    check('A2 没设过提示词时不出现"预设提示词"勾选', (await readPromptToggle()) === null,
       JSON.stringify(await readPromptToggle()))
 
     // ── B 弹窗里存全局提示词 ────────────────────────────────────────
@@ -167,7 +167,7 @@ async function main() {
     // ── C 选中具体项目，再存项目提示词 ──────────────────────────────
     await page.locator('.proj-item:not(.proj-item--all)').filter({ hasText: target.name }).first().click()
     await sleep(900)
-    await page.locator('[aria-label="默认提示词设置"]').click()
+    await page.locator('[aria-label="预设提示词设置"]').click()
     await page.waitForSelector('.pd', { state: 'visible', timeout: 5000 })
     check('C1 选中具体项目后项目栏可编辑', !(await page.locator('#pd-project').isDisabled()))
     check('C2 项目栏标题带出项目名',
@@ -189,7 +189,7 @@ async function main() {
     await sleep(900)
     check('D1 默认附加：请求体 useDefaultPrompt=true',
       lastDispatch?.useDefaultPrompt === true, JSON.stringify(lastDispatch?.useDefaultPrompt))
-    await page.locator('.oc__autorn').filter({ hasText: '默认提示词' }).locator('input').uncheck()
+    await page.locator('.oc__autorn').filter({ hasText: '预设提示词' }).locator('input').uncheck()
     await sleep(200)
     await page.fill('.oc__input', '随便改点什么')
     await sleep(200)
@@ -197,12 +197,12 @@ async function main() {
     await sleep(900)
     check('D2 取消勾选后：请求体 useDefaultPrompt=false',
       lastDispatch?.useDefaultPrompt === false, JSON.stringify(lastDispatch?.useDefaultPrompt))
-    await page.locator('.oc__autorn').filter({ hasText: '默认提示词' }).locator('input').check()
+    await page.locator('.oc__autorn').filter({ hasText: '预设提示词' }).locator('input').check()
     await sleep(200)
 
     // ── E 服务端按落点项目解析（真打接口，autoRun=false 只建任务）────
     const dispatched = await post('/api/workbench/orchestrator/dispatch', {
-      text: `【默认提示词验证${MARK}】这条指令必须带上默认提示词`,
+      text: `【预设提示词验证${MARK}】这条指令必须带上预设提示词`,
       projectPath: target.path,
       autoRun: false,
     })
@@ -211,11 +211,16 @@ async function main() {
       dispatched?.task?.simpleOverride === `${GLOBAL_TEXT}\n\n${PROJECT_TEXT}`,
       JSON.stringify(dispatched?.task?.simpleOverride))
     check('E2 指令正文不被污染（desc 仍是用户敲的那句话）',
-      dispatched?.task?.desc === `【默认提示词验证${MARK}】这条指令必须带上默认提示词`,
+      dispatched?.task?.desc === `【预设提示词验证${MARK}】这条指令必须带上预设提示词`,
       JSON.stringify(dispatched?.task?.desc))
     check('E3 流水里记下提示词来源 both',
       dispatched?.instruction?.promptSource === 'both',
       JSON.stringify(dispatched?.instruction?.promptSource))
+    // 任务详情「提示词」区拆两段只读展示的依据（全局 / 项目分开冻结）
+    check('E5 任务同时记下分段快照 promptParts（全局 / 项目各一段）',
+      dispatched?.task?.promptParts?.global === GLOBAL_TEXT
+      && dispatched?.task?.promptParts?.project === PROJECT_TEXT,
+      JSON.stringify(dispatched?.task?.promptParts))
 
     // 别的项目不该被带上本项目那条
     const other = (await readOrchestrator()).projectPrompts || {}
@@ -225,14 +230,14 @@ async function main() {
       JSON.stringify(projectKeys))
 
     // ⚠️ 这里原本还有一条 F1：等 6.5s 轮询后在 UI 上找 `.oc-row__note` 渲染出的
-    //    「附带全局 + 项目默认提示词」。**已于 2026-09-28 随「活动日志」一起移除** ——
+    //    「附带全局 + 项目预设提示词」。**已于 2026-09-28 随「活动日志」一起移除** ——
     //    右栏那块换成了进度报告（见 OrchestratorConsole 的 .oc__report），
     //    提示词来源不再在界面上单独成行。事实本身仍由上面 E3 对着接口断言。
 
     // ── G 「全部项目」下项目栏禁用 ──────────────────────────────────
     await page.locator('.proj-item--all').first().click()
     await sleep(900)
-    await page.locator('[aria-label="默认提示词设置"]').click()
+    await page.locator('[aria-label="预设提示词设置"]').click()
     await page.waitForSelector('.pd', { state: 'visible', timeout: 5000 })
     check('G1 切回「全部项目」后项目栏禁用', await page.locator('#pd-project').isDisabled())
     check('G2 全局栏仍可编辑（全局与选中无关）', !(await page.locator('#pd-global').isDisabled()))

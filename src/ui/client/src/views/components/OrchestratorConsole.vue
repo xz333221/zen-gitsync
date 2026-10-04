@@ -77,9 +77,9 @@ const props = defineProps<{
    * 这里只认这一个布尔值，不再叠一层媒体查询判断，免得两边规则打架。
    */
   collapsed?: boolean
-  /** 全局默认提示词（'' = 没设置） */
+  /** 全局预设提示词（'' = 没设置） */
   defaultPrompt?: string
-  /** 各项目的默认提示词，键为归一化项目路径（与 ProjectSummary.key 同口径） */
+  /** 各项目的预设提示词，键为归一化项目路径（与 ProjectSummary.key 同口径） */
   projectPrompts?: Record<string, ProjectPromptEntry>
   /** 进度报告历史，新的在前（服务端只回最近 20 份，前端不再裁） */
   reports?: ProgressReport[]
@@ -101,7 +101,7 @@ const emit = defineEmits<{
   'toggle-schedule': [next: boolean]
   /** 点折叠条 / 头部折叠按钮：翻转让看板去决定折叠还是展开 */
   'toggle-collapse': []
-  /** 打开「默认提示词」设置弹窗（弹窗由看板持有 —— 它才拿得到项目清单） */
+  /** 打开「预设提示词」设置弹窗（弹窗由看板持有 —— 它才拿得到项目清单） */
   'open-prompt-settings': []
   /** 点「立即报告」：让主 Agent 现在汇报一次 */
   'generate-report': []
@@ -118,7 +118,7 @@ const emit = defineEmits<{
      * 吃亏的是用户。
      */
     projectPath: string
-    /** false = 本次派发不附加默认提示词 */
+    /** false = 本次派发不附加预设提示词 */
     useDefaultPrompt: boolean
     /** 本次派发用的执行器（claude | opencode），覆盖设置里的默认值 */
     executor: TaskExecutorId
@@ -129,7 +129,7 @@ const emit = defineEmits<{
 const draft = ref('')
 const autoRun = ref(true)
 /**
- * 本次派发是否附加默认提示词。
+ * 本次派发是否附加预设提示词。
  *
  * 默认勾上，留一个"这一次不带"的口子：全局提示词若没法单次关掉，偶尔发一条
  * 纯指令就得先去设置里把它删掉、发完再粘回来。
@@ -225,7 +225,7 @@ function clearDraft() { draft.value = '' }
 
 defineExpose({ clearAttachments, clearDraft })
 
-// ── 默认提示词：这里只负责"显示会带上什么"与"这次带不带" ──────────────
+// ── 预设提示词：这里只负责"显示会带上什么"与"这次带不带" ──────────────
 // 提示词正文一律由服务端在派发时解析后写进任务（resolveDispatchPrompt），
 // 前端不自己拼一份 —— 两边各拼一次，迟早会有一边先改了规则。
 const projectKey = computed(() => props.selectedProject?.key || '')
@@ -238,7 +238,7 @@ const projectPromptText = computed(() => {
 const anyProjectPrompt = computed(() =>
   Object.values(props.projectPrompts || {}).some(e => (e?.prompt || '').trim().length > 0)
 )
-/** 有提示词可附加 —— 决定"附加默认提示词"这个开关值不值得出现 */
+/** 有提示词可附加 —— 决定"附加预设提示词"这个开关值不值得出现 */
 const anyPromptConfigured = computed(() => !!globalPromptText.value || anyProjectPrompt.value)
 
 /**
@@ -1072,14 +1072,14 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
         >
           <el-icon><Paperclip /></el-icon>
         </button>
-        <!-- 默认提示词设置入口：图标按钮按项目惯例不加底色，
-             有没有设过看右侧"附加默认提示词"那个勾选（它是真实生效状态，这个只是入口） -->
+        <!-- 预设提示词设置入口：图标按钮按项目惯例不加底色，
+             有没有设过看右侧"附加预设提示词"那个勾选（它是真实生效状态，这个只是入口） -->
         <button
           type="button"
           class="oc__attach"
           :class="{ 'is-on': anyPromptConfigured }"
-          :title="$t('@WORKBENCH:设置派发时自动附加的默认提示词（全局 / 各项目）')"
-          :aria-label="$t('@WORKBENCH:默认提示词设置')"
+          :title="$t('@WORKBENCH:设置派发时自动附加的预设提示词（全局 / 各项目）')"
+          :aria-label="$t('@WORKBENCH:预设提示词设置')"
           @click="emit('open-prompt-settings')"
         >
           <el-icon><Setting /></el-icon>
@@ -1092,10 +1092,10 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
         <label
           v-if="anyPromptConfigured"
           class="oc__autorn"
-          :title="$t('@WORKBENCH:取消勾选则本次派发的任务不带默认提示词（设置本身不受影响）')"
+          :title="$t('@WORKBENCH:取消勾选则本次派发的任务不带预设提示词（设置本身不受影响）')"
         >
           <input type="checkbox" v-model="useDefaultPrompt" />
-          <span>{{ $t('@WORKBENCH:默认提示词（{state}）', { state: promptStateLabel }) }}</span>
+          <span>{{ $t('@WORKBENCH:预设提示词（{state}）', { state: promptStateLabel }) }}</span>
         </label>
         <!-- 执行器：与工作台执行按钮、看板「执行」共用同一份选择。
              下拉本体收口在 TaskExecutorPicker（对话模式底下那个也是它），
@@ -1862,7 +1862,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   transition: color var(--transition-fast) var(--ease-custom);
 }
 .oc__attach:hover:not(:disabled) { color: var(--color-primary); }
-/* 已设过默认提示词：入口点亮，一次远程状态在图标上就能看出来 */
+/* 已设过预设提示词：入口点亮，一次远程状态在图标上就能看出来 */
 .oc__attach.is-on { color: var(--color-primary); }
 .oc__attach:disabled { opacity: 0.4; cursor: default; }
 .oc__attach:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }

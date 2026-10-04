@@ -21,7 +21,6 @@
 //   - llmClient.js       LLM 客户端 (callLlmJson, callLlmStream)
 //   - projectScan.js     子项目识别 (findSubProjects, detectProjectManifest)
 //   - attachmentUtils.js 附件白名单 (sanitizeExt, resolveExt, MIME_TO_EXT)
-//   - instructionStore.js AI 指令读写
 //   - jobStore.js        jobs Map + bus + 持久化 + retention
 //   - taskRunner.js      任务执行引擎 (runSingleSubtask)
 //   - index.js           registerWorkbenchRoutes 入口聚合

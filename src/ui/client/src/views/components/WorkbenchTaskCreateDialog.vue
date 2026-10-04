@@ -99,8 +99,6 @@ async function submit(openEditor: boolean) {
     const body: Record<string, unknown> = {
       title: title.value.trim(),
       desc: desc.value,
-      promptId: null,
-      simpleOverride: '',
     }
     if (projectPath.value) body.projectPath = projectPath.value
     const res = await fetch('/api/workbench/tasks', {

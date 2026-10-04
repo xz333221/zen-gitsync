@@ -692,7 +692,7 @@ export function useAgentChat() {
           ...(options.dirStatus?.length ? { dirStatus: options.dirStatus } : {}),
           ...(options.dirSummary ? { dirSummary: options.dirSummary } : {}),
           // 主 Agent 控制台：允许这一轮对话调用 dispatch_task 派发工作台任务，
-          // 并把界面上选好的执行器 / 默认提示词勾选一并带上（服务端拿它当工具的默认值）。
+          // 并把界面上选好的执行器 / 预设提示词勾选一并带上（服务端拿它当工具的默认值）。
           // 只在显式开启时才出现在请求体里 —— 其它入口（智能体页、编辑器面板）的请求
           // 与改造前逐字节一致，它们没有派发能力。
           ...(options.allowDispatch

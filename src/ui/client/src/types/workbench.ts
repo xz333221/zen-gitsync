@@ -83,21 +83,13 @@ export interface Task {
   id: string
   title: string
   desc: string
-  promptId: string | null
-  /** 任务级提示词覆盖；为空则回退到 promptId 指向的预置模板 */
+  /** 派发时冻结的提示词快照（合并文本，执行链路读它） */
   simpleOverride?: string
+  /** 提示词快照的分段形式，任务详情只读拆「全局/项目」两段展示用（可缺省） */
+  promptParts?: { global: string; project: string }
   projectPath?: string
   status: string
   attachments?: Attachment[]
-  createdAt?: string
-  updatedAt?: string
-}
-
-export interface Prompt {
-  id: string
-  name: string
-  content: string
-  projectPath?: string
   createdAt?: string
   updatedAt?: string
 }
@@ -302,7 +294,7 @@ export interface OrchestratorInstruction {
   reason: string
   /** 落点是怎么定下来的：explicit / mention / agent / default（'' = 老记录） */
   targetSource?: string
-  /** 这条指令附带了哪一级默认提示词：global / project / both（'' = 没附带） */
+  /** 这条指令附带了哪一级预设提示词：global / project / both（'' = 没附带） */
   promptSource?: string
   /**
    * `text` 是否因超过**下发**上限而被截断（落盘那份始终完整，见服务端
@@ -313,7 +305,7 @@ export interface OrchestratorInstruction {
 }
 
 /**
- * 项目级默认提示词。键是归一化后的项目路径（canonicalProjectPath），
+ * 项目级预设提示词。键是归一化后的项目路径（canonicalProjectPath），
  * 与项目清单 / 看板同一套口径 —— 两侧一旦分叉，派发时就会查不到自己的那条。
  */
 export interface ProjectPromptEntry {
@@ -352,7 +344,7 @@ export interface OrchestratorActivity {
   reason?: string
   /** 落点是怎么定下来的：explicit / mention / agent / default（'' = 本次升级前的老记录） */
   targetSource?: string
-  /** 这条指令附带了哪一级默认提示词：global / project / both（'' = 没附带） */
+  /** 这条指令附带了哪一级预设提示词：global / project / both（'' = 没附带） */
   promptSource?: string
 }
 
@@ -461,9 +453,9 @@ export interface OrchestratorResponse {
   active: boolean
   updatedAt: string | null
   instructions: OrchestratorInstruction[]
-  /** 全局默认提示词（'' = 没设置）。派发时自动附加在指令之前 */
+  /** 全局预设提示词（'' = 没设置）。派发时自动附加在指令之前 */
   defaultPrompt?: string
-  /** 各项目的默认提示词，键为归一化项目路径 */
+  /** 各项目的预设提示词，键为归一化项目路径 */
   projectPrompts?: Record<string, ProjectPromptEntry>
   /** 自动进度报告间隔（毫秒），0 = 关闭。报告正文走 /orchestrator/reports，不在这份轮询里 */
   reportIntervalMs?: number

@@ -188,7 +188,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
   const listProjects = createProjectListProvider({ configManager, getCurrentProjectPath });
 
   // dispatch_task 的实现 —— 与 POST /api/workbench/orchestrator/dispatch 共用**同一份**
-  // 派发实现（见 dispatchInstruction.js 的文件头）：落点怎么判、默认提示词附加哪一级、
+  // 派发实现（见 dispatchInstruction.js 的文件头）：落点怎么判、预设提示词附加哪一级、
   // 指令流水记什么、执行器怎么回落，只有一套。这里只是把同一套依赖再绑一次
   // （派发器无状态，两个实例等价）。
   const { dispatchInstruction } = createDispatcher({ configManager, getCurrentProjectPath });
@@ -516,7 +516,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
         ? (payload) => runDispatchTask({
           dispatch: dispatchInstruction,
           payload,
-          // 控制台当前的选择：勾选框（要不要带默认提示词）+ 选中的执行器。
+          // 控制台当前的选择：勾选框（要不要带预设提示词）+ 选中的执行器。
           // 用户界面上做过的选择不能因为"这活是 agent 派的"就失效。
           defaults: {
             executor: typeof req.body?.dispatchExecutor === 'string' ? req.body.dispatchExecutor : '',

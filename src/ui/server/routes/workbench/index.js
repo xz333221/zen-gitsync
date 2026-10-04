@@ -21,7 +21,6 @@
 //   - llmClient.js       LLM 客户端 (callLlmJson, callLlmStream)
 //   - projectScan.js     子项目识别 (findSubProjects, detectProjectManifest)
 //   - attachmentUtils.js 附件白名单 (sanitizeExt, resolveExt, MIME_TO_EXT)
-//   - instructionStore.js AI 指令读写
 //   - jobStore.js        jobs Map + bus + 持久化 + retention
 //   - taskRunner.js      任务执行引擎 (runSingleSubtask —— 一次任务 = 一次会话)
 //
@@ -41,7 +40,6 @@ import {
   logger,
   fs,
   fsp,
-  PROMPTS_FILE,
   TASKS_FILE,
   JOBS_FILE,
   TRUTH_FILES,
@@ -55,14 +53,6 @@ import {
   nowIso,
   genId,
 } from './shared.js';
-import { callLlmJson, callLlmJsonWithRetry, callLlmStream } from './llmClient.js';
-import {
-  findSubProjects,
-  detectProjectManifest,
-  readProjectManifest,
-  listDirTree,
-  safeReadFile,
-} from './projectScan.js';
 import {
   isImageExt,
   resolveExt,
@@ -80,11 +70,6 @@ import {
   IMAGE_PATH_ERRORS,
   IMAGE_PATH_STATUS,
 } from './jobImage.js';
-import {
-  DEFAULT_INSTRUCTION,
-  readInstruction,
-  writeInstruction,
-} from './instructionStore.js';
 import {
   jobs,
   bus,
@@ -182,177 +167,6 @@ export function registerWorkbenchRoutes({
   configManager,
   getAiContextSnapshotter,
 }) {
-  // ════════════════════════════════════════════════════════════════════════
-  // §1. AI 生成提示词（基于当前项目）
-  // ════════════════════════════════════════════════════════════════════════
-  app.post('/api/workbench/prompts/ai-generate', asyncRoute(async (req, res) => {
-    const projectPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
-    if (!projectPath) throw new HttpError(400, '未选中项目');
-    let stat;
-    try { stat = await fsp.stat(projectPath); }
-    catch { throw new HttpError(400, '项目路径不存在'); }
-    if (!stat.isDirectory()) throw new HttpError(400, '项目路径不是目录');
-
-    // 取模型
-    let model;
-    try {
-      if (!configManager) throw new Error('configManager 不可用');
-      const rawConfig = await configManager.readRawConfigFile();
-      const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
-      model = models.find(m => m.isDefault) || models[0];
-    } catch (err) {
-      throw new HttpError(500, '读取 AI 配置失败: ' + err.message);
-    }
-    if (!model) throw new HttpError(400, '未配置 AI 模型，请先在通用设置中添加模型');
-
-    const userInstruction = await readInstruction();
-
-    // 递归识别多子项目
-    const subProjects = await findSubProjects(projectPath);
-    if (subProjects.length === 0) {
-      subProjects.push({
-        root: projectPath,
-        name: path.basename(projectPath),
-        manifests: await readProjectManifest(projectPath),
-        readme: await safeReadFile(path.join(projectPath, 'README.md'), 8000),
-        dirTree: await listDirTree(projectPath, 2, 400)
-      });
-    }
-
-    const projectName = path.basename(projectPath);
-    const LLM_OPTS = { timeoutMs: 1200000 };
-
-    // 第一阶段：生成「可复用的提示词模板」
-    const overviewBlock = subProjects.map(sp =>
-      `### 子项目 ${sp.name} (${sp.root})\n目录：\n${sp.dirTree || '（无）'}`
-    ).join('\n\n');
-
-    const firstPrompt = `${userInstruction}
-
----
-
-以下是你需要分析的项目（请先生成「可复用的提示词模板」，不要直接给总结）：
-
-项目根目录：${projectPath}
-项目名称：${projectName}
-子项目数：${subProjects.length}
-
-## 子项目概览
-${overviewBlock || '（无）'}
-
-## 各子项目 manifest 与 README
-${subProjects.map(sp => {
-  const manifestBlock = Object.entries(sp.manifests)
-    .map(([n, c]) => `\n--- ${n} ---\n${c}`)
-    .join('\n');
-  return `\n### ${sp.name}\n${manifestBlock || '（无 manifest）'}\n\nREADME（前 8KB）：\n${sp.readme || '（无）'}`;
-}).join('\n')}
-
-只返回 JSON：
-{
-  "name": "项目名（建议：项目名+架构说明，可根据实际项目特征调整）",
-  "template": "可复用的提示词模板，长度不限，请充分覆盖 {{task.title}} / {{task.desc}} / {{sub.title}} / {{sub.desc}} / {{repo.path}} / {{branch}} 这 6 个变量的用法与上下文"
-}`;
-
-    const first = await callLlmJsonWithRetry(model, firstPrompt, LLM_OPTS);
-    const templateName = String(first.name || '').trim() || `${projectName}架构说明`;
-    const template = String(first.template || '').trim();
-
-    // 第二阶段：为每个子项目分别生成总结
-    async function summarizeOneSub(sp) {
-      const manifestBlock = Object.entries(sp.manifests)
-        .map(([n, c]) => `\n--- ${n} ---\n${c}`)
-        .join('\n');
-      const subPrompt = `${template}
-
----
-
-以下是你需要分析的一个子项目（请直接基于这些数据输出该子项目的架构说明）：
-
-子项目根目录：${sp.root}
-子项目名称：${sp.name}
-
-## 目录结构（前 2 层）
-${sp.dirTree || '（无）'}
-
-## manifest
-${manifestBlock || '（无）'}
-
-## README
-${sp.readme || '（无）'}
-
-只返回 JSON：
-{
-  "summary": "该子项目的架构说明，长度不限，模型自行决定篇幅与详尽程度，能写多详细就多详细"
-}`;
-      const r = await callLlmJsonWithRetry(model, subPrompt, LLM_OPTS);
-      return { name: sp.name, root: sp.root, summary: String(r.summary || '').trim() };
-    }
-
-    // 串行执行，避免并发触发 provider 限流（429）
-    const subSummaries = [];
-    for (const sp of subProjects) {
-      subSummaries.push(await summarizeOneSub(sp));
-    }
-
-    // 第三阶段：仅多子项目时合并
-    let finalSummary = '';
-    let finalName = templateName;
-
-    if (subSummaries.length === 1) {
-      finalSummary = subSummaries[0].summary;
-    } else {
-      const mergePrompt = `你是项目架构师。下列是同一仓库下 N 个子项目的架构说明，请合并输出**单一**的「项目架构说明」，长度不限，模型自行决定篇幅与详尽程度。覆盖：项目整体定位、技术栈、模块划分、子项目间关系、核心流程、关键设计决策。
-子项目之间用清晰的小标题或编号分隔。最后输出一段「整体架构」总结它们如何协同。
-只引用实际出现的子项目名 / 文件路径 / 依赖名，不要编造。只返回 JSON：
-
-{
-  "name": "项目名（建议：项目名+架构说明）",
-  "summary": "合并后的架构说明"
-}
-
-## 子项目说明
-${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summary || '（空）'}`).join('\n')}`;
-
-      const merged = await callLlmJsonWithRetry(model, mergePrompt, LLM_OPTS);
-      finalSummary = String(merged.summary || '').trim()
-        || subSummaries.map(s => `### ${s.name}\n${s.summary}`).join('\n\n');
-      finalName = String(merged.name || '').trim() || templateName;
-    }
-
-    // 名称始终固定为「<项目名>架构说明」，不信任模型返回的 name 字段
-    finalName = `${projectName}架构说明`;
-
-    if (!finalSummary) {
-      throw new HttpError(502, '模型返回为空，请稍后重试');
-    }
-
-    res.json({
-      success: true,
-      name: finalName,
-      template,
-      result: finalSummary,
-      content: finalSummary
-    });
-  }));
-
-  // ════════════════════════════════════════════════════════════════════════
-  // §2. 生成指令：读 / 写
-  // ════════════════════════════════════════════════════════════════════════
-  app.get('/api/workbench/prompts/ai-instruction', asyncRoute(async (_req, res) => {
-    const instruction = await readInstruction();
-    res.json({ success: true, instruction, isDefault: instruction === DEFAULT_INSTRUCTION });
-  }));
-
-  app.put('/api/workbench/prompts/ai-instruction', asyncRoute(async (req, res) => {
-    const text = req.body && typeof req.body.instruction === 'string'
-      ? req.body.instruction.trim()
-      : '';
-    if (!text) throw new HttpError(400, '指令不能为空');
-    if (text.length > 500000) throw new HttpError(413, '指令过长（最多 500000 字符）');
-    await writeInstruction(text);
-    res.json({ success: true });
-  }));
 
   // ════════════════════════════════════════════════════════════════════════
   // §3. SSE 事件流（订阅 job/sub/task 更新）
@@ -381,54 +195,6 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
       clearInterval(ka);
       bus.off('event', handler);
     });
-  }));
-
-  // ════════════════════════════════════════════════════════════════════════
-  // §10. 提示词 CRUD
-  // ════════════════════════════════════════════════════════════════════════
-  app.get('/api/workbench/prompts', asyncRoute(async (_req, res) => {
-    const data = await readJson(PROMPTS_FILE, { prompts: [] });
-    res.json({ success: true, prompts: data.prompts || [] });
-  }));
-
-  app.post('/api/workbench/prompts', asyncRoute(async (req, res) => {
-    const { id, name, content, projectPath } = req.body || {};
-    if (!name || typeof content !== 'string') throw new HttpError(400, 'name 和 content 必填');
-    const data = await readJson(PROMPTS_FILE, { prompts: [] });
-    const prompts = data.prompts || [];
-    const now = nowIso();
-    const normalizedProjectPath = typeof projectPath === 'string' ? projectPath.trim() : '';
-    if (id) {
-      const i = prompts.findIndex(p => p.id === id);
-      if (i < 0) throw new HttpError(404, '提示词不存在');
-      prompts[i] = {
-        ...prompts[i],
-        name,
-        content,
-        projectPath: normalizedProjectPath,
-        updatedAt: now
-      };
-      await writeJson(PROMPTS_FILE, { prompts });
-      return res.json({ success: true, prompt: prompts[i] });
-    }
-    const prompt = {
-      id: genId(),
-      name,
-      content,
-      projectPath: normalizedProjectPath,
-      createdAt: now,
-      updatedAt: now
-    };
-    prompts.push(prompt);
-    await writeJson(PROMPTS_FILE, { prompts });
-    res.json({ success: true, prompt });
-  }));
-
-  app.delete('/api/workbench/prompts/:id', asyncRoute(async (req, res) => {
-    const data = await readJson(PROMPTS_FILE, { prompts: [] });
-    const prompts = (data.prompts || []).filter(p => p.id !== req.params.id);
-    await writeJson(PROMPTS_FILE, { prompts });
-    res.json({ success: true });
   }));
 
   // ════════════════════════════════════════════════════════════════════════
@@ -512,9 +278,17 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
   }));
 
   app.post('/api/workbench/tasks', asyncRoute(async (req, res) => {
-    const { id, title, desc, promptId, simpleOverride } = req.body || {};
+    const { id, title, desc, simpleOverride } = req.body || {};
     const safeTitle = typeof title === 'string' ? title.trim() : '';
     const safeOverride = typeof simpleOverride === 'string' ? simpleOverride.slice(0, 8000) : '';
+    // promptParts 是任务详情「提示词」区的只读分段快照（复制任务时透传），执行链路不读它
+    const rawParts = req.body?.promptParts;
+    const safeParts = rawParts && typeof rawParts === 'object'
+      ? {
+          global: typeof rawParts.global === 'string' ? rawParts.global.slice(0, 8000) : '',
+          project: typeof rawParts.project === 'string' ? rawParts.project.slice(0, 8000) : '',
+        }
+      : null;
     // 显式指定的归属项目（多项目编排台传选中项目）；不传则沿用当前项目。
     // 只影响**新建**，更新分支一律保留任务原有的 projectPath（否则编辑一次就会把任务挪到当前项目去）。
     const bodyProjectPath = typeof req.body?.projectPath === 'string' ? req.body.projectPath.trim() : '';
@@ -529,10 +303,11 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
         ...tasks[i],
         title: safeTitle,
         desc: desc || '',
-        promptId: promptId || null,
-        simpleOverride: safeOverride,
         updatedAt: now
       };
+      // simpleOverride 是派发时的提示词快照：只在调用方显式带了字符串时才覆盖，
+      // 缺省不能清空（否则编辑器把整 task 体提交一遍就把提示词抹掉了）
+      if (typeof simpleOverride === 'string') tasks[i].simpleOverride = safeOverride;
       await writeJson(TASKS_FILE, { tasks });
       return res.json({ success: true, task: tasks[i] });
     }
@@ -540,13 +315,13 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
       id: genId(),
       title: safeTitle,
       desc: desc || '',
-      promptId: promptId || null,
       simpleOverride: safeOverride,
       projectPath: bodyProjectPath || currentProjectPath || '',
       status: 'todo',
       createdAt: now,
       updatedAt: now
     };
+    if (safeParts && (safeParts.global || safeParts.project)) task.promptParts = safeParts;
     tasks.push(task);
     await writeJson(TASKS_FILE, { tasks });
     res.json({ success: true, task });
@@ -1000,7 +775,8 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
     }
     const removedAttCount = Array.isArray(task.attachments) ? task.attachments.length : 0;
     const hadDesc = !!(task.desc && task.desc.length > 0);
-    const hadPrompt = !!task.promptId;
+    // 提示词快照（simpleOverride / promptParts）随 desc 一起清 —— 这个动作的语义是"回到空任务"
+    const hadPrompt = !!(task.simpleOverride || task.promptParts);
     const preservedProjectPath = task.projectPath;
     const preservedCreatedAt = task.createdAt;
     const preservedStatus = task.status || 'todo';
@@ -1253,11 +1029,11 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
   // §16. 多项目编排台（L1 看板 + 主 Agent 控制台）
   //   GET  /api/workbench/projects               项目清单 + 看板任务
   //   POST /api/workbench/projects/remove        从清单里移除一个项目条目
-  //   GET  /api/workbench/orchestrator           调度开关 + 指令存档 + 活动流 + 默认提示词
+  //   GET  /api/workbench/orchestrator           调度开关 + 指令存档 + 活动流 + 预设提示词
   //   POST /api/workbench/orchestrator/state     暂停 / 恢复调度
   //   POST /api/workbench/orchestrator/dispatch  派发一条人类干预指令
-  //   POST /api/workbench/orchestrator/default-prompt   写全局默认提示词
-  //   POST /api/workbench/orchestrator/project-prompt   写某个项目的默认提示词
+  //   POST /api/workbench/orchestrator/default-prompt   写全局预设提示词
+  //   POST /api/workbench/orchestrator/project-prompt   写某个项目的预设提示词
   //
   // 「暂停调度」的实际语义：只拦**自动派发**（dispatch 里带 autoRun），
   // 手动点执行 / 子任务执行一概不受影响 —— 暂停的是主 Agent 的自主行为，
@@ -1500,7 +1276,7 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
       // 而它归服务端定（派发校验也在这儿）。前端不再自己写一份数字 ——
       // 之前 maxlength 那种"界面说能发、后端 400"的分叉就是这么来的。
       maxInstructionChars: MAX_INSTRUCTION_CHARS,
-      // 默认提示词跟着这份状态一起下发：控制台要拿它显示"当前会附带什么"，
+      // 预设提示词跟着这份状态一起下发：控制台要拿它显示"当前会附带什么"，
       // 设置弹窗打开时也不必再单独取一次（单条上限 8000 字，体积可控）
       defaultPrompt: state.defaultPrompt,
       projectPrompts: state.projectPrompts,
@@ -1727,12 +1503,12 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
   function assertPromptText(prompt) {
     if (typeof prompt !== 'string') throw new HttpError(400, 'prompt 必须是字符串');
     if (prompt.length > MAX_DEFAULT_PROMPT_CHARS) {
-      throw new HttpError(400, `默认提示词过长（上限 ${MAX_DEFAULT_PROMPT_CHARS} 字）`);
+      throw new HttpError(400, `预设提示词过长（上限 ${MAX_DEFAULT_PROMPT_CHARS} 字）`);
     }
   }
 
   /**
-   * 写**全局**默认提示词。body: { prompt }
+   * 写**全局**预设提示词。body: { prompt }
    *
    * 存的是"派发时自动附加的约束"，不是某条任务的内容 —— 改它只影响**之后**的派发：
    * 已建任务在派发那一刻就把当时生效的提示词抄进了自己的 simpleOverride，
@@ -1745,7 +1521,7 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
   }));
 
   /**
-   * 写**某个项目**的默认提示词。body: { projectPath, prompt }
+   * 写**某个项目**的预设提示词。body: { projectPath, prompt }
    *
    * 只接受项目清单里真实存在的路径：这张表的键就是项目 key，不校验的话
    * 请求体里的任意字符串都能往里塞（那些键永远不会被读到，只会把文件撑大）。

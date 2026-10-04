@@ -214,7 +214,6 @@ async function main() {
     await page.route('**/api/workbench/projects*', (route) =>
       json(route, { success: true, projects: [project], tasks: board, currentProjectPath: PROJECT_PATH }))
     await page.route('**/api/workbench/tasks*', (route) => json(route, { tasks }))
-    await page.route('**/api/workbench/prompts*', (route) => json(route, { prompts: [] }))
     await page.route('**/api/workbench/jobs', (route) => json(route, { success: true, jobs: liveJobs }))
     await page.route('**/api/workbench/current-project*', (route) => json(route, { path: PROJECT_PATH }))
     await page.route('**/api/workbench/tasks/*/run', (route) => {

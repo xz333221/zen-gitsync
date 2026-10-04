@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// 派发默认提示词的解析与归一单测。
+// 派发预设提示词的解析与归一单测。
 //
 // 这一层最贵的错误不是"没附加"，而是**附加到错误的项目上** —— 全局规则本来只该
 // 出现在 A 项目，却因为路径写法不一致（`D:/ws/a` vs `d:\ws\a`）落到了 B 项目的
@@ -42,6 +42,7 @@ test('什么都没设置时不附加任何东西', () => {
   const r = resolveDispatchPrompt(stateWith(), 'D:\\ws\\alpha');
   assert.equal(r.text, '');
   assert.equal(r.source, '');
+  assert.deepEqual(r.parts, { global: '', project: '' });
 });
 
 test('只有全局提示词：所有项目都附加，来源记 global', () => {
@@ -61,6 +62,8 @@ test('两者都有：全局在前、项目在后，中间空行分隔', () => {
   const r = resolveDispatchPrompt(state, 'D:\\ws\\alpha');
   assert.equal(r.text, '回答用中文\n\n用 pnpm');
   assert.equal(r.source, 'both');
+  // parts 是任务详情只读拆两段展示用的分段快照（text 仍是执行真相源）
+  assert.deepEqual(r.parts, { global: '回答用中文', project: '用 pnpm' });
 });
 
 test('项目路径写法不同（斜杠 / 大小写）仍然命中同一条项目提示词', () => {

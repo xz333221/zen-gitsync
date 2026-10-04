@@ -264,7 +264,6 @@ async function main() {
     // 编辑器弹窗要用的几个接口也拦掉：点卡片会开编辑器，它一开就拉这些，
     // 失败会在控制台刷红，把 H 那条（无 console 错误）带崩
     await page.route('**/api/workbench/tasks*', (route) => json(route, { tasks }))
-    await page.route('**/api/workbench/prompts*', (route) => json(route, { prompts: [] }))
     await page.route('**/api/workbench/jobs*', (route) => json(route, { jobs: [] }))
     await page.route('**/api/workbench/current-project*', (route) => json(route, { path: PROJECT_PATH }))
     // ⚠️ 这条**必须**注册在上面那条通配 `**/api/workbench/jobs*` 之后：

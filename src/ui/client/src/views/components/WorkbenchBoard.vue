@@ -628,7 +628,7 @@ const defaultProjectPath = computed(
  * （指令里点名 > 主 Agent 判断 > 默认项目）。前端不猜落点 ——
  * 猜出来的和真正执行的各说各话时，吃亏的是用户。
  *
- * 默认提示词同理：前端只说"这次带不带"，带哪一条由服务端按**落点项目**解析
+ * 预设提示词同理：前端只说"这次带不带"，带哪一条由服务端按**落点项目**解析
  * （全局 + 该项目那条）—— 「全部项目」时前端根本不知道落点是谁。
  */
 async function onDispatch(payload: {
@@ -663,7 +663,7 @@ async function onToggleSchedule(next: boolean) {
   await setSchedulingActive(next)
 }
 
-// ── 默认提示词设置弹窗 ──────────────────────────────────────────────
+// ── 预设提示词设置弹窗 ──────────────────────────────────────────────
 // 弹窗挂在看板这一层（不是控制台里）：它要用到项目清单与编排状态，而这两样
 // 都在这儿 —— 控制台只发一个"打开设置"的信号。
 const promptDialogOpen = ref(false)
@@ -856,7 +856,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
       />
     </div>
 
-    <!-- 派发默认提示词：全局一条 + 选中项目一条，写完即生效于之后的派发 -->
+    <!-- 派发预设提示词：全局一条 + 选中项目一条，写完即生效于之后的派发 -->
     <WorkbenchDefaultPromptDialog
       v-model="promptDialogOpen"
       :default-prompt="defaultPrompt"

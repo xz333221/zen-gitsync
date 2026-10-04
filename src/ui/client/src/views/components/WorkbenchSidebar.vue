@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { $t } from '@/lang/static'
-import { Plus, Close, DocumentAdd, Memo, Folder, ArrowDown, ArrowRight, CopyDocument } from '@element-plus/icons-vue'
-import type { Task, Prompt } from '@/types/workbench'
+import { Plus, Close, DocumentAdd, Folder, ArrowDown, ArrowRight, CopyDocument } from '@element-plus/icons-vue'
+import type { Task } from '@/types/workbench'
 import { useWorkbenchProjectGroups } from '@/composables/useWorkbenchProjectGroups'
 import { canonicalProjectPath } from '@/utils/path'
 
@@ -10,7 +10,6 @@ type DragPosition = 'before' | 'after' | null
 
 const props = defineProps<{
   tasks: Task[]
-  prompts: Prompt[]
   selectedTaskId: string | null
   currentProject: { path: string; name: string }
   creatingTask: boolean
@@ -27,9 +26,6 @@ const emit = defineEmits<{
   'delete-task': [task: Task]
   'copy-task': [task: Task]
   'create-task': []
-  'open-create-prompt': []
-  'open-edit-prompt': [prompt: Prompt]
-  'delete-prompt': [prompt: Prompt]
   'reorder-tasks': [payload: { groupPath: string; orderedIds: string[] }]
 }>()
 
@@ -42,12 +38,6 @@ const currentProjectKey = computed(() => canonicalProjectPath(props.currentProje
 function isOtherProject(t: Task): boolean {
   return !!t.projectPath && canonicalProjectPath(t.projectPath) !== currentProjectKey.value
 }
-
-// 只展示全局 + 当前项目的提示词;其它项目绑定到具体项目,切过去自然能看到
-const availablePrompts = computed<Prompt[]>(() => {
-  const cur = currentProjectKey.value
-  return props.prompts.filter(p => !p.projectPath || canonicalProjectPath(p.projectPath) === cur)
-})
 
 // 单行展示的标题来源:优先任务标题;没写标题用任务描述(多行压平成一行),
 // 超出交给 CSS ellipsis。两者都没有的返回空串——这种空任务不保存,
@@ -293,53 +283,6 @@ function onWindowMouseUp(_e: MouseEvent) {
         </li>
       </ul>
     </section>
-
-    <section class="wb-section">
-      <header class="wb-section__head">
-        <span class="wb-section__tag wb-section__tag--accent">{{ $t('@WORKBENCH:提示') }}</span>
-        <h3 class="wb-section__title">{{ $t('@WORKBENCH:预置提示词') }}</h3>
-        <span class="wb-pill wb-section__count">{{ availablePrompts.length }}</span>
-        <button
-          class="wb-section__action"
-          @click="emit('open-create-prompt')"
-          :title="$t('@WORKBENCH:新建提示词')"
-          :aria-label="$t('@WORKBENCH:新建提示词')"
-        >
-          <el-icon><Plus /></el-icon>
-        </button>
-      </header>
-      <ul class="wb-prompt-list">
-        <li v-for="p in availablePrompts" :key="p.id" class="wb-prompt-item">
-          <div class="wb-prompt-item__icon">
-            <el-icon><Memo /></el-icon>
-          </div>
-          <button type="button" class="wb-prompt-item__name" @click="emit('open-edit-prompt', p)" :title="p.content">
-            {{ p.name }}
-          </button>
-          <span
-            v-if="!p.projectPath"
-            class="wb-prompt-item__tag"
-            :title="$t('@WORKBENCH:全局（所有项目可用）')"
-          >{{ $t('@WORKBENCH:全局（所有项目可用）') }}</span>
-          <span
-            v-else
-            class="wb-prompt-item__tag wb-prompt-item__tag--project"
-            :title="p.projectPath"
-          >{{ shortProjectLabel(p.projectPath) }}</span>
-          <button
-            class="wb-prompt-item__del"
-            @click="emit('delete-prompt', p)"
-            :title="$t('@WORKBENCH:删除')"
-            :aria-label="$t('@WORKBENCH:删除')"
-          >
-            <el-icon><Close /></el-icon>
-          </button>
-        </li>
-        <li v-if="availablePrompts.length === 0" class="wb-empty wb-empty--compact">
-          {{ $t('@WORKBENCH:暂无提示词') }}
-        </li>
-      </ul>
-    </section>
   </aside>
 </template>
 
@@ -451,7 +394,7 @@ function onWindowMouseUp(_e: MouseEvent) {
 .wb-new-btn:hover .wb-new-btn__icon { transform: rotate(90deg); }
 .wb-new-btn:active { transform: scale(0.99); }
 .wb-new-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
-.wb-task-list, .wb-prompt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.wb-task-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 /* 分组模式下任务项相对组头缩进一层,视觉上归属到项目分组下 */
 .wb-task-list.is-grouped .wb-task-item { margin-left: 14px; }
 .wb-task-item {
@@ -565,27 +508,7 @@ function onWindowMouseUp(_e: MouseEvent) {
 }
 .wb-task-item__del:hover { background: color-mix(in srgb, var(--color-danger) 14%, transparent); color: var(--color-danger); }
 .wb-task-item__del:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-outline-offset); opacity: 1; }
-.wb-task-item__del, .wb-prompt-item__del, .wb-sub-item__del { font-size: var(--font-size-mid); }
-.wb-prompt-item {
-  display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: var(--radius-md);
-  font-size: var(--font-size-mid); color: var(--text-primary);
-  transition: background var(--transition-fast) var(--ease-custom); position: relative;
-}
-.wb-prompt-item:hover { background: var(--bg-container-hover); }
-.wb-prompt-item:hover .wb-prompt-item__del { opacity: 1; }
-.wb-prompt-item__icon { width: 22px; height: 22px; border-radius: var(--radius-base); background: var(--tint-primary-08); color: var(--color-primary); display: inline-flex; align-items: center; justify-content: center; font-size: var(--font-size-sm); flex-shrink: 0; }
-/* button 重置:视觉保持原 <span> 不变 */
-.wb-prompt-item__name { border: none; background: transparent; font: inherit; padding: 0; width: 100%; text-align: left; flex: 1; min-width: 0; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary); font-weight: 500; letter-spacing: -0.05px; }
-.wb-prompt-item__tag { flex-shrink: 0; max-width: 96px; padding: 1px 6px; border-radius: var(--radius-xs); font-size: var(--font-size-xs); line-height: 16px; letter-spacing: 0.1px; background: var(--tint-primary-08); color: var(--color-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wb-prompt-item__tag--project { background: var(--bg-subtle); color: var(--text-secondary); border: 1px solid var(--border-color-light); }
-.wb-prompt-item__del {
-  border: none; background: transparent; color: var(--text-meta); width: 20px; height: 20px;
-  border-radius: var(--radius-xs); display: inline-flex; align-items: center; justify-content: center;
-  cursor: pointer; font-size: var(--font-size-sm); flex-shrink: 0; opacity: 0;
-  transition: opacity var(--transition-fast) var(--ease-custom), background var(--transition-fast) var(--ease-custom), color var(--transition-fast) var(--ease-custom);
-}
-.wb-prompt-item__del:hover { background: color-mix(in srgb, var(--color-danger) 14%, transparent); color: var(--color-danger); }
-.wb-prompt-item__del:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-outline-offset); opacity: 1; }
+.wb-task-item__del, .wb-sub-item__del { font-size: var(--font-size-mid); }
 .wb-empty { padding: 24px 14px 20px; text-align: center; color: var(--text-meta); display: flex; flex-direction: column; align-items: center; gap: 8px; border-radius: var(--radius-md); background: linear-gradient(135deg, var(--bg-subtle) 0%, color-mix(in srgb, var(--tint-primary-06) 50%, transparent) 100%); border: 1px dashed var(--border-color-light); position: relative; overflow: hidden; }
 .wb-empty::before {
   content: '';

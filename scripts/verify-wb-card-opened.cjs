@@ -155,7 +155,6 @@ async function main() {
     // 编辑器弹窗要用的几个接口也拦掉：它一开就会拉这些，失败会在控制台刷红，
     // 把 G 那条（无 console 错误）带崩，而那些失败与本脚本要验的契约无关
     await page.route('**/api/workbench/tasks*', (route) => json(route, { tasks }))
-    await page.route('**/api/workbench/prompts*', (route) => json(route, { prompts: [] }))
     await page.route('**/api/workbench/jobs*', (route) => json(route, { jobs: [] }))
     await page.route('**/api/workbench/current-project*', (route) => json(route, { path: PROJECT_PATH }))
 

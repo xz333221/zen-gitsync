@@ -296,7 +296,7 @@ export const TOOL_DEFINITIONS = [
           },
           use_default_prompt: {
             type: 'boolean',
-            description: '默认 true = 附加编排台配置的默认提示词（全局 + 落点项目级）；false = 这条任务不带。',
+            description: '默认 true = 附加编排台配置的预设提示词（全局 + 落点项目级）；false = 这条任务不带。',
           },
         },
         required: ['text'],

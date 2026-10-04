@@ -181,16 +181,19 @@ test('autoRun=true 且调度中：交给执行入口，执行器按参数 > 配�
   assert.equal(noCfgResult.executor, 'claude', '配置读不出来时回落 claude，而不是派发失败');
 });
 
-test('默认提示词按落点项目解析并抄进任务；显式关掉时不带', async () => {
+test('预设提示词按落点项目解析并抄进任务；显式关掉时不带', async () => {
   await setDefaultPrompt('派发时先跑一遍 lint');
   try {
     const { dispatchInstruction } = makeDispatcher();
-    const withPrompt = await dispatchInstruction({ text: '带默认提示词', autoRun: false });
+    const withPrompt = await dispatchInstruction({ text: '带预设提示词', autoRun: false });
     assert.match(withPrompt.task.simpleOverride, /先跑一遍 lint/);
     assert.equal(withPrompt.instruction.promptSource !== '', true);
+    // 分段快照：任务详情「提示词」区只读拆两段展示用（执行仍只认 simpleOverride）
+    assert.deepEqual(withPrompt.task.promptParts, { global: '派发时先跑一遍 lint', project: '' });
 
     const without = await dispatchInstruction({ text: '这次不带', autoRun: false, useDefaultPrompt: false });
     assert.equal(without.task.simpleOverride, '');
+    assert.equal(without.task.promptParts, undefined);
     assert.equal(without.instruction.promptSource, '');
   } finally {
     await setDefaultPrompt('');

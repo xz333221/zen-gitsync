@@ -37,7 +37,6 @@ import path from 'path';
 import { spawn, execFileSync } from 'child_process';
 import {
   logger,
-  PROMPTS_FILE,
   readJson,
   nowIso,
   genId,
@@ -879,9 +878,9 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
   const opts = options || {};
   const resumeSessionId = opts.resumeSessionId || null;
   const executor = normalizeTaskExecutor(opts.executor);
-  const promptTemplate = sub.promptOverride || (task.promptId
-    ? (await readJson(PROMPTS_FILE, { prompts: [] })).prompts.find(p => p.id === task.promptId)?.content
-    : null) || '';
+  // 提示词唯一来源：派发时抄进任务的快照（simpleOverride → sub.promptOverride）。
+  // 旧实现还有一条"任务绑定预置词库条目"的回退，随提示词合并（2026-10-04）删除。
+  const promptTemplate = sub.promptOverride || '';
   const ctx = {
     task: { title: task.title, desc: task.desc || '' },
     sub: { title: sub.title, desc: sub.desc || '' },

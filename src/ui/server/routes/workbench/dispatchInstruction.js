@@ -19,7 +19,7 @@
 //   2. 内置智能体的 dispatch_task 工具        —— g ai 自己派出去的活
 //      （见 cli/ai/tools.js 的 toolDispatchTask 与 routes/workbench/agentRoutes.js 的 ctx 注入）。
 //
-// 为什么必须共用：这条链路里全是"口径"——落点怎么判、默认提示词附加哪一级、
+// 为什么必须共用：这条链路里全是"口径"——落点怎么判、预设提示词附加哪一级、
 // 指令流水记什么、执行器怎么回落、附件从暂存区怎么搬。两份实现分叉的失效方式是
 // 「不报错，只是 prompt 里少一段 / 落点不一样」，只能靠人眼比对才发现 —— 与
 // agentParity.test.js 里钉的那几条（提示词四处、路径归一三处）同一类坑。
@@ -101,7 +101,7 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
    * @param {string} payload.text                指令正文（会原样成为该任务的 prompt）
    * @param {string} [payload.projectPath]       显式指定的落点；缺省交给 targetResolver 判断
    * @param {boolean} [payload.autoRun]          默认 true；false = 只建任务不执行
-   * @param {boolean} [payload.useDefaultPrompt] 默认 true；false = 本次不附加默认提示词
+   * @param {boolean} [payload.useDefaultPrompt] 默认 true；false = 本次不附加预设提示词
    * @param {string} [payload.executor]          claude | opencode | codex；缺省走配置默认
    * @param {Array} [payload.attachments]        暂存区附件记录 [{ id, ext, originalName }]
    * @returns {Promise<{task: object, instruction: object, ran: boolean, schedulingActive: boolean, target: object}>}
@@ -171,12 +171,12 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
     }
 
     const autoRun = payload.autoRun !== false;
-    // 调度开关与默认提示词同在一份 state 里，只读一次：
+    // 调度开关与预设提示词同在一份 state 里，只读一次：
     // 分开读两次必然出现"读到的是两个瞬间"的窗口（改设置的同时派发）。
     const orchestratorState = await readOrchestrator();
     const schedulingActive = orchestratorState.active;
 
-    // 默认提示词按**落点项目**解析：全局那条对所有项目生效，项目级那条只在这个项目追加。
+    // 预设提示词按**落点项目**解析：全局那条对所有项目生效，项目级那条只在这个项目追加。
     // useDefaultPrompt=false 是"这一次不附加" —— 全局提示词若没法单次关掉，
     // 偶尔发一条纯指令就得先去设置里把它删了，再粘回来。
     const dispatchPrompt = payload.useDefaultPrompt === false
@@ -247,8 +247,7 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
       // 标题取指令首行并截断：看板卡片只占一行，整段指令塞进标题会把卡片撑爆
       title: text.split('\n')[0].slice(0, 120),
       desc: text,
-      promptId: null,
-      // 默认提示词在派发这一刻抄进任务（这次生效的是什么，任务自己记着）。
+      // 预设提示词（全局 + 落点项目）在派发这一刻抄进任务（这次生效的是什么，任务自己记着）。
       // 之后用户改设置不会回头改写它 —— 一条已存在的任务，"它当时是被怎么派出去的"
       // 是既成事实，不是当前配置的投影。
       simpleOverride: dispatchPrompt.text,
@@ -258,6 +257,11 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
       createdAt: now,
       updatedAt: now,
     };
+    // 分段快照：任务详情「提示词」区只读拆两段展示（全局 / 项目）。
+    // 执行链路只认 simpleOverride 合并文本，这个字段纯展示、可缺省。
+    if (dispatchPrompt.parts && (dispatchPrompt.parts.global || dispatchPrompt.parts.project)) {
+      task.promptParts = dispatchPrompt.parts;
+    }
     tasks.push(task);
     await writeJson(TASKS_FILE, { tasks });
 
@@ -271,7 +275,7 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
       // 落点是怎么定下来的（explicit / mention / agent / default），
       // 记下来才能在流水里回答用户那句"为什么派到这儿了"
       targetSource: target.source,
-      // 附带的是哪一级默认提示词（'' = 没带）。流水里要能说清"这段话是谁加的"
+      // 附带的是哪一级预设提示词（'' = 没带）。流水里要能说清"这段话是谁加的"
       promptSource: dispatchPrompt.source,
     });
 
@@ -287,7 +291,7 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
         desc: task.desc || '',
         status: 'todo',
         // 提示词取自 task.simpleOverride（派发时已把
-        // 全局/项目默认提示词抄进去），而不是在这里再解析一次配置
+        // 全局/项目预设提示词抄进去），而不是在这里再解析一次配置
         promptOverride: task.simpleOverride || '',
         attachments: [],
       };

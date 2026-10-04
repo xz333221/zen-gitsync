@@ -14,7 +14,7 @@
   ~ limitations under the License.
   -->
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick, reactive, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -37,7 +37,7 @@ const configStore = useConfigStore()
 const toolsStore = useToolsStore()
 import ExecutionLogManager from '@components/ExecutionLogManager.vue'
 import { canonicalProjectPath } from '@/utils/path'
-import type { Task, Prompt } from '@/types/workbench'
+import type { Task } from '@/types/workbench'
 import { useWorkbenchAttachments, ALLOWED_EXT_HINT, MAX_ATTACHMENT_BYTES } from '@/composables/useWorkbenchAttachments'
 import { useWorkbenchSimpleConversation } from '@/composables/useWorkbenchSimpleConversation'
 import { buildTaskExecutionText } from '@/utils/taskExecutionExport'
@@ -161,9 +161,9 @@ async function openTaskFromBoard(payload: { taskId: string; projectPath: string 
 
 // ── 数据层（状态 + 加载 + CRUD） ─────────────────────────────────────────────
 const {
-  prompts, tasks, jobs, currentProject,
+  tasks, jobs, currentProject,
   connectSSE, disconnectSSE,
-  loadPrompts, loadCurrentProject, loadJobs,
+  loadCurrentProject, loadJobs,
   clearJobsByTask,
   loadTasks: _loadDataTasks
 } = useWorkbenchData()
@@ -240,31 +240,26 @@ const foreignRepo = computed<{ name: string; path: string } | null>(() => {
   return { name, path: tp }
 })
 // 当前选中 task 在磁盘上的快照（参与 dirty 比较的字段）。
-// metaSnapshot 记 task 自身的 title/desc/promptId/simpleOverride。
-// 任务级 title/desc/promptId/simpleOverride 改动走"防抖自动保存"。
+// metaSnapshot 只记 task 自身可编辑的 title/desc（提示词快照是只读的，不进 dirty）。
 // - captureSnapshot()  在 loadTasks / persistTask 成功后 / 切换 selectedTaskId 时调用
-// - metaDirty    对比 selectedTask.{title,desc,promptId,simpleOverride} 与 metaSnapshot
+// - metaDirty    对比 selectedTask.{title,desc} 与 metaSnapshot
 const metaSnapshot = ref<{
   title: string
   desc: string
-  promptId: string | null
-  simpleOverride: string
-}>({ title: '', desc: '', promptId: null, simpleOverride: '' })
+}>({ title: '', desc: '' })
 
 function captureSnapshot() {
   if (selectedTask.value) {
     metaSnapshot.value = {
       title: selectedTask.value.title,
-      desc: selectedTask.value.desc,
-      promptId: selectedTask.value.promptId,
-      simpleOverride: selectedTask.value.simpleOverride || ''
+      desc: selectedTask.value.desc
     }
   } else {
-    metaSnapshot.value = { title: '', desc: '', promptId: null, simpleOverride: '' }
+    metaSnapshot.value = { title: '', desc: '' }
   }
 }
 
-// ── 任务级字段（title / desc / promptId / simpleOverride）自动保存 ────────────────────
+// ── 任务级字段（title / desc）自动保存 ────────────────────
 // 改动后 1.5s 防抖自动落盘；切走/关页面前再 flush 一次。
 // 状态机：idle → saving → saved(显示时间) → idle；失败回到 idle + 弹错。
 type MetaSaveState = 'idle' | 'saving' | 'saved' | 'error'
@@ -277,8 +272,6 @@ const metaDirty = computed(() => {
   const t = selectedTask.value
   return metaSnapshot.value.title !== t.title
     || metaSnapshot.value.desc !== t.desc
-    || metaSnapshot.value.promptId !== t.promptId
-    || metaSnapshot.value.simpleOverride !== (t.simpleOverride || '')
 })
 
 function clearMetaSaveTimers() {
@@ -288,11 +281,10 @@ function clearMetaSaveTimers() {
 // ── 空任务不落盘 ────────────────────────────────────────────────────
 // 「空任务」= 标题和描述都没填(点了新建就直接走人/刷新)。这种任务保留下来
 // 只会在侧边栏留一行空白条目,所以不保存:切走时直接丢弃,首次加载时清理历史遗留。
-// 判定刻意保守——带附件 / 绑定提示词 / 自定义提示词的算不算空由下面逐条把关。
+// 判定刻意保守——带附件 / 带提示词快照的算不算空由下面逐条把关。
 function isTaskBlank(t: Task | null | undefined): boolean {
   if (!t) return false
   if ((t.title || '').trim() || (t.desc || '').trim()) return false
-  if (t.promptId) return false
   if ((t.simpleOverride || '').trim()) return false
   if (Array.isArray(t.attachments) && t.attachments.length > 0) return false
   return true
@@ -347,16 +339,14 @@ async function flushMetaSave(): Promise<boolean> {
   return false
 }
 
-// 监听 title/desc/promptId/simpleOverride 变化 → 1.5s 防抖 → flushMetaSave
+// 监听 title/desc 变化 → 1.5s 防抖 → flushMetaSave
 // 任何字段任一变化都重置计时器（写操作高频时合并）
 watch(
   () => selectedTask.value
     ? {
         id: selectedTask.value.id,
         title: selectedTask.value.title,
-        desc: selectedTask.value.desc,
-        promptId: selectedTask.value.promptId,
-        simpleOverride: selectedTask.value.simpleOverride || ''
+        desc: selectedTask.value.desc
       }
     : null,
   (cur, prev) => {
@@ -406,20 +396,9 @@ function onBeforeUnloadPersist() {
   }
 }
 
-const promptDialog = reactive({ visible: false, editing: null as Prompt | null, name: '', content: '', aiLoading: false, projectPath: '' })
-const instructionDialog = reactive({ visible: false, text: '', loading: false, saving: false })
 // 任务描述（主任务 desc + 附件）默认折叠，避免撑满首屏、把对话区挤到折叠线以下
 // （内容不空也不自动展开：有内容时摘要行右侧有「已填写」徽标 + 附件数作为信号）
 const taskDescExpanded = ref(false)
-
-// ── 提示词按项目过滤 ────────────────────────────────────────────────────
-// 全局提示词的 projectPath = '' (空串);右侧下拉只展示「当前项目专属 + 全局」两部分。
-// 历史数据(没有 projectPath 字段)也会被 !p.projectPath 命中 → 仍作为全局展示,不影响存量。
-const availablePrompts = computed<Prompt[]>(() => {
-  const cur = canonicalProjectPath(currentProject.value.path)
-  return prompts.value.filter(p => !p.projectPath || canonicalProjectPath(p.projectPath) === cur)
-})
-
 
 /** 复制文本到剪贴板，失败时降级到 textarea + execCommand。 */
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -623,140 +602,29 @@ const runButtonTitle = computed(() => {
   return selectedTaskHasRun.value ? $t('@WORKBENCH:重新跑一轮:上一轮的执行记录会被清空') : ''
 })
 
-// clearExecutionForSelectedTask → 来自 useWorkbenchExecution
+/** 任务「提示词」只读展示：派发时冻结的分段快照（全局/项目两段）；
+ *  老任务（合并前派发的）没有分段字段，回退整段展示 simpleOverride。 */
+const selectedTaskPromptParts = computed<{ key: string; label: string; text: string }[]>(() => {
+  const t = selectedTask.value
+  if (!t) return []
+  const parts = t.promptParts
+  if (parts && (parts.global || parts.project)) {
+    const list: { key: string; label: string; text: string }[] = []
+    if (parts.global) list.push({ key: 'global', label: $t('@WORKBENCH:全局提示词'), text: parts.global })
+    if (parts.project) list.push({ key: 'project', label: $t('@WORKBENCH:项目提示词'), text: parts.project })
+    return list
+  }
+  const legacy = (t.simpleOverride || '').trim()
+  if (legacy) return [{ key: 'legacy', label: $t('@WORKBENCH:提示词'), text: legacy }]
+  return []
+})
 
-// ── 提示词 CRUD ─────────────────────────────────────────────────────────────
-// 新建提示词：默认归属当前项目（若已选中项目）；用户可在弹窗里手动改成"全局"。
-// 让"在哪个项目添加就属于哪个项目"的默认行为一步到位,不需要额外操作。
-function openCreatePrompt() {
-  promptDialog.editing = null
-  promptDialog.name = ''
-  promptDialog.content = ''
-  promptDialog.aiLoading = false
-  promptDialog.projectPath = (currentProject.value.path || '').trim()
-  promptDialog.visible = true
-}
-function openEditPrompt(p: Prompt) {
-  promptDialog.editing = p
-  promptDialog.name = p.name
-  promptDialog.content = p.content
-  promptDialog.aiLoading = false
-  // 旧数据没有 projectPath → 视同全局(空串)
-  promptDialog.projectPath = (p.projectPath || '').trim()
-  promptDialog.visible = true
-}
-async function aiGeneratePrompt() {
-  if (promptDialog.aiLoading) return
-  promptDialog.aiLoading = true
-  try {
-    const res = await fetch('/api/workbench/prompts/ai-generate', { method: 'POST' }).then(r => r.json())
-    if (res.success) {
-      // 后端只回 summary（架构说明纯文本），不再拼接 template
-      promptDialog.name = res.name || promptDialog.name
-      promptDialog.content = res.result || ''
-      ElMessage.success($t('@WORKBENCH:已生成，可继续编辑'))
-    } else {
-      ElMessage.error(res.error || $t('@WORKBENCH:生成失败'))
-    }
-  } catch (err: any) {
-    ElMessage.error($t('@WORKBENCH:网络错误: ') + (err && err.message || err))
-  } finally {
-    promptDialog.aiLoading = false
-  }
-}
-async function openEditInstruction() {
-  instructionDialog.visible = true
-  instructionDialog.loading = true
-  try {
-    const res = await fetch('/api/workbench/prompts/ai-instruction').then(r => r.json())
-    if (res.success) {
-      instructionDialog.text = res.instruction || ''
-    } else {
-      ElMessage.error(res.error || $t('@WORKBENCH:读取指令失败'))
-    }
-  } catch (err: any) {
-    ElMessage.error($t('@WORKBENCH:读取指令失败') + ': ' + (err && err.message || err))
-  } finally {
-    instructionDialog.loading = false
-  }
-}
-async function saveInstruction() {
-  if (!instructionDialog.text.trim()) {
-    ElMessage.warning($t('@WORKBENCH:指令内容不能为空'))
-    return
-  }
-  instructionDialog.saving = true
-  try {
-    const res = await fetch('/api/workbench/prompts/ai-instruction', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ instruction: instructionDialog.text })
-    }).then(r => r.json())
-    if (res.success) {
-      ElMessage.success($t('@WORKBENCH:已保存指令'))
-      instructionDialog.visible = false
-    } else {
-      ElMessage.error(res.error || $t('@WORKBENCH:保存失败'))
-    }
-  } catch (err: any) {
-    ElMessage.error($t('@WORKBENCH:网络错误: ') + (err && err.message || err))
-  } finally {
-    instructionDialog.saving = false
-  }
-}
-async function savePrompt() {
-  if (!promptDialog.name.trim() || !promptDialog.content.trim()) {
-    ElMessage.warning($t('@WORKBENCH:名称和内容不能为空'))
-    return
-  }
-  // 落盘:projectPath 为空 = 全局提示词,非空 = 归属到那个项目
-  const body = {
-    id: promptDialog.editing?.id,
-    name: promptDialog.name.trim(),
-    content: promptDialog.content,
-    projectPath: (promptDialog.projectPath || '').trim()
-  }
-  const res = await fetch('/api/workbench/prompts', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  }).then(r => r.json())
-  if (res.success) {
-    ElMessage.success($t('@WORKBENCH:已保存'))
-    promptDialog.visible = false
-    loadPrompts()
-  } else {
-    ElMessage.error(res.error || $t('@WORKBENCH:保存失败'))
-  }
-}
-async function deletePrompt(p: Prompt) {
-  await ElMessageBox.confirm(
-    $t('@WORKBENCH:删除提示词「{name}」？', { name: p.name }),
-    $t('@WORKBENCH:确认'),
-    { type: 'warning' }
-  )
-  await fetch(`/api/workbench/prompts/${p.id}`, { method: 'DELETE' })
-  loadPrompts()
-  // 清掉引用
-  for (const t of tasks.value) {
-    if (t.promptId === p.id) {
-      t.promptId = null
-      await fetch('/api/workbench/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(t)
-      })
-    }
-  }
-  // 删的是提示词，不是任务 —— 保留选中项，别把正在编辑的任务顺手清掉
-  await refreshTasks()
-}
+// clearExecutionForSelectedTask → 来自 useWorkbenchExecution
 
 // ── 任务 CRUD ───────────────────────────────────────────────────────────────
 // 新建任务:点按钮直接创建空任务,自动选中,右侧立即出现编辑器。不再走弹窗。
-// - 任务级 title / desc / promptId / simpleOverride 全部在右侧 inline 编辑
-//   (标题输入、描述折叠面板、promptId select、simpleOverride textarea),
-//   原弹窗只是「创建时的初始值收集器」,能力完全可由右侧 inline 化字段承担。
+// - 任务级 title / desc 在右侧 inline 编辑（标题输入、描述折叠面板）；
+//   提示词是派发时冻结的只读快照，不参与编辑。
 // - 标题为空由后端存储 '' / 前端模板 fallback 显示「未命名任务」,跟弹窗里"不填则自动命名"语义一致。
 // - 连续点击防并发:creatingTask 标志位 + 按钮 disabled。
 // - 创建后标题输入框自动聚焦,直接打字即可起标题(免去鼠标移到输入框)。
@@ -813,9 +681,7 @@ async function createTaskDirect() {
   creatingTask.value = true
   const body: any = {
     title: '',
-    desc: '',
-    promptId: null,
-    simpleOverride: ''
+    desc: ''
   }
   // 附带当前项目路径,后续按项目分组显示;没有当前项目时后端走默认
   if (currentProject.value.path) {
@@ -866,7 +732,7 @@ async function deleteTask(t: Task) {
 
 /**
  * 复制任务：基于源任务创建一个新任务，标题加"副本"后缀，
- * 保留 desc / promptId / simpleOverride 等全部内容。
+ * 保留 desc 与派发时冻结的提示词快照（simpleOverride / promptParts）。
  */
 async function copyTask(t: Task) {
   const baseTitle = (t.title || $t('@WORKBENCH:未命名任务')).trim()
@@ -874,8 +740,10 @@ async function copyTask(t: Task) {
   const body: any = {
     title: copyTitle,
     desc: t.desc || '',
-    promptId: t.promptId || null,
     simpleOverride: t.simpleOverride || ''
+  }
+  if (t.promptParts && (t.promptParts.global || t.promptParts.project)) {
+    body.promptParts = t.promptParts
   }
   if (currentProject.value.path) {
     body.projectPath = currentProject.value.path
@@ -902,7 +770,7 @@ async function copyTask(t: Task) {
 }
 async function selectTask(t: Task) {
   if (selectedTaskId.value === t.id) return
-  // 切换前先把当前 task 的未保存 title/desc/promptId 落盘
+  // 切换前先把当前 task 的未保存 title/desc 落盘
   clearMetaSaveTimers()
   const leaving = selectedTask.value
   if (leaving && isTaskBlank(leaving)) {
@@ -1008,7 +876,7 @@ async function persistTask(showSuccess: boolean): Promise<boolean> {
 // ── 执行（其余执行函数来自 useWorkbenchExecution） ──
 
 onMounted(async () => {
-  await Promise.all([loadPrompts(), loadTasks(), loadCurrentProject(), loadJobs()])
+  await Promise.all([loadTasks(), loadCurrentProject(), loadJobs()])
   // 首次加载清一次历史遗留的空任务(以前点新建没填东西留下的空白行)
   await pruneBlankTasks()
   connectSSE()
@@ -1113,7 +981,6 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
     <WorkbenchSidebar
       :style="{ width: sidebarWidth + 'px' }"
       :tasks="tasks"
-      :prompts="prompts"
       :selected-task-id="selectedTaskId"
       :current-project="currentProject"
       :creating-task="creatingTask"
@@ -1122,9 +989,6 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
       @delete-task="deleteTask"
       @copy-task="copyTask"
       @create-task="createTaskDirect"
-      @open-create-prompt="openCreatePrompt"
-      @open-edit-prompt="openEditPrompt"
-      @delete-prompt="deletePrompt"
       @reorder-tasks="reorderTasks"
     />
     <div
@@ -1194,10 +1058,6 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
               : $t('@WORKBENCH:有未保存的更改')
             }}
           </span>
-          <select class="wb-select" v-model="selectedTask.promptId" :aria-label="$t('@WORKBENCH:预置提示词')">
-            <option :value="null">{{ $t('@WORKBENCH:不绑定预置提示词') }}</option>
-            <option v-for="p in availablePrompts" :key="p.id" :value="p.id">{{ p.name }}</option>
-          </select>
           <!--
             执行：split button —— 主体按当前选中执行器直接跑，下拉临时切换执行器。
             文案随执行状态变（2026-10-01）：这条任务已经有执行记录时改叫「重新执行任务」，
@@ -1357,34 +1217,35 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
                  template.content（inert DocumentFragment），不产生任何布局盒。
                  症状：任务在跑、看板「执行中」，但对话区一片空白，
                  而 innerText 里明明有内容（元素 0×0）。重构移除子任务概念时留下的空壳。 -->
+            <!-- 提示词：派发时冻结的只读快照（全局 + 项目两段），改设置不影响历史任务。
+                   任务级不可编辑 —— 编辑入口只有主 Agent 控制台的「预设提示词」设置。 -->
             <details
-              class="wb-simple__override"
-                :class="{ 'has-content': !!(selectedTask.simpleOverride && selectedTask.simpleOverride.trim()) }"
-              >
-                <summary class="wb-form-item__label wb-simple__override-summary">
-                  <el-icon class="wb-simple__override-caret"><ArrowRight /></el-icon>
-                  <span>{{ $t('@WORKBENCH:覆盖预置提示词（可选）') }}</span>
-                  <span
-                    v-if="selectedTask.simpleOverride && selectedTask.simpleOverride.trim()"
-                    class="wb-simple__override-tag"
-                    :title="$t('@WORKBENCH:已填写覆盖内容')"
-                  >{{ $t('@WORKBENCH:已填写') }}</span>
-                  <button
-                    v-if="simpleJobState(simpleJobFor(selectedTask)) === 'running' && simpleJobFor(selectedTask)"
-                    class="wb-simple__stop"
-                    @click.stop="cancelJob(simpleJobFor(selectedTask)!)"
-                  >
-                    {{ $t('@WORKBENCH:停止') }}
-                  </button>
-                </summary>
-                <textarea
-                  class="wb-textarea"
-                  v-model="selectedTask.simpleOverride"
-                  :placeholder="$t('@WORKBENCH:留空则使用上方选定的「预置提示词」模板;可用变量:｛｛task.title｝｝ ｛｛task.desc｝｝ ｛｛repo.path｝｝ ｛｛branch｝｝')"
-                  :aria-label="$t('@WORKBENCH:覆盖预置提示词（可选）')"
-                  rows="6"
-                />
-              </details>
+              class="wb-task-prompt"
+              :class="{ 'has-content': selectedTaskPromptParts.length > 0 }"
+            >
+              <summary class="wb-form-item__label wb-task-prompt__summary">
+                <el-icon class="wb-task-prompt__caret"><ArrowRight /></el-icon>
+                <span>{{ $t('@WORKBENCH:提示词') }}</span>
+                <span
+                  v-if="selectedTaskPromptParts.length > 0"
+                  class="wb-task-prompt__tag"
+                >{{ $t('@WORKBENCH:已填写') }}</span>
+                <button
+                  v-if="simpleJobState(simpleJobFor(selectedTask)) === 'running' && simpleJobFor(selectedTask)"
+                  class="wb-simple__stop"
+                  @click.stop="cancelJob(simpleJobFor(selectedTask)!)"
+                >
+                  {{ $t('@WORKBENCH:停止') }}
+                </button>
+              </summary>
+              <div v-if="selectedTaskPromptParts.length > 0" class="wb-task-prompt__parts">
+                <div v-for="part in selectedTaskPromptParts" :key="part.key" class="wb-task-prompt__part">
+                  <div class="wb-task-prompt__label">{{ part.label }}</div>
+                  <pre class="wb-task-prompt__text">{{ part.text }}</pre>
+                </div>
+              </div>
+              <p v-else class="wb-task-prompt__empty">{{ $t('@WORKBENCH:这条任务没有附加提示词') }}</p>
+            </details>
               <!-- 任务对话流：所有轮次合并到单个 ChatContainer -->
               <template v-if="simpleAllJobsFor(selectedTask).length > 0">
                 <div class="wb-simple-chat-wrap" ref="chatWrapRef">
@@ -1460,94 +1321,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
       <ExecutionLogManager />
     </CommonDialog>
 
-    <!-- 提示词编辑对话框：同「执行日志」，从编辑器里打开，必须 append-to-body 才压得住编辑器弹窗 -->
-    <CommonDialog
-      v-model="promptDialog.visible"
-      :title="promptDialog.editing ? $t('@WORKBENCH:编辑提示词') : $t('@WORKBENCH:新建提示词')"
-      width="640px"
-      type="flex"
-      append-to-body
-    >
-      <el-form label-position="top">
-        <el-form-item :label="$t('@WORKBENCH:名称')">
-          <el-input v-model="promptDialog.name" :placeholder="$t('@WORKBENCH:如：代码审查 / 写测试')" />
-        </el-form-item>
-        <el-form-item :label="$t('@WORKBENCH:所属项目')">
-          <el-select
-            v-model="promptDialog.projectPath"
-            :placeholder="$t('@WORKBENCH:所属项目')"
-            style="width: 100%"
-            :disabled="!currentProject.path"
-          >
-            <!-- 「全局」选项 = projectPath 为空串,所有项目都能看到 -->
-            <el-option
-              :label="$t('@WORKBENCH:全局（所有项目可用）')"
-              value=""
-            />
-            <!-- 仅当有当前项目时才允许绑定到当前项目,避免“绑到空项目”的兑犷数据 -->
-            <el-option
-              v-if="currentProject.path"
-              :key="currentProject.path"
-              :label="currentProject.name || currentProject.path"
-              :value="currentProject.path"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <el-button
-              type="primary"
-              plain
-              :loading="promptDialog.aiLoading"
-              @click="aiGeneratePrompt"
-            >
-              {{ $t('@WORKBENCH:AI 生成项目架构说明') }}
-            </el-button>
-            <el-button @click="openEditInstruction">
-              {{ $t('@WORKBENCH:编辑指令') }}
-            </el-button>
-          </div>
-        </el-form-item>
-        <el-form-item :label="$t('@WORKBENCH:内容')">
-          <el-input
-            v-model="promptDialog.content"
-            type="textarea"
-            :rows="10"
-            :placeholder="$t('@WORKBENCH:可用变量：') + '｛｛task.title｝｝ ｛｛task.desc｝｝ ｛｛sub.title｝｝ ｛｛sub.desc｝｝ ｛｛repo.path｝｝ ｛｛branch｝｝'"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="promptDialog.visible = false">{{ $t('@WORKBENCH:取消') }}</el-button>
-        <el-button type="primary" @click="savePrompt">{{ $t('@WORKBENCH:保存') }}</el-button>
-      </template>
-    </CommonDialog>
-
-    <!-- 生成指令编辑对话框 -->
-    <CommonDialog
-      v-model="instructionDialog.visible"
-      :title="$t('@WORKBENCH:编辑生成指令')"
-      width="720px"
-      type="flex"
-      append-to-body
-    >
-      <el-form label-position="top">
-        <el-form-item :label="$t('@WORKBENCH:指令内容')">
-          <el-input
-            v-model="instructionDialog.text"
-            type="textarea"
-            :rows="18"
-            :placeholder="$t('@WORKBENCH:指令内容')"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="instructionDialog.visible = false">{{ $t('@WORKBENCH:取消') }}</el-button>
-        <el-button type="primary" :loading="instructionDialog.saving" @click="saveInstruction">{{ $t('@WORKBENCH:保存') }}</el-button>
-      </template>
-    </CommonDialog>
-
-  </div>
+    </div>
 </template>
 
 <style scoped>
@@ -1780,7 +1554,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   gap: 8px;
   min-height: 0;
   /* 侧栏整体 overflow: auto 已经能滚动；不要让 flex 把分组压扁，
-     否则任务列表最后一项会被下方"预置提示词"分组压上来形成重叠。 */
+     否则任务列表最后一项会被下方分组压上来形成重叠。 */
   flex-shrink: 0;
 }
 .wb-section + .wb-section {
@@ -2449,12 +2223,11 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
    这里不再重复。原因：el-dialog 用 teleport 渲染到 body 下，scoped 选择器（包括 :deep()）
    都拿不到它的根 div，强行写只会变成 dead rule。 */
 
-/* ── 表单控件统一系统（input / select / textarea 共用基底） ── */
+/* ── 表单控件统一系统（input / textarea 共用基底） ── */
 /*    设计目标：与按钮视觉重量齐平、可识别焦点、hover 反馈明确。
       颜色走 --border-color-medium 提升基础边框可见度，hover 阶段加深，
       focus 阶段同时改色 + 套 3px primary-tinted ring。 */
 .wb-input,
-.wb-select,
 .wb-textarea {
   font-family: inherit;
   color: var(--text-primary);
@@ -2522,33 +2295,6 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   font-weight: 500;
   color: var(--text-placeholder);
 }
-
-/* ── 下拉选择 ─────────────────────────────────────── */
-.wb-select {
-  height: 36px;
-  padding: 0 32px 0 12px;
-  font-size: var(--font-size-mid);
-  font-weight: 500;
-  min-width: 168px;
-  cursor: pointer;
-  /* 自绘 chevron，避免浏览器默认箭头视觉噪音 */
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 4.5l3 3 3-3' fill='none' stroke='%236b7280' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 12px 12px;
-  flex-shrink: 0;
-}
-.wb-select:hover:not(:focus) {
-  border-color: var(--border-input-hover, #cbd5e1);
-  background-color: var(--bg-container-hover);
-}
-.wb-select:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--tint-primary-18);
-}
-/* 标记「不绑定」之类的占位符选项——当值为 null 时 option label 会更浅，
-   但 select 自身无法读到 selectedIndex 状态，用一个轻量颜色 hack：
-   没有明显需求的情况下保持现状即可 */
 
 /* ── 多行输入 ─────────────────────────────────────── */
 .wb-textarea {
@@ -2704,14 +2450,11 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   cursor: not-allowed;
 }
 
-/* ── 任务「覆盖预置提示词」可折叠 ── */
-.wb-simple__override {
+/* ── 任务「提示词」只读展示（派发时快照，拆全局/项目两段） ── */
+.wb-task-prompt {
   border-radius: var(--radius-md);
 }
-.wb-simple__override > .wb-textarea {
-  margin-top: 8px;
-}
-.wb-simple__override-summary {
+.wb-task-prompt__summary {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2720,20 +2463,20 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   list-style: none;
   padding: 4px 0;
 }
-.wb-simple__override-summary::-webkit-details-marker { display: none; }
-.wb-simple__override-caret {
+.wb-task-prompt__summary::-webkit-details-marker { display: none; }
+.wb-task-prompt__caret {
   font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   transition: transform var(--transition-fast) var(--ease-custom);
 }
-.wb-simple__override[open] > .wb-simple__override-summary .wb-simple__override-caret {
+.wb-task-prompt[open] > .wb-task-prompt__summary .wb-task-prompt__caret {
   transform: rotate(90deg);
   color: var(--color-primary);
 }
-.wb-simple__override.has-content > .wb-simple__override-summary {
+.wb-task-prompt.has-content > .wb-task-prompt__summary {
   color: var(--text-primary);
 }
-.wb-simple__override-tag {
+.wb-task-prompt__tag {
   font-size: var(--font-size-xs);
   font-weight: 600;
   padding: 1px 6px;
@@ -2741,6 +2484,39 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   background: var(--tint-primary-12, color-mix(in srgb, var(--color-primary) 12%, transparent));
   color: var(--color-primary);
   letter-spacing: 0.2px;
+}
+.wb-task-prompt__parts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.wb-task-prompt__part {
+  padding: 6px 9px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+.wb-task-prompt__label {
+  margin-bottom: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+.wb-task-prompt__text {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  font-family: inherit;
+  font-size: var(--font-size-mid);
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.wb-task-prompt__empty {
+  margin: 8px 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
 }
 
 /* ── 任务单一对话流：合并所有轮次到一个 ChatContainer ── */
@@ -2969,7 +2745,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   color: var(--color-primary);
 }
 
-/* ── 任务级字段自动保存指示器（title / desc / promptId） ─────────── */
+/* ── 任务级字段自动保存指示器（title / desc） ─────────── */
 .wb-meta-save {
   display: inline-flex;
   align-items: center;

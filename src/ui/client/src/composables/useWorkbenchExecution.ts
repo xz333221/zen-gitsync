@@ -35,8 +35,6 @@ export function useWorkbenchExecution(
     const dirty = !onDisk
       || onDisk.title !== selectedTask.value.title
       || onDisk.desc !== selectedTask.value.desc
-      || onDisk.promptId !== selectedTask.value.promptId
-      || (onDisk.simpleOverride || '') !== (selectedTask.value.simpleOverride || '')
     if (!dirty) return true
     return await options.persistTask(false)
   }

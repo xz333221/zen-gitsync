@@ -31,13 +31,11 @@ import { DATA_DIR } from '../../../../paths.js';
 // 全部存在用户主目录 ~/.zen-gitsync/ 下，跨项目共享。
 // 目录本身定义在 src/paths.js(全部数据路径的唯一真相源)，这里只在其下拼文件名。
 export { DATA_DIR };
-export const PROMPTS_FILE = path.join(DATA_DIR, 'prompts.json');
 export const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 // 应用主配置（projects / recentDirectories / models …）。这里只用来把**路径**告诉 Agent，
 // 让它需要时自己读 —— 服务端不在这个流程里解析配置内容。
 export const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 export const IMAGES_DIR = path.join(DATA_DIR, 'workbench-images');
-export const INSTRUCTION_FILE = path.join(DATA_DIR, 'ai-instruction.json');
 // 执行日志持久化：jobs.json 是历史档案，jobs-config.json 是保留策略
 export const JOBS_FILE = path.join(DATA_DIR, 'jobs.json');
 export const JOBS_CONFIG_FILE = path.join(DATA_DIR, 'jobs-config.json');
@@ -102,7 +100,7 @@ export const TRUTH_FILES = {
   configFile: CONFIG_FILE,
 };
 
-// 派发默认提示词（全局 / 各项目级）**单条**长度上限。
+// 派发预设提示词（全局 / 各项目级）**单条**长度上限。
 // 它不是"指令"，而是一条每次派发都会被拼进 prompt 的约束 —— 4000 字足够写下一整套
 // 规范，再长只会让每一次执行都白烧一遍 token。
 // 之所以是 4000 而不是 8000：全局 + 项目级拼起来正好等于任务提示词字段

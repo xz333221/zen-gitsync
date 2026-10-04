@@ -1,10 +1,9 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { $t } from '@/lang/static'
-import type { Job, Task, Prompt } from '@/types/workbench'
+import type { Job, Task } from '@/types/workbench'
 
 export function useWorkbenchData() {
-  const prompts = ref<Prompt[]>([])
   const tasks = ref<Task[]>([])
   const jobs = ref<Job[]>([])
   const currentProject = ref<{ path: string; name: string }>({ path: '', name: '' })
@@ -96,10 +95,6 @@ export function useWorkbenchData() {
     if (es) { es.close(); es = null }
   }
 
-  async function loadPrompts() {
-    const res = await fetch('/api/workbench/prompts').then(r => r.json()).catch(() => ({ prompts: [] }))
-    prompts.value = res.prompts || []
-  }
   async function loadTasks(captureSnapshot?: () => void) {
     const res = await fetch('/api/workbench/tasks').then(r => r.json()).catch(() => ({ tasks: [] }))
     tasks.value = res.tasks || []
@@ -134,9 +129,7 @@ export function useWorkbenchData() {
   async function createTask(currentProjectPath?: string): Promise<Task | null> {
     const body: any = {
       title: '',
-      desc: '',
-      promptId: null,
-      simpleOverride: ''
+      desc: ''
     }
     if (currentProjectPath) {
       body.projectPath = currentProjectPath
@@ -159,10 +152,10 @@ export function useWorkbenchData() {
   }
 
   return {
-    prompts, tasks, jobs, currentProject,
+    tasks, jobs, currentProject,
     applyJobEvent,
     connectSSE, disconnectSSE,
-    loadPrompts, loadTasks, loadCurrentProject, loadJobs,
+    loadTasks, loadCurrentProject, loadJobs,
     clearJobsByTask, createTask
   }
 }

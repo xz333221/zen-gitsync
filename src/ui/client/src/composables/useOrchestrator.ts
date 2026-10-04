@@ -13,14 +13,14 @@
 // limitations under the License.
 //
 // 主 Agent 控制台数据源：GET /api/workbench/orchestrator 及其六个写接口
-// （调度开关 / 派发 / 全局默认提示词 / 项目默认提示词 / 立即报告 / 报告间隔）。
+// （调度开关 / 派发 / 全局预设提示词 / 项目预设提示词 / 立即报告 / 报告间隔）。
 //
 // 关于「暂停调度」的真实语义（别在 UI 上把它说成别的）：
 //   暂停只拦**自动派发** —— 通过控制台派发的指令在暂停期间只建任务不执行；
 //   手动点执行、子任务单独执行一概不受影响。暂停的是主 Agent 的自主行为，不是用户的手。
 //   拦截在服务端（routes/workbench/index.js），前端这个开关只是同一份状态的镜像。
 //
-// 关于「默认提示词」：
+// 关于「预设提示词」：
 //   两级（全局 + 每个项目一条），派发时服务端按**落点项目**解析后拼在指令之前，
 //   并抄进任务的 simpleOverride —— 前端只负责编辑与显示，不自己拼提示词
 //   （两边各拼一次必然会分叉）。生效规则见服务端 resolveDispatchPrompt。
@@ -72,7 +72,7 @@ export interface DispatchPayload {
   autoRun?: boolean
   /** 已上传到暂存区的附件。只回传 id / ext / originalName，服务端自己按 id 找文件 */
   attachments?: Attachment[]
-  /** false = 本次派发不附加默认提示词（默认附加） */
+  /** false = 本次派发不附加预设提示词（默认附加） */
   useDefaultPrompt?: boolean
   /** 本次派发建的任务用哪个本地 CLI 执行（claude | opencode | codex）。缺省走服务端配置默认 */
   executor?: TaskExecutorId
@@ -95,9 +95,9 @@ export function useOrchestrator() {
   const loaded = ref(false)
   const togglingSchedule = ref(false)
   const dispatching = ref(false)
-  /** 全局默认提示词（'' = 没设置） */
+  /** 全局预设提示词（'' = 没设置） */
   const defaultPrompt = ref('')
-  /** 各项目默认提示词，键为归一化项目路径（与 ProjectSummary.key 同口径） */
+  /** 各项目预设提示词，键为归一化项目路径（与 ProjectSummary.key 同口径） */
   const projectPrompts = ref<Record<string, ProjectPromptEntry>>({})
   /** 进度报告历史（新的在前）。正文走单独接口，不在这份 5s 轮询里 */
   const reports = ref<ProgressReport[]>([])
@@ -230,7 +230,7 @@ export function useOrchestrator() {
   }
 
   /**
-   * 写全局默认提示词（'' = 清除）。
+   * 写全局预设提示词（'' = 清除）。
    *
    * 成功后就地更新本地值而不是再拉一次整份状态：这个弹窗可能正开在用户面前，
    * 让「保存」按钮的生命周期和一次网络往返绑在一起就够，不必多打一轮轮询接口。
@@ -247,7 +247,7 @@ export function useOrchestrator() {
         return false
       }
       defaultPrompt.value = typeof res.defaultPrompt === 'string' ? res.defaultPrompt : ''
-      ElMessage.success($t('@WORKBENCH:已保存全局默认提示词'))
+      ElMessage.success($t('@WORKBENCH:已保存全局预设提示词'))
       return true
     } catch (err: any) {
       ElMessage.error($t('@WORKBENCH:网络错误: ') + (err?.message || err))
@@ -255,7 +255,7 @@ export function useOrchestrator() {
     }
   }
 
-  /** 写某个项目的默认提示词（'' = 清除该项目这一条） */
+  /** 写某个项目的预设提示词（'' = 清除该项目这一条） */
   async function saveProjectPrompt(projectPath: string, prompt: string): Promise<boolean> {
     try {
       const res = await fetch('/api/workbench/orchestrator/project-prompt', {
@@ -270,7 +270,7 @@ export function useOrchestrator() {
       projectPrompts.value = res.projectPrompts && typeof res.projectPrompts === 'object'
         ? res.projectPrompts
         : {}
-      ElMessage.success($t('@WORKBENCH:已保存项目默认提示词'))
+      ElMessage.success($t('@WORKBENCH:已保存项目预设提示词'))
       return true
     } catch (err: any) {
       ElMessage.error($t('@WORKBENCH:网络错误: ') + (err?.message || err))
@@ -325,7 +325,7 @@ export function useOrchestrator() {
           text: payload.text,
           projectPath: payload.projectPath || '',
           autoRun: payload.autoRun !== false,
-          // 省缺即附加：默认提示词的默认行为是"生效"，勾掉才不带
+          // 省缺即附加：预设提示词的默认行为是"生效"，勾掉才不带
           useDefaultPrompt: payload.useDefaultPrompt !== false,
           // 执行器缺省时服务端回落到配置默认；非法值也是同一个回落，不用前端兜底
           executor: payload.executor,

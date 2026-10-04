@@ -14,7 +14,7 @@
   ~ limitations under the License.
   -->
 <!--
-  多项目编排台 · 派发默认提示词设置弹窗。
+  多项目编排台 · 派发预设提示词设置弹窗。
 
   两级：全局一条（所有项目都附加）+ 当前项目的每项目一条。
   两条是**拼接**关系而不是覆盖关系 —— 见服务端 orchestratorStore.resolveDispatchPrompt
@@ -30,13 +30,13 @@ import CommonDialog from '@/components/CommonDialog.vue'
 
 const props = defineProps<{
   modelValue: boolean
-  /** 全局默认提示词（'' = 没设置） */
+  /** 全局预设提示词（'' = 没设置） */
   defaultPrompt: string
   /** 当前选中项目的路径；'' = 选的是「全部项目」，此时项目级这一栏不可编辑 */
   projectPath: string
   /** 当前选中项目的显示名，用于字段标题 */
   projectName: string
-  /** 当前选中项目的默认提示词（'' = 没设置） */
+  /** 当前选中项目的预设提示词（'' = 没设置） */
   projectPrompt: string
   /** 保存中：两个按钮一起禁用，避免连点存两次 */
   saving: boolean
@@ -80,7 +80,7 @@ function close() {
 <template>
   <CommonDialog
     :model-value="modelValue"
-    :title="$t('@WORKBENCH:默认提示词')"
+    :title="$t('@WORKBENCH:预设提示词')"
     width="min(640px, 94vw)"
     :close-on-click-modal="false"
     @update:model-value="emit('update:modelValue', $event)"
@@ -92,7 +92,7 @@ function close() {
 
       <div class="pd__field">
         <div class="pd__head">
-          <label class="pd__label" for="pd-global">{{ $t('@WORKBENCH:全局默认提示词') }}</label>
+          <label class="pd__label" for="pd-global">{{ $t('@WORKBENCH:全局提示词') }}</label>
           <span class="pd__count">{{ globalDraft.length }} / {{ MAX_CHARS }}</span>
         </div>
         <textarea

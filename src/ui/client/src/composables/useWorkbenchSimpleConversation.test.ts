@@ -36,7 +36,6 @@ function makeTask(patch: Partial<Task> = {}): Task {
     id: 't1',
     title: '任务',
     desc: '描述',
-    promptId: null,
     simpleOverride: '',
     projectPath: 'C:\\proj',
     status: 'todo',
