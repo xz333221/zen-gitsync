@@ -800,6 +800,42 @@
   --dot-glow-warning: 0 0 6px 1px color-mix(in srgb, var(--color-warning) 45%, transparent);
   --dot-glow-danger: 0 0 6px 1px color-mix(in srgb, var(--color-danger) 45%, transparent);
 
+
+  /* ===== 语义角色色 =====
+     角色 = 一块 UI 在回答"我是什么"，色相就是答案。
+     浅色主题的 ink 必须过 AA 4.5:1（11~12px 中文尤其），所以 ink 一律用
+     各色系的 -dark 档；surface/edge/glow 是装饰，透明度随便。 */
+  --role-pending-ink: #5b6472;          /* 石板灰蓝：待处理 / 未开始 */
+  --role-pending-surface: color-mix(in srgb, #64748b 6%, transparent);
+  --role-pending-edge: color-mix(in srgb, #64748b 34%, transparent);
+  --role-pending-glow: 0 0 6px 1px color-mix(in srgb, #64748b 40%, transparent);
+
+  --role-active-ink: var(--color-warning-dark);
+  --role-active-surface: var(--tint-warning-06);
+  --role-active-edge: var(--tint-warning-45);
+  --role-active-glow: var(--dot-glow-warning);
+
+  --role-done-ink: var(--color-success-dark);
+  --role-done-surface: var(--tint-success-04);
+  --role-done-edge: var(--tint-success-35);
+  --role-done-glow: var(--dot-glow-success);
+
+  --role-error-ink: var(--color-danger-dark);
+  --role-error-surface: var(--tint-danger-06);
+  --role-error-edge: var(--tint-danger-45);
+  --role-error-glow: var(--dot-glow-danger);
+
+  /* AI 代做：紫。2026-10-04 重新启用 —— 之前被当成"AI 紫"删掉的是**渐变**，
+     渐变才是问题（PRODUCT.md 时代把它和"AI 生成感"绑在一起）。实心紫配
+     白字过 AA，是一条正经的产品色；而且紫色在本仓库本来就已经是
+     --color-think（思考区）/ --color-info-light（活动栏徽标）/
+     --git-status-untracked（未跟踪文件）三处状态色的用色，
+     这里只是把那个既有身份收进角色表，不是新增色相。 */
+  --role-ai-ink: var(--color-think-dark);
+  --role-ai-surface: var(--tint-think-06);
+  --role-ai-edge: var(--tint-think-45);
+  --role-ai-glow: 0 0 6px 1px color-mix(in srgb, var(--color-think) 40%, transparent);
+
   /* 图标字形尺寸（大号图标按钮 44px 专用）
      三种承载方式 el-icon / svg-icon / 图片 必须同档，否则混排时会出现「某个图标小一圈」
      （实测：el-icon 曾按字号渲染 24px，而自定义 SVG 写死 22px，视觉上明显偏小） */

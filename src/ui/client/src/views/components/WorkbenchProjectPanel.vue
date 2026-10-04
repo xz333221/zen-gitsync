@@ -346,7 +346,11 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
     <ul class="proj__list">
       <li
         class="proj-item proj-item--all"
-        :class="{ 'is-active': selectedKey === '' }"
+        :class="{
+          'is-active': selectedKey === '',
+          'is-running': totals.running > 0,
+          'is-complete': totals.total > 0 && totals.done >= totals.total,
+        }"
         role="button"
         tabindex="0"
         :title="$t('@WORKBENCH:全部项目')"
@@ -386,6 +390,11 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
         :class="{
           'is-active': p.key === selectedKey,
           'is-running': p.stats.runningJobs > 0,
+          // 全跑完且当前没在跑才算「完成」—— 有在跑的哪怕 done==total 也不算
+          'is-complete':
+            p.stats.total > 0 &&
+            p.stats.done >= p.stats.total &&
+            p.stats.runningJobs === 0,
           'is-missing': p.exists === false,
         }"
         role="button"
@@ -806,7 +815,9 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   box-shadow: inset 0 0 0 1px var(--tint-primary-14);
 }
 .proj-item:focus-visible { outline: var(--focus-outline); outline-offset: -1px; }
-.proj-item.is-running { background: color-mix(in srgb, var(--color-warning) 7%, transparent); }
+/* 2026-10-04：从字面 color-mix 改成 --role-active-*，与进度条那档同源。 */
+.proj-item.is-running { background: var(--role-active-surface); }
+.proj-item.is-complete { background: var(--role-done-surface); }
 
 /* 「全部项目」：与真实项目同构，但用一条下边线把它和下面的项目列表分隔开 */
 .proj-item--all {
@@ -1101,16 +1112,23 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   min-width: 0;
   height: 4px;
   border-radius: var(--radius-pill);
-  background: var(--bg-subtle);
+  background: color-mix(in srgb, var(--text-tertiary) 16%, transparent);
   overflow: hidden;
 }
 .proj-item__bar-fill {
   display: block;
   height: 100%;
   border-radius: var(--radius-pill);
-  background: var(--gradient-progress);
-  transition: width var(--transition-base) var(--ease-custom);
+  /* 2026-10-04：原本是 var(--gradient-progress)（primary→primary-light 蓝渐变），
+     30 个项目排下来是一条条同一个蓝，进度条完全没传递信息。
+     改成按角色上色（父级 .proj-item.is-running / .is-complete 决定），
+     于是"哪个项目有活儿在跑""哪个已经收尾"扫一眼就知道。 */
+  background: var(--role-pending-ink);
+  transition: width var(--transition-base) var(--ease-custom),
+              background var(--transition-fast) var(--ease-custom);
 }
+.proj-item.is-running .proj-item__bar-fill { background: var(--role-active-ink); }
+.proj-item.is-complete .proj-item__bar-fill { background: var(--role-done-ink); }
 .proj-item__progress-text {
   flex-shrink: 0;
   font-size: var(--font-size-xs);

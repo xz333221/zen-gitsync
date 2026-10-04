@@ -749,12 +749,36 @@ function liveSummary(live: BoardTaskLive): string {
   min-height: 0;
   overflow: hidden;
 }
+/* 2026-10-04：列第一次有了角色色。
+   之前三列除了一个 6px 圆点之外全是同一个蓝 + 同一个灰底，三列并排时
+   眼睛只能靠位置和文字判断"这是哪一列"；而"单调"也不只是审美问题 ——
+   看板的核心心智模型就是"待处理 → 进行中 → 已完成"这条流水线，
+   角色色正好是这条模型最直接的视觉表达。
+   每列挑一个角色（pending / active / done），列身只上 surface 6% 这一档，
+   列头把 ink 和 edge 用足，列表区保持安静免得压住卡片。 */
 .kb-col {
+  --col-ink: var(--role-pending-ink);
+  --col-surface: var(--role-pending-surface);
+  --col-edge: var(--role-pending-edge);
+  --col-glow: var(--role-pending-glow);
   display: flex;
   flex-direction: column;
   min-height: 0;
   min-width: 0;
   border-left: 1px solid var(--border-color);
+  background: var(--col-surface);
+}
+.kb-col--doing {
+  --col-ink: var(--role-active-ink);
+  --col-surface: var(--role-active-surface);
+  --col-edge: var(--role-active-edge);
+  --col-glow: var(--role-active-glow);
+}
+.kb-col--done {
+  --col-ink: var(--role-done-ink);
+  --col-surface: var(--role-done-surface);
+  --col-edge: var(--role-done-edge);
+  --col-glow: var(--role-done-glow);
 }
 .kb-col:first-child { border-left: none; }
 .kb-col__head {
@@ -763,17 +787,20 @@ function liveSummary(live: BoardTaskLive): string {
   gap: 8px;
   padding: 8px 12px;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border-color-light);
+  /* 列头单独铺一档更浓的角色色（14%）：列身那 6% 是"氛围"，
+     列头这条带子才是"标识" —— 只靠标题文字的颜色，扫视时还是得逐列读字。 */
+  background: color-mix(in srgb, var(--col-ink) 14%, transparent);
+  border-bottom: 1px solid var(--col-edge);
 }
 .kb-col__dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: var(--text-tertiary);
+  background: var(--col-ink);
+  box-shadow: var(--col-glow);
 }
-.kb-col--doing .kb-col__dot { background: var(--color-warning); box-shadow: var(--dot-glow-warning); animation: kb-pulse 1.4s ease-in-out infinite; }
-.kb-col--done .kb-col__dot { background: var(--color-success); box-shadow: var(--dot-glow-success); }
+.kb-col--doing .kb-col__dot { animation: kb-pulse 1.4s ease-in-out infinite; }
 @keyframes kb-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.45; transform: scale(1.35); }
@@ -781,16 +808,22 @@ function liveSummary(live: BoardTaskLive): string {
 .kb-col__title {
   margin: 0;
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: var(--letter-spacing-wide);
-  color: var(--text-secondary);
+  /* 标题吃角色色的 ink（各档都过 AA 4.5:1），不再用中性 secondary ——
+     三列标题的明度本来几乎一样，这是"并排看不出区别"的另一半原因。 */
+  color: var(--col-ink);
   flex: 1;
   min-width: 0;
 }
 .kb-col__count {
   font-size: var(--font-size-sm);
-  color: var(--text-meta);
+  font-weight: 600;
+  color: var(--col-ink);
   font-variant-numeric: tabular-nums;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--col-ink) 10%, transparent);
 }
 .kb-col__list {
   list-style: none;
@@ -842,13 +875,15 @@ function liveSummary(live: BoardTaskLive): string {
   box-shadow: var(--shadow-card-lift);
   transform: translateY(-1px);
 }
+/* 卡片状态与列状态是同一套角色（2026-10-04 从字面 color-mix 改成令牌）——
+   "进行中"的卡和"进行中"的列于是必然同色，而不是靠两处各写一遍数值凑巧一致。 */
 .kb-card.is-running {
-  border-color: color-mix(in srgb, var(--color-warning) 45%, var(--border-color));
-  background: color-mix(in srgb, var(--color-warning) 4%, var(--surface-elevated));
+  border-color: var(--role-active-edge);
+  background: var(--role-active-surface);
 }
 .kb-card.has-error {
-  border-color: color-mix(in srgb, var(--color-danger) 40%, var(--border-color));
-  background: color-mix(in srgb, var(--color-danger) 4%, var(--surface-elevated));
+  border-color: var(--role-error-edge);
+  background: var(--role-error-surface);
 }
 /* 点开过的那张（.is-opened）：常驻一圈主色描边，让"这张不再有 hover 操作"看着是条规则，
    而不是"这张卡坏了"。描边色与上面两个状态色同用 color-mix 那一套写法。

@@ -27,7 +27,8 @@
 - **`tmp-*` 脚本从不入库**：验完删掉，或改名 `verify-*` + 在 `package.json` 加同名 `verify:` 入口。
 - **grep 前排除 `node_modules`**（含 `src/ui/public` 构建产物），否则输出被刷爆、后面的匹配全被吞。
 - **`node_modules/.trash/` 里的旧构建产物仍会被 grep 命中** —— 判断"是不是我引入的"要先看 `git status --short`。
-- **改 UI 前先读根目录 `.impeccable.md`**（设计上下文，来源 `PRODUCT.md`）。
+- **改 UI 前的设计上下文在两处**：`src/ui/client/src/styles/variables.scss` 里的 `--role-*` 语义角色色（`pending` / `active` / `done` / `error` / `ai`，各带 `ink`/`surface`/`edge`/`glow` 四档）与 `docs/ui-audit/README.md`（每个决定背后的理由 + 修复状态表）。
+  根目录曾有 `PRODUCT.md`，2026-10-04 移除 —— 它的反参考清单（禁一切渐变/装饰色）把界面压成了"一个蓝 + 状态三色"，用户反馈"没有丰富的色彩又有些单调"。改配色前先读上面两处，别再翻 `PRODUCT.md`。
 
 ## 环境入口
 

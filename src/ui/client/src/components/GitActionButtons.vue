@@ -211,17 +211,18 @@ defineExpose({
 /* ── 动作区三档层级 ────────────────────────────────────────────────
    改前：5 个按钮全是实心色块（暂存/提交/推送 = 主色，一键提交/一键推送所有 =
    两种深蓝渐变），主次不分，扫视时不知道从哪个开始。
-   改后（2026-10-04 再调一次口径：原稿写的"主色浅底 + 描边"与实现不符，
-   QuickPushButton 实际是纯 --color-primary-dark 实心，下面的描述已按实现改）：
+   改后（原稿写的"主色浅底 + 描边"与实现不符，QuickPushButton 实际是纯
+   --color-primary-dark 实心，下面按实现写）：
      一档 一键提交        —— 最重的一档，--color-primary-dark 实心（见 QuickCommitButton.vue）
      二档 一键推送所有    —— --color-primary 实心（见 QuickPushButton.vue）
-     二档 AI 提交并推送   —— 同二档，靠 AI 图标区分（见 AiQuickPushButton.vue）。
-                             原来这里是紫罗兰渐变，属 PRODUCT.md:34 明令禁的
-                             "AI purple"，且紫色在仓库里已有 --color-think /
-                             --color-info-light / --git-status-untracked 三重身份。
+     二档 一键推送所有    —— --color-primary 实心（见 QuickPushButton.vue）
+     AI 档 AI 提交并推送   —— --role-ai-ink 实心紫（见 AiQuickPushButton.vue）
      三档 暂存 / 提交 / 推送 —— 中性描边，保留逐步显式控制
-   改完后整个动作区只有两个色值：一档 primary-dark、二档 primary、三档中性描边。
-   层级靠明度，不靠色相。只改视觉权重，不动任何按钮的功能与位置。 */
+   2026-10-04 二次调整：AI 档原先被降级成"同二档、靠图标区分"，实测三颗按钮
+   变成两档几乎同明度的蓝，横扫过去分不出层级。真正的禁令对象是**渐变**
+   （135deg + 发光），不是色相 —— 紫色在仓库里本就是 --color-think 一族的状态色。
+   于是动作区现在是三个角色三档：一档 primary-dark、二档 primary、AI 档 role-ai，
+   三档描边中性。只改视觉权重，不动任何按钮的功能与位置。 */
 :deep(.left-actions .el-button) {
   background: var(--bg-container);
   border: 1px solid var(--border-color-medium);

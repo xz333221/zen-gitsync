@@ -164,19 +164,20 @@ function handleClick() {
 <style scoped lang="scss">
 .one-ai-push-button {
   height: 100%;
-  /* 二档（同「一键推送所有」）：实心主色 + AI 图标。
-     2026-10-04 从「紫罗兰渐变」改成主色家族：PRODUCT.md:34 明令禁 "AI purple"，
-     而紫色在仓库里本来就已经是 --color-think / --color-info-light /
-     --git-status-untracked 三处状态色的用色，再加一颗实心紫按钮就是第四重身份，
-     工具栏也会出现"深蓝 / 中蓝 / 紫"三个色相。
-     "这是 AI 写的"这件事由图标和文案承担 —— 它跟"一键推送所有"的差别
-     （免写提交信息 vs 提交并推远端）本来就比"是不是 AI 写的"更容易读。
-     白字在 --color-primary 上 ≥ 4.6:1（AA 要 4.5:1）。 */
-  background: var(--color-primary) !important;
+  /* AI 档：实心紫（--role-ai），不是渐变。
+     2026-10-04 二次调整：上一轮把这里连同"紫色"一起降级成主色，结果三颗按钮
+     变成两档几乎同明度的蓝，工具栏一眼看过去是"三颗差不多的蓝按钮"——
+     层级只靠明度分，在 1600px 宽下根本分不出来。
+     真正该删的从来是**渐变**（135deg 蓝紫 + 发光），不是色相本身：
+     紫色在本仓库早就承担 --color-think（思考区）/ --color-info-light
+     （活动栏徽标）/ --git-status-untracked（未跟踪文件）三处状态色身份。
+     改回实心紫后：一档 primary-dark / 二档 primary / AI 档 role-ai，
+     三个角色三个色相，扫视时第一眼就知道哪颗是"让 AI 写"。 */
+  background: var(--role-ai-ink) !important;
   border: none !important;
   color: #fff !important;
   &:hover:not(.is-disabled) {
-    background: var(--color-primary-dark) !important;
+    background: color-mix(in srgb, var(--role-ai-ink) 86%, #000) !important;
   }
   /* EP 把 label 包在 span 里，父级 color 不保证落到文字节点，显式声明 */
   .one-ai-push-icon,
@@ -209,7 +210,7 @@ function handleClick() {
       }
       .one-ai-push-desc {
         font-size: var(--font-size-xs);
-        /* 11px 小字压在主色底上要保住 4.5:1，透明度不能压得太狠 */
+        /* 11px 小字压在紫底上要保住 4.5:1，透明度不能压得太狠 */
         opacity: 0.9;
         font-weight: 400;
         letter-spacing: 0.1px;

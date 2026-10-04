@@ -212,13 +212,46 @@ assertNone(
     [hasGradient && 'linear-gradient', hasBlur && 'backdrop-filter'].filter(Boolean).join(' + '))
 }
 
-// A10 AI 动作不许紫罗兰渐变。审计 B3：PRODUCT.md 明令禁 "AI purple"。
+// A10 AI 动作按钮：实心色，禁渐变。
+//   口径改过一次：2026-10-04 上午按"PRODUCT.md 禁 AI purple"把它降级成主色，
+//   下午就因为"三颗按钮变成两档同明度的蓝、层级分不出来"改回 --role-ai-ink。
+//   真正该禁的从来是**渐变**（135deg + 发光），不是色相 —— 紫色在仓库里
+//   本来就是 --color-think 一族的状态色身份。所以这里只断言"没有渐变"。
 {
   const f = path.join(SRC, 'components/buttons/AiQuickPushButton.vue')
   const s = stripComments(fs.readFileSync(f, 'utf8'))
-  if (/7c3aed|6d28d9|5b21b6|linear-gradient/.test(s)) {
-    bad('AiQuickPushButton 仍有紫色/渐变')
-  } else ok('AiQuickPushButton 已改走主色家族')
+  if (/linear-gradient/.test(s)) bad('AiQuickPushButton 又有渐变')
+  else if (!/var\(--role-ai-ink\)/.test(s)) {
+    bad('AiQuickPushButton 没走 --role-ai-ink', '要么回到实心角色色，要么明确写下新口径')
+  } else ok('AiQuickPushButton 是实心 --role-ai-ink，无渐变')
+}
+
+// A11 语义角色色必须在场。上一轮把全站压成"一个蓝 + 状态三色"，
+//     层级只能靠明度分 —— 用户反馈"没有丰富的色彩又有些单调"。
+//     这条守住角色表不被悄悄删回去。
+{
+  const v = stripComments(fs.readFileSync(path.join(SRC, 'styles/variables.scss'), 'utf8'))
+  const roles = ['pending', 'active', 'done', 'error', 'ai']
+  const missing = []
+  for (const r of roles) {
+    for (const slot of ['ink', 'surface', 'edge']) {
+      if (!new RegExp('--role-' + r + '-' + slot + ':').test(v)) {
+        missing.push(`--role-${r}-${slot}`)
+      }
+    }
+  }
+  if (missing.length) bad('语义角色色不完整', missing.join(' '))
+  else ok('五个语义角色色齐全（pending/active/done/error/ai × ink/surface/edge）')
+}
+
+// A12 角色色的暗色档必须存在。--role-*-ink 在浅色是深色、在暗色必须反过来变亮，
+//     忘了覆盖就会出现"暗色下角色色比正文还暗"。
+{
+  const d = stripComments(fs.readFileSync(path.join(SRC, 'styles/dark-theme.scss'), 'utf8'))
+  const need = ['--role-pending-ink', '--role-ai-ink']
+  const missing = need.filter((n) => !new RegExp(n + ':').test(d))
+  if (missing.length) bad('dark-theme.scss 缺角色色暗色档', missing.join(' '))
+  else ok('dark-theme.scss 覆盖了角色色 ink')
 }
 
 // ─────────────────────────────────────────────────────────────

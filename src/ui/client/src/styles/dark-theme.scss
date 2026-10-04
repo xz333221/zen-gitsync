@@ -195,6 +195,16 @@ html[data-theme="dark"] {
   --text-primary: var(--text-primary-dark);
   --text-title: var(--text-title-dark);
   --text-secondary: var(--text-secondary-dark);
+  /* 角色色的暗色档：ink 必须**亮于**同色系的浅色 ink（暗底上越亮对比越高），
+     surface/edge 跟着一起提亮，否则淡底在暗底上等于没有。 */
+  --role-pending-ink: #b6c0cf;
+  --role-pending-surface: color-mix(in srgb, #94a3b8 10%, transparent);
+  --role-pending-edge: color-mix(in srgb, #94a3b8 42%, transparent);
+  --role-active-ink: var(--color-warning-dark);
+  --role-done-ink: var(--color-success-dark);
+  --role-error-ink: var(--color-danger-dark);
+  --role-ai-ink: #a78bfa;
+
   --text-tertiary: var(--text-tertiary-dark);
   --text-meta: var(--text-meta-dark);
   --text-placeholder: var(--text-placeholder-dark);
