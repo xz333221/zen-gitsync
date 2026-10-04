@@ -786,7 +786,6 @@ export default {
   // @NPM01: file end
   // @NPM02: file path: components\ProjectStartupAiPanel.vue
   '@NPM02:AI 启动建议': 'AI startup suggestions',
-  '@NPM02:AI 读了一遍项目里的脚本与启动相关文件，按启动顺序列在下面': 'AI read the project scripts and startup-related files — listed below in startup order',
   '@NPM02:重新分析启动方式': 'Re-analyze startup ways',
   '@NPM02:正在分析这个项目的启动方式…': 'Analyzing how this project can be started…',
   '@NPM02:分析失败，请稍后重试': 'Analysis failed, please try again later',

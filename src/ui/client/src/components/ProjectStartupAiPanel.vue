@@ -62,7 +62,6 @@ type Status = 'idle' | 'loading' | 'done' | 'empty' | 'no-facts' | 'error' | 'no
 const status = ref<Status>('idle')
 const suggestions = ref<StartupSuggestion[]>([])
 const errorText = ref('')
-const modelLabel = ref('')
 const runningId = ref('')
 /** 本次会话里已经点过启动的条目 —— 只是视觉反馈,不进缓存 */
 const launchedIds = ref<Set<string>>(new Set())
@@ -171,7 +170,6 @@ async function analyze() {
         return
       }
 
-      modelLabel.value = String(result.model || '')
       const list = Array.isArray(result.suggestions) ? result.suggestions as StartupSuggestion[] : []
       writeStartupSuggestions(key, list)
       applyResult(list)
@@ -301,11 +299,6 @@ watch([cacheKey, hasModel], () => sync())
 
       <div v-else-if="status === 'error'" class="state-box state-box--error">
         <p class="state-text">{{ errorText }}</p>
-      </div>
-
-      <div v-else-if="status === 'done'" class="list-hint">
-        <span class="list-hint__text">{{ $t('@NPM02:AI 读了一遍项目里的脚本与启动相关文件，按启动顺序列在下面') }}</span>
-        <span v-if="modelLabel" class="list-hint__model">{{ modelLabel }}</span>
       </div>
 
       <div v-if="status === 'done'" class="suggestion-list">
@@ -469,36 +462,6 @@ watch([cacheKey, hasModel], () => sync())
 .state-spinner {
   font-size: 22px;
   color: var(--color-primary);
-}
-
-.list-hint {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 4px 8px;
-  min-width: 0;
-}
-
-/* flex-basis 给一个"这句话至少要多宽才念得下去"的下限:左栏太窄时模型标签
-   整体换到下一行,而不是把说明文字挤成一列四个字 */
-.list-hint__text {
-  flex: 1 1 180px;
-  min-width: 0;
-  font-size: var(--font-size-xs);
-  line-height: 1.5;
-  color: var(--text-tertiary);
-}
-
-.list-hint__model {
-  flex-shrink: 0;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: var(--font-size-xs);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  color: var(--color-primary);
-  background: var(--tint-primary-10);
-  border: 1px solid var(--tint-primary-22);
 }
 
 .suggestion-list {
