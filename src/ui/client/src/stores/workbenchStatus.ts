@@ -15,8 +15,15 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
-// 跨组件共享的 Workbench 任务运行状态：
-// WorkbenchView 写入（每次 SSE / REST 拉取后），ActivityBar 读取以显示脉动指示器。
+// 跨组件共享的 Workbench「活跃执行」数：ActivityBar 读它显示工作台图标角标。
+//
+// **写者只有一个**：useOrchestrator 每次拉到 /api/workbench/orchestrator 后写 running.length。
+// 这一个数就是看板表头那个「活跃执行」——服务端 buildRunningAgents 的口径（running | pending，
+// 含别的 g ui 实例正在跑的 job），所以左栏角标与表头永远同源同值。
+//
+// 以前这里是"客户端本地 jobs 数组里 status === 'running' 的条数"，与表头差三处：
+// 漏 pending、漏别的实例起的 job（SSE 的 bus 是进程内的）、且只在打开工作台那一刻取过一次快照。
+// 2026-10-04 用户截图里左栏 2 / 表头 3 就是这么来的 —— 别再往回改成本地数。
 export const useWorkbenchStatusStore = defineStore('workbenchStatus', () => {
   const runningCount = ref(0)
 

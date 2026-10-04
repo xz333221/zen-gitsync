@@ -51,6 +51,7 @@ import type {
 import type { TaskExecutorId } from '@/utils/taskExecutor'
 import { DEFAULT_REPORT_INTERVAL_MS, normalizeReportInterval } from '@/utils/progressReport'
 import { useConfigStore } from '@/stores/configStore'
+import { useWorkbenchStatusStore } from '@/stores/workbenchStatus'
 
 /**
  * 指令正文上限的**本地兜底值**。
@@ -123,6 +124,10 @@ export function useOrchestrator() {
       instructions.value = Array.isArray(res.instructions) ? res.instructions : []
       activity.value = Array.isArray(res.activity) ? res.activity : []
       running.value = Array.isArray(res.running) ? res.running : []
+      // 左栏工作台角标用的就是这一个数（口径 = 看板表头「活跃执行」）：
+      // 服务端已经把 running | pending 和别的 g ui 实例的 job 都算好了，
+      // 前端不再自己从本地 jobs 数组里数一份（那会漏 pending、漏跨实例，见 stores/workbenchStatus.ts）。
+      useWorkbenchStatusStore().setRunning(running.value.length)
       updatedAt.value = res.updatedAt || null
       defaultPrompt.value = typeof res.defaultPrompt === 'string' ? res.defaultPrompt : ''
       projectPrompts.value = res.projectPrompts && typeof res.projectPrompts === 'object'

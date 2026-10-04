@@ -16,7 +16,6 @@ export function useWorkbenchExecution(
   tasks: Ref<Task[]>,
   selectedTask: ComputedRef<Task | null>,
   options: {
-    syncRunningCount: () => void
     clearJobsByTask: (taskId: string) => Promise<number>
     persistTask: (showSuccess: boolean) => Promise<boolean>
     uploadAttachment: (target: any, file: File) => Promise<void>
@@ -164,7 +163,6 @@ export function useWorkbenchExecution(
       .catch(err => ({ success: false, error: err?.message || String(err) }))
     if (res?.success) {
       jobs.value = jobs.value.filter(j => j.taskId !== t.id)
-      options.syncRunningCount()
       ElMessage.success(res.message || $t('@WORKBENCH:已清空执行内容'))
     } else {
       ElMessage.error(res?.error || $t('@WORKBENCH:清空失败'))

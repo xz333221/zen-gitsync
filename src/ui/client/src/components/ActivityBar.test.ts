@@ -21,6 +21,7 @@ import type { VueWrapper } from '@vue/test-utils'
 import { mountWithSetup } from '@/test-utils/mount'
 import ActivityBar from './ActivityBar.vue'
 import { useAgentActivityStore } from '@/stores/agentActivity'
+import { useWorkbenchStatusStore } from '@/stores/workbenchStatus'
 import { useGitStore } from '@/stores/gitStore'
 
 /**
@@ -89,6 +90,44 @@ describe('ActivityBar 智能体徽标', () => {
     for (let i = 0; i < 100; i++) store.begin(`t${i}`)
     await nextTick()
     expect(w.find('.agent-running-badge').text()).toBe('99+')
+  })
+})
+
+/**
+ * 工作台图标上的活跃执行徽标：跟着 useWorkbenchStatusStore 走。
+ * 数字本身由 useOrchestrator 从服务端下发的 running 数组投喂（见
+ * composables/useOrchestrator.test.ts 那组用例），这里只守"store 变了徽标就变"。
+ */
+describe('ActivityBar 工作台活跃执行徽标', () => {
+  function wbBtn(w: VueWrapper<any>) {
+    return w.find('button[aria-label*="@ACTBAR:工作台"]')
+  }
+
+  it('没有活跃执行时不显示徽标', () => {
+    const w = mountWithSetup(ActivityBar, { props: { activeView: 'workbench' } })
+    expect(w.find('.wb-running-badge').exists()).toBe(false)
+  })
+
+  it('store 有数时出现，落在工作台按钮内，归零后消失', async () => {
+    const w = mountWithSetup(ActivityBar, { props: { activeView: 'git' } })
+    const store = useWorkbenchStatusStore()
+
+    store.setRunning(3)
+    await nextTick()
+    const badge = wbBtn(w).find('.wb-running-badge')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toBe('3')
+
+    store.setRunning(0)
+    await nextTick()
+    expect(w.find('.wb-running-badge').exists()).toBe(false)
+  })
+
+  it('超过 99 显示 99+', async () => {
+    const w = mountWithSetup(ActivityBar, { props: { activeView: 'git' } })
+    useWorkbenchStatusStore().setRunning(120)
+    await nextTick()
+    expect(w.find('.wb-running-badge').text()).toBe('99+')
   })
 })
 

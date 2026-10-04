@@ -162,7 +162,6 @@ async function openTaskFromBoard(payload: { taskId: string; projectPath: string 
 // ── 数据层（状态 + 加载 + CRUD） ─────────────────────────────────────────────
 const {
   prompts, tasks, jobs, currentProject,
-  syncRunningCount,
   connectSSE, disconnectSSE,
   loadPrompts, loadCurrentProject, loadJobs,
   clearJobsByTask,
@@ -1043,7 +1042,6 @@ const {
 } = useWorkbenchExecution(
   jobs, tasks, selectedTask,
   {
-    syncRunningCount,
     clearJobsByTask,
     persistTask,
     uploadAttachment,

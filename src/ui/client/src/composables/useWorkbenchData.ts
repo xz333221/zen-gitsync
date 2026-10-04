@@ -2,23 +2,20 @@ import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { $t } from '@/lang/static'
 import type { Job, Task, Prompt } from '@/types/workbench'
-import { useWorkbenchStatusStore } from '@stores/workbenchStatus'
 
 export function useWorkbenchData() {
   const prompts = ref<Prompt[]>([])
   const tasks = ref<Task[]>([])
   const jobs = ref<Job[]>([])
   const currentProject = ref<{ path: string; name: string }>({ path: '', name: '' })
-  const wbStatus = useWorkbenchStatusStore()
 
-  function syncRunningCount() {
-    wbStatus.setRunning(jobs.value.filter(j => j.status === 'running').length)
-  }
+  // 这里曾经往 useWorkbenchStatusStore 写过"左栏工作台角标"的数字（本地 jobs 里数 running）。
+  // 已删除：那个口径漏 pending、漏别的 g ui 实例起的 job，与看板表头对不上。
+  // 角标现在由 useOrchestrator 用服务端的 running 数组统一投喂（见 stores/workbenchStatus.ts）。
 
   function applyJobEvent(evt: string, payload: any) {
     if (evt === 'hello') {
       jobs.value = payload.jobs || []
-      syncRunningCount()
       return
     }
     if (evt === 'job:update') {
@@ -26,7 +23,6 @@ export function useWorkbenchData() {
       const i = jobs.value.findIndex(x => x.id === j.id)
       if (i >= 0) jobs.value[i] = j
       else jobs.value.push(j)
-      syncRunningCount()
       return
     }
     if (evt === 'job:thinking-delta' || evt === 'job:output-delta') {
@@ -118,7 +114,6 @@ export function useWorkbenchData() {
   async function loadJobs() {
     const res = await fetch('/api/workbench/jobs').then(r => r.json()).catch(() => ({ jobs: [] }))
     jobs.value = res.jobs || []
-    syncRunningCount()
   }
 
   async function clearJobsByTask(taskId: string): Promise<number> {
@@ -129,7 +124,6 @@ export function useWorkbenchData() {
         return 0
       }
       jobs.value = jobs.value.filter(j => j.taskId !== taskId)
-      syncRunningCount()
       return res.removed || 0
     } catch (err) {
       console.warn('[clearJobsByTask] error:', err)
@@ -166,7 +160,7 @@ export function useWorkbenchData() {
 
   return {
     prompts, tasks, jobs, currentProject,
-    syncRunningCount, applyJobEvent,
+    applyJobEvent,
     connectSSE, disconnectSSE,
     loadPrompts, loadTasks, loadCurrentProject, loadJobs,
     clearJobsByTask, createTask
