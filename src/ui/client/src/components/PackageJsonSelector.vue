@@ -385,7 +385,7 @@ watch(() => props.modelValue, (newValue) => {
 
 .folder-icon {
   
-  color: var(--color-success);
+  color: var(--success-dark);
   flex-shrink: 0;
 }
 

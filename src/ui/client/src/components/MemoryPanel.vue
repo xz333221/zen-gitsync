@@ -394,7 +394,7 @@ defineExpose({ reload })
 .mem-panel__stat-warn {
   font-size: var(--font-size-sm);
   /* 唯一允许用色的地方：这里确实是一种"状态"（有经验查不到） */
-  color: var(--el-color-warning, #e6a23c);
+  color: var(--color-warning-dark);
   font-variant-numeric: tabular-nums;
 }
 .mem-panel__scope { display: flex; align-items: center; gap: 8px; }
@@ -408,7 +408,7 @@ defineExpose({ reload })
   min-width: 0;
 }
 .mem-panel__scope-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.mem-panel__scope-count { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.mem-panel__scope-count { color: var(--text-meta); font-variant-numeric: tabular-nums; }
 .mem-panel__batch {
   display: flex;
   align-items: center;
@@ -497,7 +497,7 @@ defineExpose({ reload })
   white-space: nowrap;
 }
 .mem-card__badge--warn {
-  color: var(--el-color-warning, #e6a23c);
+  color: var(--color-warning-dark);
   border: 1px solid color-mix(in srgb, var(--el-color-warning, #e6a23c) 45%, transparent);
 }
 .mem-card__actions { flex-shrink: 0; }
@@ -515,7 +515,7 @@ defineExpose({ reload })
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md, 6px);
 }
-.mem-card__body-error { font-size: var(--font-size-sm); color: var(--el-color-danger, #f56c6c); }
+.mem-card__body-error { font-size: var(--font-size-sm); color: var(--color-danger-dark); }
 .mem-panel__foot {
   margin: 0;
   font-size: var(--font-size-sm);

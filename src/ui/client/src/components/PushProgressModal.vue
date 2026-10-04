@@ -363,13 +363,13 @@ defineExpose({
 
 .status-success {
   :deep(.el-dialog__title) {
-    color: var(--color-success);
+    color: var(--success-dark);
   }
 }
 
 .status-error {
   :deep(.el-dialog__title) {
-    color: var(--color-danger);
+    color: var(--danger-dark);
   }
 }
 
@@ -632,12 +632,12 @@ defineExpose({
   transition: var(--transition-ui-slow);
   
   .icon-finish {
-    color: var(--color-success);
+    color: var(--success-dark);
     font-size: var(--font-size-md);
   }
   
   .icon-error {
-    color: var(--color-danger);
+    color: var(--danger-dark);
     font-size: var(--font-size-md);
   }
   
@@ -687,7 +687,7 @@ defineExpose({
   letter-spacing: 0.5px;
   
   .finished & {
-    color: var(--color-success);
+    color: var(--success-dark);
   }
 }
 
@@ -726,7 +726,7 @@ defineExpose({
 
 .error-title {
   font-weight: 600;
-  color: var(--color-danger);
+  color: var(--danger-dark);
 }
 
 .pull-button {

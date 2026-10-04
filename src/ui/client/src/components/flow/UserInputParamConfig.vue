@@ -247,7 +247,7 @@ function getCurrentReferenceValue(row: UserInputParam): string {
 .field-label {
   display: block;
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   margin-bottom: var(--spacing-sm);
 }
 

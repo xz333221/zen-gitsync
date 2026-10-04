@@ -3160,7 +3160,7 @@ onActivated(() => {
   transition: var(--transition-ui-slow);
   
   .el-icon {
-    color: var(--text-tertiary);
+    color: var(--text-meta);
     transition: var(--transition-ui-slow);
   }
   
@@ -3197,7 +3197,7 @@ onActivated(() => {
 
 .command-manager-btn {
   &:hover {
-    color: var(--color-success);
+    color: var(--success-dark);
     background: rgba(103, 194, 58, 0.1);
   }
 }
@@ -3211,7 +3211,7 @@ onActivated(() => {
 
 .orchestrator-btn {
   &:hover {
-    color: var(--color-warning);
+    color: var(--warning-dark);
     background: rgba(230, 162, 60, 0.1);
   }
 }
@@ -3282,7 +3282,7 @@ onActivated(() => {
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   font-weight: 500;
-  color: var(--color-success);
+  color: var(--success-dark);
   /* background: linear-gradient(135deg, rgba(103, 194, 58, 0.1), rgba(103, 194, 58, 0.05)); */
   /* border: 1px solid rgba(103, 194, 58, 0.3); */
   border-radius: var(--radius-md);
@@ -3363,7 +3363,7 @@ onActivated(() => {
 }
 
 .stdin-icon {
-  color: var(--color-success);
+  color: var(--success-dark);
   font-size: var(--font-size-md);
   flex-shrink: 0;
 }
@@ -3799,7 +3799,7 @@ pre.stderr {
       }
       
       .step-name {
-        color: var(--color-warning);
+        color: var(--warning-dark);
       }
     }
     
@@ -3820,7 +3820,7 @@ pre.stderr {
       }
       
       .step-name {
-        color: var(--color-success);
+        color: var(--success-dark);
       }
     }
     
@@ -3856,7 +3856,7 @@ pre.stderr {
     }
     
     .step-name {
-      color: var(--text-tertiary);
+      color: var(--text-meta);
       opacity: 0.8;
     }
     
@@ -3872,7 +3872,7 @@ pre.stderr {
     .step-indicator {
       background: var(--bg-panel);
       border: 2px solid var(--border-component);
-      color: var(--text-tertiary);
+      color: var(--text-meta);
       font-weight: 500;
     }
     
@@ -3916,7 +3916,7 @@ pre.stderr {
   
   .step-type-icon {
     font-size: var(--font-size-base);
-    color: var(--text-tertiary);
+    color: var(--text-meta);
   }
   
   .step-icon-check {
@@ -3960,12 +3960,12 @@ pre.stderr {
   
   &.type-wait {
     background: rgba(230, 162, 60, 0.12);
-    color: var(--color-warning);
+    color: var(--warning-dark);
   }
   
   &.type-version {
     background: rgba(103, 194, 58, 0.12);
-    color: var(--color-success);
+    color: var(--success-dark);
   }
 }
 
@@ -4012,7 +4012,7 @@ pre.stderr {
 }
 
 .user-input-empty {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-mid);
   padding: 10px 0;
 }
@@ -4041,7 +4041,7 @@ pre.stderr {
 }
 
 .user-input-label .required {
-  color: var(--color-danger);
+  color: var(--danger-dark);
   margin-right: 4px;
 }
 

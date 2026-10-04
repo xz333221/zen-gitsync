@@ -1388,7 +1388,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-editor-bar__hint {
   margin-left: auto;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   flex-shrink: 0;
 }
 /* 任务属于别的项目时补一句实话：执行目录不是上面这个当前目录（后端按 task.projectPath 落目录） */
@@ -1402,7 +1402,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   line-height: 16px;
   padding: 0 6px;
   border-radius: var(--radius-base);
-  color: var(--color-warning);
+  color: var(--warning-dark);
   background: color-mix(in srgb, var(--color-warning) 12%, transparent);
   font-variant-numeric: tabular-nums;
 }
@@ -1451,7 +1451,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-task-desc__summary:hover { background: var(--bg-container-hover); }
 .wb-task-desc__caret {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   transition: transform var(--transition-fast);
 }
 .wb-task-desc__label {
@@ -1574,7 +1574,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: 0.4px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   background: var(--bg-subtle);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-base);
@@ -1599,7 +1599,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-section__action {
   border: none;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   width: 28px;
   height: 28px;
   border-radius: var(--radius-base);
@@ -1783,7 +1783,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   align-items: center;
   gap: 5px;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   line-height: 1;
 }
 .wb-task-item__meta-item {
@@ -1846,7 +1846,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-task-item__del {
   border: none;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   width: 22px;
   height: 22px;
   border-radius: var(--radius-md);
@@ -1865,7 +1865,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 }
 .wb-task-item__del:hover {
   background: color-mix(in srgb, var(--color-danger) 14%, transparent);
-  color: var(--color-danger);
+  color: var(--danger-dark);
 }
 .wb-task-item__del:focus-visible {
   outline: var(--focus-outline);
@@ -1938,7 +1938,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-prompt-item__del {
   border: none;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   width: 20px;
   height: 20px;
   border-radius: var(--radius-xs);
@@ -1955,7 +1955,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 }
 .wb-prompt-item__del:hover {
   background: color-mix(in srgb, var(--color-danger) 14%, transparent);
-  color: var(--color-danger);
+  color: var(--danger-dark);
 }
 .wb-prompt-item__del:focus-visible {
   outline: var(--focus-outline);
@@ -1984,7 +1984,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-mid);
 }
 
@@ -2054,7 +2054,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
   background: var(--bg-container);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
@@ -2077,7 +2077,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-copy-btn.is-flash {
   background: var(--tint-success-14, color-mix(in srgb, var(--color-success) 14%, transparent));
   border-color: var(--tint-success-35, color-mix(in srgb, var(--color-success) 35%, transparent));
-  color: var(--color-success-dark, var(--color-success-dark));
+  color: var(--color-success-dark);
 }
 .wb-copy-btn__icon { font-size: var(--font-size-mid); line-height: 1; }
 .wb-copy-btn__icon--check {
@@ -2377,7 +2377,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 }
 .wb-simple__hint {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 /* ── 任务完成态 pill ── */
@@ -2411,7 +2411,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 }
 .wb-simple__meta {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   letter-spacing: -0.05px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2419,7 +2419,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   max-width: 100%;
 }
 .wb-simple__meta--error {
-  color: var(--color-danger);
+  color: var(--danger-dark);
 }
 /* idle 灰底：背景由 inline style 注入，无文字无需特殊处理 */
 .wb-simple__status[style*="--text-tertiary"] .wb-simple__status-dot {
@@ -2466,7 +2466,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-task-prompt__summary::-webkit-details-marker { display: none; }
 .wb-task-prompt__caret {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   transition: transform var(--transition-fast) var(--ease-custom);
 }
 .wb-task-prompt[open] > .wb-task-prompt__summary .wb-task-prompt__caret {
@@ -2500,7 +2500,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-task-prompt__label {
   margin-bottom: 4px;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 .wb-task-prompt__text {
   margin: 0;
@@ -2516,7 +2516,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-task-prompt__empty {
   margin: 8px 0 0;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 /* ── 任务单一对话流：合并所有轮次到一个 ChatContainer ── */
@@ -2758,7 +2758,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   border-radius: var(--radius-xl);
   border: 1px solid var(--border-color-medium);
   background: var(--bg-container);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   flex-shrink: 0;
   user-select: none;
   transition:
@@ -2797,12 +2797,12 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   animation: wb-meta-pulse 1.2s ease-in-out infinite;
 }
 .wb-meta-save.is-saved {
-  color: var(--color-success-dark, var(--color-success-dark));
+  color: var(--color-success-dark);
   border-color: var(--tint-success-35);
   background: var(--tint-success-08);
 }
 .wb-meta-save.is-dirty {
-  color: var(--color-warning-dark, var(--color-warning-dark));
+  color: var(--color-warning-dark);
   border-color: var(--tint-warning-45);
   background: var(--tint-warning-06);
 }

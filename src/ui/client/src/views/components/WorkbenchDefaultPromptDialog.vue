@@ -160,7 +160,7 @@ function close() {
   margin: 0;
   font-size: var(--font-size-sm);
   line-height: 1.6;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 .pd__field { display: flex; flex-direction: column; gap: 5px; }
 .pd__head {
@@ -176,7 +176,7 @@ function close() {
 .pd__count {
   margin-left: auto;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
 .pd__area {
@@ -197,13 +197,13 @@ function close() {
   transition: border-color var(--transition-fast) var(--ease-custom);
 }
 .pd__area:focus { border-color: var(--color-primary); }
-.pd__area::placeholder { color: var(--text-tertiary); }
+.pd__area::placeholder { color: var(--text-meta); }
 .pd__area:disabled { opacity: 0.55; cursor: not-allowed; }
 .pd__hint {
   margin: 0;
   font-size: var(--font-size-xs);
   line-height: 1.6;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 .pd__foot { display: flex; align-items: center; gap: 8px; width: 100%; }

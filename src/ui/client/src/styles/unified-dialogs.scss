@@ -109,7 +109,7 @@
     }
 
     .el-dialog__close {
-      color: var(--text-tertiary);
+      color: var(--text-meta);
       transition: var(--dialog-transition-fast);
       font-size: var(--font-size-md);
     }
@@ -356,15 +356,15 @@
      这里兜底:svg 跟随 currentColor,只要给容器 color 就能修。 */
   .el-message-box__status.el-message-box-icon--warning,
   .el-message-box__status.el-icon-warning {
-    color: var(--el-color-warning, var(--color-warning));
+    color: var(--color-warning-dark);
   }
   .el-message-box__status.el-message-box-icon--info,
   .el-message-box__status.el-icon-info {
-    color: var(--el-color-info, var(--color-info));
+    color: var(--text-meta);
   }
   .el-message-box__status.el-message-box-icon--success,
   .el-message-box__status.el-icon-success {
-    color: var(--el-color-success, var(--color-success));
+    color: var(--color-success-dark);
   }
   .el-message-box__status.el-message-box-icon--error,
   .el-message-box__status.el-icon-error {

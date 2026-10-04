@@ -38,7 +38,7 @@ defineProps<{
   }
 
   .node-warning {
-    color: var(--color-danger);
+    color: var(--danger-dark);
     font-size: var(--font-size-sm);
     margin-top: 4px;
   }

@@ -685,7 +685,7 @@ onUnmounted(() => {
 /* 危险按钮样式 */
 .danger-btn {
   background: rgba(245, 108, 108, 0.1);
-  color: var(--color-danger);
+  color: var(--danger-dark);
   border-color: rgba(245, 108, 108, 0.2);
 }
 
@@ -695,7 +695,7 @@ onUnmounted(() => {
 
 .danger-btn:hover {
   background: rgba(245, 108, 108, 0.15);
-  color: var(--color-danger);
+  color: var(--danger-dark);
   border-color: rgba(245, 108, 108, 0.3);
   box-shadow: var(--shadow-md);
 }
@@ -741,13 +741,13 @@ onUnmounted(() => {
 
 .dialog-toolbar .danger-btn {
   background: rgba(245, 108, 108, 0.08);
-  color: var(--color-danger);
+  color: var(--danger-dark);
   border-color: rgba(245, 108, 108, 0.15);
 }
 
 .dialog-toolbar .danger-btn:hover {
   background: rgba(245, 108, 108, 0.12);
-  color: var(--color-danger);
+  color: var(--danger-dark);
   border-color: rgba(245, 108, 108, 0.25);
   box-shadow: var(--shadow-md);
 }
@@ -1023,7 +1023,7 @@ onUnmounted(() => {
   align-items: center;
   gap: var(--spacing-lg);
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 /* 深色主题下的命令元数据 */

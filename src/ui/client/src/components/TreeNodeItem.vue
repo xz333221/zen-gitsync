@@ -338,7 +338,7 @@ function handleClick() {
   padding: var(--spacing-xs) var(--spacing-base);
   border-radius: var(--radius-base);
   background: var(--bg-panel);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   flex-shrink: 0;
 }
 

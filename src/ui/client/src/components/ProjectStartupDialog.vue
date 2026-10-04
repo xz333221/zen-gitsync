@@ -509,7 +509,7 @@ function executeItem(item: any) {
 .after-quick-push__hint {
   margin-top: 6px;
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 .startup-toolbar {
@@ -536,7 +536,7 @@ function executeItem(item: any) {
 
 .startup-toolbar__warn {
   margin-left: 6px;
-  color: var(--color-warning);
+  color: var(--warning-dark);
   font-size: var(--font-size-sm);
 }
 
@@ -626,7 +626,7 @@ function executeItem(item: any) {
 .startup-item__dir {
   margin-top: 6px;
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

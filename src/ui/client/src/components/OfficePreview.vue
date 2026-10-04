@@ -119,8 +119,8 @@ onBeforeUnmount(() => { requestId++; revokeFallbackUrl() })
 .office-preview-toolbar { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; flex: 0 0 34px; border-bottom: 1px solid var(--border-color-light); }
 .office-preview-title { font-size: var(--font-size-sm); font-weight: 600; color: var(--text-secondary); }
 .office-preview-badge, .office-preview-side { font-size: var(--font-size-xs); padding: 2px 5px; border-radius: var(--radius-base); background: rgba(59,130,246,.15); color: var(--color-primary); }
-.office-preview-side { background: var(--bg-hover); color: var(--text-tertiary); }
-.office-preview-reload { margin-left: auto; border: 0; background: transparent; color: var(--text-tertiary); cursor: pointer; font-size: var(--font-size-sm); }
+.office-preview-side { background: var(--bg-hover); color: var(--text-meta); }
+.office-preview-reload { margin-left: auto; border: 0; background: transparent; color: var(--text-meta); cursor: pointer; font-size: var(--font-size-sm); }
 .office-preview-document { flex: 1; min-height: 0; overflow: auto; }
 .office-preview-frame { width: 100%; height: 100%; flex: 1; border: 0; background: #525659; }
 .office-preview-state { display: grid; place-content: center; flex: 1; text-align: center; color: var(--text-secondary); font-size: var(--font-size-mid); }

@@ -1425,13 +1425,13 @@ function onBrowserSelect(path: string) {
 }
 
 .claude-menu__warn {
-  color: var(--color-warning);
+  color: var(--warning-dark);
   font-size: var(--font-size-mid);
   vertical-align: middle;
 }
 
 .claude-menu__item--danger .claude-menu__hint {
-  color: var(--color-warning);
+  color: var(--warning-dark);
   font-weight: 600;
 }
 
@@ -1464,7 +1464,7 @@ function onBrowserSelect(path: string) {
   font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: 0.3px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   text-transform: uppercase;
 }
 
@@ -1549,7 +1549,7 @@ function onBrowserSelect(path: string) {
 .tools-more__hint {
   flex-shrink: 0;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   transition: color var(--transition-fast) ease;
 }
 
@@ -1666,7 +1666,7 @@ function onBrowserSelect(path: string) {
   margin-left: var(--spacing-base);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-normal);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 /* 常用目录这一行是"标题 + 总数 + 「刷新全部」":与最近项目面板的标题行同一版式
    (标题靠左、动作靠右)。两件事要凑齐按钮才落在对的位置:

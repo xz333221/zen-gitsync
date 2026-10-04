@@ -48,7 +48,7 @@ const info = computed(() => {
 <style scoped lang="scss">
 .code-node-content {
   .node-warning {
-    color: var(--color-danger);
+    color: var(--danger-dark);
     font-size: var(--font-size-sm);
     margin-top: 4px;
   }
@@ -61,7 +61,7 @@ const info = computed(() => {
       display: flex;
       flex-direction: column;
       gap: 2px;
-      color: var(--text-tertiary);
+      color: var(--text-meta);
 
       .meta-item {
         word-break: break-all;

@@ -365,7 +365,7 @@ const context = computed(() => {
 .summary-context {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
   text-overflow: ellipsis;
@@ -387,7 +387,7 @@ const context = computed(() => {
 .summary-body :deep(.md-preview ul:last-child),
 .summary-body :deep(.md-preview ol:last-child) { margin-bottom: 0; }
 
-.summary-placeholder { color: var(--text-tertiary); line-height: 24px; }
+.summary-placeholder { color: var(--text-meta); line-height: 24px; }
 .summary-placeholder.is-loading { color: var(--text-secondary); }
 .summary-error {
   display: flex;
@@ -410,7 +410,7 @@ const context = computed(() => {
 
 .dialog-context {
   padding: 8px var(--spacing-lg) 0;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   word-break: break-all;

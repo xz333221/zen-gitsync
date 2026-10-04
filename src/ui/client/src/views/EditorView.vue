@@ -1675,10 +1675,10 @@ function stopPreviewResize() {
             :style="{ paddingLeft: (12 + inlineInput.depth * 14) + 'px' }"
           >
             <span class="tree-arrow-spacer" />
-            <svg v-if="inlineInput.kind === 'directory'" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--color-warning)">
+            <svg v-if="inlineInput.kind === 'directory'" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color: var(--warning-dark)">
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
             </svg>
-            <svg v-else viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--text-tertiary)">
+            <svg v-else viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color: var(--text-meta)">
               <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/>
             </svg>
             <input
@@ -1700,10 +1700,10 @@ function stopPreviewResize() {
           :style="{ paddingLeft: '12px' }"
         >
           <span class="tree-arrow-spacer" />
-          <svg v-if="inlineInput.kind === 'directory'" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--color-warning)">
+          <svg v-if="inlineInput.kind === 'directory'" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color: var(--warning-dark)">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
           </svg>
-          <svg v-else viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--text-tertiary)">
+          <svg v-else viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color: var(--text-meta)">
             <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/>
           </svg>
           <input
@@ -2032,7 +2032,7 @@ function stopPreviewResize() {
   border: none;
   padding: 3px;
   cursor: pointer;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   border-radius: var(--radius-base);
   display: flex;
   align-items: center;
@@ -2054,7 +2054,7 @@ function stopPreviewResize() {
 .sidebar-search-icon {
   position: absolute;
   left: 18px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   pointer-events: none;
 }
 
@@ -2073,7 +2073,7 @@ function stopPreviewResize() {
 }
 
 .sidebar-search-input::placeholder {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 .sidebar-search-input:hover {
@@ -2098,7 +2098,7 @@ function stopPreviewResize() {
   border: none;
   border-radius: 50%;
   cursor: pointer;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 
@@ -2157,7 +2157,7 @@ function stopPreviewResize() {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   transition: transform var(--transition-fast);
   width: 12px;
 }
@@ -2212,7 +2212,7 @@ function stopPreviewResize() {
 
 .tree-empty {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   text-align: center;
   padding: 24px 12px;
 }
@@ -2340,7 +2340,7 @@ function stopPreviewResize() {
   border: none;
   padding: 2px;
   cursor: pointer;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   border-radius: var(--radius-base);
   display: flex;
   align-items: center;
@@ -2356,7 +2356,7 @@ function stopPreviewResize() {
 
 .tab-close:hover {
   background: var(--bg-hover);
-  color: var(--color-danger);
+  color: var(--danger-dark);
 }
 
 .editor-empty {
@@ -2366,7 +2366,7 @@ function stopPreviewResize() {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-mid);
   user-select: none;
 }
@@ -2414,7 +2414,7 @@ function stopPreviewResize() {
 
 .image-tab-placeholder-hint {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   margin: 0;
 }
 
@@ -2512,7 +2512,7 @@ function stopPreviewResize() {
   border: none;
   padding: 3px;
   cursor: pointer;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   border-radius: var(--radius-base);
   display: flex;
   align-items: center;
@@ -2520,7 +2520,7 @@ function stopPreviewResize() {
 }
 
 .preview-close-btn:hover {
-  color: var(--color-danger);
+  color: var(--danger-dark);
   background: var(--bg-hover);
 }
 
@@ -2689,7 +2689,7 @@ function stopPreviewResize() {
 }
 
 .ctx-menu-item--danger {
-  color: var(--color-danger);
+  color: var(--danger-dark);
 }
 
 .ctx-menu-item--danger:hover {

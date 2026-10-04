@@ -443,7 +443,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-mid);
   font-family: inherit;
   cursor: pointer;
@@ -490,7 +490,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-base);
 }
 
@@ -533,7 +533,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   border: none;
   border-radius: var(--radius-xs);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   cursor: pointer;
   transition: var(--transition-ui-fast);
 

@@ -225,7 +225,7 @@ function getCurrentReferenceValue(input: CodeNodeInput): string {
 }
 
 .empty-tip {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-base);
   padding: 12px 0;
 }
@@ -246,7 +246,7 @@ function getCurrentReferenceValue(input: CodeNodeInput): string {
 .field-label {
   display: block;
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   margin-bottom: var(--spacing-sm);
 }
 

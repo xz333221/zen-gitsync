@@ -75,7 +75,7 @@ const hasMore = computed(() => paramNames.value.length > 3)
   height: 100%;
 
   .node-warning {
-    color: var(--color-danger);
+    color: var(--danger-dark);
     font-size: var(--font-size-sm);
     line-height: 1.2;
   }
@@ -117,18 +117,18 @@ const hasMore = computed(() => paramNames.value.length > 3)
   .param-chip.required {
     border-color: rgba(230, 162, 60, 0.35);
     background: rgba(230, 162, 60, 0.08);
-    color: var(--color-warning);
+    color: var(--warning-dark);
   }
 
   .star {
-    color: var(--color-danger);
+    color: var(--danger-dark);
     font-weight: 700;
     line-height: 1;
   }
 
   .more {
     font-size: var(--font-size-sm);
-    color: var(--text-tertiary);
+    color: var(--text-meta);
     padding: 2px 2px;
   }
 }

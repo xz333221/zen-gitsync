@@ -423,7 +423,7 @@ onBeforeUnmount(() => {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   white-space: nowrap;
   /* 面板跟 Monaco 抢宽度，天生很窄：标题给引擎下拉与图标让位，超了就省略号 */
   min-width: 0;
@@ -451,7 +451,7 @@ onBeforeUnmount(() => {
   border: none;
   border-radius: var(--radius-xs);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   cursor: pointer;
   transition: var(--transition-ui-fast);
 

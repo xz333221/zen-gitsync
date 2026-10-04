@@ -18,7 +18,10 @@ html[data-theme="dark"] {
   --el-bg-color-page: var(--bg-page-dark);
   --el-text-color-primary: var(--text-primary-dark);
   --el-text-color-regular: var(--text-secondary-dark);
-  --el-text-color-secondary: var(--text-tertiary-dark);
+  /* 2026-10-04：这三条原本都指向 tertiary 档（#cbd0d6 → 现 #b4bac2），但它们的
+     角色是「EP 控件里的次要文字 / 输入框图标 / 源码地图节点说明」，都是要读或
+     要看见的，不该走装饰档。统一改到 meta 档。 */
+  --el-text-color-secondary: var(--text-meta-dark);
   --el-text-color-placeholder: var(--text-placeholder-dark);
   --el-border-color: var(--border-color-dark);
   --el-border-color-light: rgba(255, 255, 255, 0.08);
@@ -50,7 +53,7 @@ html[data-theme="dark"] {
   --el-input-hover-border-color: var(--border-input-hover-dark);
   --el-input-focus-border-color: var(--color-primary);
   --el-input-placeholder-color: var(--text-placeholder-dark);
-  --el-input-icon-color: var(--text-tertiary-dark);
+  --el-input-icon-color: var(--text-meta-dark);
   /* 可选：单独控制 Textarea 背景 */
   --el-textarea-bg-color: var(--bg-input-dark);
 
@@ -206,7 +209,7 @@ html[data-theme="dark"] {
   --color-text: var(--text-primary-dark);
   --color-text-title: var(--text-title-dark);
   --color-text-secondary: var(--text-secondary-dark);
-  --color-text-tertiary: var(--text-tertiary-dark);
+  --color-text-tertiary: var(--text-meta-dark);
   --color-text-placeholder: var(--text-placeholder-dark);
   
   /* 文件路径文字颜色 */
@@ -262,11 +265,11 @@ html[data-theme="dark"] {
   --sm-bg-pattern: #334155;
   --sm-node-bg: var(--color-slate-deep);
   --sm-node-text: var(--text-primary-dark);
-  --sm-node-desc: var(--text-tertiary-dark);
+  --sm-node-desc: var(--text-meta-dark);
   --sm-edge-color: #475569;
   --sm-controls-bg: var(--bg-container-dark);
   --sm-controls-border: var(--border-color-dark);
-  --sm-controls-color: var(--text-tertiary-dark);
+  --sm-controls-color: var(--text-meta-dark);
   --sm-controls-hover-bg: var(--bg-page-dark);
   --sm-controls-hover-color: var(--text-primary-dark);
   --sm-minimap-bg: var(--bg-container-dark);
@@ -785,19 +788,19 @@ html[data-theme="dark"] {
   .el-tag.el-tag--success {
     background-color: rgba(103, 194, 58, 0.2);
     border-color: rgba(103, 194, 58, 0.4);
-    color: var(--color-success);
+    color: var(--success-dark);
   }
 
   .el-tag.el-tag--warning {
     background-color: rgba(230, 162, 60, 0.2);
     border-color: rgba(230, 162, 60, 0.4);
-    color: var(--color-warning);
+    color: var(--warning-dark);
   }
 
   .el-tag.el-tag--danger {
     background-color: rgba(245, 108, 108, 0.2);
     border-color: rgba(245, 108, 108, 0.4);
-    color: var(--color-danger);
+    color: var(--danger-dark);
   }
 
   /* 自定义对话框按钮深色主题 - 使用实色替代渐变 */

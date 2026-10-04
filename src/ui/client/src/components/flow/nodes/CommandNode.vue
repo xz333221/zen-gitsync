@@ -98,7 +98,7 @@ const commandInfo = computed(() => {
   }
   
   .node-warning {
-    color: var(--color-danger);
+    color: var(--danger-dark);
     font-size: var(--font-size-sm);
     margin-top: 4px;
   }
@@ -134,7 +134,7 @@ const commandInfo = computed(() => {
       display: flex;
       align-items: center;
       gap: 4px;
-      color: var(--text-tertiary);
+      color: var(--text-meta);
       
       .el-icon {
         font-size: var(--font-size-sm);

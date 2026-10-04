@@ -1039,7 +1039,7 @@ defineExpose({
     
     &.required::after {
       content: '*';
-      color: var(--color-danger);
+      color: var(--danger-dark);
       margin-left: var(--spacing-sm);
     }
   }

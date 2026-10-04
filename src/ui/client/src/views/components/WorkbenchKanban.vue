@@ -1059,7 +1059,7 @@ function liveSummary(live: BoardTaskLive): string {
 .kb-card__reply-text { flex: 1 1 auto; min-width: 0; margin-left: 4px; }
 
 /* 静默：卡片上最接近"可能卡住了"的信号，用告警色 */
-.kb-card__live-silent { color: var(--color-warning); }
+.kb-card__live-silent { color: var(--warning-dark); }
 .kb-card__live-line {
   margin: 4px 0 0;
   font-size: var(--font-size-xs);
@@ -1237,13 +1237,13 @@ function liveSummary(live: BoardTaskLive): string {
  * 让它跟"正在跑"共用一套颜色，读起来是"对当前状态下手"；
  * 红留给 ×，含义收窄成唯一一个：把任务整个删掉。
  */
-.kb-card__btn--stop:hover { color: var(--color-warning); background: var(--bg-subtle-hover); }
+.kb-card__btn--stop:hover { color: var(--warning-dark); background: var(--bg-subtle-hover); }
 /*
  * 「完成」用成功色、「撤销」用主色 —— 与「停止」用告警色同一条思路：
  * 颜色说明**这一下会对任务做什么**（收进已完成 / 只是把标记退回来），
  * 而不是给按钮排名次。红仍然只留给 ×。
  */
-.kb-card__btn--done:hover { color: var(--color-success); background: var(--bg-subtle-hover); }
+.kb-card__btn--done:hover { color: var(--success-dark); background: var(--bg-subtle-hover); }
 .kb-card__btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
 .kb-col__empty {
@@ -1365,7 +1365,7 @@ function liveSummary(live: BoardTaskLive): string {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.kb-table__live-silent { margin-left: 6px; color: var(--color-warning); }
+.kb-table__live-silent { margin-left: 6px; color: var(--warning-dark); }
 /* 「最后回复」在列表行里用同一根引用竖线（与看板卡片的 .kb-card__reply 同一个含义）。
    不写 padding-left：图标与正文之间已经由 .kb-table__agent 的右外边距管着，
    再叠一层内边距会把图标推到正文上去（与卡片那边同一条坑）。 */
@@ -1380,8 +1380,8 @@ function liveSummary(live: BoardTaskLive): string {
   background: var(--bg-subtle);
   color: var(--text-secondary);
 }
-.kb-table__status.is-doing { color: var(--color-warning); }
-.kb-table__status.is-done { color: var(--color-success); }
+.kb-table__status.is-doing { color: var(--warning-dark); }
+.kb-table__status.is-done { color: var(--success-dark); }
 .kb-table__empty {
   text-align: center;
   padding: 28px 10px;

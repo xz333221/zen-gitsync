@@ -164,13 +164,13 @@ const emit = defineEmits<{
 
 .flow-node-status.status-success {
   border-color: rgba(103, 194, 58, 0.5);
-  color: var(--color-success);
+  color: var(--success-dark);
   background: rgba(103, 194, 58, 0.1);
 }
 
 .flow-node-status.status-failed {
   border-color: rgba(245, 108, 108, 0.55);
-  color: var(--color-danger);
+  color: var(--danger-dark);
   background: rgba(245, 108, 108, 0.1);
 }
 
@@ -378,7 +378,7 @@ const emit = defineEmits<{
     align-items: center;
     justify-content: center;
     font-size: var(--font-size-sm);
-    color: var(--text-tertiary);
+    color: var(--text-meta);
     border-radius: var(--radius-md);
     z-index: 5;
   }

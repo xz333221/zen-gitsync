@@ -112,7 +112,7 @@ const versionInfo = computed(() => {
     font-size: var(--font-size-xs);
     font-weight: 500;
     background: rgba(104, 189, 255, 0.15);
-    color: var(--color-info);
+    color: var(--text-meta);
     margin-top: 6px;
     max-width: 100%;
     white-space: nowrap;
@@ -150,7 +150,7 @@ const versionInfo = computed(() => {
   }
   
   .node-warning {
-    color: var(--color-danger);
+    color: var(--danger-dark);
     font-size: var(--font-size-sm);
     margin-top: 4px;
   }

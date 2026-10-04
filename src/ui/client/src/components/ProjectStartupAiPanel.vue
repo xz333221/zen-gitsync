@@ -456,7 +456,7 @@ watch([cacheKey, hasModel], () => sync())
 }
 
 .state-box--error .state-text {
-  color: var(--color-danger);
+  color: var(--danger-dark);
 }
 
 .state-spinner {
@@ -563,7 +563,7 @@ watch([cacheKey, hasModel], () => sync())
   flex: 1 1 auto;
   min-width: 0;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   white-space: nowrap;
   overflow: hidden;
@@ -599,7 +599,7 @@ watch([cacheKey, hasModel], () => sync())
 
 .suggestion-launched {
   font-size: var(--font-size-xs);
-  color: var(--color-success);
+  color: var(--success-dark);
 }
 
 .suggestion-list::-webkit-scrollbar {

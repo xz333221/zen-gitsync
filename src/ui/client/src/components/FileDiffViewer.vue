@@ -1534,7 +1534,7 @@ onMounted(() => {
           <!-- 冲突已手动解决 -->
           <div v-else-if="isConflictedFile && !hasActualConflictMarkers" class="conflict-resolved-container">
             <div class="resolved-notice">
-              <el-icon class="success-icon" style="color: var(--color-success); font-size: var(--font-size-xl);">
+              <el-icon class="success-icon" style="color: var(--success-dark); font-size: var(--font-size-xl);">
                 <CircleCheck />
               </el-icon>
               <span class="notice-text">{{ $t('@E80AC:冲突已解决，可以添加到暂存区') }}</span>
@@ -2032,7 +2032,7 @@ onMounted(() => {
       color: var(--text-primary);
       
       &::placeholder {
-        color: var(--text-tertiary);
+        color: var(--text-meta);
       }
     }
     
@@ -2070,7 +2070,7 @@ onMounted(() => {
 }
 
 .path-dir {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 .path-name {
@@ -2297,7 +2297,7 @@ onMounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   background: var(--bg-file-path);
   padding: 1px var(--spacing-sm);
   border-radius: var(--radius-base);

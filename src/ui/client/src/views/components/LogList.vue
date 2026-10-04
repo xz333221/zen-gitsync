@@ -1633,7 +1633,7 @@ function toggleFullscreen() {
   align-items: center;
   justify-content: center;
   gap: var(--spacing-base);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 .log-empty-icon {
@@ -1835,7 +1835,7 @@ function toggleFullscreen() {
 
 .info-label {
   font-weight: 600;
-  color: var(--color-warning);
+  color: var(--warning-dark);
   
   flex-shrink: 0;
   white-space: nowrap;
@@ -2008,7 +2008,7 @@ function toggleFullscreen() {
 }
 
 .compact-label {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-sm);
   margin-right: 4px;
   white-space: nowrap;
@@ -2130,7 +2130,7 @@ function toggleFullscreen() {
 
 .pagination-info {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   margin-bottom: var(--spacing-sm);
 }
 

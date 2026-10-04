@@ -877,7 +877,7 @@ defineExpose({
   height: 100%;
 }
 .dir-list__search-input::placeholder {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 .dir-list__search-clear {
   flex-shrink: 0;
@@ -1023,7 +1023,7 @@ defineExpose({
 .dir-card__name-path {
   font-family: ui-monospace, monospace;
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1130,7 +1130,7 @@ defineExpose({
   height: 26px;
   border: none;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   border-radius: var(--radius-base);
   cursor: pointer;
   padding: 0;
@@ -1148,7 +1148,7 @@ defineExpose({
   color: var(--color-primary);
 }
 .dir-card__remove:active {
-  color: var(--color-danger);
+  color: var(--danger-dark);
 }
 .dir-card__action:focus-visible {
   outline: 2px solid var(--color-primary);

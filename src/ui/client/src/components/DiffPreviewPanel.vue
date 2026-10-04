@@ -190,7 +190,7 @@ syncTheme()
   border: none;
   padding: 3px;
   cursor: pointer;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   border-radius: var(--radius-base);
   display: flex;
   align-items: center;
@@ -247,7 +247,7 @@ syncTheme()
 }
 
 .diff-preview-empty {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-sm);
 }
 </style>

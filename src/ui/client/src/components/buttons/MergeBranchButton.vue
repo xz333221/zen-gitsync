@@ -544,7 +544,7 @@ async function handleMergeBranch() {
 
   .el-icon {
     font-size: var(--font-size-md);
-    color: var(--color-info);
+    color: var(--text-meta);
     flex-shrink: 0;
   }
 

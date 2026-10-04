@@ -459,7 +459,7 @@ function onReExecute() {
 }
 .wb-log-summary__meta {
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
 .wb-log-copy {
@@ -560,7 +560,7 @@ function onReExecute() {
 .wb-log-fullscreen__render :deep(pre) { margin: 8px 0; }
 .wb-log-fullscreen__empty {
   padding: 14px 18px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-style: italic;
 }
 
@@ -573,7 +573,7 @@ function onReExecute() {
   font-size: var(--font-size-sm);
 }
 .wb-log-summary__status--running {
-  color: var(--color-warning-dark, var(--color-warning-dark));
+  color: var(--color-warning-dark);
 }
 .wb-log-summary__status--pending {
   color: var(--color-primary);
@@ -595,7 +595,7 @@ function onReExecute() {
 .wb-log-summary__elapsed {
   font-size: var(--font-size-xs);
   font-weight: 400;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-variant-numeric: tabular-nums;
   margin-left: 2px;
 }

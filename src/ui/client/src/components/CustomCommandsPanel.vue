@@ -766,13 +766,13 @@ async function runCommand(cmd: any) {
 }
 
 .empty-icon {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   opacity: 0.5;
 }
 
 .empty-text {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   margin: 0;
 }
 
@@ -840,7 +840,7 @@ async function runCommand(cmd: any) {
 
 .command-desc {
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -886,7 +886,7 @@ async function runCommand(cmd: any) {
 
 .schedule-countdown {
   font-size: var(--font-size-xs);
-  color: var(--color-success);
+  color: var(--success-dark);
   font-family: var(--font-mono);
   white-space: nowrap;
 }
@@ -950,7 +950,7 @@ async function runCommand(cmd: any) {
 
 .schedule-help-icon {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   margin-left: 2px;
   vertical-align: middle;
   cursor: help;
@@ -1001,7 +1001,7 @@ async function runCommand(cmd: any) {
 .schedule-cli-hint {
   font-size: var(--font-size-xs);
   line-height: 1.5;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 .schedule-cli-hint::before {
@@ -1031,7 +1031,7 @@ async function runCommand(cmd: any) {
 
 .schedule-log-time {
   font-family: var(--font-mono);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   flex-shrink: 0;
 }
 
@@ -1044,11 +1044,11 @@ async function runCommand(cmd: any) {
 }
 
 .schedule-log-item.is-error .schedule-log-text {
-  color: var(--color-danger);
+  color: var(--danger-dark);
 }
 
 .schedule-log-item.is-skipped .schedule-log-text {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-style: italic;
 }
 </style>

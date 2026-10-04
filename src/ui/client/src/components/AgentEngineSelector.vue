@@ -148,7 +148,7 @@ function onCommand(id: AgentEngineId) {
 
 .agent-engine__btn:disabled {
   cursor: not-allowed;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 /* 两种图标机制（<img> 品牌彩色 SVG / sprite 的 <svg-icon>）在同一个 1em 盒子里对齐：
@@ -161,7 +161,7 @@ function onCommand(id: AgentEngineId) {
 
 .agent-engine__caret {
   font-size: 12px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 .agent-engine__item {
@@ -182,6 +182,6 @@ function onCommand(id: AgentEngineId) {
 
 .agent-engine__item-missing {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 </style>

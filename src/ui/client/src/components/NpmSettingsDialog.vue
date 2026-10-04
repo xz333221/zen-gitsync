@@ -623,7 +623,7 @@ function handleClose() {
 }
 
 .pin-button {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 .pin-button:hover {
@@ -776,7 +776,7 @@ function handleClose() {
 }
 
 .error-tip {
-  color: var(--color-danger);
+  color: var(--danger-dark);
   background: rgba(245, 108, 108, 0.1);
   border: 1px solid rgba(245, 108, 108, 0.2);
 }
@@ -787,7 +787,7 @@ function handleClose() {
 }
 
 .success-tip {
-  color: var(--color-success);
+  color: var(--success-dark);
   background: rgba(103, 194, 58, 0.1);
   border: 1px solid rgba(103, 194, 58, 0.2);
 }

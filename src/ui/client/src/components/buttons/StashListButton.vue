@@ -686,7 +686,7 @@ function handleOpenInEditor(filePath: string, _context: string) {
 
 .badge-icon {
   
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 .stash-id-text {

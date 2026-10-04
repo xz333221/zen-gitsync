@@ -291,7 +291,7 @@ onMounted(() => {
   width: 22px;
   height: 22px;
   border-radius: var(--radius-base);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   opacity: 0.7;
   text-decoration: none;
   transition: color var(--transition-base) ease, opacity var(--transition-base) ease, background var(--transition-base) ease;

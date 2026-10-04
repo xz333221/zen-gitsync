@@ -1898,7 +1898,7 @@ defineExpose({
   border-radius: 50%;
   margin-bottom: var(--spacing-base);
   font-size: 28px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   animation: git-status-pulse 2s infinite ease-in-out;
 }
 
@@ -1917,7 +1917,7 @@ defineExpose({
 
 .empty-subtext {
   
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   margin-bottom: var(--spacing-base);
 }
 
@@ -1999,7 +1999,7 @@ defineExpose({
   margin: 0;
   font-size: var(--font-size-xs);
   line-height: 1.6;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   text-align: center;
   max-width: 360px;
 }
@@ -2234,7 +2234,7 @@ defineExpose({
 
 .no-remote-tip .tip-icon {
   font-size: var(--font-size-xl);
-  color: var(--el-color-warning);
+  color: var(--color-warning-dark);
   flex-shrink: 0;
 }
 

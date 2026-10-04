@@ -214,7 +214,7 @@ watch(() => props.filePath, () => {
 }
 
 .image-preview-dim {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-xs);
 }
 
@@ -278,7 +278,7 @@ watch(() => props.filePath, () => {
 }
 
 .image-preview-error-path {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-xs);
   margin-top: var(--spacing-xs);
   max-width: 400px;
@@ -292,7 +292,7 @@ watch(() => props.filePath, () => {
   padding: 4px 12px;
   background: var(--bg-panel);
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   flex-shrink: 0;
 }
 

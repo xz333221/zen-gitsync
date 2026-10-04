@@ -326,7 +326,7 @@ onMounted(() => {
   font-size: var(--font-size-xs);
   font-weight: 700;
   letter-spacing: 0.06em;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -346,7 +346,7 @@ onMounted(() => {
   border: none;
   border-radius: var(--radius-xs);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   cursor: pointer;
   transition: var(--transition-ui-fast);
 }
@@ -417,11 +417,11 @@ onMounted(() => {
 }
 .acs__foot-label {
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 .acs__foot-hint {
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -432,6 +432,6 @@ onMounted(() => {
   margin: 0;
   font-size: var(--font-size-xs);
   line-height: 1.5;
-  color: var(--color-warning);
+  color: var(--warning-dark);
 }
 </style>

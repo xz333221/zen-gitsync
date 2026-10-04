@@ -263,7 +263,7 @@ function getCurrentReferenceValue(input: NodeInput): string {
 <style scoped lang="scss">
 .node-input-config {
   .empty-tip {
-    color: var(--text-tertiary);
+    color: var(--text-meta);
     font-size: var(--font-size-sm);
     padding: var(--spacing-lg);
     text-align: center;

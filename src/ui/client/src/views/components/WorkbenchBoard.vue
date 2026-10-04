@@ -962,7 +962,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
-.board__stat-value.is-live { color: var(--color-warning); }
+.board__stat-value.is-live { color: var(--warning-dark); }
 
 /* 图标按钮只变颜色，不加底色/边框 */
 .board__icon-btn {

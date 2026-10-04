@@ -1119,7 +1119,7 @@ body {
 }
 
 .config-broken-banner .banner-icon {
-  color: var(--color-warning);
+  color: var(--warning-dark);
   flex-shrink: 0;
 }
 
@@ -1506,7 +1506,7 @@ h1 {
 .header-monitor__label {
   font-size: var(--font-size-xs);
   font-weight: 600;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   letter-spacing: 0.3px;
 }
 
@@ -1650,7 +1650,7 @@ h1 {
 
 .user-unconfigured-divider span {
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   white-space: nowrap;
 }
 
@@ -1864,7 +1864,7 @@ h1 {
 }
 
 .user-warning {
-  color: var(--color-warning);
+  color: var(--warning-dark);
   font-weight: bold;
 }
 
@@ -2065,7 +2065,7 @@ h1 {
   border: 1px solid transparent;
   border-radius: var(--radius-lg);
   padding: 0;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   box-shadow: none;
   transition:
     background-color var(--transition-base) var(--ease-custom),

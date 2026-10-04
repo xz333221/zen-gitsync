@@ -425,7 +425,7 @@ onMounted(() => {
 }
 .exec-logs__stats {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
 .exec-logs__head-actions {
@@ -455,7 +455,7 @@ onMounted(() => {
 }
 .exec-logs__config-name {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 .exec-logs__filter {
   display: flex;
@@ -493,7 +493,7 @@ onMounted(() => {
   padding: 60px 20px;
   border: 1px dashed var(--border-color);
   border-radius: var(--radius-md, 6px);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   text-align: center;
 }
 .exec-logs__empty-art {
@@ -566,7 +566,7 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   flex-wrap: wrap;
   flex-shrink: 0;
 }
@@ -581,7 +581,7 @@ onMounted(() => {
   justify-content: center;
   font-size: var(--font-size-md);
   line-height: 1;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   background: transparent;
   border: none;
   border-radius: var(--radius-base);

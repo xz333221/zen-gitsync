@@ -1065,7 +1065,7 @@ onBeforeUnmount(() => {
   border: 1px solid transparent;
   border-radius: 5px;
   cursor: pointer;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   transition: var(--transition-ui-fast);
 }
 
@@ -1242,7 +1242,7 @@ onBeforeUnmount(() => {
 
 .sm-summary-text {
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -1271,7 +1271,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-mid);
   pointer-events: none;
 }
@@ -1292,7 +1292,7 @@ onBeforeUnmount(() => {
   padding: 4px 10px;
   font-size: var(--font-size-xs);
   font-weight: 600;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   flex-shrink: 0;
@@ -1325,7 +1325,7 @@ onBeforeUnmount(() => {
   line-height: 1.5;
 }
 
-.sm-log-entry--info { color: var(--text-tertiary); }
+.sm-log-entry--info { color: var(--text-meta); }
 .sm-log-entry--success { color: var(--text-success, var(--action-green-dark)); }
 .sm-log-entry--error { color: var(--text-danger, var(--git-status-locked)); }
 .sm-log-entry--thinking { color: var(--color-warning-light); }
@@ -1368,7 +1368,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   transition: transform var(--transition-fast);
   width: 12px;
 }
@@ -1409,7 +1409,7 @@ onBeforeUnmount(() => {
 
 .sm-tree-empty {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   text-align: center;
   padding: 24px 12px;
 }
@@ -1431,7 +1431,7 @@ onBeforeUnmount(() => {
 
 .sm-node-file {
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-family: 'Consolas', monospace;
   margin-top: 2px;
 }
@@ -1463,7 +1463,7 @@ onBeforeUnmount(() => {
   background: var(--sm-source-overlay-bg);
   z-index: 10;
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   pointer-events: none;
 }
 
@@ -1479,7 +1479,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   height: 100%;
   min-height: 60px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-sm);
   text-align: center;
   padding: 12px;
@@ -1704,7 +1704,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   font-size: var(--font-size-xs);
   font-weight: 600;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   transition: var(--transition-ui-fast);
@@ -1789,7 +1789,7 @@ onBeforeUnmount(() => {
 .sm-outline-desc {
   flex: 1;
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

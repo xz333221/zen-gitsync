@@ -130,7 +130,7 @@ function getKey(item: any, index: number) {
 }
 
 .param-list__empty {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-sm);
   padding: var(--spacing-lg);
   text-align: center;

@@ -225,7 +225,7 @@
 }
 .wb-attachment:hover .wb-attachment__del { opacity: 1; }
 .wb-attachment__del:hover {
-  color: var(--color-danger);
+  color: var(--danger-dark);
   background: var(--tint-danger-14, color-mix(in srgb, var(--color-danger) 14%, transparent));
 }
 .wb-attachment__del:focus-visible {

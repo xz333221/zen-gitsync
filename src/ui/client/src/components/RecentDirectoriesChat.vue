@@ -224,7 +224,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-base);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font: inherit;
   font-size: var(--font-size-sm);
   line-height: 1;

@@ -473,7 +473,7 @@ onBeforeUnmount(() => {
   padding: 2px 8px;
   font-size: var(--font-size-xs);
   font-weight: 500;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   background: var(--bg-subtle);
   border-radius: var(--radius-pill);
 }
@@ -527,11 +527,11 @@ onBeforeUnmount(() => {
   gap: 6px;
   font-size: var(--font-size-sm);
   font-weight: 500;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 .metric-card__header svg {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 .metric-card__body {
@@ -562,7 +562,7 @@ onBeforeUnmount(() => {
 
 .metric-card__footer {
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -631,7 +631,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 /* ── 占位 / 错误 ─────────────────────────────────────────────────────── */
@@ -643,12 +643,12 @@ onBeforeUnmount(() => {
   justify-content: center;
   gap: 12px;
   padding: 60px 20px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-base);
 }
 
 .monitor-error {
-  color: var(--color-danger);
+  color: var(--danger-dark);
 }
 
 /* ── 端口列表 ───────────────────────────────────────────────────────── */
@@ -795,7 +795,7 @@ onBeforeUnmount(() => {
 }
 
 .proto-badge.proto-tcp6 {
-  color: var(--color-info);
+  color: var(--text-meta);
   background: var(--tint-info-12);
 }
 
@@ -831,20 +831,20 @@ onBeforeUnmount(() => {
 .state-tag.state-time_wait,
 .state-tag.state-close_wait,
 .state-tag.state-closing {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   background: var(--bg-subtle);
 }
 
 .state-tag.state-unknown,
 .state-tag.state- {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   background: var(--bg-subtle);
 }
 
 .ports-empty {
   text-align: center;
   padding: 40px 12px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-mid);
 }
 

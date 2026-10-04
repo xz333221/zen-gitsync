@@ -1659,7 +1659,7 @@ function saveConfig() {
 
 .examples-title {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   margin-bottom: var(--spacing-sm);
 }
 
@@ -1718,7 +1718,7 @@ function saveConfig() {
     
     .command-desc {
       font-size: var(--font-size-sm);
-      color: var(--text-tertiary);
+      color: var(--text-meta);
     }
     
     .command-code {
@@ -1737,10 +1737,10 @@ function saveConfig() {
       align-items: center;
       gap: var(--spacing-sm);
       font-size: var(--font-size-sm);
-      color: var(--text-tertiary);
+      color: var(--text-meta);
       
       .el-icon {
-        color: var(--color-warning);
+        color: var(--warning-dark);
         font-size: var(--font-size-base);
       }
       
@@ -1758,7 +1758,7 @@ function saveConfig() {
 }
 
 .empty-tip {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-size: var(--font-size-base);
   padding: 20px;
   text-align: center;
@@ -1907,13 +1907,13 @@ function saveConfig() {
 
 .field-label {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   margin-bottom: 6px;
 }
 
 .branch-default-tip {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   padding: var(--spacing-sm);
   border-radius: var(--radius-md);
   background: var(--tint-primary-08);
@@ -1926,7 +1926,7 @@ function saveConfig() {
   gap: var(--spacing-sm);
   margin-top: var(--spacing-sm);
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   
   .el-icon {
     font-size: var(--font-size-base);
@@ -1964,7 +1964,7 @@ function saveConfig() {
   
   .node-id {
     font-size: var(--font-size-xs);
-    color: var(--text-tertiary);
+    color: var(--text-meta);
     font-family: var(--font-mono);
   }
 }
@@ -2026,7 +2026,7 @@ function saveConfig() {
 
 .output-col-title {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 .output-col-actions {
@@ -2070,7 +2070,7 @@ function saveConfig() {
 
 .col-title {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 .col-actions {

@@ -454,7 +454,7 @@ async function requestCloseAll() {
 }
 
 .instance-close:hover {
-  color: var(--el-color-danger);
+  color: var(--color-danger-dark);
   background: color-mix(in srgb, var(--el-color-danger) 10%, transparent);
 }
 
@@ -541,7 +541,7 @@ async function requestCloseAll() {
   border: 1px solid color-mix(in srgb, var(--el-color-danger) 28%, var(--border-color));
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--el-color-danger) 4%, transparent);
-  color: var(--el-color-danger);
+  color: var(--color-danger-dark);
   font-size: var(--font-size-xs);
   font-weight: 600;
   white-space: nowrap;

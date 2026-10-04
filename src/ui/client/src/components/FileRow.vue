@@ -319,7 +319,7 @@ const getFileIcon = (filePath: string) => getFileIconClass(props.getFileName(fil
 
 .file-directory {
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -1857,7 +1857,7 @@ async function openSystemConfigFile() {
   line-height: 1.5;
 }
 .notify-hint--warn {
-  color: var(--el-color-warning);
+  color: var(--color-warning-dark);
 }
 /* 提示音是「任务完成提示」的子选项：左侧竖线 + 缩进表达从属关系，别让它看起来和
    总开关平级 —— 平级的两个开关会让人以为"关了总开关声音还在"（实际不会响）。 */
@@ -2217,7 +2217,7 @@ html.dark .label-icon {
 
 .model-btn--danger:hover {
   border-color: var(--el-color-danger);
-  color: var(--el-color-danger);
+  color: var(--color-danger-dark);
 }
 
 .model-form {
@@ -2258,7 +2258,7 @@ html.dark .label-icon {
 }
 
 .model-form-label .req {
-  color: var(--el-color-danger);
+  color: var(--color-danger-dark);
   margin-left: 2px;
 }
 
@@ -2296,7 +2296,7 @@ html.dark .label-icon {
 
 .model-test-badge--fail {
   background: rgba(245, 108, 108, 0.1);
-  color: var(--el-color-danger);
+  color: var(--color-danger-dark);
   border: 1px solid rgba(245, 108, 108, 0.25);
 }
 

@@ -1342,7 +1342,7 @@ onBeforeUnmount(stopPolling)
   color: var(--text-primary);
 }
 .repo-list__center--error .el-icon {
-  color: var(--el-color-warning);
+  color: var(--color-warning-dark);
   font-size: 26px;
 }
 .repo-list__center .repo-list__btn {
@@ -1526,7 +1526,7 @@ onBeforeUnmount(stopPolling)
   padding: 8px 12px;
   text-align: left;
   border-radius: var(--radius-md);
-  color: var(--color-warning);
+  color: var(--warning-dark);
   background: color-mix(in srgb, var(--color-warning) 12%, transparent);
 }
 .repo-list__guide-note--warn .el-icon {
@@ -1627,7 +1627,7 @@ onBeforeUnmount(stopPolling)
   color: var(--text-primary);
 }
 .repo-list__search-input::placeholder {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 .repo-list__search-clear {
   flex-shrink: 0;
@@ -1666,7 +1666,7 @@ onBeforeUnmount(stopPolling)
 }
 .repo-list__banner .el-icon {
   flex-shrink: 0;
-  color: var(--el-color-warning);
+  color: var(--color-warning-dark);
 }
 .repo-list__banner--info {
   background: var(--tint-primary-08);
@@ -1852,7 +1852,7 @@ onBeforeUnmount(stopPolling)
 /* 第三行是元信息(最近推送 / Fork / 分支 / 许可证):比描述更低一档,同样单行省略 */
 .repo-card__meta {
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1972,10 +1972,10 @@ onBeforeUnmount(stopPolling)
   gap: 5px;
   margin: 0;
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 .repo-list__footnote .el-icon {
-  color: var(--el-color-success);
+  color: var(--color-success-dark);
   font-size: var(--font-size-sm);
 }
 </style>

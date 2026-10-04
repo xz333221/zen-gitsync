@@ -764,7 +764,7 @@ function formatSize(bytes: number): string {
 
 .mm-dir-empty {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   font-style: italic;
 }
 
@@ -786,7 +786,7 @@ function formatSize(bytes: number): string {
 }
 
 .mm-status-dirty {
-  color: var(--color-warning);
+  color: var(--warning-dark);
   font-size: var(--font-size-base);
   line-height: 1;
 }
@@ -838,11 +838,11 @@ function formatSize(bytes: number): string {
   padding: 24px 12px;
   text-align: center;
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 .mm-sidebar-error {
-  color: var(--color-danger);
+  color: var(--danger-dark);
 }
 
 /* ── 目录分组 ─────────────────────────────────────────────────── */
@@ -871,7 +871,7 @@ function formatSize(bytes: number): string {
 
 .mm-group-caret {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   flex-shrink: 0;
   transition: transform var(--transition-fast) ease;
 }
@@ -910,14 +910,14 @@ function formatSize(bytes: number): string {
 
 .mm-group-count {
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   flex-shrink: 0;
 }
 
 /* 完整路径小字：同名目录也能分辨（hover 有 title 看全文） */
 .mm-group-path {
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -934,7 +934,7 @@ function formatSize(bytes: number): string {
   gap: 4px;
   padding: 8px 8px 8px 12px;
   font-size: var(--font-size-sm);
-  color: var(--color-danger);
+  color: var(--danger-dark);
 }
 
 /* ── 文件条目 ─────────────────────────────────────────────────── */
@@ -981,7 +981,7 @@ function formatSize(bytes: number): string {
 
 .mm-file-meta {
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1037,7 +1037,7 @@ html:not(.dark) .mm-file-actions :deep(.el-button--danger) {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 .mm-editor-empty svg {
@@ -1053,7 +1053,7 @@ html:not(.dark) .mm-file-actions :deep(.el-button--danger) {
 
 .mm-editor-empty-hint {
   font-size: var(--font-size-mid);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   margin: 0;
 }
 
@@ -1095,7 +1095,7 @@ html:not(.dark) .mm-file-actions :deep(.el-button--danger) {
 }
 
 .ctx-menu-item--danger {
-  color: var(--color-danger);
+  color: var(--danger-dark);
 }
 
 .ctx-menu-item--danger:hover {

@@ -1254,7 +1254,7 @@ onUnmounted(() => {
     .description {
       margin: 0 0 var(--spacing-base) 0;
       font-size: var(--font-size-sm);
-      color: var(--text-tertiary);
+      color: var(--text-meta);
     }
     
     .item-actions {
@@ -1338,7 +1338,7 @@ onUnmounted(() => {
   
   .tool-desc {
     font-size: var(--font-size-sm);
-    color: var(--text-tertiary);
+    color: var(--text-meta);
   }
 }
 

@@ -477,7 +477,7 @@ const chatSummary = computed(() =>
   border: none;
   border-radius: var(--radius-base);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   cursor: pointer;
   font-size: var(--font-size-mid);
   transition: color var(--transition-fast);

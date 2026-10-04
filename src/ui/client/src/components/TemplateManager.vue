@@ -581,7 +581,7 @@ defineExpose({
 }
 
 .pin-button {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 .pin-button:hover {

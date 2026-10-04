@@ -171,10 +171,10 @@ async function onCopyCommand() {
     color: var(--el-color-primary);
   }
   &.is-success {
-    color: var(--el-color-success);
+    color: var(--color-success-dark);
   }
   &.is-failed {
-    color: var(--el-color-danger);
+    color: var(--color-danger-dark);
   }
 
   .is-loading {
@@ -203,7 +203,7 @@ async function onCopyCommand() {
   background: rgba(103, 194, 58, 0.08);
   border-left: 3px solid var(--el-color-success);
   border-radius: var(--radius-base);
-  color: var(--el-color-success);
+  color: var(--color-success-dark);
   font-size: var(--font-size-mid);
 }
 
@@ -231,7 +231,7 @@ async function onCopyCommand() {
   &__label {
     display: block;
     margin-bottom: 4px;
-    color: var(--el-color-danger);
+    color: var(--color-danger-dark);
     font-weight: 500;
   }
 

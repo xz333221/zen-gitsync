@@ -104,7 +104,7 @@ const props = withDefaults(defineProps<{
 
 .self-closed-hint {
   font-size: var(--font-size-xs, 12px);
-  color: var(--text-tertiary, var(--text-secondary));
+  color: var(--text-meta, var(--text-secondary));
   line-height: 1.6;
 }
 </style>

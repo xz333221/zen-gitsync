@@ -827,7 +827,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 .proj-item__running-text {
   margin-left: auto;
   flex-shrink: 0;
-  color: var(--color-warning);
+  color: var(--warning-dark);
   font-variant-numeric: tabular-nums;
 }
 
@@ -952,9 +952,9 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 /* 破坏性动作（从清单移除）：平时就用危险色，不必等 hover 才变色 ——
    这一行已经标着「目录不存在」，按下去的后果需要一眼可辨。
    hover 反过来加深底色，给出与另外两个"打开"按钮不同的手感。 */
-.proj-item__action--danger { color: var(--color-danger); }
+.proj-item__action--danger { color: var(--danger-dark); }
 .proj-item__action--danger:hover {
-  color: var(--color-danger);
+  color: var(--danger-dark);
   background: color-mix(in srgb, var(--color-danger) 14%, transparent);
 }
 .proj-item__action--danger:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
@@ -1030,7 +1030,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   color: var(--text-meta);
 }
 /* 完全批准（含 Shell）：给个琥珀色，和顶栏 claude 菜单里那条危险项同一套语言 */
-.proj-menu__item--danger .proj-menu__label { color: var(--color-warning); }
+.proj-menu__item--danger .proj-menu__label { color: var(--warning-dark); }
 /* 未安装：降饱和度（hover 恢复），点它走安装引导而不是硬启动 */
 .proj-menu__item.is-missing .proj-menu__icon { opacity: 0.5; filter: grayscale(0.65); }
 .proj-menu__item.is-missing:hover .proj-menu__icon { opacity: 0.85; filter: grayscale(0.2); }
@@ -1086,7 +1086,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   font-variant-numeric: tabular-nums;
 }
 .proj-chip--ahead { color: var(--color-primary); background: var(--tint-primary-12); }
-.proj-chip--behind { color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 14%, transparent); }
+.proj-chip--behind { color: var(--warning-dark); background: color-mix(in srgb, var(--color-warning) 14%, transparent); }
 .proj-chip--dirty { color: var(--text-secondary); background: var(--bg-subtle); }
 .proj-chip--missing { color: var(--color-danger-light); background: color-mix(in srgb, var(--color-danger) 12%, transparent); }
 

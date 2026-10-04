@@ -620,7 +620,7 @@ function formatDate(dateString: string): string {
 }
 
 .tag-date {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 .tag-message {

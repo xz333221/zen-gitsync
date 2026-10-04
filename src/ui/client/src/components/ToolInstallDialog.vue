@@ -289,8 +289,8 @@ onBeforeUnmount(stopPolling)
   font-size: var(--font-size-mid);
 
   &.is-waiting { color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 8%, transparent); }
-  &.is-success { color: var(--el-color-success); background: color-mix(in srgb, var(--el-color-success) 8%, transparent); }
-  &.is-error { color: var(--el-color-danger); background: color-mix(in srgb, var(--el-color-danger) 8%, transparent); }
+  &.is-success { color: var(--color-success-dark); background: color-mix(in srgb, var(--el-color-success) 8%, transparent); }
+  &.is-error { color: var(--color-danger-dark); background: color-mix(in srgb, var(--el-color-danger) 8%, transparent); }
 }
 
 .tool-install__loading {

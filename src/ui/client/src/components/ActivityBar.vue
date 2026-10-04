@@ -348,7 +348,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   border: none;
   background: transparent;
   border-radius: var(--radius-md);
-  color: var(--text-tertiary);
+  color: var(--text-meta);
   cursor: pointer;
   padding: 0;
   position: relative;

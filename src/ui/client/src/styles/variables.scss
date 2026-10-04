@@ -368,14 +368,19 @@
   --text-secondary-dark: #d8dce2; /* 再次提升：原 #bfc3c9 */
   
   /* 辅助文字 */
+  /* 装饰档。**只用于非 color 属性** —— border-color / background / 状态点。
+     凡是用在 color: 上的（文字、图标、数字）一律用下面的 --text-meta：
+     #909399 在 --bg-panel 上只有 2.87:1，连图标的 3:1 都不到。
+     2026-10-04 把全站 183 处 color: 走 tertiary 的改成 meta，这条分工
+     从"只写在注释里的约定"变成可执行的规则。 */
   --text-tertiary: #909399;
   --text-tertiary-dark: #b4bac2; /* 装饰档。2026-10-04 从 #cbd0d6 调暗一档，
      为下面 --text-meta-dark 让出空间 —— 之前两者都是 #cbd0d6，等于「meta 档」
      在暗色下根本不存在。仍在暗面板 8.9:1 以上，装饰性状态点无感。 */
 
-  /* 承载信息的元文字（light 主题）。
-     与 --text-tertiary 的分工：tertiary 只用于**装饰**（状态点 / 图标 / 占位符），
-     凡是"要读的字"一律用 meta。实测 #909399 在 --bg-panel 上只有 2.87:1、
+  /* 承载信息的元文字（light 主题）—— 凡是用在 color: 上的那一档。
+     与上面 --text-tertiary 的分工见该令牌自己的注释。
+     实测 #909399 在 --bg-panel 上只有 2.87:1、
      在画布上 2.75:1，而 11~12px 中文按 WCAG AA 需要 4.5:1。
      #686a6f 是按**新画布** #e7ebf2 反解出来的：画布上 4.50、面板 #f5f7fa 上 5.01、白底 5.38。
      取值刻意比 --text-secondary(#606266) 略亮一档，这样"列标题(secondary) / 列计数(meta)"
@@ -414,7 +419,7 @@
   --border-color-extra-light: #ebeef5; /* el-plus 默认细边框 */
   --color-text-title: var(--text-title);
   --color-text-secondary: var(--text-secondary);
-  --color-text-tertiary: var(--text-tertiary);
+  --color-text-tertiary: var(--text-meta);
   --color-text-placeholder: var(--text-placeholder);
   
   /* 文件路径文字颜色 */
@@ -626,13 +631,13 @@
   --sm-bg-pattern: #cbd5e1;
   --sm-node-bg: #ffffff;
   --sm-node-text: var(--text-primary);
-  --sm-node-desc: var(--text-tertiary);
+  --sm-node-desc: var(--text-meta);
   --sm-edge-color: #cbd5e1;
 
   /* Controls / MiniMap */
   --sm-controls-bg: #ffffff;
   --sm-controls-border: var(--border-color-medium);
-  --sm-controls-color: var(--text-tertiary);
+  --sm-controls-color: var(--text-meta);
   --sm-controls-hover-bg: var(--bg-container-hover);
   --sm-controls-hover-color: var(--text-primary);
   --sm-minimap-bg: #ffffff;

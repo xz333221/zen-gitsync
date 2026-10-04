@@ -141,5 +141,5 @@ function btnTitle(): string {
   color: var(--text-meta);
 }
 .tep__item-check { color: var(--color-primary); font-size: var(--font-size-sm); }
-.tep__item-missing { font-size: var(--font-size-xs); color: var(--text-tertiary, var(--text-secondary)); }
+.tep__item-missing { font-size: var(--font-size-xs); color: var(--text-meta, var(--text-secondary)); }
 </style>

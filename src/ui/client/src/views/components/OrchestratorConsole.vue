@@ -1224,7 +1224,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   cursor: pointer;
   transition: color var(--transition-fast) var(--ease-custom), background var(--transition-fast) var(--ease-custom);
 }
-.oc__toggle:hover:not(:disabled) { color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 10%, transparent); }
+.oc__toggle:hover:not(:disabled) { color: var(--warning-dark); background: color-mix(in srgb, var(--color-warning) 10%, transparent); }
 .oc__toggle:disabled { opacity: 0.5; cursor: default; }
 .oc__toggle:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
@@ -1259,7 +1259,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   background-image: var(--gradient-accent-soft);
   flex-shrink: 0;
 }
-.oc__state.is-paused { color: var(--color-warning); }
+.oc__state.is-paused { color: var(--warning-dark); }
 .oc__state-label { color: var(--text-meta); }
 .oc__state-value { font-weight: 500; }
 .oc__state-meta { margin-left: auto; color: var(--text-meta); font-variant-numeric: tabular-nums; }
@@ -1575,7 +1575,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 .rpt__meta > span + span::before {
   content: '·';
   margin-right: 6px;
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 .rpt__project { color: var(--text-secondary); }
 /* 每个任务自己的进度：比整体那条细一档（3px），它是注脚不是标题 */
@@ -1614,7 +1614,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   padding: 0 4px;
   border-radius: var(--radius-pill);
   background: var(--tint-warning-14);
-  color: var(--color-warning);
+  color: var(--warning-dark);
 }
 .rpt__line {
   margin: 3px 0 0;
@@ -1777,7 +1777,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.oc__git-value.is-warn { color: var(--color-warning); }
+.oc__git-value.is-warn { color: var(--warning-dark); }
 .oc__git-value.is-danger { color: var(--color-danger-light); }
 
 /* 折起来时只剩一行标题：把上下留白和列表的滚动框一起收掉，
@@ -1833,8 +1833,8 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   font-variant-numeric: tabular-nums;
   color: var(--text-meta);
 }
-.oc__count.is-warn { color: var(--color-warning); }
-.oc__count.is-over { color: var(--color-danger); }
+.oc__count.is-warn { color: var(--warning-dark); }
+.oc__count.is-over { color: var(--danger-dark); }
 .oc__compose-foot {
   display: flex;
   align-items: center;

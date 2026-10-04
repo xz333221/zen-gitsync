@@ -223,14 +223,14 @@ async function submit(openEditor: boolean) {
 }
 .nc__input:focus,
 .nc__select:focus { border-color: var(--color-primary); }
-.nc__input::placeholder { color: var(--text-tertiary); }
+.nc__input::placeholder { color: var(--text-meta); }
 .nc__select { cursor: pointer; }
 .nc__input--area {
   resize: vertical;
   min-height: 92px;
   max-height: 260px;
 }
-.nc__hint { margin: 0; font-size: var(--font-size-xs); color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nc__hint { margin: 0; font-size: var(--font-size-xs); color: var(--text-meta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .nc__error {
   margin: 0;
