@@ -2144,7 +2144,7 @@ export default {
   '@EDITOR:清除搜索': '清除搜索',
   '@EDITOR:未找到匹配文件': '未找到匹配文件',
   // @EDITOR: file end
-  // @INSSW: file path: components/InstanceSwitcher.vue
+  // @INSSW: file path: components/InstanceSwitcher.vue, components/ServerClosedOverlay.vue
   '@INSSW:个实例': '个实例',
   '@INSSW:运行中': '运行中',
   '@INSSW:运行中的实例': '运行中的实例',

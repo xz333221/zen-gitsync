@@ -51,12 +51,14 @@ import { registerGitOpsRoutes } from './routes/gitOps.js';
 import { registerCodeRoutes } from './routes/code.js';
 import { registerCodeAnalysisRoutes } from './routes/codeAnalysis.js';
 import { registerInstancesRoutes } from './routes/instances.js';
+import { registerHealthRoutes } from './routes/health.js';
 import { registerMonitorRoutes } from './routes/monitor.js';
 import { registerMindmapRoutes } from './routes/mindmap.js';
 import { registerMemoryRoutes } from './routes/memory.js';
 import { registerAgentRoutes } from './routes/workbench/agentRoutes.js';
 import { createWorkspaceSnapshotter } from './routes/aiContext/wiring.js';
 import { createInstanceRegistry, getRegistryPath } from './utils/instanceRegistry.js';
+import { notifyShutdown } from './utils/instanceShutdown.js';
 import { createSavePortToFile } from './utils/createSavePortToFile.js';
 import { createOriginGuard, createOriginCheckerFromEnv } from './middleware/originGuard.js';
 import { startServerOnAvailablePort } from './utils/startServerOnAvailablePort.js';
@@ -469,6 +471,9 @@ async function startUIServer(noOpen = false, savePort = false) {
     getCurrentInstanceId: () => process.pid
   });
 
+  // 健康探针：前端在「疑似服务端已退出」的确认窗口内轮询(带 pid，用于识别热重启)
+  registerHealthRoutes({ app });
+
   registerGitOpsRoutes({
     app,
     execGitCommand,
@@ -700,6 +705,10 @@ async function startUIServer(noOpen = false, savePort = false) {
       if (_shuttingDown) return;
       _shuttingDown = true;
       console.log(chalk.gray(`[shutdown] 收到 ${signal}，开始清理…`));
+      // 0) 先广播给所有 UI 标签页(在 drain 之前):让页面立刻进入「确认窗口」，
+      //    而不是等 15s 轮询失败才发现。emit 同步写入 socket 发送缓冲，
+      //    后续 drain(最长 3s) + 100ms exit 延时足够把包刷出去。
+      notifyShutdown(io, { pid: process.pid, signal });
       // 1) 先并行 SIGTERM 所有正在跑的子进程(限时 3s),防止 claude/npm/git 变孤儿。
       //    注意:返回值是"尝试终止数"而非"实际终止数" — drain 内部用
       //    Promise.race 卡总时长,3s 到了就返回,可能仍有进程在 SIGTERM 退出中。

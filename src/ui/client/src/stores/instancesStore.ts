@@ -17,6 +17,7 @@ import { ref, computed } from 'vue'
 import { io, Socket } from 'socket.io-client'
 import type { InstanceInfo, InstancesResponse } from '@/types/instances'
 import { getBackendPort } from '@/utils/backendUrl'
+import { useServerLifecycle } from '@/composables/useServerLifecycle'
 
 const backendPort = getBackendPort()
 const POLL_INTERVAL_MS = 15_000
@@ -134,11 +135,39 @@ export const useInstancesStore = defineStore('instances', () => {
         list.value = payload.instances
       }
     })
+    // 宿主服务端生命周期：见 composables/useServerLifecycle.ts。
+    // 只处理「本实例」的信号(pid 与 currentInstanceId 一致)，其他实例退出与本页无关。
+    s.on('server_shutdown', (payload: { pid?: number; signal?: string }) => {
+      if (payload?.pid != null && payload.pid === currentInstanceId.value) {
+        useServerLifecycle().armGraceful({
+          pid: payload.pid,
+          name: currentInstance.value?.projectName,
+        })
+      }
+    })
+    s.on('disconnect', (reason: string) => {
+      // 'io client disconnect' 是我们自己调 disconnect() 造成的(如 store.stop)，
+      // 不代表服务端退出；其余 reason(transport close/error 等)才进入确认窗口。
+      if (reason !== 'io client disconnect') {
+        useServerLifecycle().armDisconnect({
+          pid: currentInstanceId.value,
+          name: currentInstance.value?.projectName,
+        })
+      }
+    })
+    s.on('connect', () => {
+      useServerLifecycle().noteConnected()
+    })
   }
 
   function detachSocket() {
     if (socketRef.value) {
-      try { socketRef.value.off('instances_changed') } catch (_) {}
+      try {
+        socketRef.value.off('instances_changed')
+        socketRef.value.off('server_shutdown')
+        socketRef.value.off('disconnect')
+        socketRef.value.off('connect')
+      } catch (_) {}
       try { socketRef.value.disconnect() } catch (_) {}
       socketRef.value = null
     }

@@ -35,6 +35,7 @@ import type { SettingsTab } from '@/components/GitGlobalSettingsDialog.vue'
 import ActivityBar from '@/components/ActivityBar.vue'
 import InstanceSwitcher from '@/components/InstanceSwitcher.vue'
 import AppErrorBanner from '@/components/AppErrorBanner.vue'
+import ServerClosedOverlay from '@/components/ServerClosedOverlay.vue'
 import RecentDirectoriesList from '@/components/RecentDirectoriesList.vue'
 // GitHub / Gitee 仓库列表面板(Git 视图的另外两个 Tab)。静态导入:只有切到对应
 // Tab 才挂载,不占首屏请求;但它本身不大,不值得为它多开一个异步 chunk。
@@ -72,6 +73,7 @@ import { useNetworkStatus } from '@/composables/useNetworkStatus'
 import { ALL_AI_CONTEXT_SECTIONS, refreshAiContext, refreshAiContextForView } from '@/composables/useAiContextSync'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import { useTaskNotifier } from '@/composables/useTaskNotifier'
+import { useServerLifecycle } from '@/composables/useServerLifecycle'
 import { gesturePermissionDecision, notificationPermission, requestNotificationPermission } from '@/utils/taskNotify'
 
 const configInfo = ref('')
@@ -112,6 +114,20 @@ function stopHeaderMonitor() {
 // 只把「跑着 → 结束」的跃迁翻译成系统通知 / 应用内提示。
 // 开关在 设置 → 通用设置 → 任务完成提示（默认开），每次事件实时读取。
 const taskNotifier = useTaskNotifier()
+
+// 宿主服务端生命周期：检出服务端退出后尝试关标签页，关不掉则亮全屏遮罩。
+// 判定/关页逻辑在 composable 内，这里只负责「已确认退出」后的收尾——
+// 停掉全部轮询与 socket 重连，避免僵尸页面对已死端口无限重试。
+// 注意：模板里访问对象嵌套 ref 不会自动解包，所以这里解构到顶层绑定。
+const serverLifecycle = useServerLifecycle()
+const { isServerGone: serverGone, serverGoneName } = serverLifecycle
+watch(serverGone, (gone) => {
+  if (!gone) return
+  instancesStore.stop()
+  toolsStore.stopPolling()
+  stopHeaderMonitor()
+  taskNotifier.stop()
+})
 
 // 通知权限自动申请：开关默认开启后，用户很可能永远不碰设置里那个开关，
 // 而浏览器只在用户手势里弹授权询问 —— 所以挂到页面内第一次点击上，补一次申请。
@@ -273,6 +289,9 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  // 清掉服务端生命周期检测的定时器/监听，保证 HMR 不残留
+  serverLifecycle.resetAll()
+
   // 停止实例注册表轮询 + 断开 Socket.IO
   instancesStore.stop()
 
@@ -712,6 +731,8 @@ function stopHResize() {
   <!-- 跳过导航:键盘用户第一次 Tab 就能直达主内容(WCAG 2.4.1) -->
   <a class="skip-link" href="#main-content">{{ $t('@F13B4:跳到主内容') }}</a>
   <AppErrorBanner />
+  <!-- 宿主服务端已退出：关闭标签页失败时的全屏兜底遮罩 -->
+  <ServerClosedOverlay :visible="serverGone" :name="serverGoneName" />
   <header class="main-header app-header">
     <div class="header-left">
       <a href="https://github.com/xz333221/zen-gitsync" target="_blank" class="header-brand-link">
