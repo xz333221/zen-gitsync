@@ -1148,7 +1148,7 @@ defineExpose({
   color: var(--color-primary);
 }
 .dir-card__remove:active {
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
 }
 .dir-card__action:focus-visible {
   outline: var(--focus-outline);

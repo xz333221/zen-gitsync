@@ -1425,13 +1425,13 @@ function onBrowserSelect(path: string) {
 }
 
 .claude-menu__warn {
-  color: var(--warning-dark);
+  color: var(--color-warning-dark);
   font-size: var(--font-size-mid);
   vertical-align: middle;
 }
 
 .claude-menu__item--danger .claude-menu__hint {
-  color: var(--warning-dark);
+  color: var(--color-warning-dark);
   font-weight: 600;
 }
 

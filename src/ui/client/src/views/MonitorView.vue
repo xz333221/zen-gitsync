@@ -648,7 +648,7 @@ onBeforeUnmount(() => {
 }
 
 .monitor-error {
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
 }
 
 /* ── 端口列表 ───────────────────────────────────────────────────────── */

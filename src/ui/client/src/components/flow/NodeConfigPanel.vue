@@ -1740,7 +1740,7 @@ function saveConfig() {
       color: var(--text-meta);
       
       .el-icon {
-        color: var(--warning-dark);
+        color: var(--color-warning-dark);
         font-size: var(--font-size-base);
       }
       

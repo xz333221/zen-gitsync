@@ -793,7 +793,11 @@
   --gradient-accent: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
   --gradient-accent-hover: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-primary) 100%);
   --gradient-accent-soft: linear-gradient(180deg, var(--tint-primary-04) 0%, transparent 100%);
-  --gradient-progress: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+  /* 2026-10-04 删掉 --gradient-progress：进度条一律走 --role-active-ink 实心。
+     渐变版最后两个消费点是控制台的「进度报告」总进度与任务事实每条进度，
+     而进度条表示的是"在跑的活儿到哪一步"，跟看板「进行中」是同一件事 ——
+     两处都用同一个角色色才可能必然一致。原来蓝渐变那版还导致
+     "同屏 6 条进度全是同一个蓝、扫不出差别"。 */
 
   /* 状态点微光（color-mix 自适应双主题） */
   --dot-glow-success: 0 0 6px 1px color-mix(in srgb, var(--color-success) 45%, transparent);
@@ -803,27 +807,36 @@
 
   /* ===== 语义角色色 =====
      角色 = 一块 UI 在回答"我是什么"，色相就是答案。
-     浅色主题的 ink 必须过 AA 4.5:1（11~12px 中文尤其），所以 ink 一律用
-     各色系的 -dark 档；surface/edge/glow 是装饰，透明度随便。 */
-  --role-pending-ink: #5b6472;          /* 石板灰蓝：待处理 / 未开始 */
-  --role-pending-surface: color-mix(in srgb, #64748b 6%, transparent);
-  --role-pending-edge: color-mix(in srgb, #64748b 34%, transparent);
-  --role-pending-glow: 0 0 6px 1px color-mix(in srgb, #64748b 40%, transparent);
 
+     六个槽位，**分工不能串**（2026-10-04 晚修用户报的"白主题偏深偏暗"）：
+     · hue     —— 纯色相。**只用来调 surface / wash / edge / glow，永远不当文字色。**
+     · ink     —— 文字 / 图标。浅色档一律走各色系的 -dark 档，过 AA 4.5:1。
+     · surface —— 大面积氛围底（看板列身、项目列表行）。色相兑进 near-white。
+     · wash    —— 承载状态的那一块（进行中 / 出错的卡片、列头色带）。
+                  与 surface 是**强度差不是色相差**：卡片是"信号"，列身是"氛围"。
+     · edge    —— 1px 描边，半透明（同一支要同时落在白卡 / 灰底 / 暗底上）。
+     · glow    —— 状态点微光。
+
+     ⚠️ 上一版把 surface / edge 从 **ink** 调出来 —— 那正是"偏深偏暗"的根因：
+     ink 是为小字过 AA 刻意压暗的档（active 的 ink 是 #b45309 深棕、done 是 #047857
+     墨绿），拿它按 4~14% 兑进中性底，出来的是灰褐 / 灰绿而不是淡彩；再让它以
+     `transparent` 落在 --surface-canvas(#e7ebf2 —— 本身就是 92% 明度的灰) 上合成，
+     明度又掉一档。两层叠起来，整列是脏的。改成从 hue 调、基底换 near-white，
+     同样的百分比才是那种干净的淡彩。
+     ⚠️ surface / wash 在浅色是**不透明**的（基底 --surface-elevated 是白的），
+     所以 dark-theme.scss 必须整套覆盖 —— 忘了就是暗色下满屏白板。 */
+  --role-pending-hue: #64748b;              /* 石板灰蓝：待处理 / 未开始 */
+  --role-active-hue: var(--color-warning);  /* 琥珀 */
+  /* done 用 #10b981 而不是 --color-success(#67c23a)：后者是黄绿，会让列头黄绿、
+     标题字却是墨绿(#047857)，两个色相在同一块上打架。#10b981 与那个 ink 同族。 */
+  --role-done-hue: #10b981;
+  --role-error-hue: var(--color-danger);
+  --role-ai-hue: var(--color-think);
+
+  --role-pending-ink: #5b6472;
   --role-active-ink: var(--color-warning-dark);
-  --role-active-surface: var(--tint-warning-06);
-  --role-active-edge: var(--tint-warning-45);
-  --role-active-glow: var(--dot-glow-warning);
-
   --role-done-ink: var(--color-success-dark);
-  --role-done-surface: var(--tint-success-04);
-  --role-done-edge: var(--tint-success-35);
-  --role-done-glow: var(--dot-glow-success);
-
   --role-error-ink: var(--color-danger-dark);
-  --role-error-surface: var(--tint-danger-06);
-  --role-error-edge: var(--tint-danger-45);
-  --role-error-glow: var(--dot-glow-danger);
 
   /* AI 代做：紫。2026-10-04 重新启用 —— 之前被当成"AI 紫"删掉的是**渐变**，
      渐变才是问题（PRODUCT.md 时代把它和"AI 生成感"绑在一起）。实心紫配
@@ -832,9 +845,30 @@
      --git-status-untracked（未跟踪文件）三处状态色的用色，
      这里只是把那个既有身份收进角色表，不是新增色相。 */
   --role-ai-ink: var(--color-think-dark);
-  --role-ai-surface: var(--tint-think-06);
-  --role-ai-edge: var(--tint-think-45);
-  --role-ai-glow: 0 0 6px 1px color-mix(in srgb, var(--color-think) 40%, transparent);
+
+  --role-pending-surface: color-mix(in srgb, var(--role-pending-hue) 9%, var(--surface-elevated));
+  --role-active-surface:  color-mix(in srgb, var(--role-active-hue) 9%, var(--surface-elevated));
+  --role-done-surface:    color-mix(in srgb, var(--role-done-hue) 9%, var(--surface-elevated));
+  --role-error-surface:   color-mix(in srgb, var(--role-error-hue) 9%, var(--surface-elevated));
+  --role-ai-surface:      color-mix(in srgb, var(--role-ai-hue) 9%, var(--surface-elevated));
+
+  --role-pending-wash: color-mix(in srgb, var(--role-pending-hue) 16%, var(--surface-elevated));
+  --role-active-wash:  color-mix(in srgb, var(--role-active-hue) 16%, var(--surface-elevated));
+  --role-done-wash:    color-mix(in srgb, var(--role-done-hue) 16%, var(--surface-elevated));
+  --role-error-wash:   color-mix(in srgb, var(--role-error-hue) 16%, var(--surface-elevated));
+  --role-ai-wash:      color-mix(in srgb, var(--role-ai-hue) 16%, var(--surface-elevated));
+
+  --role-pending-edge: color-mix(in srgb, var(--role-pending-hue) 38%, transparent);
+  --role-active-edge:  color-mix(in srgb, var(--role-active-hue) 42%, transparent);
+  --role-done-edge:    color-mix(in srgb, var(--role-done-hue) 42%, transparent);
+  --role-error-edge:   color-mix(in srgb, var(--role-error-hue) 42%, transparent);
+  --role-ai-edge:      color-mix(in srgb, var(--role-ai-hue) 42%, transparent);
+
+  --role-pending-glow: 0 0 6px 1px color-mix(in srgb, var(--role-pending-hue) 40%, transparent);
+  --role-active-glow: var(--dot-glow-warning);
+  --role-done-glow: var(--dot-glow-success);
+  --role-error-glow: var(--dot-glow-danger);
+  --role-ai-glow: 0 0 6px 1px color-mix(in srgb, var(--role-ai-hue) 40%, transparent);
 
   /* 图标字形尺寸（大号图标按钮 44px 专用）
      三种承载方式 el-icon / svg-icon / 图片 必须同档，否则混排时会出现「某个图标小一圈」

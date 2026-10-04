@@ -164,13 +164,13 @@ const emit = defineEmits<{
 
 .flow-node-status.status-success {
   border-color: rgba(103, 194, 58, 0.5);
-  color: var(--success-dark);
+  color: var(--color-success-dark);
   background: rgba(103, 194, 58, 0.1);
 }
 
 .flow-node-status.status-failed {
   border-color: rgba(245, 108, 108, 0.55);
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
   background: rgba(245, 108, 108, 0.1);
 }
 

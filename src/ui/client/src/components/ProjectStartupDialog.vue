@@ -536,7 +536,7 @@ function executeItem(item: any) {
 
 .startup-toolbar__warn {
   margin-left: 6px;
-  color: var(--warning-dark);
+  color: var(--color-warning-dark);
   font-size: var(--font-size-sm);
 }
 

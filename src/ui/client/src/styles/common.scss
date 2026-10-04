@@ -960,17 +960,17 @@ select option {
 
 .state-block--error .state-block__icon {
   background: var(--tint-danger-14);
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
 }
 
 .state-block--warning .state-block__icon {
   background: var(--tint-warning-14);
-  color: var(--warning-dark);
+  color: var(--color-warning-dark);
 }
 
 .state-block--success .state-block__icon {
   background: var(--tint-success-14);
-  color: var(--success-dark);
+  color: var(--color-success-dark);
 }
 
 .state-block--loading .state-block__icon {

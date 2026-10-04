@@ -195,15 +195,29 @@ html[data-theme="dark"] {
   --text-primary: var(--text-primary-dark);
   --text-title: var(--text-title-dark);
   --text-secondary: var(--text-secondary-dark);
-  /* 角色色的暗色档：ink 必须**亮于**同色系的浅色 ink（暗底上越亮对比越高），
-     surface/edge 跟着一起提亮，否则淡底在暗底上等于没有。 */
+  /* 角色色的暗色档。三条：
+     ① ink 必须**亮于**同色系的浅色 ink（暗底上越亮对比越高）。
+     ② surface / wash 在浅色是**不透明**的（基底是白的 --surface-elevated），
+        这里必须整套换成半透明 —— 漏了就是暗色下满屏白板。
+     ③ 暗色里它们兑的是**透明**（=落在最暗的 --surface-canvas 上），不是
+        --surface-elevated：卡片自己就是 #202636，列身若比卡片还亮，
+        卡片就成了列里的暗窟窿，层次整个反过来。 */
   --role-pending-ink: #b6c0cf;
-  --role-pending-surface: color-mix(in srgb, #94a3b8 10%, transparent);
-  --role-pending-edge: color-mix(in srgb, #94a3b8 42%, transparent);
+  --role-pending-surface: color-mix(in srgb, var(--role-pending-hue) 12%, transparent);
+  --role-pending-edge: color-mix(in srgb, var(--role-pending-hue) 42%, transparent);
+  --role-pending-wash: color-mix(in srgb, var(--role-pending-hue) 20%, transparent);
   --role-active-ink: var(--color-warning-dark);
+  --role-active-surface: color-mix(in srgb, var(--role-active-hue) 9%, transparent);
+  --role-active-wash: color-mix(in srgb, var(--role-active-hue) 16%, transparent);
   --role-done-ink: var(--color-success-dark);
+  --role-done-surface: color-mix(in srgb, var(--role-done-hue) 9%, transparent);
+  --role-done-wash: color-mix(in srgb, var(--role-done-hue) 16%, transparent);
   --role-error-ink: var(--color-danger-dark);
+  --role-error-surface: color-mix(in srgb, var(--role-error-hue) 9%, transparent);
+  --role-error-wash: color-mix(in srgb, var(--role-error-hue) 16%, transparent);
   --role-ai-ink: #a78bfa;
+  --role-ai-surface: color-mix(in srgb, var(--role-ai-hue) 9%, transparent);
+  --role-ai-wash: color-mix(in srgb, var(--role-ai-hue) 16%, transparent);
 
   --text-tertiary: var(--text-tertiary-dark);
   --text-meta: var(--text-meta-dark);
@@ -798,19 +812,19 @@ html[data-theme="dark"] {
   .el-tag.el-tag--success {
     background-color: rgba(103, 194, 58, 0.2);
     border-color: rgba(103, 194, 58, 0.4);
-    color: var(--success-dark);
+    color: var(--color-success-dark);
   }
 
   .el-tag.el-tag--warning {
     background-color: rgba(230, 162, 60, 0.2);
     border-color: rgba(230, 162, 60, 0.4);
-    color: var(--warning-dark);
+    color: var(--color-warning-dark);
   }
 
   .el-tag.el-tag--danger {
     background-color: rgba(245, 108, 108, 0.2);
     border-color: rgba(245, 108, 108, 0.4);
-    color: var(--danger-dark);
+    color: var(--color-danger-dark);
   }
 
   /* 自定义对话框按钮深色主题 - 使用实色替代渐变 */

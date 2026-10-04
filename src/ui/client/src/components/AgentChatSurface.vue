@@ -432,6 +432,6 @@ onMounted(() => {
   margin: 0;
   font-size: var(--font-size-xs);
   line-height: 1.5;
-  color: var(--warning-dark);
+  color: var(--color-warning-dark);
 }
 </style>

@@ -506,7 +506,7 @@ function onWindowMouseUp(_e: MouseEvent) {
   cursor: pointer; font-size: var(--font-size-sm); flex-shrink: 0;
   transition: background var(--transition-fast) var(--ease-custom), color var(--transition-fast) var(--ease-custom), transform var(--transition-fast) var(--ease-custom);
 }
-.wb-task-item__del:hover { background: color-mix(in srgb, var(--color-danger) 14%, transparent); color: var(--danger-dark); }
+.wb-task-item__del:hover { background: color-mix(in srgb, var(--color-danger) 14%, transparent); color: var(--color-danger-dark); }
 .wb-task-item__del:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-outline-offset); opacity: 1; }
 .wb-task-item__del, .wb-sub-item__del { font-size: var(--font-size-mid); }
 .wb-empty { padding: 24px 14px 20px; text-align: center; color: var(--text-meta); display: flex; flex-direction: column; align-items: center; gap: 8px; border-radius: var(--radius-md); background: linear-gradient(135deg, var(--bg-subtle) 0%, color-mix(in srgb, var(--tint-primary-06) 50%, transparent) 100%); border: 1px dashed var(--border-color-light); position: relative; overflow: hidden; }

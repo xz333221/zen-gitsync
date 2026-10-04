@@ -254,6 +254,79 @@ assertNone(
   else ok('dark-theme.scss 覆盖了角色色 ink')
 }
 
+// A13 通用防线：**任何 var(--x) 引用到的令牌必须真的存在**。
+//      CSS 里 var() 解析失败不会报错，只是把整条声明丢掉 —— 编译器不报、
+//      tsc 不报、build 不报、浏览器 console 也不报，只能靠扫源码。
+//      真实踩过两例：
+//        OrchestratorConsole.vue  color: var(--warning-dark)
+//          → 令牌表里只有 --color-warning-dark，"已暂停"和"调度中"一个颜色
+//        WorkbenchKanban.vue      border-radius: var(--radius-sm)
+//          → --radius-* 没有 sm 档，fallback 落 0，胶囊渲染成直角
+{
+  // 声明集合要扫**所有**样式文件，不能只看 variables.scss + dark-theme.scss ——
+  // 很多自定义属性是就近声明在组件自己身上的（.kb-col 上的 --col-ink、
+  // .kb-card 上的 --kb-mask-outside-band、common.scss .skeleton 里的 --skeleton-bg），
+  // 只扫全局两张表会把它们全误判成"不存在"。
+  const declared = new Set()
+  // files 里只有 .vue/.scss/.css，但 :style 的值常来自 TS 里的对象字面量
+  // （utils/projectTag.ts 就是 `return { '--tag-hue': String(...) }`），
+  // 所以"声明"这一遍额外扫 .ts，否则 --tag-hue 会被误判成不存在。
+  const declFiles = files.concat(
+    (function walkTs(d) {
+      const out = []
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const p = path.join(d, e.name)
+        if (e.isDirectory()) {
+          if (e.name === 'node_modules' || e.name === 'public') continue
+          out.push(...walkTs(p))
+        } else if (/\.ts$/.test(e.name)) out.push(p)
+      }
+      return out
+    })(SRC),
+  )
+  for (const f of declFiles) {
+    const t = stripComments(fs.readFileSync(f, 'utf8'))
+    for (const m of t.matchAll(/(--[a-z0-9-]+)\s*:/g)) declared.add(m[1])
+    // Vue 模板里 :style="{ '--card-min': w }" 也是声明 ——
+    // RecentDirectoriesList / RemoteReposList / WorkbenchKanban 的
+    // --dir-card-min / --repo-card-min / --avatar-hue / --tag-hue 都是这么来的，
+    // 漏掉它们就会整片误报。
+    for (const m of t.matchAll(/['"](--[a-z0-9-]+)['"]\s*:/g)) declared.add(m[1])
+  }
+  void declFiles
+  // 真正由外部注入、不在本仓任何样式文件里的前缀：
+  //   --acu-*  zen-ai-chat-ui 组件库（样式表在运行时由它的 <link>/import 引入）
+  //   --el-*   Element Plus（运行时注入）
+  //   --md-*   markdown 预览（markdownTheme.ts 在 JS 里 setProperty）
+  const EXTERNAL_PREFIX = ['--acu-', '--el-', '--md-']
+  const isExternal = (n) => EXTERNAL_PREFIX.some((p) => n.startsWith(p))
+  // 自己扫一遍拿令牌名：scan() 返回的是「路径:行号  截断到 90 字的文本」，
+  // 直接拿它再 match 会在被截断的行上拿到 null。
+  const VAR_RE = /var\(\s*(--[a-z0-9-]+)/g
+  const missing = new Map()
+  for (const f of files) {
+    const lines = stripComments(fs.readFileSync(f, 'utf8')).split(/\r?\n/)
+    lines.forEach((line, i) => {
+      let m
+      VAR_RE.lastIndex = 0
+      while ((m = VAR_RE.exec(line))) {
+        const name = m[1]
+        if (declared.has(name) || isExternal(name)) continue
+        if (!missing.has(name)) missing.set(name, [])
+        const loc = path.relative(ROOT, f) + ':' + (i + 1)
+        if (missing.get(name).length < 3 && !missing.get(name).includes(loc)) {
+          missing.get(name).push(loc)
+        }
+      }
+    })
+  }
+  if (missing.size === 0) ok('所有 var(--x) 引用的令牌都在样式表里存在')
+  else {
+    bad(`${missing.size} 个 var() 引用了不存在的令牌（声明会被静默丢弃）`)
+    for (const [k, v] of [...missing].slice(0, 12)) console.log(`          ${k}  ← ${v.join(', ')}`)
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
 // B. 运行时抽样（可选）
 // ─────────────────────────────────────────────────────────────

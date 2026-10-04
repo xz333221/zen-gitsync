@@ -1675,7 +1675,7 @@ function stopPreviewResize() {
             :style="{ paddingLeft: (12 + inlineInput.depth * 14) + 'px' }"
           >
             <span class="tree-arrow-spacer" />
-            <svg v-if="inlineInput.kind === 'directory'" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color: var(--warning-dark)">
+            <svg v-if="inlineInput.kind === 'directory'" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color: var(--color-warning-dark)">
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
             </svg>
             <svg v-else viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color: var(--text-meta)">
@@ -1700,7 +1700,7 @@ function stopPreviewResize() {
           :style="{ paddingLeft: '12px' }"
         >
           <span class="tree-arrow-spacer" />
-          <svg v-if="inlineInput.kind === 'directory'" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color: var(--warning-dark)">
+          <svg v-if="inlineInput.kind === 'directory'" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color: var(--color-warning-dark)">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
           </svg>
           <svg v-else viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color: var(--text-meta)">
@@ -2356,7 +2356,7 @@ function stopPreviewResize() {
 
 .tab-close:hover {
   background: var(--bg-hover);
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
 }
 
 .editor-empty {
@@ -2520,7 +2520,7 @@ function stopPreviewResize() {
 }
 
 .preview-close-btn:hover {
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
   background: var(--bg-hover);
 }
 
@@ -2689,7 +2689,7 @@ function stopPreviewResize() {
 }
 
 .ctx-menu-item--danger {
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
 }
 
 .ctx-menu-item--danger:hover {

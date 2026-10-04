@@ -776,7 +776,7 @@ function handleClose() {
 }
 
 .error-tip {
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
   background: rgba(245, 108, 108, 0.1);
   border: 1px solid rgba(245, 108, 108, 0.2);
 }
@@ -787,7 +787,7 @@ function handleClose() {
 }
 
 .success-tip {
-  color: var(--success-dark);
+  color: var(--color-success-dark);
   background: rgba(103, 194, 58, 0.1);
   border: 1px solid rgba(103, 194, 58, 0.2);
 }

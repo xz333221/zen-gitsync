@@ -786,7 +786,7 @@ function formatSize(bytes: number): string {
 }
 
 .mm-status-dirty {
-  color: var(--warning-dark);
+  color: var(--color-warning-dark);
   font-size: var(--font-size-base);
   line-height: 1;
 }
@@ -842,7 +842,7 @@ function formatSize(bytes: number): string {
 }
 
 .mm-sidebar-error {
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
 }
 
 /* ── 目录分组 ─────────────────────────────────────────────────── */
@@ -934,7 +934,7 @@ function formatSize(bytes: number): string {
   gap: 4px;
   padding: 8px 8px 8px 12px;
   font-size: var(--font-size-sm);
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
 }
 
 /* ── 文件条目 ─────────────────────────────────────────────────── */
@@ -1095,7 +1095,7 @@ html:not(.dark) .mm-file-actions :deep(.el-button--danger) {
 }
 
 .ctx-menu-item--danger {
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
 }
 
 .ctx-menu-item--danger:hover {

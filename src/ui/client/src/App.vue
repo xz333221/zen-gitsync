@@ -1119,7 +1119,7 @@ body {
 }
 
 .config-broken-banner .banner-icon {
-  color: var(--warning-dark);
+  color: var(--color-warning-dark);
   flex-shrink: 0;
 }
 
@@ -1864,7 +1864,7 @@ h1 {
 }
 
 .user-warning {
-  color: var(--warning-dark);
+  color: var(--color-warning-dark);
   font-weight: bold;
 }
 

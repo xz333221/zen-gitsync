@@ -1224,7 +1224,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   cursor: pointer;
   transition: color var(--transition-fast) var(--ease-custom), background var(--transition-fast) var(--ease-custom);
 }
-.oc__toggle:hover:not(:disabled) { color: var(--warning-dark); background: color-mix(in srgb, var(--color-warning) 10%, transparent); }
+.oc__toggle:hover:not(:disabled) { color: var(--color-warning-dark); background: color-mix(in srgb, var(--color-warning) 10%, transparent); }
 .oc__toggle:disabled { opacity: var(--disabled-opacity); cursor: default; }
 .oc__toggle:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
@@ -1259,7 +1259,14 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   background-image: var(--gradient-accent-soft);
   flex-shrink: 0;
 }
-.oc__state.is-paused { color: var(--warning-dark); }
+/* 2026-10-04：这里原本是 `color: var(--warning-dark)` —— 令牌表里只有
+   --color-warning-dark，压根没有 --warning-dark。var() 解析失败会让整条声明
+   被丢掉（编译器/tsc/build/浏览器 console 全都不报），于是「已暂停」与「调度中」
+   一直是一个颜色。同一个错字在本文件还有第二处（.rpt__silent），一并修。 */
+.oc__state.is-paused {
+  color: var(--role-active-ink);
+  background: var(--role-active-surface);
+}
 .oc__state-label { color: var(--text-meta); }
 .oc__state-value { font-weight: 500; }
 .oc__state-meta { margin-left: auto; color: var(--text-meta); font-variant-numeric: tabular-nums; }
@@ -1289,10 +1296,13 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   transition: var(--transition-ui-fast);
 }
 .oc__mode-btn:hover { color: var(--text-secondary); }
+/* 2026-10-04：选中档吃 primary 10% 淡底 + primary-dark 字色 + 600 字重。
+   拨片只有两档，不需要第四个色相，靠「这块底色比旁边亮一档 + 字变主色」分得开；
+   原来选中档只比未选中档白一点点，扫过去基本看不出选了哪个。 */
 .oc__mode-btn.is-active {
-  background: var(--bg-panel);
-  color: var(--color-primary);
-  font-weight: 500;
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--bg-panel));
+  color: var(--color-primary-dark);
+  font-weight: 600;
   box-shadow: var(--shadow-sm);
 }
 .oc__mode-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
@@ -1389,11 +1399,15 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 /* 卡片本体。边界用 --border-color 而不是 --border-color-light：后者在浅色
    主题下只有 3% 黑，压在 #f5f7fa 的栏底上肉眼等于没有 —— 整块报告看起来就是
    一大片没有边界的字（这正是"不清晰"的根，不是字号问题） */
+/* 2026-10-04：这一块永远是「正在看的那一份」（模板是 v-if="currentReport"，
+   没有别的形态），所以直接给 active 角色即可。之前是纯灰卡片，跟下面历史列表里
+   的旧报告长得一模一样，「我现在看的哪份」要靠位置猜。
+   （历史上这里还有个 .rp.is-current，但模板从来没绑这个类，是条死规则。） */
 .rp {
   padding: 8px 9px;
   border-radius: var(--radius-lg);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--role-active-ink) 4%, var(--bg-subtle));
+  border: 1px solid var(--role-active-edge);
 }
 .rp__head {
   display: flex;
@@ -1445,11 +1459,13 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   background: var(--bg-active);
   overflow: hidden;
 }
+/* 2026-10-04：原本是 --gradient-progress（蓝渐变）。这条进度表示
+   「正在跑的活儿到哪一步」，跟看板「进行中」是同一件事，于是走同一个角色。 */
 .rp__bar-fill {
   display: block;
   height: 100%;
   border-radius: var(--radius-pill);
-  background: var(--gradient-progress);
+  background: var(--role-active-ink);
   transition: width var(--transition-base) var(--ease-custom);
 }
 .rp__percent {
@@ -1599,11 +1615,12 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   background: var(--bg-active);
   overflow: hidden;
 }
+/* 同 .rp__bar-fill：任务事实里每一条进度也是「在跑的活儿」 */
 .rpt__bar-fill {
   display: block;
   height: 100%;
   border-radius: var(--radius-pill);
-  background: var(--gradient-progress);
+  background: var(--role-active-ink);
   transition: width var(--transition-base) var(--ease-custom);
 }
 .rpt__percent {
@@ -1620,7 +1637,10 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   padding: 0 4px;
   border-radius: var(--radius-pill);
   background: var(--tint-warning-14);
-  color: var(--warning-dark);
+  /* 原本是 var(--warning-dark) —— 同一个错字，本文件第二处。整条声明被丢掉之后，
+     这枚「可能卡住了」的告警徽标只剩淡底没有字色，压在灰底上几乎看不见。 */
+  color: var(--role-active-ink);
+  font-weight: 600;
 }
 .rpt__line {
   margin: 3px 0 0;
@@ -1783,7 +1803,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.oc__git-value.is-warn { color: var(--warning-dark); }
+.oc__git-value.is-warn { color: var(--color-warning-dark); }
 .oc__git-value.is-danger { color: var(--color-danger-light); }
 
 /* 折起来时只剩一行标题：把上下留白和列表的滚动框一起收掉，
@@ -1839,8 +1859,8 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   font-variant-numeric: tabular-nums;
   color: var(--text-meta);
 }
-.oc__count.is-warn { color: var(--warning-dark); }
-.oc__count.is-over { color: var(--danger-dark); }
+.oc__count.is-warn { color: var(--color-warning-dark); }
+.oc__count.is-over { color: var(--color-danger-dark); }
 .oc__compose-foot {
   display: flex;
   align-items: center;

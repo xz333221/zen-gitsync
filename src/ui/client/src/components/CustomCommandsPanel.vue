@@ -886,7 +886,7 @@ async function runCommand(cmd: any) {
 
 .schedule-countdown {
   font-size: var(--font-size-xs);
-  color: var(--success-dark);
+  color: var(--color-success-dark);
   font-family: var(--font-mono);
   white-space: nowrap;
 }
@@ -1044,7 +1044,7 @@ async function runCommand(cmd: any) {
 }
 
 .schedule-log-item.is-error .schedule-log-text {
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
 }
 
 .schedule-log-item.is-skipped .schedule-log-text {

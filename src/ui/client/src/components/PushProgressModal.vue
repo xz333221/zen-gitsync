@@ -363,13 +363,13 @@ defineExpose({
 
 .status-success {
   :deep(.el-dialog__title) {
-    color: var(--success-dark);
+    color: var(--color-success-dark);
   }
 }
 
 .status-error {
   :deep(.el-dialog__title) {
-    color: var(--danger-dark);
+    color: var(--color-danger-dark);
   }
 }
 
@@ -467,7 +467,7 @@ defineExpose({
   padding: var(--spacing-xl) var(--spacing-xl);
   border-radius: var(--radius-md);
   border: 1px solid var(--tint-primary-18);
-  background: var(--tint-primary-4);
+  background: var(--tint-primary-04);
   position: relative;
   overflow: hidden;
 
@@ -632,12 +632,12 @@ defineExpose({
   transition: var(--transition-ui-slow);
   
   .icon-finish {
-    color: var(--success-dark);
+    color: var(--color-success-dark);
     font-size: var(--font-size-md);
   }
   
   .icon-error {
-    color: var(--danger-dark);
+    color: var(--color-danger-dark);
     font-size: var(--font-size-md);
   }
   
@@ -687,7 +687,7 @@ defineExpose({
   letter-spacing: 0.5px;
   
   .finished & {
-    color: var(--success-dark);
+    color: var(--color-success-dark);
   }
 }
 
@@ -726,7 +726,7 @@ defineExpose({
 
 .error-title {
   font-weight: 600;
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
 }
 
 .pull-button {

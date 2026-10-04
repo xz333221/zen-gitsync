@@ -3197,7 +3197,7 @@ onActivated(() => {
 
 .command-manager-btn {
   &:hover {
-    color: var(--success-dark);
+    color: var(--color-success-dark);
     background: rgba(103, 194, 58, 0.1);
   }
 }
@@ -3211,7 +3211,7 @@ onActivated(() => {
 
 .orchestrator-btn {
   &:hover {
-    color: var(--warning-dark);
+    color: var(--color-warning-dark);
     background: rgba(230, 162, 60, 0.1);
   }
 }
@@ -3282,7 +3282,7 @@ onActivated(() => {
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   font-weight: 500;
-  color: var(--success-dark);
+  color: var(--color-success-dark);
   /* background: linear-gradient(135deg, rgba(103, 194, 58, 0.1), rgba(103, 194, 58, 0.05)); */
   /* border: 1px solid rgba(103, 194, 58, 0.3); */
   border-radius: var(--radius-md);
@@ -3363,7 +3363,7 @@ onActivated(() => {
 }
 
 .stdin-icon {
-  color: var(--success-dark);
+  color: var(--color-success-dark);
   font-size: var(--font-size-md);
   flex-shrink: 0;
 }
@@ -3804,7 +3804,7 @@ pre.stderr {
       }
       
       .step-name {
-        color: var(--warning-dark);
+        color: var(--color-warning-dark);
       }
     }
     
@@ -3825,7 +3825,7 @@ pre.stderr {
       }
       
       .step-name {
-        color: var(--success-dark);
+        color: var(--color-success-dark);
       }
     }
     
@@ -3965,12 +3965,12 @@ pre.stderr {
   
   &.type-wait {
     background: rgba(230, 162, 60, 0.12);
-    color: var(--warning-dark);
+    color: var(--color-warning-dark);
   }
   
   &.type-version {
     background: rgba(103, 194, 58, 0.12);
-    color: var(--success-dark);
+    color: var(--color-success-dark);
   }
 }
 
@@ -4046,7 +4046,7 @@ pre.stderr {
 }
 
 .user-input-label .required {
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
   margin-right: 4px;
 }
 

@@ -820,12 +820,12 @@ watch(visible, (v) => {
 
   &.is-ok {
     background: rgba(16, 185, 129, 0.12);
-    color: var(--success-dark);
+    color: var(--color-success-dark);
   }
 
   &.is-fail {
     background: rgba(239, 68, 68, 0.12);
-    color: var(--danger-dark);
+    color: var(--color-danger-dark);
     cursor: help;
   }
 }
@@ -856,7 +856,7 @@ watch(visible, (v) => {
   line-height: 1.5;
 
   &--warn {
-    color: var(--warning-dark);
+    color: var(--color-warning-dark);
   }
 }
 

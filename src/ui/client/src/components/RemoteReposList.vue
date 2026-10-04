@@ -1526,7 +1526,7 @@ onBeforeUnmount(stopPolling)
   padding: 8px 12px;
   text-align: left;
   border-radius: var(--radius-md);
-  color: var(--warning-dark);
+  color: var(--color-warning-dark);
   background: color-mix(in srgb, var(--color-warning) 12%, transparent);
 }
 .repo-list__guide-note--warn .el-icon {

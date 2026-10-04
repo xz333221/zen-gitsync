@@ -1835,7 +1835,7 @@ function toggleFullscreen() {
 
 .info-label {
   font-weight: 600;
-  color: var(--warning-dark);
+  color: var(--color-warning-dark);
   
   flex-shrink: 0;
   white-space: nowrap;

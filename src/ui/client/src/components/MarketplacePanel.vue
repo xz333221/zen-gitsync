@@ -652,7 +652,7 @@ async function onRemove(item: InstalledItem) {
   align-items: center;
   gap: 4px;
   font-size: var(--font-size-sm);
-  color: var(--warning-dark);
+  color: var(--color-warning-dark);
 }
 
 .mp-group-link {
@@ -757,7 +757,7 @@ async function onRemove(item: InstalledItem) {
 
   &.warn {
     background: color-mix(in srgb, var(--color-warning) 14%, transparent);
-    color: var(--warning-dark);
+    color: var(--color-warning-dark);
   }
 }
 
@@ -893,7 +893,7 @@ async function onRemove(item: InstalledItem) {
 
 .mp-remove-btn {
   &:hover:not(:disabled) {
-    color: var(--danger-dark);
+    color: var(--color-danger-dark);
     border-color: var(--color-danger);
   }
 }

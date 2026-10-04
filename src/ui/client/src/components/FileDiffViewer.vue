@@ -1534,7 +1534,7 @@ onMounted(() => {
           <!-- 冲突已手动解决 -->
           <div v-else-if="isConflictedFile && !hasActualConflictMarkers" class="conflict-resolved-container">
             <div class="resolved-notice">
-              <el-icon class="success-icon" style="color: var(--success-dark); font-size: var(--font-size-xl);">
+              <el-icon class="success-icon" style="color: var(--color-success-dark); font-size: var(--font-size-xl);">
                 <CircleCheck />
               </el-icon>
               <span class="notice-text">{{ $t('@E80AC:冲突已解决，可以添加到暂存区') }}</span>

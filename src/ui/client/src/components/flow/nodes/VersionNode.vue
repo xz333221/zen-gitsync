@@ -150,7 +150,7 @@ const versionInfo = computed(() => {
   }
   
   .node-warning {
-    color: var(--danger-dark);
+    color: var(--color-danger-dark);
     font-size: var(--font-size-sm);
     margin-top: 4px;
   }

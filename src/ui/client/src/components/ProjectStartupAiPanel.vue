@@ -456,7 +456,7 @@ watch([cacheKey, hasModel], () => sync())
 }
 
 .state-box--error .state-text {
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
 }
 
 .state-spinner {
@@ -599,7 +599,7 @@ watch([cacheKey, hasModel], () => sync())
 
 .suggestion-launched {
   font-size: var(--font-size-xs);
-  color: var(--success-dark);
+  color: var(--color-success-dark);
 }
 
 .suggestion-list::-webkit-scrollbar {

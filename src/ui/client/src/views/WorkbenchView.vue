@@ -1402,7 +1402,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   line-height: 16px;
   padding: 0 6px;
   border-radius: var(--radius-base);
-  color: var(--warning-dark);
+  color: var(--color-warning-dark);
   background: color-mix(in srgb, var(--color-warning) 12%, transparent);
   font-variant-numeric: tabular-nums;
 }
@@ -1865,7 +1865,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 }
 .wb-task-item__del:hover {
   background: color-mix(in srgb, var(--color-danger) 14%, transparent);
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
 }
 .wb-task-item__del:focus-visible {
   outline: var(--focus-outline);
@@ -1955,7 +1955,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 }
 .wb-prompt-item__del:hover {
   background: color-mix(in srgb, var(--color-danger) 14%, transparent);
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
 }
 .wb-prompt-item__del:focus-visible {
   outline: var(--focus-outline);
@@ -2420,7 +2420,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   max-width: 100%;
 }
 .wb-simple__meta--error {
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
 }
 /* idle 灰底：背景由 inline style 注入，无文字无需特殊处理 */
 .wb-simple__status[style*="--text-tertiary"] .wb-simple__status-dot {

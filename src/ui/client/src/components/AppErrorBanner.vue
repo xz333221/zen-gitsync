@@ -181,7 +181,7 @@ onBeforeUnmount(stopRelativeTimer)
 }
 
 .banner-icon {
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
   flex-shrink: 0;
   font-size: var(--font-size-md);
 }
@@ -233,7 +233,7 @@ onBeforeUnmount(stopRelativeTimer)
 .banner-btn:hover {
   background: var(--tint-danger-08);
   border-color: var(--color-danger);
-  color: var(--danger-dark);
+  color: var(--color-danger-dark);
 }
 
 .banner-btn:focus-visible {

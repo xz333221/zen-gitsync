@@ -753,14 +753,26 @@ function liveSummary(live: BoardTaskLive): string {
    之前三列除了一个 6px 圆点之外全是同一个蓝 + 同一个灰底，三列并排时
    眼睛只能靠位置和文字判断"这是哪一列"；而"单调"也不只是审美问题 ——
    看板的核心心智模型就是"待处理 → 进行中 → 已完成"这条流水线，
-   角色色正好是这条模型最直接的视觉表达。
-   每列挑一个角色（pending / active / done），列身只上 surface 6% 这一档，
-   列头把 ink 和 edge 用足，列表区保持安静免得压住卡片。 */
+   角色色正好是这条模型最直接的视觉表达。每列挑一个角色（pending / active / done）。
+
+   ⚠️ 同日晚按用户反馈返工过一次（"白主题下感觉颜色偏深偏暗"）。原写法是
+   列头 `color-mix(--col-ink 14%, transparent)` —— **从 ink 调色**，而 ink 是为
+   小字过 AA 刻意压暗过的档（active 的 ink 是 #b45309 深棕、done 是 #047857 墨绿），
+   兑进中性底出来的是灰褐 / 灰绿；列身那 6% 又是透明的，落在 --surface-canvas
+   (#e7ebf2，本身已是 92% 明度的灰) 上再掉一档明度。两层叠起来整列是脏的。
+   现在三档浓度全部从 --col-hue（纯色相）兑进 near-white，是**同一色相的三档强度**：
+     列身 9%（surface，氛围）→ 列头色带 26%（标识）→ 卡片 16%（wash，信号）。
+   基底都是 --surface-elevated 而不是 transparent：透明会让浓度随下层底色漂。 */
 .kb-col {
+  --col-hue: var(--role-pending-hue);
   --col-ink: var(--role-pending-ink);
   --col-surface: var(--role-pending-surface);
+  --col-wash: var(--role-pending-wash);
   --col-edge: var(--role-pending-edge);
   --col-glow: var(--role-pending-glow);
+  /* 列头那条带子：从 hue 直接兑基底，**不是**叠在列身上 ——
+     叠的话列头会比列身更暗，读起来像一块阴影而不是一条标识。 */
+  --col-band: color-mix(in srgb, var(--col-hue) 26%, var(--surface-elevated));
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -769,14 +781,18 @@ function liveSummary(live: BoardTaskLive): string {
   background: var(--col-surface);
 }
 .kb-col--doing {
+  --col-hue: var(--role-active-hue);
   --col-ink: var(--role-active-ink);
   --col-surface: var(--role-active-surface);
+  --col-wash: var(--role-active-wash);
   --col-edge: var(--role-active-edge);
   --col-glow: var(--role-active-glow);
 }
 .kb-col--done {
+  --col-hue: var(--role-done-hue);
   --col-ink: var(--role-done-ink);
   --col-surface: var(--role-done-surface);
+  --col-wash: var(--role-done-wash);
   --col-edge: var(--role-done-edge);
   --col-glow: var(--role-done-glow);
 }
@@ -787,9 +803,7 @@ function liveSummary(live: BoardTaskLive): string {
   gap: 8px;
   padding: 8px 12px;
   flex-shrink: 0;
-  /* 列头单独铺一档更浓的角色色（14%）：列身那 6% 是"氛围"，
-     列头这条带子才是"标识" —— 只靠标题文字的颜色，扫视时还是得逐列读字。 */
-  background: color-mix(in srgb, var(--col-ink) 14%, transparent);
+  background: var(--col-band);
   border-bottom: 1px solid var(--col-edge);
 }
 .kb-col__dot {
@@ -828,7 +842,10 @@ function liveSummary(live: BoardTaskLive): string {
 .kb-col__list {
   list-style: none;
   margin: 0;
-  padding: 0 12px 12px;
+  /* 上内边距**不能是 0**（2026-10-04 用户报"卡片和上边的看板类型的 title 之间没有间距"）：
+     卡片自己的外边距只有 margin-bottom，首屏第一张会和列头那条色带直接贴死，
+     看起来像色带把卡片压住了。12px 与左右两侧同档，四边才是齐的。 */
+  padding: 12px;
   overflow-y: auto;
   flex: 1 1 auto;
   min-height: 0;
@@ -875,15 +892,20 @@ function liveSummary(live: BoardTaskLive): string {
   box-shadow: var(--shadow-card-lift);
   transform: translateY(-1px);
 }
-/* 卡片状态与列状态是同一套角色（2026-10-04 从字面 color-mix 改成令牌）——
-   "进行中"的卡和"进行中"的列于是必然同色，而不是靠两处各写一遍数值凑巧一致。 */
+/* 卡片状态与列状态是同一套角色 —— "进行中"的卡和"进行中"的列必然同色，
+   而不是靠两处各写一遍数值凑巧一致。
+   ⚠️ 用的是 wash 那一档（16%）不是 surface（9%）：surface 是列身那种"氛围"，
+   卡片是"信号"，两者同浓度就会糊进列身里分不出哪张在跑。
+   而且这一档是**不透明**的 —— 上一版拿 6% 透明色当卡片自己的背景，
+   等于把卡片的白底换成了"列身色再加一层脏"，比旁边的白卡更暗也更浑；
+   现在的写法是白底往色相方向偏一点，卡片仍然是卡片，只是暖了。 */
 .kb-card.is-running {
   border-color: var(--role-active-edge);
-  background: var(--role-active-surface);
+  background: var(--role-active-wash);
 }
 .kb-card.has-error {
   border-color: var(--role-error-edge);
-  background: var(--role-error-surface);
+  background: var(--role-error-wash);
 }
 /* 点开过的那张（.is-opened）：常驻一圈主色描边，让"这张不再有 hover 操作"看着是条规则，
    而不是"这张卡坏了"。描边色与上面两个状态色同用 color-mix 那一套写法。
@@ -1094,7 +1116,7 @@ function liveSummary(live: BoardTaskLive): string {
 .kb-card__reply-text { flex: 1 1 auto; min-width: 0; margin-left: 4px; }
 
 /* 静默：卡片上最接近"可能卡住了"的信号，用告警色 */
-.kb-card__live-silent { color: var(--warning-dark); }
+.kb-card__live-silent { color: var(--color-warning-dark); }
 .kb-card__live-line {
   margin: 4px 0 0;
   font-size: var(--font-size-xs);
@@ -1275,13 +1297,13 @@ function liveSummary(live: BoardTaskLive): string {
  * 让它跟"正在跑"共用一套颜色，读起来是"对当前状态下手"；
  * 红留给 ×，含义收窄成唯一一个：把任务整个删掉。
  */
-.kb-card__btn--stop:hover { color: var(--warning-dark); background: var(--bg-subtle-hover); }
+.kb-card__btn--stop:hover { color: var(--color-warning-dark); background: var(--bg-subtle-hover); }
 /*
  * 「完成」用成功色、「撤销」用主色 —— 与「停止」用告警色同一条思路：
  * 颜色说明**这一下会对任务做什么**（收进已完成 / 只是把标记退回来），
  * 而不是给按钮排名次。红仍然只留给 ×。
  */
-.kb-card__btn--done:hover { color: var(--success-dark); background: var(--bg-subtle-hover); }
+.kb-card__btn--done:hover { color: var(--color-success-dark); background: var(--bg-subtle-hover); }
 .kb-card__btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
 .kb-col__empty {
@@ -1403,7 +1425,7 @@ function liveSummary(live: BoardTaskLive): string {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.kb-table__live-silent { margin-left: 6px; color: var(--warning-dark); }
+.kb-table__live-silent { margin-left: 6px; color: var(--color-warning-dark); }
 /* 「最后回复」在列表行里用同一根引用竖线（与看板卡片的 .kb-card__reply 同一个含义）。
    不写 padding-left：图标与正文之间已经由 .kb-table__agent 的右外边距管着，
    再叠一层内边距会把图标推到正文上去（与卡片那边同一条坑）。 */
@@ -1419,8 +1441,8 @@ function liveSummary(live: BoardTaskLive): string {
   background: var(--bg-subtle);
   color: var(--text-secondary);
 }
-.kb-table__status.is-doing { color: var(--warning-dark); }
-.kb-table__status.is-done { color: var(--success-dark); }
+.kb-table__status.is-doing { color: var(--color-warning-dark); }
+.kb-table__status.is-done { color: var(--color-success-dark); }
 .kb-table__empty {
   text-align: center;
   padding: 28px 10px;
