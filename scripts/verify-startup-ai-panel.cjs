@@ -10,6 +10,8 @@
  *   P5 shell 类建议点「启动」→ **先弹确认框**(框里必须出现完整命令),取消则一个请求都不发;
  *      确认后才打 /api/exec-in-terminal(command + workingDirectory)
  *   P6 反向护栏:两个接口都给得出内容时,两个面板**都在**(E1/E2 的阳性对照)
+ *   P7 左栏拖到最窄(212px)时**标题仍独占整行、没被裁** —— 标题曾被「类型 pill + 目录」
+ *      抢成「客户端…」(见组件里 .suggestion-foot 的注释);这条量的是标题几何,不是文案
  *
  * 空态(--empty):两个面板都没有内容时**整块不渲染** —— 一个点开只有"没找到/没看出"
  *   的空壳在左栏既占地方又像自己配错了。
@@ -303,6 +305,30 @@ async function main() {
     const scriptItems = await page.locator('.npm-scripts-panel .script-item').count()
     check('P6 展开后渲染出 2 条脚本', scriptItems === 2, `count=${scriptItems}`)
     await page.locator('.npm-scripts-panel .accordion-header').click() // 收回去,别挡住后面的截图
+
+    // ── P7 左栏压到最窄时,标题仍得独占整行(不出现「客户端…」) ──────────
+    //    左栏是可拖拽的,窄的时候标题和「类型 pill + 目录」抢一行会把标题挤成 4 个字。
+    //    这里把栅格列宽钉到 212px(用户截图里那种宽度)再量:标题必须拿到条目
+    //    宽度的一半以上,且没有被横向裁掉。
+    await page.evaluate(() => {
+      const grid = document.querySelector('.grid-layout')
+      if (grid) grid.style.gridTemplateColumns = '212px 4px 1fr'
+    })
+    await sleep(300)
+    const narrow = await page.locator('.startup-ai-panel .suggestion-item').evaluateAll((els) => els.map((el) => {
+      const name = el.querySelector('.suggestion-name')
+      return {
+        item: Math.round(el.getBoundingClientRect().width),
+        title: name ? Math.round(name.getBoundingClientRect().width) : 0,
+        clipped: name ? name.scrollWidth > name.clientWidth + 1 : true,
+        text: name ? name.textContent.trim() : '(no .suggestion-name)',
+      }
+    }))
+    const narrowOk = narrow.length === 3
+      && narrow.every((r) => !r.clipped && r.title >= r.item * 0.5)
+    check('P7 左栏 212px 宽时标题仍占满整行、没有被裁',
+      narrowOk,
+      JSON.stringify(narrow))
 
     if (SHOT) {
       await page.locator('.startup-ai-panel').screenshot({ path: SHOT })

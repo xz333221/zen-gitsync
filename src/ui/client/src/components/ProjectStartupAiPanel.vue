@@ -318,29 +318,31 @@ watch([cacheKey, hasModel], () => sync())
           <div class="suggestion-order">{{ item.order }}</div>
 
           <div class="suggestion-main">
-            <div class="suggestion-title">
-              <span class="suggestion-name" :title="item.title">{{ item.title }}</span>
+            <span class="suggestion-name" :title="item.title">{{ item.title }}</span>
+            <span class="suggestion-cmd" :title="item.command">{{ item.command }}</span>
+            <span v-if="item.reason" class="suggestion-reason" :title="item.reason">{{ item.reason }}</span>
+
+            <!-- 类型/目录/启动按钮收成一条底栏:左栏最窄时(≈210px)标题得独占整行,
+                 否则三个元素抢一行会把标题挤成「客户端…」 -->
+            <div class="suggestion-foot">
               <span class="suggestion-tag" :class="item.kind === 'npm' ? 'is-npm' : 'is-shell'">
                 {{ item.kind === 'npm' ? $t('@NPM02:npm 脚本') : $t('@NPM02:命令行') }}
               </span>
               <span class="suggestion-where" :title="item.packagePath || item.cwd">
                 {{ item.packageLabel || item.cwdLabel }}
               </span>
+              <div class="suggestion-actions">
+                <span v-if="launchedIds.has(item.id)" class="suggestion-launched">{{ $t('@NPM02:已启动') }}</span>
+                <el-button
+                  type="primary"
+                  size="small"
+                  :loading="runningId === item.id"
+                  @click="launch(item)"
+                >
+                  {{ $t('@NPM02:启动') }}
+                </el-button>
+              </div>
             </div>
-            <div class="suggestion-cmd" :title="item.command">{{ item.command }}</div>
-            <div v-if="item.reason" class="suggestion-reason" :title="item.reason">{{ item.reason }}</div>
-          </div>
-
-          <div class="suggestion-actions">
-            <span v-if="launchedIds.has(item.id)" class="suggestion-launched">{{ $t('@NPM02:已启动') }}</span>
-            <el-button
-              type="primary"
-              size="small"
-              :loading="runningId === item.id"
-              @click="launch(item)"
-            >
-              {{ $t('@NPM02:启动') }}
-            </el-button>
           </div>
         </div>
       </div>
@@ -471,14 +473,17 @@ watch([cacheKey, hasModel], () => sync())
 
 .list-hint {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 2px 4px 8px;
   min-width: 0;
 }
 
+/* flex-basis 给一个"这句话至少要多宽才念得下去"的下限:左栏太窄时模型标签
+   整体换到下一行,而不是把说明文字挤成一列四个字 */
 .list-hint__text {
-  flex: 1;
+  flex: 1 1 180px;
   min-width: 0;
   font-size: var(--font-size-xs);
   line-height: 1.5;
@@ -543,22 +548,31 @@ watch([cacheKey, hasModel], () => sync())
 .suggestion-main {
   flex: 1;
   min-width: 0;
-}
-
-.suggestion-title {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .suggestion-name {
   font-size: var(--font-size-sm);
   font-weight: 600;
+  line-height: 1.35;
   color: var(--color-text);
-  white-space: nowrap;
+  /* 最长两行后省略 —— 标题是这张卡片的主语,宁可换行也不缩成一个词 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
+  word-break: break-word;
+}
+
+/* 类型 + 目录 + 启动按钮:同一行的底栏,按钮靠右 */
+.suggestion-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  min-width: 0;
 }
 
 .suggestion-tag {
@@ -583,8 +597,8 @@ watch([cacheKey, hasModel], () => sync())
 }
 
 .suggestion-where {
-  flex-shrink: 0;
-  max-width: 40%;
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -594,27 +608,27 @@ watch([cacheKey, hasModel], () => sync())
 }
 
 .suggestion-cmd {
-  margin-top: 3px;
   padding: 1px 5px;
   border-radius: var(--radius-xs);
   font-size: var(--font-size-xs);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   color: var(--color-text);
   background: var(--bg-container);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* 命令是要照着看的那一行,长命令换行显示,不截断 */
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .suggestion-reason {
-  margin-top: 4px;
   font-size: var(--font-size-xs);
   line-height: 1.5;
   color: var(--text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .suggestion-actions {
   flex-shrink: 0;
+  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 6px;
