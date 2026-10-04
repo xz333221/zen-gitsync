@@ -36,6 +36,7 @@ const { $tInterp } = vi.hoisted(() => ({
 vi.mock('@/lang/static', () => ({ $t: $tInterp }))
 
 import RecentDirectoriesList from './RecentDirectoriesList.vue'
+import RecentDirectoriesSummary from './RecentDirectoriesSummary.vue'
 import { resetOncePerLoad } from '@/utils/oncePerLoad'
 import { mountWithSetup } from '@/test-utils/mount'
 
@@ -441,5 +442,71 @@ describe('RecentDirectoriesList.vue 启动时自动刷新', () => {
     await flushAll()
     expect(fetchCalls(spy)).toHaveLength(1)
     expect(w2.findAll('.dir-card').length).toBe(2)
+  })
+})
+
+// ── 搜索过滤 ─────────────────────────────────────────────────────────────
+// 弹窗(切换工作目录)里那一列三十来个目录、名字都差不多,搜索是唯一的筛选入口;
+// 它和首屏 panel 形态共用同一份过滤逻辑(组件内 allItems = 全部 / items = 过滤后)。
+// 关键的一条是「AI 解读不吃过滤」:说明描述的是"这批目录现在什么状态",
+// 不该因为敲了几个字就换一段解读(那还会白烧一次模型调用)。
+describe('RecentDirectoriesList.vue 搜索过滤', () => {
+  const dirs: DirEntry[] = [
+    { path: 'D:\\work\\zen-gitsync', exists: true },
+    { path: 'D:\\work\\home2026', exists: true },
+    { path: 'D:\\other\\zen-ai-chat-ui', exists: true },
+  ]
+
+  test('RCL-30: bare 形态(弹窗)也渲染搜索框,占位文案由调用方给', async () => {
+    setupFetch({ dirs })
+    const w = mountList({
+      variant: 'bare',
+      layout: 'split',
+      searchPlaceholder: '搜索常用目录...',
+    })
+    await flushAll()
+
+    const input = w.find('input.dir-list__search-input')
+    expect(input.exists()).toBe(true)
+    expect(input.attributes('placeholder')).toBe('搜索常用目录...')
+    // 「搜索」这个动作在弹窗里只有列表自己能提供,但它不该顺手把 panel 的标题行也带出来
+    expect(w.find('.dir-list__head').exists()).toBe(false)
+    expect(w.findAll('.dir-card').length).toBe(3)
+  })
+
+  test('RCL-31: panel 形态不传 prop 时仍是「最近项目」文案', async () => {
+    setupFetch({ dirs })
+    const w = mountList()
+    await flushAll()
+
+    const input = w.find('input.dir-list__search-input')
+    expect(input.attributes('placeholder')).toBe('@13D1C:搜索最近项目...')
+    expect(input.attributes('aria-label')).toBe('@13D1C:搜索最近项目...')
+  })
+
+  test('RCL-32: 关键词只筛卡片,清空后恢复,AI 解读栏始终拿全量', async () => {
+    setupFetch({ dirs })
+    const w = mountList({ variant: 'bare', layout: 'split' })
+    await flushAll()
+
+    const input = w.find('input.dir-list__search-input')
+    await input.setValue('zen')
+    expect(w.findAll('.dir-card').length).toBe(2)
+    // 说明块读的是 allItems:过滤只影响"看得见几张卡",不改变被解读的那批目录
+    expect(w.findComponent(RecentDirectoriesSummary).props('items')).toHaveLength(3)
+
+    await input.setValue('home')
+    expect(w.findAll('.dir-card').length).toBe(1)
+
+    // 一个都不匹配:给的是"没有匹配"空态,而不是把列表画成空的
+    await input.setValue('绝无此目录')
+    expect(w.findAll('.dir-card').length).toBe(0)
+    expect(w.find('.dir-list__empty').text()).toContain('没有匹配')
+
+    // 清空按钮撤回过滤(弹窗每次打开都重建组件,不需要持久化搜索词)
+    await input.setValue('zen')
+    await w.find('button.dir-list__search-clear').trigger('click')
+    expect(w.findAll('.dir-card').length).toBe(3)
+    expect(w.find('button.dir-list__search-clear').exists()).toBe(false)
   })
 })

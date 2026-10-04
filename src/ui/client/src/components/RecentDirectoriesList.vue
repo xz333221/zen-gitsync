@@ -20,8 +20,10 @@
 //   1. 点击语义  mode='open'(App.vue 非 Git 仓库空态)   → 点击即在新的 cmd 标签页打开该目录
 //               mode='pick'(切换工作目录弹窗的常用目录) → 点击把路径回填到输入框,
 //                                                       Ctrl/Cmd + 点击才在新标签页打开
-//   2. 外壳形态  variant='panel' → 自带标题行 + 搜索框 + 卡片容器,撑满父级高度(右侧整列空态)
+//   2. 外壳形态  variant='panel' → 自带标题行 + 卡片容器,撑满父级高度(右侧整列空态)
 //               variant='bare'  → 无外壳直接铺在弹窗表单里,列表自身限高滚动
+//      (两者都带搜索框:panel 用它筛首屏面板,bare 用它筛弹窗里的常用目录;
+//       文案由 searchPlaceholder 传,两处叫法不同 —— 最近项目 / 常用目录)
 //
 // 第三点「刷新全部」按钮的位置不由 props 决定:panel 形态的按钮长在本组件自带的标题行里,
 // bare 形态的标题行在调用方那边(弹窗的 el-form-item label),插槽落不到那儿,
@@ -129,6 +131,8 @@ const props = withDefaults(defineProps<{
   emptyText?: string;
   /** 列表的无障碍标签 */
   ariaLabel?: string;
+  /** 搜索框占位文案;两个调用方叫法不同(最近项目 / 常用目录),也兼作它的无障碍标签 */
+  searchPlaceholder?: string;
 }>(), {
   mode: "open",
   variant: "panel",
@@ -149,7 +153,9 @@ const directories = ref<Array<{ path: string; exists: boolean }>>([]);
 const isLoading = ref(false);
 // 目录路径 → Git 状态。探测是异步补充的,所以单独存一份,不阻塞列表渲染
 const gitStates = ref<Record<string, DirectoryGitState>>({});
-// 搜索关键词:只在 panel 形态渲染输入框,bare 形态下始终为空
+// 搜索关键词。两种形态共用同一份过滤逻辑(见下面 items):panel 形态是首屏「最近项目」
+// 面板自带的搜索框,弹窗的 bare 形态也渲染它 —— 常用目录一屏三十来个、又都长一个样,
+// 没有筛选只能靠肉眼扫。
 const searchQuery = ref("");
 
 // ── 「刷新全部」────────────────────────────────────────────────────────────
@@ -200,6 +206,9 @@ const ctrlHint = computed(() =>
 const removeLabelText = computed(() => props.removeLabel ?? $t("@13D1C:从最近项目中移除"));
 const resolvedEmptyText = computed(() => props.emptyText ?? $t("@13D1C:暂无最近项目"));
 const resolvedAriaLabel = computed(() => props.ariaLabel ?? $t("@13D1C:最近项目列表"));
+const resolvedSearchPlaceholder = computed(() =>
+  props.searchPlaceholder ?? $t("@13D1C:搜索最近项目...")
+);
 
 // 列表项:补一个 basename 做第一行,完整路径放第二行(同名目录靠完整路径区分)
 // 顺手把该目录的 Git 状态挂上去,模板里直接读 item.git,避免在模板里反复查表
@@ -537,7 +546,7 @@ defineExpose({
 
 <template>
   <div class="dir-list" :class="[`dir-list--${variant}`, { 'dir-list--split': isSplit }]">
-    <!-- 外壳:仅 panel 形态自带标题行 + 搜索框;bare 形态由调用方(弹窗表单 label)提供标题 -->
+    <!-- 外壳:仅 panel 形态自带标题行;bare 形态的标题行在调用方(弹窗表单 label)那边 -->
     <template v-if="variant === 'panel'">
       <div class="dir-list__head">
         <span class="dir-list__title">{{ $t('@13D1C:最近项目') }}</span>
@@ -558,24 +567,28 @@ defineExpose({
           />
         </div>
       </div>
-      <div class="dir-list__search">
-        <el-icon class="dir-list__search-icon" aria-hidden="true"><Search /></el-icon>
-        <input
-          v-model="searchQuery"
-          type="text"
-          class="dir-list__search-input"
-          :placeholder="$t('@13D1C:搜索最近项目...')"
-          :aria-label="$t('@13D1C:搜索最近项目')"
-        />
-        <button
-          v-if="searchQuery"
-          type="button"
-          class="dir-list__search-clear"
-          :aria-label="$t('@13D1C:清空搜索')"
-          @click="searchQuery = ''"
-        >×</button>
-      </div>
     </template>
+
+    <!-- 搜索框:两种形态都有。panel 形态排在标题行下方(自带外壳的那个);
+         bare 形态(切换工作目录弹窗)的标题行在调用方那边,列表自身就只剩这一个入口,
+         split 布局里它是左栏的第一行,AI 解读栏不受它影响(见下面 allItems/items 的分工)。 -->
+    <div class="dir-list__search">
+      <el-icon class="dir-list__search-icon" aria-hidden="true"><Search /></el-icon>
+      <input
+        v-model="searchQuery"
+        type="text"
+        class="dir-list__search-input"
+        :placeholder="resolvedSearchPlaceholder"
+        :aria-label="resolvedSearchPlaceholder"
+      />
+      <button
+        v-if="searchQuery"
+        type="button"
+        class="dir-list__search-clear"
+        :aria-label="$t('@13D1C:清空搜索')"
+        @click="searchQuery = ''"
+      >×</button>
+    </div>
 
     <div v-if="isLoading && directories.length === 0" class="dir-list__empty">
       <el-icon><Loading /></el-icon>
@@ -742,62 +755,64 @@ defineExpose({
   overflow-y: auto;
 }
 /* split:卡片在左、AI 栏在右。两个消费方:
-   - bare(全屏"切换工作目录"弹窗):没有标题/搜索行,根节点直接由纵翻横。
-   - panel(最近项目面板):自带标题 + 搜索行,不能跟着一起横排,
-     所以改用 grid 把这两行钉在左列顶部(见下面 .dir-list--panel.dir-list--split)。
+   - bare(全屏"切换工作目录"弹窗):左栏 = 搜索框 + 卡片两行,右栏是 AI 解读 + 追问区。
+   - panel(最近项目面板):比 bare 多一行标题,所以行数从 2 加到 3(见下面那条更具体的规则)。
+   两行两列的 grid 而不是 flex:搜索框与卡片是左栏里的**上下两层**,
+   用 flex row 会把它顶成第三列(挤在卡片右侧)。
    max-height 在这里必须放开 —— bare 那条 74vh 是为"卡片在上"的旧布局设的,
-   横过来之后高度应由父容器高度链决定,而不是再截一道。 */
+   改 grid 之后高度由父容器高度链决定,而不是再截一道。 */
 .dir-list--split {
-  flex-direction: row;
+  display: grid;
+  /* 右列宽度就是 AI 栏的宽度,与调用方(DirectorySelector 的 label 行)对齐:
+     那边按同一个 clamp 算"左栏有多宽" */
+  grid-template-columns: minmax(0, 1fr) clamp(360px, 38%, 560px);
+  /* 搜索行按内容高,卡片行吃掉剩下的;minmax(0,1fr) 的 0 下限保证长列表能内部滚动 */
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "search summary"
+    "items  summary";
   align-items: stretch;
-  gap: var(--spacing-xl);
+  /* 行间距沿用 panel 原有的 gap;列间距放宽,卡片列与 AI 栏分开 */
+  gap: var(--spacing-base) var(--spacing-xl);
   max-height: none;
 }
-.dir-list--split .dir-list__items {
-  flex: 1 1 auto;
-  min-width: 0;
+/* 搜索框是左栏第一行:间距交给 grid gap,清掉元素自带的 margin-top,
+   否则行距会叠成两倍(panel 形态同理,见下面那条) */
+.dir-list--split > .dir-list__search {
+  grid-area: search;
+  margin-top: 0;
 }
-.dir-list--split .dir-list__summary {
-  flex: 0 0 auto;
-  width: clamp(360px, 38%, 560px);
+.dir-list--split > .dir-list__items,
+.dir-list--split > .dir-list__empty {
+  grid-area: items;
+  /* grid 行已给出确定高度,回落成普通块级滚动容器(panel 的 flex:1 / bare 的 flex:1 1 auto
+     在 grid 下都不生效) */
+  min-width: 0;
+  min-height: 0;
+  max-height: none;
+}
+.dir-list--split > .dir-list__summary {
+  grid-area: summary;
+  /* 宽度由 grid 列决定,不再叠加 clamp;跨满两行才是"整列高度" */
+  width: auto;
   min-width: 0;
 }
 
 /* panel + split:标题行 / 搜索框只属于左列,AI 栏跨满整列高度。
-   用 grid 而不是再包一层 DOM:panel 的 DOM 顺序是 标题 → 搜索 → 卡片 → 说明,
-   grid 里分别落进 head / search / items 三行,说明栏跨满三行占据右列。
-   specificity(0,2,0)盖过上面的单类 .dir-list--split 与 .dir-list--panel。 */
+   panel 的 DOM 顺序是 标题 → 搜索 → 卡片 → 说明,比 bare 多一行标题,
+   所以这里只覆盖行数 / 区域名(列宽与 gap 沿用上面那份)。
+   specificity(0,2,0)盖过单类 .dir-list--split 与 .dir-list--panel。 */
 .dir-list--panel.dir-list--split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(360px, 38%, 560px);
   grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-areas:
-    "head summary"
+    "head   summary"
     "search summary"
-    "items summary";
-  /* 行间距沿用 panel 原有的 gap;列间距放宽,卡片列与 AI 栏分开 */
-  gap: var(--spacing-base) var(--spacing-xl);
+    "items  summary";
 }
 .dir-list--panel.dir-list--split > .dir-list__head {
   grid-area: head;
   /* 间距交给 grid gap,清掉元素自带的 margin,否则行距会叠成两倍 */
   margin-bottom: 0;
-}
-.dir-list--panel.dir-list--split > .dir-list__search {
-  grid-area: search;
-  margin-top: 0;
-}
-.dir-list--panel.dir-list--split > .dir-list__items,
-.dir-list--panel.dir-list--split > .dir-list__empty {
-  grid-area: items;
-  /* grid 行已给出确定高度,回落成普通块级滚动容器(panel 的 flex:1 在 grid 下无效) */
-  min-height: 0;
-  max-height: none;
-}
-.dir-list--panel.dir-list--split > .dir-list__summary {
-  grid-area: summary;
-  /* 宽度由 grid 列决定,不再叠加 clamp */
-  width: auto;
 }
 .dir-list__head {
   display: flex;

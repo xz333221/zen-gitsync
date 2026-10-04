@@ -636,6 +636,7 @@ export default {
   '@67CE7:目录路径': 'Directory path',
   '@67CE7:浏览': 'Browse',
   '@67CE7:常用目录': 'Common Directories',
+  '@67CE7:搜索常用目录...': 'Search common directories...',
   '@67CE7:暂无常用目录': 'No common directories yet',
   '@67CE7:从常用目录中移除': 'Remove from common directories',
   '@67CE7:共 {count} 个': '{count} total',

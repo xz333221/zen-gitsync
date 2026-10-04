@@ -1086,7 +1086,8 @@ function onBrowserSelect(path: string) {
   />
 
   <!-- 切换目录对话框:全屏。左栏是路径输入 + 常用目录卡片,右栏是 AI 状态解读 + 追问区
-       —— RecentDirectoriesList 的 layout="split" 把根节点翻成横向 flex,说明块自然落到右栏。
+       —— RecentDirectoriesList 的 layout="split" 把根节点翻成"搜索 + 卡片 | AI 栏"的 grid,
+       说明块自然落到右栏。
        type="flex" 让 body 撑满剩余高度;高度链一路 min-height:0 到列表/对话区内部滚动,
        路径输入框与底部按钮始终钉在原地。 -->
   <CommonDialog
@@ -1123,7 +1124,8 @@ function onBrowserSelect(path: string) {
         </el-form-item>
         <!-- 常用目录:与"最近项目"同一个组件、同一份数据、同一套卡片样式。
              mode="pick"   → 普通点击把路径回填到上面的输入框,Ctrl/Cmd+点击在新标签页打开
-             variant="bare" → 不渲染面板外壳(标题由本表单项 label 提供)
+             variant="bare" → 不渲染面板外壳(标题由本表单项 label 提供;搜索框仍由列表自带,
+                              就是卡片区上方那一条 —— 三十来个目录都长一个样,没筛选只能肉眼看)
              layout="split" → 全屏形态下卡片在左、AI 解读+追问区在右(见组件内注释)
              min-card-width→ 全屏后左栏很宽,卡片网格的默认 380px 下限会排成三列、每列又
                              变回 ~410px 的窄卡(路径照样截断)。这里把下限提到
@@ -1163,6 +1165,7 @@ function onBrowserSelect(path: string) {
             :remove-label="$t('@67CE7:从常用目录中移除')"
             :empty-text="$t('@67CE7:暂无常用目录')"
             :aria-label="$t('@67CE7:常用目录')"
+            :search-placeholder="$t('@67CE7:搜索常用目录...')"
             @select="onRecentDirSelect"
             @loaded="(n: number) => (recentDirsCount = n)"
           />
