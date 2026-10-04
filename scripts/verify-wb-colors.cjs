@@ -12,7 +12,9 @@
  *   C2  五个角色 × hue / ink / surface / wash / edge / bar 齐全，且
  *       dark-theme.scss 必须**整套**覆盖 surface + wash + bar ——
  *       浅色那套是不透明的（基底是白的 --surface-elevated），漏覆盖 = 暗色下满屏白板。
- *   C3  列身 / 列头 / 首卡之间得分得开：列头色带必须比列身浓，列身必须比底板亮。
+ *   C3  列身 / 列头 / 首卡之间得分得开：列头色带必须比列身浓，列身必须比底板亮；
+ *       进行中的卡**不许**自己换底色（与同列普通卡同底，状态交给列 + 描边 + 活动行），
+ *       出错的卡反过来必须有浅红底（出错是跨列的，不染就扫不出哪条失败）。
  *   C4  列头与首卡之间要有间距 —— 曾是 0（`padding: 0 12px 12px`），
  *       首卡和列头色带贴死，用户报"卡片和上边的看板类型的 title 之间没有间距"。
  *   C5  进度条填充不许直接吃 ink（三个消费点：项目列表 / 控制台进度报告 /
@@ -330,11 +332,16 @@ async function main() {
       flat.map((c) => `${c.key} head ${c.head.lum} >= body ${c.body.lum}`).join(' | '))
 
     // C3 状态卡得是"浅色卡"而不是"脏底"：亮度 ≥ 0.90 且色相方向对
-    const warm = m.running && m.running.rgb.match(/\d+/g).map(Number)
     const red = m.error && m.error.rgb.match(/\d+/g).map(Number)
-    check('C3c 进行中的卡是浅暖底（lum ≥ 0.90 且 r > b）',
-      !!m.running && m.running.lum >= 0.9 && warm[0] > warm[2],
-      m.running ? `${m.running.rgb} lum=${m.running.lum}` : '没有 .kb-card.is-running（数据里没在跑的任务）')
+    /* C3c 进行中的卡**与普通卡同底**（2026-10-05 第五轮）。
+       卡落在哪一列是它自己的状态推出来的（is-running ⇔ 进行中 列），
+       所以给卡面再染一遍色是纯冗余，代价却是同屏别的卡都白、唯独它一块暖色 ——
+       用户报「我非进行中的正常任务都是白色，进行中的是橙色有点奇怪」。
+       断言写成"与普通卡逐位相同"而不是"等于 #fff"：要守的契约是**一致**，
+       哪天卡面整体换个底色不该把这条带红。 */
+    check('C3c 进行中的卡与同列的普通卡同底（状态不靠换底色表达）',
+      !!m.running && !!m.plain && m.running.rgb === m.plain.rgb,
+      m.running ? `running ${m.running.rgb} vs plain ${m.plain && m.plain.rgb}` : '没有 .kb-card.is-running（数据里没在跑的任务）')
     check('C3d 出错的卡是浅红底（lum ≥ 0.90 且 r > g）',
       !!m.error && m.error.lum >= 0.9 && red[0] > red[1],
       m.error ? `${m.error.rgb} lum=${m.error.lum}` : '没有 .kb-card.has-error（数据里没有出错的任务）')
@@ -388,7 +395,7 @@ async function main() {
      C1 是源码断言，注入的旧 CSS 在运行时，它照旧应当是绿的。 */
   const MUST_FAIL_IN_REVERSE = [
     'C3a 每一列的列身都不比底板暗',      // 旧写法列身比底板暗 —— 这就是"偏深偏暗"
-    'C3c 进行中的卡是浅暖底（lum ≥ 0.90 且 r > b）',
+    'C3c 进行中的卡与同列的普通卡同底（状态不靠换底色表达）',  // 旧写法给卡面染 6~16% 暖色
     'C3d 出错的卡是浅红底（lum ≥ 0.90 且 r > g）',
     'C4a 列头与首卡之间有间距（≥ 8px）',
     'C4b .kb-col__list 上内边距不为 0',
