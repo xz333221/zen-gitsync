@@ -726,7 +726,6 @@ export default {
   '@NPM01:NPM 脚本': 'NPM Scripts',
   '@NPM01:个包': 'packages',
   '@NPM01:正在扫描项目中的 npm 脚本...': 'Scanning npm scripts in project...',
-  '@NPM01:当前项目中未找到包含 scripts 的 package.json': 'No package.json with scripts found in current project',
   // @OPT-4: NPM panel separator a11y
   '@NPM01:调整 NPM 脚本面板高度（上下方向键）': 'Adjust NPM scripts panel height (arrow up/down)',
   '@NPM01:个脚本': 'scripts',
@@ -792,8 +791,6 @@ export default {
   '@NPM02:正在分析这个项目的启动方式…': 'Analyzing how this project can be started…',
   '@NPM02:分析失败，请稍后重试': 'Analysis failed, please try again later',
   '@NPM02:未配置 AI 模型，请先在通用设置里添加模型': 'No AI model configured — add one in General Settings first',
-  '@NPM02:这个目录里没有 package.json 或启动相关的文件，看不出启动方式': 'No package.json or startup-related files in this directory — no startup way to infer',
-  '@NPM02:没看出这个项目有明确的启动方式，可以直接在下面的脚本列表里挑一条试试': 'No obvious startup way found — pick one from the script list below',
   '@NPM02:npm 脚本': 'npm script',
   '@NPM02:命令行': 'command',
   '@NPM02:已启动': 'Started',

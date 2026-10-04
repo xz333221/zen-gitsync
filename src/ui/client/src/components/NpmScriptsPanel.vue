@@ -14,7 +14,7 @@
   ~ limitations under the License.
   -->
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { FolderOpened } from '@element-plus/icons-vue';
 import { $t } from '@/lang/static';
@@ -44,6 +44,14 @@ function toggleCollapsed() {
 const packages = ref<PackageInfo[]>([]);
 const isLoading = ref(false);
 const expandedPackages = ref<Set<string>>(new Set());
+
+/**
+ * 面板存在的前提:这个目录里真的扫到了带 scripts 的 package.json。
+ * 一个都没有(纯文档/纯资源目录)时整块不渲染 —— 只留一个点开也是空的标题行,
+ * 等于在左栏白占一行还让人以为点错了。扫描中也不渲染:反正默认是收起的,
+ * 先闪一下再消失反而更晃。
+ */
+const visible = computed(() => packages.value.length > 0);
 
 // 设置对话框
 const showSettingsDialog = ref(false);
@@ -254,7 +262,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="npm-scripts-panel">
+  <div v-if="visible" class="npm-scripts-panel">
     <div class="panel-header accordion-header" @click="toggleCollapsed">
       <div class="header-left">
         <el-icon class="accordion-chevron" :class="{ 'is-collapsed': collapsed }">
@@ -295,23 +303,17 @@ onMounted(() => {
       @keydown="onResizeKeydown"
     ></div>
 
-    <div v-if="!collapsed && isLoading" class="loading-container">
+<div v-if="!collapsed && isLoading" class="loading-container">
       <el-icon class="is-loading loading-icon">
         <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-          <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z"/>
+          <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32-32H192a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32z"/>
         </svg>
       </el-icon>
       <p class="loading-text">{{ $t('@NPM01:正在扫描项目中的 npm 脚本...') }}</p>
     </div>
 
-    <div v-else-if="!collapsed && packages.length === 0" class="empty-container">
-      <svg class="empty-icon" viewBox="0 0 1024 1024" width="64" height="64">
-        <path fill="currentColor" d="M832 384H576V128H192v768h640V384zm-26.496-64L640 154.496V320h165.504zM160 64h480l256 256v608a32 32 0 0 1-32 32H160a32 32 0 0 1-32-32V96a32 32 0 0 1 32-32z"/>
-      </svg>
-      <p class="empty-text">{{ $t('@NPM01:当前项目中未找到包含 scripts 的 package.json') }}</p>
-    </div>
-
     <div v-else-if="!collapsed" class="packages-container" :style="{ maxHeight: panelHeight + 'px' }">
+
       <div 
         v-for="pkg in packages" 
         :key="pkg.path" 
@@ -514,8 +516,7 @@ onMounted(() => {
   to { transform: rotate(360deg); }
 }
 
-.loading-container,
-.empty-container {
+.loading-container {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -529,16 +530,10 @@ onMounted(() => {
   color: var(--color-primary);
 }
 
-.loading-text,
-.empty-text {
+.loading-text {
   
   color: var(--text-secondary);
   margin: 0;
-}
-
-.empty-icon {
-  opacity: 0.3;
-  margin-bottom: var(--spacing-base);
 }
 
 .packages-container {

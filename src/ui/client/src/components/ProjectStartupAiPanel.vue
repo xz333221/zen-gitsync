@@ -21,8 +21,10 @@
   **服务端实测扫到的**事实(各目录脚本 / 标志文件 / README 摘要),把答案按启动顺序列出来,
   每条一个按钮,点了就在新终端里跑起来(后端 routes/projectStartupAi.js)。
 
-  三条交互口径:
+  四条交互口径:
   · 配了模型才自动分析;没配就只显示一句"先去添加模型",不发请求。
+  · **没内容就不出现**:这个目录没有 package.json / 启动相关文件(NO_FACTS),或者模型
+    一条都没排出来,面板整块不渲染 —— 与下面的 NPM 脚本面板同一口径,空壳只占地方。
   · 结果按 项目路径 + 语言 + 模型 缓存(utils/projectStartupCache),切目录/重挂载都不会
     重复问模型;刷新按钮是**显式**的强制重跑入口。
   · npm 类建议直接跑(服务端已校验脚本名真实存在);shell 类是模型给的原话,
@@ -55,7 +57,7 @@ function toggleCollapsed() {
   collapsed.value = !collapsed.value
 }
 
-type Status = 'idle' | 'loading' | 'done' | 'empty' | 'error' | 'no-model'
+type Status = 'idle' | 'loading' | 'done' | 'empty' | 'no-facts' | 'error' | 'no-model'
 
 const status = ref<Status>('idle')
 const suggestions = ref<StartupSuggestion[]>([])
@@ -66,6 +68,15 @@ const runningId = ref('')
 const launchedIds = ref<Set<string>>(new Set())
 
 const hasModel = computed(() => Array.isArray(configStore.models) && configStore.models.length > 0)
+
+/**
+ * 这个目录压根没有 package.json / 启动相关文件,或者模型没排出任何一条可执行的:
+ * **整块面板不渲染**。理由同 NpmScriptsPanel —— 一个点开只有一句"看不出来"的空壳,
+ * 在左栏里既占地方又让人以为是自己哪里配错了。
+ * 只藏"没内容",不藏真报错:网关挂了之类得让人看见。
+ */
+const visible = computed(() => status.value !== 'empty' && status.value !== 'no-facts')
+
 const locale = computed(() => (String(configStore.locale || '').startsWith('en') ? 'en' : 'zh'))
 const modelKey = computed(() => {
   const models = Array.isArray(configStore.models) ? configStore.models : []
@@ -145,14 +156,17 @@ async function analyze() {
       }
 
       if (result.success === false) {
-        // NO_MODEL / NO_FACTS 是本地语义,用本地文案;其余(网关报错)原样带出 —— 那句话本身就是排查线索
+        // NO_MODEL / NO_FACTS 是本地语义,用本地语义表达;其余(网关报错)原样带出 —— 那句话本身就是排查线索
         if (result.code === 'NO_MODEL') {
           status.value = 'no-model'
           return
         }
-        errorText.value = result.code === 'NO_FACTS'
-          ? $t('@NPM02:这个目录里没有 package.json 或启动相关的文件，看不出启动方式')
-          : (result.error || $t('@NPM02:分析失败，请稍后重试'))
+        if (result.code === 'NO_FACTS') {
+          // 不是错误,是"这个目录压根没有能起的东西" —— 面板直接不出现
+          status.value = 'no-facts'
+          return
+        }
+        errorText.value = result.error || $t('@NPM02:分析失败，请稍后重试')
         status.value = 'error'
         return
       }
@@ -245,7 +259,7 @@ watch([cacheKey, hasModel], () => sync())
 </script>
 
 <template>
-  <div class="startup-ai-panel">
+  <div v-if="visible" class="startup-ai-panel">
     <div class="panel-header accordion-header" @click="toggleCollapsed">
       <div class="header-left">
         <el-icon class="accordion-chevron" :class="{ 'is-collapsed': collapsed }">
@@ -287,10 +301,6 @@ watch([cacheKey, hasModel], () => sync())
 
       <div v-else-if="status === 'error'" class="state-box state-box--error">
         <p class="state-text">{{ errorText }}</p>
-      </div>
-
-      <div v-else-if="status === 'empty'" class="state-box">
-        <p class="state-text">{{ $t('@NPM02:没看出这个项目有明确的启动方式，可以直接在下面的脚本列表里挑一条试试') }}</p>
       </div>
 
       <div v-else-if="status === 'done'" class="list-hint">

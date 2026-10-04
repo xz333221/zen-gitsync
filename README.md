@@ -320,6 +320,7 @@ Build automated pipelines with a drag-and-drop canvas:
 - `npm` suggestions run straight away; raw shell suggestions (e.g. `docker compose up -d`) show a confirmation with the exact command first
 - Results are cached per project + language + model, so reopening the view does not call the model again; the refresh button in the panel header forces a fresh analysis
 - No model configured → the panel just tells you to add one, and sends no request at all
+- Nothing to show → the panel is not rendered at all: a directory with no `package.json` / startup files (and nothing for the model to pick) hides this panel **and** the NPM scripts panel, instead of leaving two empty shells in the sidebar
 
 ---
 
@@ -1030,6 +1031,7 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 - `npm` 类建议直接跑；模型给的原始命令（如 `docker compose up -d`）会先弹确认框，把完整命令摆给你看过再执行
 - 结果按 项目 + 语言 + 模型 缓存，重开视图不会重复问模型；面板头部的刷新按钮才是强制重新分析的入口
 - 没配模型时只提示去添加模型，一个请求都不发
+- 没东西可显示时**整块面板不渲染**：目录里既没有 `package.json`／启动相关文件、模型也排不出任何一条时，这个面板和 NPM 脚本面板**一起不出现**，左栏里不留两个点开还是空的壳
 
 ---
 
