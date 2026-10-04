@@ -508,7 +508,9 @@ function onReExecute() {
   padding: 2px 8px;
   font-size: var(--font-size-xs);
   font-weight: 500;
-  color: #6d28d9;
+  /* 2026-10-04：这两处原是硬编码 #6d28d9 / #5b21b6，与同一规则的 --color-think
+     脱钩，改完就成了紫色的第四份来源。统一走 --color-think-dark（暗色下自动切档）。 */
+  color: var(--color-think-dark);
   background: color-mix(in srgb, var(--color-think) 10%, var(--bg-container));
   border: 1px solid color-mix(in srgb, var(--color-think) 30%, transparent);
   border-radius: var(--radius-base);
@@ -519,7 +521,7 @@ function onReExecute() {
 .wb-chat__action:hover {
   background: color-mix(in srgb, var(--color-think) 18%, var(--bg-container));
   border-color: color-mix(in srgb, var(--color-think) 50%, transparent);
-  color: #5b21b6;
+  color: var(--color-think-darker);
 }
 .wb-chat__action:active {
   background: color-mix(in srgb, var(--color-think) 26%, var(--bg-container));

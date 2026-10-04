@@ -164,23 +164,19 @@ function handleClick() {
 <style scoped lang="scss">
 .one-ai-push-button {
   height: 100%;
-  /* AI 档：紫罗兰渐变。选紫不选蓝是为了让"AI 代写"和两颗蓝色按钮
-     一眼分开——紫色在本仓库已经是 AI 的语言（--color-think / ai-commit
-     图标 / Git 视图未跟踪文件）。渐变两端对白字都过 AA：
-     #7c3aed 5.7:1、#6d28d9 7.1:1（11px 的小字也够）。 */
-  background: linear-gradient(
-    135deg,
-    #7c3aed 0%,
-    #6d28d9 100%
-  ) !important;
+  /* 二档（同「一键推送所有」）：实心主色 + AI 图标。
+     2026-10-04 从「紫罗兰渐变」改成主色家族：PRODUCT.md:34 明令禁 "AI purple"，
+     而紫色在仓库里本来就已经是 --color-think / --color-info-light /
+     --git-status-untracked 三处状态色的用色，再加一颗实心紫按钮就是第四重身份，
+     工具栏也会出现"深蓝 / 中蓝 / 紫"三个色相。
+     "这是 AI 写的"这件事由图标和文案承担 —— 它跟"一键推送所有"的差别
+     （免写提交信息 vs 提交并推远端）本来就比"是不是 AI 写的"更容易读。
+     白字在 --color-primary 上 ≥ 4.6:1（AA 要 4.5:1）。 */
+  background: var(--color-primary) !important;
   border: none !important;
   color: #fff !important;
   &:hover:not(.is-disabled) {
-    background: linear-gradient(
-      135deg,
-      #6d28d9 0%,
-      #5b21b6 100%
-    ) !important;
+    background: var(--color-primary-dark) !important;
   }
   /* EP 把 label 包在 span 里，父级 color 不保证落到文字节点，显式声明 */
   .one-ai-push-icon,
@@ -213,7 +209,7 @@ function handleClick() {
       }
       .one-ai-push-desc {
         font-size: var(--font-size-xs);
-        /* 11px 小字压在紫底上要保住 4.5:1，透明度不能压得太狠 */
+        /* 11px 小字压在主色底上要保住 4.5:1，透明度不能压得太狠 */
         opacity: 0.9;
         font-weight: 400;
         letter-spacing: 0.1px;

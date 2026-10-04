@@ -65,7 +65,9 @@ withDefaults(defineProps<Props>(), {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.0);
+  /* 浅色原本是 rgba(255,255,255,0) 全透明，暗色却是 0.45 —— 同一个遮罩在两套
+     主题下是两件不同的东西。现统一成一层极淡的面板色，挡得住但不抢戏。 */
+  background: var(--bg-panel);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -85,9 +87,14 @@ withDefaults(defineProps<Props>(), {
   gap: var(--spacing-md);
   padding: 28px 32px;
   border-radius: var(--radius-xl);
-  background: linear-gradient(135deg, rgba(64, 158, 255, 0.9) 0%, rgba(103, 194, 58, 0.9) 100%);
-  backdrop-filter: blur(25px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  /* 2026-10-04：原来是蓝→绿彩虹渐变 + backdrop-filter: blur(25px) + 0 8px 32px
+     重阴影，三样都撞在 PRODUCT.md 的反参考上（禁彩虹渐变 / 禁玻璃拟态 / 禁重阴影），
+     而且用的是 Element Plus 旧默认蓝 #409eff —— variables.scss:394-397 已明确
+     不再保留它（历史上两套蓝同屏可见色差）。现改为纯令牌底 + 1px 描边，
+     明暗两套主题自动切换，下面的 [data-theme="dark"] 整段覆盖已随之删除。 */
+  background: var(--bg-container);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
 
@@ -108,12 +115,12 @@ withDefaults(defineProps<Props>(), {
 }
 
 .spinner-ring:nth-child(1) {
-  border-top: 4px solid rgba(255, 255, 255, 0.9);
+  border-top: 4px solid var(--color-primary);
   animation: spin 2s linear infinite;
 }
 
 .spinner-ring:nth-child(2) {
-  border-right: 4px solid rgba(255, 255, 255, 0.6);
+  border-right: 4px solid var(--tint-primary-45);
   animation: spin 3s linear infinite reverse;
   width: 90%;
   height: 90%;
@@ -122,7 +129,7 @@ withDefaults(defineProps<Props>(), {
 }
 
 .spinner-ring:nth-child(3) {
-  border-bottom: 4px solid rgba(255, 255, 255, 0.3);
+  border-bottom: 4px solid var(--tint-primary-20);
   animation: spin 4s linear infinite;
   width: 80%;
   height: 80%;
@@ -133,27 +140,28 @@ withDefaults(defineProps<Props>(), {
 .loading-text {
   font-size: var(--font-size-lg);
   font-weight: 600;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   letter-spacing: 1px;
   text-align: center;
-  color: var(--color-white);
+  /* 文字压在面板底色上（不再是半透明彩底），所以不需要 text-shadow ——
+     原来那层阴影是为了在蓝绿渐变上把白字捞出来。 */
+  color: var(--text-primary);
   animation: pulse-text 2s ease-in-out infinite;
 }
 
 .loading-progress {
   width: 200px;
   height: 4px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--bg-subtle);
   border-radius: var(--radius-xs);
   overflow: hidden;
 }
 
 .progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, var(--bg-container) 0%, rgba(255, 255, 255, 0.8) 100%);
+  /* 原来是白→白半透明渐变压在蓝绿底上，浅色主题下几乎看不见。 */
+  background: var(--color-primary);
   border-radius: var(--radius-xs);
   transition: width var(--transition-slow) ease;
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
 }
 
 /* Mock 进度：自动循环 */
@@ -173,13 +181,13 @@ withDefaults(defineProps<Props>(), {
 }
 
 @keyframes pulse-text {
+  /* 原来 50% 那一帧还带 transform: scale(1.05)。呼吸感来自透明度就够了，
+     缩放属于装饰性动效（PRODUCT.md: 禁 decorative motion）。 */
   0%, 100% {
     opacity: 1;
-    transform: scale(1);
   }
   50% {
-    opacity: 0.8;
-    transform: scale(1.05);
+    opacity: 0.65;
   }
 }
 
@@ -213,39 +221,17 @@ withDefaults(defineProps<Props>(), {
 .loading-fade-enter-from .loading-container,
 .loading-fade-leave-to .loading-container {
   opacity: 0;
-  transform: scale(0.8);
-  backdrop-filter: blur(0px);
+  transform: scale(0.96);
 }
 
 .loading-fade-enter-to .loading-container,
 .loading-fade-leave-from .loading-container {
   opacity: 1;
   transform: scale(1);
-  backdrop-filter: blur(25px);
 }
 
-/* 深色主题优化 */
-[data-theme="dark"] .global-loading-overlay {
-  background: rgba(0, 0, 0, 0.45);
-}
-
-[data-theme="dark"] .loading-container {
-  background: linear-gradient(135deg, rgba(22, 22, 22, 0.9) 0%, rgba(28, 28, 28, 0.9) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
-}
-
-[data-theme="dark"] .loading-text {
-  color: rgba(255, 255, 255, 0.92);
-  text-shadow: 0 2px 10px rgba(0,0,0,0.6);
-}
-
-[data-theme="dark"] .loading-progress {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-[data-theme="dark"] .progress-bar {
-  background: linear-gradient(90deg, rgba(64,158,255,0.85) 0%, rgba(103,194,58,0.85) 100%);
-  box-shadow: 0 0 10px var(--tint-primary-45);
-}
+/* 原先这里有 5 条 [data-theme="dark"] 覆盖，其中 .loading-container 用的还是
+   另一套纯灰渐变 rgba(22,22,22,.9)→rgba(28,28,28,.9) —— 和浅色的蓝绿渐变
+   完全是两个物体。现在底色/文字/进度条全部走令牌，这 5 条覆盖自然失效，
+   不需要再各自维护一遍。 */
 </style>

@@ -211,14 +211,17 @@ defineExpose({
 /* ── 动作区三档层级 ────────────────────────────────────────────────
    改前：5 个按钮全是实心色块（暂存/提交/推送 = 主色，一键提交/一键推送所有 =
    两种深蓝渐变），主次不分，扫视时不知道从哪个开始。
-   改后：
-     一档 一键提交        —— 唯一实心主色（产品核心动作：一条命令完成提交）
-     二档 一键推送所有    —— 主色浅底 + 描边（见 QuickPushButton.vue）
+   改后（2026-10-04 再调一次口径：原稿写的"主色浅底 + 描边"与实现不符，
+   QuickPushButton 实际是纯 --color-primary-dark 实心，下面的描述已按实现改）：
+     一档 一键提交        —— 最重的一档，--color-primary-dark 实心（见 QuickCommitButton.vue）
+     二档 一键推送所有    —— --color-primary 实心（见 QuickPushButton.vue）
+     二档 AI 提交并推送   —— 同二档，靠 AI 图标区分（见 AiQuickPushButton.vue）。
+                             原来这里是紫罗兰渐变，属 PRODUCT.md:34 明令禁的
+                             "AI purple"，且紫色在仓库里已有 --color-think /
+                             --color-info-light / --git-status-untracked 三重身份。
      三档 暂存 / 提交 / 推送 —— 中性描边，保留逐步显式控制
-     另档 AI 提交并推送   —— 紫罗兰渐变（见 AiQuickPushButton.vue）。用紫不用蓝是
-                            刻意的：它不是"更快的提交"，而是"不用自己写提交信息"，
-                            颜色区分开才不会和上面两颗蓝按钮混成一条梯队。
-   只改视觉权重，不动任何按钮的功能与位置。 */
+   改完后整个动作区只有两个色值：一档 primary-dark、二档 primary、三档中性描边。
+   层级靠明度，不靠色相。只改视觉权重，不动任何按钮的功能与位置。 */
 :deep(.left-actions .el-button) {
   background: var(--bg-container);
   border: 1px solid var(--border-color-medium);

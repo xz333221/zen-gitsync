@@ -177,15 +177,13 @@ defineExpose({
 <style scoped lang="scss">
 .one-commit-button {
   height: 100%;
-  /* 一档动作：实心主色渐变（产品核心动作）。
-     渐变两端都不能比 --color-primary-dark 更亮 —— 白字在 #3b82f6 上只有 3.68:1，
-     不达 AA 4.5:1；这里用「中蓝 → 深蓝」，白字全程 ≥ 5.2:1 且天然比
-     二档的纯色平铺更重，主次一眼可分。 */
-  background: linear-gradient(
-    135deg,
-    var(--color-primary-dark) 0%,
-    color-mix(in srgb, var(--color-primary-dark) 78%, #000) 100%
-  ) !important;
+  /* 一档动作：实心主色（产品核心动作，全场唯一最重的一档）。
+     2026-10-04 从「主色渐变」改成纯色：渐变属于 PRODUCT.md:37 禁的装饰性效果，
+     而"要最重"这件事靠一个更深的 --color-primary-dark 就够了，不需要靠渐变。
+     白字在 --color-primary-dark 上 ≥ 5.2:1（AA 要 4.5:1），保持不变。
+     二档（一键推送所有 / AI 提交并推送）用纯 --color-primary，
+     于是主次变成"深蓝 vs 中蓝"，全按钮区只有一个色相。 */
+  background: var(--color-primary-dark) !important;
   border: none !important;
   color: white !important;
   /* EP 把 label 包在 span 里，父级 color 不保证落到文字节点，显式声明 */
