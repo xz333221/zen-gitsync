@@ -159,7 +159,7 @@
   cursor: pointer;
 }
 .wb-attachment__preview:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 1px;
   border-radius: 11px;
 }
@@ -229,7 +229,7 @@
   background: var(--tint-danger-14, color-mix(in srgb, var(--color-danger) 14%, transparent));
 }
 .wb-attachment__del:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 1px;
   opacity: 1;
 }
@@ -275,7 +275,7 @@
 }
 .wb-attachments__add:active:not(:disabled) { transform: none; }
 .wb-attachments__add:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 1px;
 }
 .wb-attachments__add:disabled {

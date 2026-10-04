@@ -799,7 +799,7 @@ onUnmounted(() => {
 
 .item-copy-button:focus-visible,
 .output-copy-button:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 2px;
 }
 
@@ -825,7 +825,7 @@ onUnmounted(() => {
 }
 
 .enhanced-btn:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 2px;
 }
 

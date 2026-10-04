@@ -111,7 +111,7 @@ body {
    个别组件已自定义 :focus-visible,这里只覆盖"没设置"的元素,
    保证键盘用户始终能看到清晰的焦点指示(WCAG 2.4.7) */
 :focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 2px;
 }
 /* 鼠标点击产生的 :focus 不显示 outline */

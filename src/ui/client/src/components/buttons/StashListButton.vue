@@ -603,7 +603,7 @@ function handleOpenInEditor(filePath: string, _context: string) {
   }
   
   &:focus-visible {
-    outline: 2px solid var(--color-primary);
+    outline: var(--focus-outline);
     outline-offset: 2px;
   }
 }
@@ -640,7 +640,7 @@ function handleOpenInEditor(filePath: string, _context: string) {
   }
   
   &:focus-visible {
-    outline: 2px solid var(--color-primary);
+    outline: var(--focus-outline);
     outline-offset: 2px;
   }
 }
@@ -750,7 +750,7 @@ function handleOpenInEditor(filePath: string, _context: string) {
   }
   
   &:focus-visible {
-    outline: 2px solid var(--color-primary);
+    outline: var(--focus-outline);
     outline-offset: 2px;
   }
 }

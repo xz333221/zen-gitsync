@@ -474,7 +474,7 @@ defineExpose({ reload })
   color: inherit;
   font: inherit;
 }
-.mem-card__head:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: 3px; }
+.mem-card__head:focus-visible { outline: var(--focus-outline); outline-offset: 2px; border-radius: 3px; }
 .mem-card__title {
   font-size: var(--font-size-base);
   font-weight: 500;

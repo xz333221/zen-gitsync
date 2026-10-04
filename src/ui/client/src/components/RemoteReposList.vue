@@ -1305,7 +1305,7 @@ onBeforeUnmount(stopPolling)
   cursor: default;
 }
 .repo-list__action:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 2px;
 }
 .repo-list__action .el-icon {
@@ -1453,7 +1453,7 @@ onBeforeUnmount(stopPolling)
   background: var(--tint-primary-08);
 }
 .repo-list__icon-btn:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 2px;
 }
 .repo-list__guide-actions {
@@ -1489,7 +1489,7 @@ onBeforeUnmount(stopPolling)
   cursor: default;
 }
 .repo-list__btn:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 2px;
 }
 .repo-list__btn--primary {
@@ -1821,7 +1821,7 @@ onBeforeUnmount(stopPolling)
   cursor: pointer;
 }
 .repo-card__btn:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 2px;
   border-radius: var(--radius-base);
 }
@@ -1948,7 +1948,7 @@ onBeforeUnmount(stopPolling)
   background: var(--tint-primary-12);
 }
 .repo-card__action:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 2px;
 }
 /* 克隆进行中:图标从 FolderAdd 换成转圈的 Loading,同时禁掉重复点击 */

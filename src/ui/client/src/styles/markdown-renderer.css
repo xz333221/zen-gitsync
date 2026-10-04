@@ -52,7 +52,7 @@
   margin: 2px 0;
 }
 .wb-log-pre .markdown-renderer li::marker {
-  color: var(--text-tertiary);
+  color: var(--text-meta);
 }
 
 /* 行内 code */

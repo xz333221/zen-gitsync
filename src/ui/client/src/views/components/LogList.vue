@@ -1708,7 +1708,7 @@ function toggleFullscreen() {
 }
 
 .branch-tag:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 2px;
 }
 
@@ -2166,7 +2166,7 @@ function toggleFullscreen() {
 }
 
 .context-menu-item:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: -2px;
   background-color: var(--bg-hover);
 }

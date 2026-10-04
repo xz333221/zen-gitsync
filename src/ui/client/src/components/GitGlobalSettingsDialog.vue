@@ -1980,7 +1980,7 @@ html.dark .label-icon {
   align-items: flex-start;
   gap: var(--spacing-md);
   padding: var(--spacing-lg);
-  background: linear-gradient(135deg, var(--tint-primary-08) 0%, rgba(64, 158, 255, 0.04) 100%);
+  background: linear-gradient(135deg, var(--tint-primary-08) 0%, var(--tint-primary-4) 100%);
   border: 1px solid var(--tint-primary-18);
   border-radius: var(--radius-xl);
   position: relative;

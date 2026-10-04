@@ -109,7 +109,7 @@ function onClick(event: MouseEvent) {
   cursor: default;
 }
 .dir-list__refresh:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 2px;
 }
 .dir-list__refresh .el-icon {

@@ -1280,7 +1280,7 @@ git config --global user.email "your.email@example.com"</pre
   }
   
   &:focus-visible {
-    outline: 2px solid var(--color-primary);
+    outline: var(--focus-outline);
     outline-offset: 2px;
   }
 }

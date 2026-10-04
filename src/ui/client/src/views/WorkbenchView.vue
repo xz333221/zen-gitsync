@@ -1662,7 +1662,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   transform: scale(0.99);
 }
 .wb-new-btn:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 1px;
 }
 
@@ -2071,7 +2071,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 }
 .wb-copy-btn:active:not(:disabled) { transform: scale(0.94); }
 .wb-copy-btn:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 1px;
 }
 .wb-copy-btn.is-flash {
@@ -2214,7 +2214,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   background: var(--tint-success-14, color-mix(in srgb, var(--color-success) 14%, transparent));
 }
 .wb-logs-inline-btn:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 1px;
 }
 .wb-logs-inline-btn__icon { font-size: var(--font-size-base); }

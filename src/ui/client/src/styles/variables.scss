@@ -674,7 +674,7 @@
   --focus-ring: 0 0 0 3px var(--focus-ring-color);
   --focus-ring-soft: 0 0 0 3px var(--focus-ring-color-soft);
   --focus-ring-strong: 0 0 0 4px var(--focus-ring-color);
-  --focus-outline: 2px solid var(--color-primary);
+  --focus-outline: var(--focus-outline);
   --focus-outline-offset: 1px;
   --focus-outline-offset-lg: 2px;
 

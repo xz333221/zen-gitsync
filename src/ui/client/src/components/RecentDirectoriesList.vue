@@ -977,7 +977,7 @@ defineExpose({
   cursor: pointer;
 }
 .dir-card__btn:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 2px;
   border-radius: var(--radius-base);
 }
@@ -1151,7 +1151,7 @@ defineExpose({
   color: var(--danger-dark);
 }
 .dir-card__action:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 1px;
 }
 .dir-card__remove:focus-visible {

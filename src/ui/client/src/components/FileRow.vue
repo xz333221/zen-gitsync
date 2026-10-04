@@ -372,6 +372,6 @@ const getFileIcon = (filePath: string) => getFileIconClass(props.getFileName(fil
 
 .file-item.selected:hover {
   background: var(--tint-primary-16);
-  border-color: rgba(64, 158, 255, 0.4);
+  border-color: var(--tint-primary-35);
 }
 </style>

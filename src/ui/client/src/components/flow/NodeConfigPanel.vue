@@ -1917,7 +1917,7 @@ function saveConfig() {
   padding: var(--spacing-sm);
   border-radius: var(--radius-md);
   background: var(--tint-primary-08);
-  border: 1px solid rgba(64, 158, 255, 0.18);
+  border: 1px solid var(--tint-primary-18);
 }
 
 .form-tip {

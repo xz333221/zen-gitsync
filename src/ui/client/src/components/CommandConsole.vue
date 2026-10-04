@@ -3338,7 +3338,7 @@ onActivated(() => {
   }
   
   &:focus-visible {
-    outline: 2px solid var(--color-primary);
+    outline: var(--focus-outline);
     outline-offset: 2px;
   }
 }
@@ -3770,7 +3770,7 @@ pre.stderr {
   }
   
   &:focus-visible {
-    outline: 2px solid var(--color-primary);
+    outline: var(--focus-outline);
     outline-offset: 2px;
   }
   
@@ -4057,7 +4057,7 @@ pre.stderr {
   }
   50% {
     box-shadow: 0 0 8px var(--tint-primary-50),
-                0 0 0 4px rgba(64, 158, 255, 0);
+                0 0 0 4px transparent;
   }
 }
 

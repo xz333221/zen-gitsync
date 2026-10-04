@@ -1,0 +1,97 @@
+{
+  "_note": "2026-10-04 修完之后重算。C1 把 121 处 color: 从亮色状态色换成 -dark 档，P2-15 把 --text-tertiary-dark 从 #cbd0d6 调暗到 #b4bac2 给 --text-meta-dark 让位。底色取各自主题的面板色；AA 要求正文 4.5:1，大号/图标 3:1。",
+  "light": {
+    "_bgPanel": "#f5f7fa (--bg-panel)",
+    "--color-success": {
+      "value": "#67c23a",
+      "onPanel": 2.09
+    },
+    "--color-warning": {
+      "value": "#e6a23c",
+      "onPanel": 2.04
+    },
+    "--color-danger": {
+      "value": "#f56c6c",
+      "onPanel": 2.7
+    },
+    "--color-info": {
+      "value": "#909399",
+      "onPanel": 2.87
+    },
+    "--color-success-dark": {
+      "value": "#047857",
+      "onPanel": 5.11
+    },
+    "--color-warning-dark": {
+      "value": "#b45309",
+      "onPanel": 4.68
+    },
+    "--color-danger-dark": {
+      "value": "#b91c1c",
+      "onPanel": 6.03
+    },
+    "--text-tertiary": {
+      "value": "#909399",
+      "onPanel": 2.87
+    },
+    "--text-meta": {
+      "value": "#686a6f",
+      "onPanel": 5.04
+    },
+    "--text-secondary": {
+      "value": "#606266",
+      "onPanel": 5.69
+    },
+    "--text-primary": {
+      "value": "#303133",
+      "onPanel": 12.13
+    }
+  },
+  "dark": {
+    "_bgPanel": "#161a22 附近（暗面板，取 --surface-canvas #0f131b 与面板之间的量级）",
+    "--color-success": {
+      "value": "#67c23a",
+      "onPanel": 7.76
+    },
+    "--color-warning": {
+      "value": "#e6a23c",
+      "onPanel": 7.97
+    },
+    "--color-danger": {
+      "value": "#f56c6c",
+      "onPanel": 6.01
+    },
+    "--color-info": {
+      "value": "#909399",
+      "onPanel": 5.66
+    },
+    "--color-success-dark": {
+      "value": "#34d399",
+      "onPanel": 9.07
+    },
+    "--color-warning-dark": {
+      "value": "#fbbf24",
+      "onPanel": 10.44
+    },
+    "--color-danger-dark": {
+      "value": "#fca5a5",
+      "onPanel": 9.18
+    },
+    "--text-tertiary": {
+      "value": "#b4bac2",
+      "onPanel": 8.92
+    },
+    "--text-meta": {
+      "value": "#cbd0d6",
+      "onPanel": 11.23
+    },
+    "--text-secondary": {
+      "value": "#d8dce2",
+      "onPanel": 12.66
+    },
+    "--text-primary": {
+      "value": "#ffffff",
+      "onPanel": 17.43
+    }
+  }
+}

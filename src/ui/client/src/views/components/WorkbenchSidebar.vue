@@ -393,7 +393,7 @@ function onWindowMouseUp(_e: MouseEvent) {
 }
 .wb-new-btn:hover .wb-new-btn__icon { transform: rotate(90deg); }
 .wb-new-btn:active { transform: scale(0.99); }
-.wb-new-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.wb-new-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 .wb-task-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 /* 分组模式下任务项相对组头缩进一层,视觉上归属到项目分组下 */
 .wb-task-list.is-grouped .wb-task-item { margin-left: 14px; }

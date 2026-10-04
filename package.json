@@ -115,7 +115,8 @@
     "npm:2fa:get": "npm profile get",
     "npm:2fa:disable": "npm profile disable-2fa",
     "verify:wb-select-popup": "node scripts/verify-native-select-popup.cjs",
-    "verify:wb-inline-images": "node scripts/verify-wb-inline-images.mjs"
+    "verify:wb-inline-images": "node scripts/verify-wb-inline-images.mjs",
+    "verify:ui-consistency": "node scripts/verify-ui-consistency.cjs"
   },
   "files": [
     "src/ui/public/**",

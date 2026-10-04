@@ -328,7 +328,7 @@ async function requestCloseAll() {
 .instance-switcher:active { transform: scale(0.98); }
 
 .instance-switcher:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 2px;
 }
 

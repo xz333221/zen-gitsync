@@ -490,7 +490,7 @@ const chatSummary = computed(() =>
   opacity: var(--disabled-opacity);
 }
 .dir-summary__refresh:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 1px;
 }
 .dir-summary__refresh .el-icon.is-spinning {

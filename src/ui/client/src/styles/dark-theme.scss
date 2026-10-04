@@ -404,7 +404,7 @@ html[data-theme="dark"] {
   }
 
   .preview-content::-webkit-scrollbar-thumb:hover {
-    background: rgba(64, 158, 255, 0.7);
+    background: var(--tint-primary-55);
   }
 
   /* 主容器深色主题 */
@@ -863,7 +863,7 @@ html[data-theme="dark"] {
       }
 
       &:focus-visible {
-        outline: 2px solid var(--color-primary);
+        outline: var(--focus-outline);
         outline-offset: 2px;
       }
     }
@@ -1094,7 +1094,7 @@ html[data-theme="dark"] {
   
   .el-dropdown-menu__item:focus-visible {
     background-color: var(--bg-container-dark);
-    outline: 2px solid var(--color-primary);
+    outline: var(--focus-outline);
     outline-offset: -2px;
   }
   

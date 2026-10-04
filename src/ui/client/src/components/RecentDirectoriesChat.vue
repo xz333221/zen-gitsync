@@ -236,7 +236,7 @@ onBeforeUnmount(() => {
   border-color: var(--color-primary);
 }
 .dir-chat__new:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--focus-outline);
   outline-offset: 1px;
 }
 

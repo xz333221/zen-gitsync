@@ -399,7 +399,7 @@ defineExpose({
     box-shadow: 0 0 0 0 var(--tint-primary-16);
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(64, 158, 255, 0);
+    box-shadow: 0 0 0 6px transparent;
   }
 }
 
@@ -466,8 +466,8 @@ defineExpose({
   gap: var(--spacing-lg);
   padding: var(--spacing-xl) var(--spacing-xl);
   border-radius: var(--radius-md);
-  border: 1px solid rgba(64, 158, 255, 0.18);
-  background: rgba(64, 158, 255, 0.04);
+  border: 1px solid var(--tint-primary-18);
+  background: var(--tint-primary-4);
   position: relative;
   overflow: hidden;
 
@@ -480,9 +480,9 @@ defineExpose({
     height: 2px;
     background: linear-gradient(90deg,
       transparent 0%,
-      rgba(64, 158, 255, 0.4) 30%,
-      rgba(64, 158, 255, 0.9) 50%,
-      rgba(64, 158, 255, 0.4) 70%,
+      var(--tint-primary-35) 30%,
+      var(--tint-primary-55) 50%,
+      var(--tint-primary-35) 70%,
       transparent 100%
     );
     box-shadow: 0 0 10px var(--tint-primary-50);
@@ -506,7 +506,7 @@ defineExpose({
   }
 
   .pulling-spinner-arc {
-    stroke: rgba(64, 158, 255, 0.9);
+    stroke: var(--tint-primary-55);
     stroke-linecap: round;
     stroke-dasharray: 80 126;
     animation: pulling-dash 1.4s ease-in-out infinite;
@@ -522,7 +522,7 @@ defineExpose({
 .pulling-title {
   font-size: var(--font-size-sm);
   font-weight: 600;
-  color: rgba(64, 158, 255, 0.95);
+  color: var(--tint-primary-55);
   letter-spacing: 0.3px;
 }
 
@@ -565,9 +565,9 @@ defineExpose({
       height: 2px;
       background: linear-gradient(90deg, 
         transparent 0%,
-        rgba(64, 158, 255, 0.4) 30%,
-        rgba(64, 158, 255, 0.8) 50%,
-        rgba(64, 158, 255, 0.4) 70%,
+        var(--tint-primary-35) 30%,
+        var(--tint-primary-55) 50%,
+        var(--tint-primary-35) 70%,
         transparent 100%
       );
       box-shadow: 0 0 10px var(--tint-primary-50);

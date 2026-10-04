@@ -333,7 +333,7 @@ const emit = defineEmits<{
 
   &.is-selected {
     border-color: var(--color-primary-dark);
-    box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.22), var(--shadow-lg);
+    box-shadow: 0 0 0 3px var(--tint-primary-22), var(--shadow-lg);
   }
 
   .flow-node-handle {
