@@ -1022,7 +1022,7 @@ onBeforeUnmount(() => {
 }
 
 .sm-path-input:disabled {
-  opacity: 0.6;
+  opacity: var(--disabled-opacity);
   cursor: not-allowed;
 }
 
@@ -1051,7 +1051,7 @@ onBeforeUnmount(() => {
 }
 
 .sm-btn-primary:disabled {
-  opacity: 0.6;
+  opacity: var(--disabled-opacity);
   cursor: not-allowed;
 }
 
@@ -1649,7 +1649,7 @@ onBeforeUnmount(() => {
 }
 
 .sm-layout-btn:disabled {
-  opacity: 0.45;
+  opacity: var(--disabled-opacity);
   cursor: not-allowed;
 }
 

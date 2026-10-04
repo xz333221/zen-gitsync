@@ -1225,7 +1225,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   transition: color var(--transition-fast) var(--ease-custom), background var(--transition-fast) var(--ease-custom);
 }
 .oc__toggle:hover:not(:disabled) { color: var(--warning-dark); background: color-mix(in srgb, var(--color-warning) 10%, transparent); }
-.oc__toggle:disabled { opacity: 0.5; cursor: default; }
+.oc__toggle:disabled { opacity: var(--disabled-opacity); cursor: default; }
 .oc__toggle:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
 /* 折叠按钮：和 .oc__toggle 同款无底色图标按钮，只是换成图标 */
@@ -1367,7 +1367,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
               border-color var(--transition-fast) var(--ease-custom);
 }
 .oc__report-run:hover:not(:disabled) { color: var(--color-primary); border-color: var(--color-primary); }
-.oc__report-run:disabled { opacity: 0.55; cursor: default; }
+.oc__report-run:disabled { opacity: var(--disabled-opacity); cursor: default; }
 .oc__report-run:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 .oc__report-run-icon { font-size: var(--font-size-xs); }
 /* 生成中：转起来。它可能等上十几秒（一次模型往返），没动静会让人以为按钮没生效 */
@@ -1864,7 +1864,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 .oc__attach:hover:not(:disabled) { color: var(--color-primary); }
 /* 已设过预设提示词：入口点亮，一次远程状态在图标上就能看出来 */
 .oc__attach.is-on { color: var(--color-primary); }
-.oc__attach:disabled { opacity: 0.4; cursor: default; }
+.oc__attach:disabled { opacity: var(--disabled-opacity); cursor: default; }
 .oc__attach:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 .oc__autorn {
   display: inline-flex;
@@ -1899,7 +1899,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   background: var(--gradient-accent-hover);
   box-shadow: var(--btn-shadow-hover);
 }
-.oc__send:disabled { opacity: 0.45; cursor: default; }
+.oc__send:disabled { opacity: var(--disabled-opacity); cursor: default; }
 .oc__send:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 .oc__send-icon { font-size: var(--font-size-sm); }
 .oc__hint {

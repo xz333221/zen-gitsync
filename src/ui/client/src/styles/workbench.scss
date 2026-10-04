@@ -279,6 +279,6 @@
   outline-offset: 1px;
 }
 .wb-attachments__add:disabled {
-  opacity: 0.4;
+  opacity: var(--disabled-opacity);
   cursor: not-allowed;
 }

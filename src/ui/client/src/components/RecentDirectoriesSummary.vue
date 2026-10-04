@@ -487,7 +487,7 @@ const chatSummary = computed(() =>
 }
 .dir-summary__refresh:disabled {
   cursor: default;
-  opacity: 0.5;
+  opacity: var(--disabled-opacity);
 }
 .dir-summary__refresh:focus-visible {
   outline: 2px solid var(--color-primary);
@@ -545,6 +545,6 @@ const chatSummary = computed(() =>
 }
 .dir-summary__retry:disabled {
   cursor: default;
-  opacity: 0.5;
+  opacity: var(--disabled-opacity);
 }
 </style>

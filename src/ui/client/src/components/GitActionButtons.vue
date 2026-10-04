@@ -180,7 +180,7 @@ defineExpose({
   }
 
   &.is-disabled {
-    opacity: 0.4 !important;
+    opacity: var(--disabled-opacity)!important;
   }
 }
 
@@ -192,7 +192,7 @@ defineExpose({
   &.is-disabled {
     background-color: var(--color-primary-light) !important;
     border-color: var(--color-primary-light) !important;
-    opacity: 0.5 !important;
+    opacity: var(--disabled-opacity)!important;
   }
 }
 
@@ -204,7 +204,7 @@ defineExpose({
   &.is-disabled {
     background-color: var(--color-warning) !important;
     border-color: var(--color-warning) !important;
-    opacity: 0.5 !important;
+    opacity: var(--disabled-opacity)!important;
   }
 }
 
@@ -241,7 +241,7 @@ defineExpose({
   background-color: var(--bg-container) !important;
   border-color: var(--border-color-medium) !important;
   color: var(--text-disabled) !important;
-  opacity: 0.6 !important;
+  opacity: var(--disabled-opacity)!important;
 }
 
 /* .form-bottom-actions:hover {

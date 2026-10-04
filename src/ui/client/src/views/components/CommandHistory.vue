@@ -831,7 +831,7 @@ onUnmounted(() => {
 
 /* 按钮加载状态 */
 .enhanced-btn:disabled {
-  opacity: 0.6;
+  opacity: var(--disabled-opacity);
   cursor: not-allowed;
   transform: none;
 }

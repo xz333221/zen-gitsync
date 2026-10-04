@@ -397,6 +397,13 @@
   /* 禁用态文字（按钮 / 图标按钮不可用时；跟随 placeholder 档，深色自动跟随） */
   --text-disabled: var(--text-placeholder);
 
+  /* 禁用态透明度。2026-10-04 之前全站有 0.4 / 0.45 / 0.5 / 0.55 / 0.6 / 0.65 六档，
+     其中 GitActionButtons.vue 与 unified-dialogs.scss 各带一个 !important
+     打同一类按钮 —— 谁赢取决于 CSS 加载顺序，同屏的禁用按钮深浅不一，
+     看起来像「有的还能点」。现统一到 0.5：看得清「在这里但按不了」，
+     又不至于淡到消失。 */
+  --disabled-opacity: 0.5;
+
   /* 全局文字颜色 - 根据主题自动调整 */
   --color-text: var(--text-primary);
 
@@ -796,6 +803,7 @@
   /* 图标字形尺寸（大号图标按钮 44px 专用）
      三种承载方式 el-icon / svg-icon / 图片 必须同档，否则混排时会出现「某个图标小一圈」
      （实测：el-icon 曾按字号渲染 24px，而自定义 SVG 写死 22px，视觉上明显偏小） */
+  --icon-glyph-size-md: 20px;
   --icon-glyph-size-lg: 24px;
 
   /* 「主色软按钮」的两个尺寸 + hover 两色。

@@ -1880,7 +1880,7 @@ async function openSystemConfigFile() {
 }
 /* 置灰时连说明一起降透明度，让"现在不生效"一眼看得出来 */
 .notify-sub:has(.el-switch.is-disabled) .notify-sub__hint {
-  opacity: 0.6;
+  opacity: var(--disabled-opacity);
 }
 .ai-iterations-input {
   width: 140px;
@@ -2320,7 +2320,7 @@ html.dark .label-icon {
 }
 
 .model-test-btn:disabled {
-  opacity: 0.6;
+  opacity: var(--disabled-opacity);
   cursor: not-allowed;
 }
 

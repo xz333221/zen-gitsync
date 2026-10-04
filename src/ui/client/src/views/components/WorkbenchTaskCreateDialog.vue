@@ -255,7 +255,7 @@ async function submit(openEditor: boolean) {
   transition: color var(--transition-fast) var(--ease-custom), background var(--transition-fast) var(--ease-custom);
 }
 .nc__btn:hover:not(:disabled) { color: var(--color-primary); background: var(--bg-container-hover); }
-.nc__btn:disabled { opacity: 0.45; cursor: default; }
+.nc__btn:disabled { opacity: var(--disabled-opacity); cursor: default; }
 .nc__btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 .nc__btn--primary { background: var(--color-primary); color: #fff; }
 .nc__btn--primary:hover:not(:disabled) { background: var(--color-primary); color: #fff; opacity: 0.88; }

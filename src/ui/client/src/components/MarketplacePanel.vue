@@ -794,7 +794,7 @@ async function onRemove(item: InstalledItem) {
     color: #fff;
   }
 
-  &:disabled { opacity: 0.5; cursor: not-allowed; }
+  &:disabled { opacity: var(--disabled-opacity); cursor: not-allowed; }
 }
 
 .mp-installed-chip {
@@ -883,7 +883,7 @@ async function onRemove(item: InstalledItem) {
   white-space: nowrap;
   transition: var(--transition-ui-fast);
 
-  &:disabled { opacity: 0.5; cursor: not-allowed; }
+  &:disabled { opacity: var(--disabled-opacity); cursor: not-allowed; }
 }
 
 .mp-reveal-btn:hover:not(:disabled) {

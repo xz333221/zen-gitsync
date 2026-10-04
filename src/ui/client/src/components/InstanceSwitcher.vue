@@ -561,7 +561,7 @@ async function requestCloseAll() {
 
 :global(.instance-switcher-popper .instance-close-all:disabled) {
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: var(--disabled-opacity);
 }
 
 :global(.instance-switcher-popper .instance-close-all.is-loading :deep(svg)) {

@@ -1301,7 +1301,7 @@ onBeforeUnmount(stopPolling)
   background: var(--tint-primary-08);
 }
 .repo-list__action:disabled {
-  opacity: 0.55;
+  opacity: var(--disabled-opacity);
   cursor: default;
 }
 .repo-list__action:focus-visible {
@@ -1485,7 +1485,7 @@ onBeforeUnmount(stopPolling)
   background: var(--tint-primary-08);
 }
 .repo-list__btn:disabled {
-  opacity: 0.55;
+  opacity: var(--disabled-opacity);
   cursor: default;
 }
 .repo-list__btn:focus-visible {
@@ -1954,7 +1954,7 @@ onBeforeUnmount(stopPolling)
 /* 克隆进行中:图标从 FolderAdd 换成转圈的 Loading,同时禁掉重复点击 */
 .repo-card__action:disabled {
   cursor: default;
-  opacity: 0.6;
+  opacity: var(--disabled-opacity);
 }
 .repo-card__action .el-icon.is-spinning {
   animation: repo-card-spin 0.9s linear infinite;

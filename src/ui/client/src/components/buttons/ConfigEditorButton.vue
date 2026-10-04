@@ -352,7 +352,7 @@ defineExpose({ openConfigEditor })
   border: 1px solid transparent;
 
   &:disabled {
-    opacity: 0.6;
+    opacity: var(--disabled-opacity);
     cursor: not-allowed;
   }
 }

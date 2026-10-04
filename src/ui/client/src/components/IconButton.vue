@@ -133,9 +133,15 @@ const handleClick = (event: MouseEvent) => {
   }
 
   &:focus-visible {
-    box-shadow: 0 0 0 2px var(--tint-primary-30);
-    outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
+    /* 2026-10-04：这里原本是**双层**焦点环 —— box-shadow 2px 半透明 halo
+       加 outline 2px 实线。而 common.scss:1214-1219 有一段注释明确记录
+       「全局焦点环被删掉，因为它跟 zen-ai-chat-ui 叠在一起会出现双层 3px
+       同心蓝圈（大框套小框）」—— IconButton 把刚被删掉的东西又写了回来，
+       而它有 67 个使用点。
+       全站焦点环现在统一走 --focus-outline / --focus-outline-offset
+       （见 variables.scss:670-671）。 */
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-outline-offset);
   }
   
   // 尺寸变体
@@ -168,8 +174,10 @@ const handleClick = (event: MouseEvent) => {
     border-radius: var(--btn-radius);
     
     :deep(.svg-icon) {
-      width: 19px;
-      height: 19px;
+      /* 2026-10-04：19px 不在项目任何刻度上（sm/lg 两档字形是 14 / 24），
+         改走新加的 --icon-glyph-size-md = 20px。 */
+      width: var(--icon-glyph-size-md);
+      height: var(--icon-glyph-size-md);
       font-size: var(--font-size-xl);
     }
     
@@ -178,8 +186,8 @@ const handleClick = (event: MouseEvent) => {
     }
     
     .icon-image {
-      width: 19px;
-      height: 19px;
+      width: var(--icon-glyph-size-md);
+      height: var(--icon-glyph-size-md);
     }
   }
   
@@ -234,7 +242,12 @@ const handleClick = (event: MouseEvent) => {
     }
     
     &:hover {
-      background: rgba(64, 158, 255, 0.18);
+      /* 2026-10-04：原本是 rgba(64,158,255,.18) —— EP 旧默认蓝 #409eff 的
+         全仓残留之一，而 variables.scss:394-397 明确记录「单一主色来源，
+         不再保留 EP 默认的 #409eff（历史上两套蓝同屏可见色差）」。
+         同一规则的下一行 box-shadow 已经用的是 var(--tint-primary-18)，
+         这里补齐。 */
+      background: var(--tint-primary-18);
       box-shadow: 0 2px 8px var(--tint-primary-18);
     }
   }
@@ -242,7 +255,7 @@ const handleClick = (event: MouseEvent) => {
   // 禁用状态
   &.is-disabled {
     cursor: not-allowed;
-    opacity: 0.4;
+    opacity: var(--disabled-opacity);
     color: var(--text-disabled);
     
     :deep(.svg-icon) {

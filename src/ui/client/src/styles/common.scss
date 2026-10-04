@@ -523,7 +523,7 @@ select option {
 }
 
 .modern-btn:disabled {
-  opacity: 0.6;
+  opacity: var(--disabled-opacity);
   cursor: not-allowed;
   transform: none;
 }
@@ -701,7 +701,7 @@ select option {
 }
 
 .dialog-confirm-btn:disabled {
-  opacity: 0.6;
+  opacity: var(--disabled-opacity);
   cursor: not-allowed;
   transform: none;
 }
@@ -1275,6 +1275,13 @@ select option {
   }
 }
 
-input {
-  box-shadow: none!important;
+/* 2026-10-04：原本是 `input { box-shadow: none !important }`，无注释，
+   把所有原生 <input> 的 box-shadow 一起干掉了 —— 连焦点环一起废掉
+   （workbench.scss 的 --input-shadow-focus = --focus-ring + inset 因此对任何
+   走 .wb-input-base 的输入框都失效），而 el-input 由 unified-dialogs.scss
+   单独补了 1px 的环。结果原生 input 与 el-input 的焦点反馈不是一回事，
+   聚焦时「边框粗细」会跳变。
+   现在只压**静止态**的 inset 阴影，聚焦时放行焦点环。 */
+input:not(:focus) {
+  box-shadow: none !important;
 }

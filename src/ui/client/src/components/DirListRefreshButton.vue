@@ -105,7 +105,7 @@ function onClick(event: MouseEvent) {
   background: var(--tint-primary-08);
 }
 .dir-list__refresh:disabled {
-  opacity: 0.55;
+  opacity: var(--disabled-opacity);
   cursor: default;
 }
 .dir-list__refresh:focus-visible {

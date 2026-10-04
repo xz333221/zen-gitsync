@@ -299,7 +299,7 @@ onBeforeUnmount(() => {
 
     &.is-disabled {
       cursor: progress;
-      opacity: 0.6;
+      opacity: var(--disabled-opacity);
     }
   }
 
