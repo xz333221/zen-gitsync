@@ -785,6 +785,25 @@ export default {
   '@NPM01:脚本名称格式不正确': 'Invalid script name format',
   '@NPM01:个脚本': 'scripts',
   // @NPM01: file end
+  // @NPM02: file path: components\ProjectStartupAiPanel.vue
+  '@NPM02:AI 启动建议': 'AI startup suggestions',
+  '@NPM02:AI 读了一遍项目里的脚本与启动相关文件，按启动顺序列在下面': 'AI read the project scripts and startup-related files — listed below in startup order',
+  '@NPM02:重新分析启动方式': 'Re-analyze startup ways',
+  '@NPM02:正在分析这个项目的启动方式…': 'Analyzing how this project can be started…',
+  '@NPM02:分析失败，请稍后重试': 'Analysis failed, please try again later',
+  '@NPM02:未配置 AI 模型，请先在通用设置里添加模型': 'No AI model configured — add one in General Settings first',
+  '@NPM02:这个目录里没有 package.json 或启动相关的文件，看不出启动方式': 'No package.json or startup-related files in this directory — no startup way to infer',
+  '@NPM02:没看出这个项目有明确的启动方式，可以直接在下面的脚本列表里挑一条试试': 'No obvious startup way found — pick one from the script list below',
+  '@NPM02:npm 脚本': 'npm script',
+  '@NPM02:命令行': 'command',
+  '@NPM02:已启动': 'Started',
+  '@NPM02:启动': 'Start',
+  '@NPM02:启动失败': 'Failed to start',
+  '@NPM02:已在新终端中启动': 'Started in a new terminal',
+  '@NPM02:确认在 {dir} 里执行这条命令？': 'Run this command in {dir}?',
+  '@NPM02:执行': 'Run',
+  '@NPM02:取消': 'Cancel',
+  // @NPM02: file end
   // @0883F: file path: components\FileActionButtons.vue
   '@0883F:处理中...': 'Processing...',
   '@0883F:解锁文件': 'Unlock files',

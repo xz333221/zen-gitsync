@@ -41,6 +41,7 @@ import { registerGitRoutes } from './routes/git.js';
 import { registerFsRoutes } from './routes/fs.js';
 import { registerRecentDirectoriesSummaryRoutes } from './routes/recentDirectoriesAiSummary.js';
 import { registerNpmRoutes } from './routes/npm.js';
+import { registerProjectStartupAiRoutes } from './routes/projectStartupAi.js';
 import { registerFileOpenRoutes } from './routes/fileOpen.js';
 import { registerLocalReposRoutes } from './routes/localRepos.js';
 import { registerExplorerContextMenuRoutes } from './routes/explorerContextMenu.js';
@@ -410,6 +411,14 @@ async function startUIServer(noOpen = false, savePort = false) {
 
   registerNpmRoutes({
     app,
+    getCurrentProjectPath: () => currentProjectPath
+  });
+
+  // 「AI 启动建议」面板(Git 视图左栏,NPM 脚本面板上方):
+  // 扫出项目事实交默认模型,换回一份有序、可直接点启动的清单
+  registerProjectStartupAiRoutes({
+    app,
+    configManager,
     getCurrentProjectPath: () => currentProjectPath
   });
 

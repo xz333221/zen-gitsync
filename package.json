@@ -80,6 +80,8 @@
     "verify:wb-open-with-permission": "node scripts/verify-open-with-permission-menus.cjs",
     "verify:open-with-permission": "node --test test/open-with-permission.test.mjs",
     "verify:repo-list": "node scripts/verify-repo-list.cjs",
+    "verify:startup-ai-panel": "node scripts/verify-startup-ai-panel.cjs",
+    "verify:startup-ai-panel:reverse": "node scripts/verify-startup-ai-panel.cjs --reverse",
     "e2e": "cd src/ui/client && npx playwright test",
     "e2e:headed": "cd src/ui/client && npx playwright test --headed",
     "e2e:install": "cd src/ui/client && npx playwright install chromium",

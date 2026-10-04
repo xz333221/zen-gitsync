@@ -20,6 +20,7 @@ A Git automation platform with interactive commits, scheduled sync, custom comma
   - [Custom Commands](#custom-commands)
   - [Flow Orchestration](#flow-orchestration-visual-workflow-designer)
   - [NPM Scripts Panel](#npm-scripts-panel)
+  - [AI Startup Suggestions](#ai-startup-suggestions)
   - [Console Panel](#console-panel)
   - [Project Startup](#project-startup)
   - [Views at a glance](#views-at-a-glance)
@@ -54,6 +55,7 @@ npm install -g zen-gitsync
 - **Merge support** — Detect and complete in-progress merges
 - **Flow orchestration** — Drag-and-drop visual workflow designer
 - **NPM scripts panel** — Discover and run npm scripts from `package.json`
+- **AI startup suggestions** — A collapsible panel (expanded by default) above the NPM scripts panel: your configured model reads the scanned scripts, marker files and README, then lists the ways this project can be started, in startup order — one click runs any of them in a new terminal
 - **Built-in terminal** — Run commands with real-time streaming output
 - **Custom commands** — Save, parameterize, and reuse shell commands
 - **Project startup** — Auto-run commands or workflows when a project opens
@@ -304,6 +306,20 @@ Build automated pipelines with a drag-and-drop canvas:
 - Lists their `scripts` entries
 - Run any script with one click
 - Configure the scan root and exclusion patterns per package
+
+---
+
+### AI Startup Suggestions
+
+![AI startup suggestions panel — above the NPM scripts panel, expanded by default](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/startup-ai-panel.png)
+
+> A collapsible panel right **above** the NPM scripts panel, expanded by default. Once an AI model is configured (Settings → AI Models), it scans the project the same way the NPM panel does — every `package.json` script, plus marker files (`Dockerfile`, `docker-compose.yml`, `Makefile`, `go.mod`, `requirements.txt`, …) and the README — and asks your default model to pick the ways this project can actually be started, in startup order. Each suggestion has a **Start** button that runs it in a new terminal.
+
+- One list answers "how do I start this project?" — no digging through dozens of scripts in a monorepo
+- Suggestions are validated server-side before they reach you: a script name that does not exist in `package.json`, or a working directory that was not scanned, is dropped (the model cannot invent a button that fails)
+- `npm` suggestions run straight away; raw shell suggestions (e.g. `docker compose up -d`) show a confirmation with the exact command first
+- Results are cached per project + language + model, so reopening the view does not call the model again; the refresh button in the panel header forces a fresh analysis
+- No model configured → the panel just tells you to add one, and sends no request at all
 
 ---
 
@@ -683,6 +699,7 @@ $ g --check-lock=config.json
   - [自定义命令](#自定义命令)
   - [可视化流程编排](#可视化流程编排)
   - [NPM 脚本面板](#npm-脚本面板)
+  - [AI 启动建议](#ai-启动建议)
   - [控制台面板](#控制台面板)
   - [项目启动](#项目启动)
   - [视图一览](#视图一览)
@@ -717,6 +734,7 @@ npm install -g zen-gitsync
 - **合并支持** — 自动检测并引导完成进行中的合并
 - **可视化流程编排** — 拖拽式工作流设计器
 - **NPM 脚本面板** — 发现并运行 `package.json` 中的脚本
+- **AI 启动建议** — NPM 脚本面板**上方**一块默认展开的折叠面板：配好模型后，让它读一遍扫描到的脚本、标志文件与 README，按启动顺序列出这个项目可以怎么起，点一下就在新终端里跑起来
 - **内置终端** — 实时流式输出的命令执行终端
 - **自定义命令** — 保存、参数化并复用 Shell 命令
 - **项目启动** — 打开项目时自动运行命令或工作流
@@ -998,6 +1016,20 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 - 列出其中的 `scripts` 条目
 - 一键运行任意脚本
 - 可配置扫描根路径和排除规则
+
+---
+
+### AI 启动建议
+
+![AI 启动建议面板 — 挂在 NPM 脚本面板上方，默认展开](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/startup-ai-panel.png)
+
+> 一块挂在 NPM 脚本面板**上方**的折叠面板，**默认展开**。配好模型（设置 → AI 模型配置）后，它按和 NPM 面板同一套规则扫项目 —— 所有 `package.json` 脚本、加上标志文件（`Dockerfile`、`docker-compose.yml`、`Makefile`、`go.mod`、`requirements.txt` …）与 README —— 再让默认模型挑出这个项目**真能怎么起**，按启动顺序列出来。每条右边一个「启动」按钮，点了就在新终端里跑。
+
+- 一个列表回答"这项目到底怎么启动"—— monorepo 里几十条脚本不用再自己认
+- 建议在服务端过一道校验才送到界面：脚本名在 `package.json` 里不存在、或执行目录不在扫描结果里的，一律丢掉（模型编不出一个点了就报错的按钮）
+- `npm` 类建议直接跑；模型给的原始命令（如 `docker compose up -d`）会先弹确认框，把完整命令摆给你看过再执行
+- 结果按 项目 + 语言 + 模型 缓存，重开视图不会重复问模型；面板头部的刷新按钮才是强制重新分析的入口
+- 没配模型时只提示去添加模型，一个请求都不发
 
 ---
 

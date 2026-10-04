@@ -34,6 +34,7 @@ import { buildListRows, type FileGroupKey } from '@/utils/fileListRows'
 import { buildTreeRows } from '@/utils/fileTreeRows'
 import { isImageFile } from '@/utils/fileKind'
 import NpmScriptsPanel from '@components/NpmScriptsPanel.vue'
+import ProjectStartupAiPanel from '@components/ProjectStartupAiPanel.vue'
 import StashChangesButton from '@/components/buttons/StashChangesButton.vue'
 import StashListButton from '@/components/buttons/StashListButton.vue'
 import StashSelectedFilesButton from '@/components/buttons/StashSelectedFilesButton.vue'
@@ -1483,6 +1484,9 @@ defineExpose({
       </div>
     </div>
     
+    <!-- AI 启动建议(默认展开,挂在 NPM 脚本面板上面) -->
+    <ProjectStartupAiPanel />
+
     <!-- NPM脚本面板 -->
     <NpmScriptsPanel />
     <!-- 自定义命令快捷面板已拆到"控制台"视图(activeView === 'console') -->
