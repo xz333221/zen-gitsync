@@ -3742,17 +3742,22 @@ pre.stderr {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   cursor: default;
   
-  // 不同类型步骤的边框颜色
+  /* 不同类型步骤的着色。2026-10-04：原本是三根 border-left: 3px 的侧边
+     色条（而且用的是硬编码 rgba(64,158,255,.4) —— EP 旧默认蓝 #409eff
+     的残留）。改成同色系淡底 + 1px 同色系描边。 */
   &.step-type-command:not(.step-current):not(.step-completed) {
-    border-left: 3px solid rgba(64, 158, 255, 0.4);
+    border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
+    background: color-mix(in srgb, var(--color-primary) 5%, var(--bg-container));
   }
-  
+
   &.step-type-wait:not(.step-current):not(.step-completed) {
-    border-left: 3px solid rgba(230, 162, 60, 0.4);
+    border-color: color-mix(in srgb, var(--color-warning) 32%, transparent);
+    background: color-mix(in srgb, var(--color-warning) 6%, var(--bg-container));
   }
-  
+
   &.step-type-version:not(.step-current):not(.step-completed) {
-    border-left: 3px solid rgba(103, 194, 58, 0.4);
+    border-color: color-mix(in srgb, var(--color-success) 30%, transparent);
+    background: color-mix(in srgb, var(--color-success) 5%, var(--bg-container));
   }
   
   &:hover:not(.step-disabled) {

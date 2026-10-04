@@ -2364,8 +2364,9 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   align-items: baseline;
   gap: 10px;
   margin-top: 8px;
-  padding-left: 8px;
-  border-left: 2px solid var(--color-primary);
+  /* 2026-10-04：原本是 border-left: 2px solid var(--color-primary) 的
+     缩进竖条，只表达层级不带语义。缩进交给 padding。 */
+  padding-left: 10px;
   flex-shrink: 0;
 }
 .wb-simple__header h4 {

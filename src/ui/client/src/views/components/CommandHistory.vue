@@ -972,7 +972,10 @@ onUnmounted(() => {
 }
 
 .history-item.is-error {
-  border-left: 3px solid var(--color-danger);
+  /* 2026-10-04：原本是 border-left: 3px 的侧边色条，属 PRODUCT.md 反参考
+   里禁掉的形态。改成同色系淡底 + 整圈 1px 同色系描边，语义不变。 */
+  border-color: color-mix(in srgb, var(--color-danger) 34%, transparent);
+  background: color-mix(in srgb, var(--color-danger) 6%, var(--bg-container));
 }
 
 .item-header {
@@ -1067,13 +1070,19 @@ onUnmounted(() => {
 }
 
 .output-section.error {
-  border-left: 3px solid var(--color-danger);
+  /* 2026-10-04：原本是 border-left: 3px 的侧边色条，属 PRODUCT.md 反参考
+   里禁掉的形态。改成同色系淡底 + 整圈 1px 同色系描边，语义不变。 */
+  border-color: color-mix(in srgb, var(--color-danger) 34%, transparent);
+  background: color-mix(in srgb, var(--color-danger) 5%, transparent);
   padding-left: var(--spacing-base);
 }
 
 /* 为正常的stderr输出（如git push）添加不同的样式 */
+/* 2026-10-04：原本给**所有非错误**输出段都加了一根 3px 成功色竖条 ——
+     一屏里七八段输出就意味着七八根绿条，成功态反而比错误态更抢眼。
+     现在只有错误段着色，正常段保持中性描边。 */
 .output-section:not(.error) {
-  border-left: 3px solid var(--color-success);
+  border-color: color-mix(in srgb, var(--color-success) 18%, transparent);
   padding-left: var(--spacing-base);
 }
 

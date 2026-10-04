@@ -628,9 +628,13 @@ function formatDate(dateString: string): string {
   color: var(--text-secondary);
   line-height: 1.4;
   padding: 6px var(--spacing-base);
-  background: var(--bg-panel);
+  /* 2026-10-04：这里原本是 border-left: 3px/4px 的**侧边色条**，属
+   PRODUCT.md 反参考里禁掉的形态（禁在卡片/列表项/callout 上用 >1px 的
+   border-left 当彩色强调）。已换成「同色系淡底 + 1px 同色系描边」，
+   语义（这里是成功/失败/冲突）不变，权重不再靠一根竖条。 */
+  background: color-mix(in srgb, var(--action-green) 6%, var(--bg-panel));
+  border: 1px solid color-mix(in srgb, var(--action-green) 26%, transparent);
   border-radius: var(--radius-md);
-  border-left: 3px solid var(--action-green);
 }
 
 /* 标签列表右侧按钮：默认隐藏，hover时显示 */

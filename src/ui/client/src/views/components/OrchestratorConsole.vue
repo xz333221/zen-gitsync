@@ -1467,8 +1467,10 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 /* 引文竖线挂在**外层**而不是 .rp__text 上：折叠用的是 mask 渐隐（见下面那条），
    mask 会把元素连同它自己的 border-left 一起淡掉，竖线底端会跟着缺一块 */
 .rp__body {
-  padding-left: 8px;
-  border-left: 2px solid var(--tint-primary-30);
+  /* 2026-10-04：原本是 border-left: 2px solid var(--tint-primary-30)。
+     这根竖线只承担缩进（上面那段注释记的是"竖线要挂外层、否则会被
+     mask 渐隐吃掉"），去掉之后不存在这个问题了，缩进交给 padding。 */
+  padding-left: 10px;
 }
 .rp__text {
   margin: 0;
@@ -1543,11 +1545,15 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   padding: 5px 7px;
   border-radius: var(--radius-base);
   background: var(--bg-active);
+  /* 2026-10-04：原本紧跟在这圈 1px 描边后面又写了一条
+     border-left: 2px solid var(--border-color) 把左边加粗 —— 视觉上
+     就是一根侧边色条。删掉即可，描边保持 1px 均匀。 */
   border: 1px solid var(--border-color-light);
-  border-left: 2px solid var(--border-color);
 }
+/* 2026-10-04：原本是 border-left-color（只染左边，配合已删掉的 2px 左边
+     加粗用）。现在描边整圈统一 1px，改成整圈染。 */
 .rpt.is-silent {
-  border-left-color: var(--color-warning);
+  border-color: color-mix(in srgb, var(--color-warning) 40%, transparent);
   background: var(--tint-warning-06);
 }
 /* 任务名是这张卡的标题：比下面那几行证据亮一档、粗一档，

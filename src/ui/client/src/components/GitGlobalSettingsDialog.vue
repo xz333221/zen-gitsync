@@ -1866,8 +1866,9 @@ async function openSystemConfigFile() {
   flex-direction: column;
   gap: 2px;
   margin-top: 4px;
-  padding-left: var(--spacing-sm);
-  border-left: 2px solid var(--el-border-color);
+  /* 2026-10-04：原本是 border-left: 2px solid var(--el-border-color)。
+     那根竖线在这里只承担「缩进」这一个职责（没有语义色彩），去掉之后
+     由 padding-left 独自表达缩进。 */
 }
 .notify-sub__head {
   display: flex;

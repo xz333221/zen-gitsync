@@ -1082,8 +1082,11 @@ function liveSummary(live: BoardTaskLive): string {
    它是"它在干嘛"最直接的证据，不该和工具名一样灰 */
 .kb-card__live-line.is-thought {
   color: var(--text-secondary);
-  padding-left: 6px;
-  border-left: 2px solid var(--border-color-light);
+  /* 2026-10-04：原本是 border-left: 2px solid var(--border-color-light)
+     的缩进竖条（同 .kb-card__reply 那一套）。改成纯缩进。
+     .kb-card__reply 自己那根暂时留着 —— verify-wb-card-reply.cjs:302
+     断言 borderLeft === '2px'，要一起改探针，不在本轮。 */
+  padding-left: 8px;
 }
 .kb-card__live-tag {
   margin-right: 4px;
@@ -1369,8 +1372,9 @@ function liveSummary(live: BoardTaskLive): string {
 /* 「最后回复」在列表行里用同一根引用竖线（与看板卡片的 .kb-card__reply 同一个含义）。
    不写 padding-left：图标与正文之间已经由 .kb-table__agent 的右外边距管着，
    再叠一层内边距会把图标推到正文上去（与卡片那边同一条坑）。 */
+/* 2026-10-04：原本是 border-left: 2px 缩进竖条，改成纯 padding。 */
 .kb-table__live--reply {
-  border-left: 2px solid var(--border-color-light);
+  padding-left: 8px;
   color: var(--text-secondary);
 }
 .kb-table__status {

@@ -80,7 +80,10 @@
 .wb-log-pre .markdown-renderer blockquote {
   margin: 8px 0;
   padding: 4px 12px;
-  border-left: 3px solid color-mix(in srgb, var(--color-primary) 50%, transparent);
+  /* 2026-10-04：原本是 border-left: 3px solid primary@50% 的引文竖条。
+     换成整圈 1px 描边 —— 同一段代码下方已经有 primary@4% 的淡底，
+     语义（这是引文）没丢。 */
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
   background: color-mix(in srgb, var(--color-primary) 4%, transparent);
   color: var(--text-secondary);
   border-radius: 0 4px 4px 0;

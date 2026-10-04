@@ -2490,8 +2490,11 @@ onMounted(() => {
 .global-conflict-resolution {
   padding: var(--spacing-md) var(--spacing-lg);
   background: rgba(249, 115, 22, 0.1);
-  border-left: 4px solid var(--git-status-conflicted);
-  border-bottom: 1px solid rgba(249, 115, 22, 0.2);
+  /* 2026-10-04：这里原本是 border-left: 3px/4px 的**侧边色条**，属
+   PRODUCT.md 反参考里禁掉的形态（禁在卡片/列表项/callout 上用 >1px 的
+   border-left 当彩色强调）。已换成「同色系淡底 + 1px 同色系描边」，
+   语义（这里是成功/失败/冲突）不变，权重不再靠一根竖条。 */
+  border: 1px solid color-mix(in srgb, var(--git-status-conflicted) 30%, transparent);
   display: flex;
   align-items: center;
   justify-content: space-between;

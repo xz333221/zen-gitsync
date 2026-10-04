@@ -501,9 +501,13 @@ defineExpose({
 }
 
 .message-help-text {
+  /* 2026-10-04：这里原本是 border-left: 3px/4px 的**侧边色条**，属
+   PRODUCT.md 反参考里禁掉的形态（禁在卡片/列表项/callout 上用 >1px 的
+   border-left 当彩色强调）。已换成「同色系淡底 + 1px 同色系描边」，
+   语义（这里是成功/失败/冲突）不变，权重不再靠一根竖条。 */
   padding: var(--spacing-lg);
   border-radius: var(--radius-md);
-  border-left: 4px solid var(--color-primary);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 22%, transparent);
 }
 
 .message-help-text h4 {

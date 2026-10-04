@@ -599,7 +599,11 @@ onMounted(() => {
   font-size: var(--font-size-sm);
   color: var(--color-danger-dark, #b91c1c);
   background: var(--tint-danger-06);
-  border-left: 2px solid var(--color-danger-bright, var(--color-danger-light));
+  /* 2026-10-04：这里原本是 border-left: 3px/4px 的**侧边色条**，属
+   PRODUCT.md 反参考里禁掉的形态（禁在卡片/列表项/callout 上用 >1px 的
+   border-left 当彩色强调）。已换成「同色系淡底 + 1px 同色系描边」，
+   语义（这里是成功/失败/冲突）不变，权重不再靠一根竖条。 */
+  border: 1px solid color-mix(in srgb, var(--color-danger) 28%, transparent);
   border-radius: var(--radius-base);
   font-family: var(--font-mono, ui-monospace, monospace);
   white-space: pre-wrap;
