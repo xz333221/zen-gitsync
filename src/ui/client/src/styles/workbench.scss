@@ -1,273 +1,51 @@
 /* =======================================================
-   Workbench 视图通用样式库
+   Workbench 附件区样式（全局唯一来源）
    --------------------------------------------------------
-   目标：把 WorkbenchView.vue（3225 行）与其他 workbench
-   组件中重复出现的胶囊徽标 / 透明图标按钮 / 主色软按钮 /
-   focus ring / 列表卡片 / input 基线等模式集中沉淀为语义
-   工具类，降低后续维护的重复度并统一交互手感。
+   范围：**只有附件区**。2026-10-04 审计前这里还放着
+   .wb-focus-ring / .wb-icon-btn / .wb-card / .wb-input-base /
+   .wb-soft-btn 五族"通用工具类"，实测消费次数全是 0 ——
+   架构做对了但从未被推广，反而让所有组件都以为自己那份
+   就是统一的。已连同 .wb-pill 一起收敛，见 .wb-pill 注释。
+
+   这里是全局类（main.ts:37 引入），附件区在 WorkbenchView
+   与 AttachmentZone 两处都要用，故不允许各自 scoped 重定义。
 
    这些类只使用 :root 下定义的 CSS 变量（见 variables.scss），
    不需要额外 @use 命名空间；样式随主题（深/浅）自动切换。
    ======================================================= */
 
-/* ===== 焦点 ring 工具类（统一 outline 风格） =====
-   取代散落的 `outline: 2px solid var(--color-primary); outline-offset: 1px;` */
-.wb-focus-ring {
-  outline: var(--focus-outline);
-  outline-offset: var(--focus-outline-offset);
-}
-.wb-focus-ring-lg {
-  outline: var(--focus-outline);
-  outline-offset: var(--focus-outline-offset-lg);
-}
+/* ===== 计数胶囊 =====
+   唯一消费点：WorkbenchSidebar.vue 的 .wb-task-group__count
+   （分组头右侧的任务数）。原先这里是"999px 全圆 + tertiary 字色"，
+   而 WorkbenchSidebar 用 scoped 又重定义了一份成 8px 圆角 +
+   meta 字色 —— 同名类在两处含义不同。现已把实际渲染的那份
+   收进这里，sidebar 的 scoped 副本已删。
 
-/* ===== 通用胶囊徽标（pill / tag） =====
-   适用于 wb-section__count、wb-task-item__num、wb-attachments__count、
-   wb-task-group__count、wb-sub-item__dirty、wb-dirty-badge、wb-task-item__meta-item--simple
-   等所有"小数字 / 小标签"位。 */
+   注：14px 高元素上 8px 圆角会被浏览器夹到全圆，所以这次收敛
+   是代码一致性修复，视觉无变化。 */
 .wb-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 16px;
   min-width: 16px;
+  height: 16px;
   padding: 0 5px;
-  border-radius: var(--badge-radius-pill);
-  background: var(--badge-bg);
-  color: var(--badge-color);
-  border: 1px solid var(--badge-border);
-  font-size: var(--badge-font-size);
-  font-weight: var(--badge-font-weight);
-  line-height: var(--badge-line-height);
-  letter-spacing: 0.2px;
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.wb-pill--sm {
-  height: 15px;
-  border-radius: var(--badge-radius-sm);
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
+  color: var(--text-meta);
   font-size: var(--font-size-xs);
-  letter-spacing: 0.2px;
-}
-.wb-pill--lg {
-  height: 18px;
-  padding: 0 6px;
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
-}
-.wb-pill--neutral { /* 默认就是 neutral */ }
-.wb-pill--primary {
-  color: var(--color-primary);
-  background: var(--tint-primary-14);
-}
-.wb-pill--success {
-  color: var(--color-success-dark);
-  background: var(--tint-success-14);
-  border-color: transparent;
-}
-.wb-pill--warning {
-  color: var(--tint-warning-80);
-  background: var(--tint-warning-14);
-  border-color: transparent;
-}
-.wb-pill--danger {
-  color: var(--color-danger);
-  background: var(--tint-danger-14);
-  border-color: transparent;
-}
-
-/* ===== 透明方形 icon button =====
-   取代 wb-section__action、wb-task-item__del、wb-prompt-item__del、
-   wb-attachment__del、wb-sub-item__toggle 等 5+ 处近似实现。 */
-.wb-icon-btn {
-  appearance: none;
-  border: none;
-  background: transparent;
-  color: var(--icon-btn-color);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-  border-radius: var(--icon-btn-radius);
-  transition:
-    background var(--transition-fast) var(--ease-custom),
-    color var(--transition-fast) var(--ease-custom),
-    opacity var(--transition-fast) var(--ease-custom),
-    transform var(--transition-fast) var(--ease-custom);
-}
-.wb-icon-btn:focus-visible {
-  outline: var(--focus-outline);
-  outline-offset: var(--focus-outline-offset);
-  opacity: 1;
-}
-.wb-icon-btn--sm {
-  width: var(--icon-btn-size-sm);
-  height: var(--icon-btn-size-sm);
-  font-size: var(--font-size-sm);
-}
-.wb-icon-btn--md {
-  width: var(--icon-btn-size-md);
-  height: var(--icon-btn-size-md);
-  font-size: var(--font-size-mid);
-}
-.wb-icon-btn--lg {
-  width: var(--icon-btn-size-lg);
-  height: var(--icon-btn-size-lg);
-  font-size: var(--font-size-sm);
-}
-.wb-icon-btn--danger:hover {
-  background: var(--icon-btn-bg-hover);
-  color: var(--icon-btn-color-hover);
-}
-.wb-icon-btn--primary:hover {
-  background: var(--tint-primary-12);
-  color: var(--color-primary);
-}
-.wb-icon-btn--hidden {
-  opacity: 0;
-  transform: translateX(-2px);
-}
-.wb-icon-btn--reveal:hover {
-  opacity: 1;
-  transform: translateX(0);
-}
-
-/* ===== Soft 按钮（主色染色描边按钮） =====
-   取代 wb-new-btn、wb-attachments__add、wb-sub-item__undo、wb-empty__link
-   等 4 处近似实现。 */
-.wb-soft-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  height: var(--soft-btn-height-sm);
-  padding: 0 var(--soft-btn-padding-x);
-  border: 1px solid var(--soft-btn-border);
-  background: var(--soft-btn-bg);
-  color: var(--soft-btn-color);
-  font-size: var(--font-size-sm);
   font-weight: 600;
-  letter-spacing: 0.1px;
-  border-radius: var(--soft-btn-radius);
-  cursor: pointer;
-  transition:
-    background var(--transition-fast) var(--ease-custom),
-    border-color var(--transition-fast) var(--ease-custom),
-    color var(--transition-fast) var(--ease-custom),
-    box-shadow var(--transition-fast) var(--ease-custom),
-    transform var(--transition-fast) var(--ease-custom);
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
-.wb-soft-btn:hover:not(:disabled) {
-  background: var(--soft-btn-bg-hover);
-  border-color: var(--soft-btn-border-hover);
-  color: var(--soft-btn-color-hover);
-  box-shadow: var(--soft-btn-shadow-hover);
-}
-.wb-soft-btn:active:not(:disabled) {
-  transform: translateY(0.5px);
-}
-.wb-soft-btn:focus-visible {
-  outline: var(--focus-outline);
-  outline-offset: var(--focus-outline-offset);
-}
-.wb-soft-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.wb-soft-btn--md {
-  height: var(--soft-btn-height-md);
-  border-radius: var(--soft-btn-radius-md);
-  font-size: var(--font-size-base);
-  padding: 0 14px;
-  letter-spacing: -0.05px;
-}
-.wb-soft-btn--primary-tinted {
-  border-color: var(--tint-primary-35);
-  background: var(--tint-primary-06);
-  color: var(--color-primary);
-}
-.wb-soft-btn--primary-tinted:hover:not(:disabled) {
-  background: var(--tint-primary-14);
-  border-color: var(--color-primary);
-  color: var(--color-primary-dark);
-}
-.wb-soft-btn--danger {
-  border-color: color-mix(in srgb, var(--color-danger) 50%, transparent);
-  background: var(--tint-danger-08);
-  color: var(--color-danger);
-}
-.wb-soft-btn--danger:hover:not(:disabled) {
-  background: var(--color-danger);
-  color: #fff;
-  border-color: var(--color-danger);
-}
-.wb-soft-btn--ghost {
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
-}
-.wb-soft-btn--ghost:hover:not(:disabled) {
-  background: var(--tint-primary-08);
-  color: var(--color-primary);
-  border-color: transparent;
-  box-shadow: none;
-}
 
-/* ===== 列表卡片（侧栏任务卡 / 提示词卡 / 附件卡的共用基线） ===== */
-.wb-card {
-  background: var(--wb-card-bg);
-  border: 1px solid var(--wb-card-border);
-  border-radius: var(--wb-card-radius);
-  transition:
-    background var(--transition-fast) var(--ease-custom),
-    border-color var(--transition-fast) var(--ease-custom),
-    box-shadow var(--transition-fast) var(--ease-custom),
-    transform var(--transition-fast) var(--ease-custom);
-}
-.wb-card:hover {
-  box-shadow: var(--wb-card-shadow-hover);
-}
-.wb-card.is-active {
-  background: var(--wb-card-bg-active);
-  border-color: var(--wb-card-border-active);
-}
-
-/* ===== 表单 input / select / textarea 共用基线 ===== */
-.wb-input-base {
-  font-family: inherit;
-  color: var(--text-primary);
-  background: var(--input-bg);
-  border: 1px solid var(--input-border);
-  border-radius: var(--input-radius);
-  box-shadow: var(--wb-card-inset-shadow);
-  transition:
-    border-color var(--transition-fast) var(--ease-custom),
-    box-shadow var(--transition-fast) var(--ease-custom),
-    background var(--transition-fast) var(--ease-custom);
-  outline: none;
-  -webkit-appearance: none;
-  appearance: none;
-}
-.wb-input-base::placeholder {
-  color: var(--text-placeholder);
-  font-weight: 400;
-}
-.wb-input-base:hover:not(:focus) {
-  border-color: var(--input-border-hover);
-  background: var(--input-bg-hover);
-}
-.wb-input-base:focus {
-  border-color: var(--input-border-focus);
-  background: var(--input-bg);
-  box-shadow: var(--input-shadow-focus);
-}
-
+/* =======================================================
+   附件相关样式（从 WorkbenchView.vue + AttachmentZone.vue
+   中合并提取，原 WorkbenchView 中为 scoped，AttachmentZone
+   中为非 scoped 重复实现。这里改为全局唯一来源。
+   极简版：附件头部精简成单行 + inline 添加按钮；附件本体为
+   紧凑 inline 胶囊，单行 wrap 排列，整体高度大幅压缩。
+   ======================================================= */
 /* =======================================================
    附件相关样式（从 WorkbenchView.vue + AttachmentZone.vue
    中合并提取，原 WorkbenchView 中为 scoped，AttachmentZone

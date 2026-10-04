@@ -849,15 +849,15 @@ onUnmounted(() => {
 /* 弹窗样式 */
 .command-history-dialog {
   border-radius: var(--radius-lg);
-  z-index: 9999 !important;
+  z-index: var(--z-menu-float) !important;
 }
 
 :deep(.command-history-dialog .el-overlay) {
-  z-index: 9998 !important;
+  z-index: var(--z-dialog-float-backdrop) !important;
 }
 
 :deep(.command-history-dialog .el-dialog) {
-  z-index: 9999 !important;
+  z-index: var(--z-menu-float) !important;
 }
 
 
@@ -1142,11 +1142,11 @@ onUnmounted(() => {
 <!-- 全局样式确保弹窗在最上层 -->
 <style>
 .command-history-dialog {
-  z-index: 1999 !important;
+  z-index: var(--z-dialog-page) !important;
 }
 
 .el-overlay {
-  z-index: 1998 !important;
+  z-index: var(--z-dialog-backdrop) !important;
 }
 
 </style>

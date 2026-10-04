@@ -2142,7 +2142,7 @@ function toggleFullscreen() {
   border-radius: var(--radius-base);
   box-shadow: var(--shadow-md);
   padding: 6px 0;
-  z-index: 3000;
+  z-index: var(--z-overlay-page);
   min-width: 200px;
   animation: fadeIn var(--transition-fast) ease-out;
 }
@@ -2195,7 +2195,7 @@ function toggleFullscreen() {
   left: 0;
   width: 100vw;
   height: 100vh;
-  z-index: 9999;
+  z-index: var(--z-menu-float);
   margin: 0;
   border-radius: 0;
   border: none;
@@ -2247,14 +2247,14 @@ function toggleFullscreen() {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   padding: 6px 0;
-  z-index: 3000;
+  z-index: var(--z-overlay-page);
   min-width: 200px;
   animation: fadeIn var(--transition-fast) ease-out;
 }
 
 /* 全屏模式下的右键菜单需要更高的z-index */
 .fullscreen-context-menu {
-  z-index: 999999; /* 增加z-index，确保在全屏模式下显示在最上层 */
+  z-index: var(--z-menu-float-top); /* 增加z-index，确保在全屏模式下显示在最上层 */
 }
 
 /* 新增只显示图标的按钮样式 */

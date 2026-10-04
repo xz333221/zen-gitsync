@@ -2938,7 +2938,7 @@ onActivated(() => {
     bottom: 0;
     margin: 0;
     border-radius: 0;
-    z-index: 9999;
+    z-index: var(--z-menu-float);
     max-height: 100vh;
     display: flex;
     flex-direction: column;

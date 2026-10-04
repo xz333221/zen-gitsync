@@ -1156,7 +1156,16 @@ defineExpose({
 }
 </style>
 
-<!-- 全局样式：层级控制 -->
+<!-- 全局样式：层级控制
+
+     这组数字是本组件**自己一套 overlay/popper/confirm 的内部梯次**，靠相对偏移
+     保证「遮罩 < 弹窗体 < 内部 popper」以及「confirm 压在 param 之上」，
+     不是全局层级，所以不归 variables.scss 的 --z-* 管（那套最大到 --z-menu-float-top
+     = 999999，套不住这里的 3000000+）。
+
+     2026-10-04 起这段加了注释：以前它是全仓最大的裸数字（3100001），
+     审计时被判成"谁在上已无法从代码判断"。现在说清了它是自洽的局部梯次，
+     全局 --z-* 也不再假装覆盖它。新增浮层请在这组内部梯次上加，不要另起新数字。 -->
 <style lang="scss">
 .el-overlay.custom-command-overlay {
   z-index: 3000000 !important;

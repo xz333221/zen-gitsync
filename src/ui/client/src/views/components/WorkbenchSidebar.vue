@@ -527,8 +527,7 @@ function onWindowMouseUp(_e: MouseEvent) {
 .wb-empty__title { font-size: var(--font-size-base); font-weight: 600; letter-spacing: var(--letter-spacing-heading, -0.25px); color: var(--text-secondary); line-height: 1.45; position: relative; z-index: 1; }
 .wb-empty--rich .wb-empty__hint { font-size: var(--font-size-sm); line-height: 1.6; color: var(--text-meta); max-width: 280px; position: relative; z-index: 1; }
 .wb-empty__cta { display: flex; align-items: center; gap: 14px; margin-top: 8px; flex-wrap: wrap; justify-content: center; position: relative; z-index: 1; }
-.wb-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 5px; border-radius: var(--radius-lg); font-size: var(--font-size-xs); font-weight: 600; color: var(--text-meta); background: var(--bg-subtle); font-variant-numeric: tabular-nums; flex-shrink: 0; }
-.wb-section__count { background: var(--tint-primary-12); color: var(--color-primary); }
+/* .wb-pill 的唯一定义已收进 styles/workbench.scss（全局），这里不再 scoped 重定义 */
 /* 分组头：作为 section header，比组内任务标题(.wb-task-item__title 12px/500/secondary)
    字号更大、字重更重,承担"这是什么项目"的语义。
    当前项目用 .is-current 切到 primary 蓝。 */

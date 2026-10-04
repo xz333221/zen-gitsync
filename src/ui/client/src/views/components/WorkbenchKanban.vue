@@ -906,7 +906,7 @@ function liveSummary(live: BoardTaskLive): string {
   margin: -4px 0 8px;
   padding: 0 5px;
   border: 1px solid color-mix(in srgb, var(--color-success) 24%, var(--surface-elevated));
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   background: color-mix(in srgb, var(--color-success) 9%, var(--surface-elevated));
   color: color-mix(in srgb, var(--color-success) 62%, var(--text-primary));
   font-size: var(--font-size-xs);

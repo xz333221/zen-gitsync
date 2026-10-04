@@ -63,7 +63,7 @@ withDefaults(defineProps<Props>(), {
   align-items: center;
   justify-content: center;
   padding: var(--spacing-2xl);
-  z-index: 9999;
+  z-index: var(--z-menu-float);
 }
 
 .success-container {

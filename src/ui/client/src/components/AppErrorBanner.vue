@@ -128,7 +128,7 @@ onBeforeUnmount(stopRelativeTimer)
   left: 0;
   right: 0;
   height: 44px;
-  z-index: 1002;
+  z-index: var(--z-menu);
   display: flex;
   align-items: center;
   justify-content: space-between;

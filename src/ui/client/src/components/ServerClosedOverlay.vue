@@ -56,7 +56,7 @@ const props = withDefaults(defineProps<{
 .self-closed-overlay {
   position: fixed;
   inset: 0;
-  z-index: 4000;
+  z-index: var(--z-overlay-critical);
   display: grid;
   place-items: center;
   padding: 24px;

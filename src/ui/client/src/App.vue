@@ -1032,7 +1032,7 @@ body {
   right: 0;
   padding: 0;
   overflow: hidden;
-  z-index: 1001;
+  z-index: var(--z-menu);
   background: var(--bg-page);
 }
 /* footer 走 fixed,不再依赖文档流 #app 高度撑开;
@@ -1044,7 +1044,7 @@ body {
   left: 0;
   right: 0;
   height: 32px;
-  z-index: 1002;
+  z-index: var(--z-menu);
   background: var(--bg-footer);
   border-top: 1px solid var(--border-color-light);
   /* 左 / 中 / 右 三区栅格：中列的「默认模型」永远居中，
@@ -1084,7 +1084,7 @@ body {
   left: 0;
   right: 0;
   height: 40px;
-  z-index: 1002;
+  z-index: var(--z-menu);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1314,7 +1314,7 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  z-index: 1000;
+  z-index: var(--z-menu);
   height: 64px;
   box-sizing: border-box;
   padding: 0 var(--spacing-lg);
@@ -1383,7 +1383,7 @@ body {
   position: fixed;
   top: 8px;
   left: 8px;
-  z-index: 2000;
+  z-index: var(--z-dialog);
   padding: 8px 14px;
   border-radius: var(--radius-md);
   background: var(--color-primary);

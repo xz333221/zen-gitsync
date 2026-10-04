@@ -19,11 +19,16 @@
  * 
  * border-radius:
  * 2px => var(--radius-xs)
- * 3px => var(--radius-sm)
  * 4px => var(--radius-base)
  * 6px => var(--radius-md)
  * 8px => var(--radius-lg)
  * 12px => var(--radius-xl)
+ *
+ * 注意：刻度里**没有 3px**，所以 RADIUS_MAP 里也没有 3px 这一条。
+ * （2026-10-04 修：原先这里写着 `3px => var(--radius-sm)`，而
+ * --radius-sm 从来没被定义过 —— 这个脚本一直在静默产出坏 CSS。
+ * 圆角刻度见 variables.scss 的 --radius-*，只有 xs/base/md/lg/xl/full/pill。
+ * 遇到 3px 请人工归到最近的一档，不要靠脚本猜。）
  * 
  * box-shadow:
  * 0 1px 3px rgba(0, 0, 0, 0.04) => var(--shadow-sm)
@@ -48,7 +53,6 @@ const isDryRun = args.includes('--dry-run');
 // border-radius 映射表
 const RADIUS_MAP = {
   '2px': 'var(--radius-xs)',
-  '3px': 'var(--radius-sm)',
   '4px': 'var(--radius-base)',
   '6px': 'var(--radius-md)',
   '8px': 'var(--radius-lg)',

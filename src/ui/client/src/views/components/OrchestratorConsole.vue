@@ -1293,7 +1293,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   background: var(--bg-panel);
   color: var(--color-primary);
   font-weight: 500;
-  box-shadow: var(--shadow-xs, 0 1px 2px rgba(0, 0, 0, 0.06));
+  box-shadow: var(--shadow-sm);
 }
 .oc__mode-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 

@@ -1379,7 +1379,7 @@ onUnmounted(() => {
 
 // 节点右键菜单样式
 :deep(.flow-node-dropdown) {
-  z-index: 9999 !important;
+  z-index: var(--z-menu-float) !important;
 }
 
 // 确保dropdown menu能够正确显示（非scoped样式）
@@ -1388,7 +1388,7 @@ onUnmounted(() => {
 <style lang="scss">
 // 全局样式用于dropdown菜单
 // .flow-node-dropdown {
-//   z-index: 9999 !important;
+//   z-index: var(--z-menu-float) !important;
   
 //   .el-dropdown-menu {
 //     background: var(--bg-container) !important;

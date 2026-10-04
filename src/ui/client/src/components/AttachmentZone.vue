@@ -192,7 +192,7 @@ onBeforeUnmount(() => {
         <span class="wb-attachments__count">{{ attachments.length }}</span>
       </span>
       <button
-        class="wb-attachments__add wb-soft-btn"
+        class="wb-attachments__add"
         :disabled="isUploading"
         @click="onPick"
       >
@@ -271,7 +271,7 @@ onBeforeUnmount(() => {
 <style scoped lang="scss">
 .wb-ctx-menu {
   position: fixed;
-  z-index: 9999;
+  z-index: var(--z-menu-float);
   min-width: 140px;
   margin: 0;
   padding: 4px;

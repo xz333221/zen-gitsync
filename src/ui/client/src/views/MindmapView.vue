@@ -1062,7 +1062,7 @@ html:not(.dark) .mm-file-actions :deep(.el-button--danger) {
    与 EditorView 的右键菜单保持同一套观感。 */
 .ctx-menu {
   position: fixed;
-  z-index: 9999;
+  z-index: var(--z-menu-float);
   /* 使用容器背景而非面板背景:深色主题下 --bg-panel 是半透明 rgba,
      会导致右键菜单"通透",文字与底层内容重叠看不清。 */
   background: var(--bg-container);

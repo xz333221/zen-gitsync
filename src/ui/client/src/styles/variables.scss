@@ -369,7 +369,9 @@
   
   /* 辅助文字 */
   --text-tertiary: #909399;
-  --text-tertiary-dark: #cbd0d6; /* 再次提升：原 #aeb3b9 */
+  --text-tertiary-dark: #b4bac2; /* 装饰档。2026-10-04 从 #cbd0d6 调暗一档，
+     为下面 --text-meta-dark 让出空间 —— 之前两者都是 #cbd0d6，等于「meta 档」
+     在暗色下根本不存在。仍在暗面板 8.9:1 以上，装饰性状态点无感。 */
 
   /* 承载信息的元文字（light 主题）。
      与 --text-tertiary 的分工：tertiary 只用于**装饰**（状态点 / 图标 / 占位符），
@@ -379,6 +381,8 @@
      取值刻意比 --text-secondary(#606266) 略亮一档，这样"列标题(secondary) / 列计数(meta)"
      这类上下级关系还能靠颜色分出来；再暗就与 secondary 撞车了。 */
   --text-meta: #686a6f;
+  /* 暗色下反过来：越亮对比越高，所以 meta 必须**亮于** tertiary。
+     三档梯次 primary #fff > secondary #d8dce2 > meta #cbd0d6 > tertiary #b4bac2。 */
   --text-meta-dark: #cbd0d6;
 
   /* 占位符文字 */
@@ -553,6 +557,28 @@
   /* ===== 层级 ===== */
   
   /* z-index层级 */
+  /* z-index 层级。
+     2026-10-04 补齐：原先只有下面 8 档，而且 8 档**全部 0 消费** ——
+     31 处层级都是硬编码，最大到 3100001，谁压谁已无法从代码判断。
+     新增档位的**数值与改造前的硬编码逐一相等**，只做「数字 → 具名」的替换，
+     不重新排层级，避免把既有的压盖关系改掉。
+     新增样式请只用这里的令牌，别再写裸数字。 */
+  /* 自定义 .ctx-menu 一族（原先 1000 / 1001 / 1002 三档并存） */
+  --z-menu: 1000;
+  /* 项目级弹窗：命令历史等（原先 1998 遮罩 + 1999 弹窗体） */
+  --z-dialog-backdrop: 1998;
+  --z-dialog-page: 1999;
+  --z-dialog: 2000;
+  /* 整页遮罩：日志全屏等 */
+  --z-overlay-page: 3000;
+  /* 必须压住一切的整页遮罩：服务端已关闭 */
+  --z-overlay-critical: 4000;
+  /* 浮动右键菜单 / 画布节点下拉 —— 必须压住普通弹窗 */
+  --z-menu-float: 9999;
+  /* 浮动弹窗（命令历史等）的遮罩，比它的弹窗体低一档 */
+  --z-dialog-float-backdrop: 9998;
+  /* 日志全屏态的右键菜单，仍要浮在 --z-menu-float 之上 */
+  --z-menu-float-top: 999999;
   --z-dropdown: 1000;
   --z-sticky: 1020;
   --z-fixed: 1030;
@@ -761,44 +787,20 @@
   --dot-glow-warning: 0 0 6px 1px color-mix(in srgb, var(--color-warning) 45%, transparent);
   --dot-glow-danger: 0 0 6px 1px color-mix(in srgb, var(--color-danger) 45%, transparent);
 
-  /* badge / pill 通用基线（Workbench 列表项、附件计数等复用） */
-  --badge-bg: var(--bg-subtle);
-  --badge-color: var(--text-tertiary);
-  --badge-border: var(--border-color);
-  --badge-radius: var(--radius-lg);
-  --badge-radius-sm: var(--radius-md);
-  --badge-radius-pill: var(--radius-pill);
-  --badge-font-size: var(--font-size-xs);
-  --badge-font-weight: 600;
-  --badge-line-height: 1.4;
-
-  /* icon button 通用基线（透明方形按钮） */
-  --icon-btn-size-sm: 20px;
-  --icon-btn-size-md: 22px;
-  --icon-btn-size-lg: 24px;
-  --icon-btn-radius: var(--radius-base);
-  --icon-btn-color: var(--text-tertiary);
-  --icon-btn-color-hover: var(--color-danger);
-  --icon-btn-bg-hover: var(--tint-danger-14);
-
   /* 图标字形尺寸（大号图标按钮 44px 专用）
      三种承载方式 el-icon / svg-icon / 图片 必须同档，否则混排时会出现「某个图标小一圈」
      （实测：el-icon 曾按字号渲染 24px，而自定义 SVG 写死 22px，视觉上明显偏小） */
   --icon-glyph-size-lg: 24px;
 
-  /* soft button 通用基线（primary 染色描边按钮） */
-  --soft-btn-height-sm: 24px;
+  /* 「主色软按钮」的两个尺寸 + hover 两色。
+     原属 .wb-soft-btn 族（2026-10-04 连同该类一起删，消费次数 0），
+     但这几个值本身仍活着：.state-block__action 用高度/圆角，
+     GitActionButtons 的 el-button hover 用底色/描边。保留令牌不改成字面量，
+     是为了让"软按钮"这一档尺寸/配色仍有唯一出处。 */
   --soft-btn-height-md: 32px;
-  --soft-btn-radius: var(--radius-base);
   --soft-btn-radius-md: var(--radius-md);
-  --soft-btn-padding-x: 10px;
-  --soft-btn-border: var(--border-color-medium);
-  --soft-btn-bg: var(--bg-container);
-  --soft-btn-color: var(--color-primary);
   --soft-btn-bg-hover: var(--tint-primary-10);
   --soft-btn-border-hover: var(--tint-primary-50);
-  --soft-btn-color-hover: var(--color-primary-dark);
-  --soft-btn-shadow-hover: var(--focus-ring-soft);
 
   /* 表单 input 共用基线 */
   --input-height: 36px;
