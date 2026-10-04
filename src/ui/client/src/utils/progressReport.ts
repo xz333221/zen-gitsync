@@ -93,6 +93,24 @@ export function reportPercent(value: unknown): number | null {
   return round >= 0 && round <= 100 ? round : null
 }
 
+// ── 静默时长 ──────────────────────────────────────────────────────────
+//
+// 「静默 x 秒」是"它可能卡住了"的告警信号，所以只有**真的静默过**才配画出来。
+//
+// 渲染层必须自己判一次 > 0，不能只信服务端的阈值（jobActivity.SILENT_NOTABLE_MS）：
+// 报告事实是**盘上的历史数据**，老版本服务端落盘时把"没有静默"（null）写成了 0
+// （`Number(null)` 是 0，见服务端 orchestratorStore 的历史坑），面板读到的
+// 就是货真价实的 0 —— 不挡就会在事实卡上画出"静默 0 秒"（用户 2026-10-04 反馈）。
+
+/**
+ * 归一成"静默了多久"，null = 不该显示这个标签。
+ * 0 归到 null：静默 0 秒约等于"它正在说话"，那不是信号，是噪声标签。
+ */
+export function reportSilentMs(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null
+  return Math.floor(value)
+}
+
 /** 百分比前面那四个字。数字由模板自己拼（`{{ n }}%`），不走 i18n 插值 */
 export const REPORT_PERCENT_LABEL_KEY = '@WORKBENCH:AI 估计'
 

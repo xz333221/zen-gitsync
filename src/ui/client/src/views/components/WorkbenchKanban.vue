@@ -63,6 +63,7 @@ import type { BoardTask, BoardTaskLive, TaskColumn } from '@/types/workbench'
 import { taskExecutorName, type TaskExecutorId } from '@/utils/taskExecutor'
 import { projectTagStyle } from '@/utils/projectTag'
 import { formatDurationMs, relativeTimeFromIso, clockFromIso } from '@/utils/relativeTime'
+import { reportSilentMs } from '@/utils/progressReport'
 
 const props = defineProps<{
   tasks: BoardTask[]
@@ -430,9 +431,9 @@ function liveSummary(live: BoardTaskLive): string {
                   放静默之前：静默是"它可能卡住了"的信号，该留在行尾最显眼。
                 -->
                 <span v-if="t.live.pid" class="kb-card__live-pid">PID {{ t.live.pid }}</span>
-                <!-- 静默只在**显然静默**时才有值（服务端有阈值），所以这里不用再过滤 -->
-                <span v-if="typeof t.live.silentMs === 'number'" class="kb-card__live-silent">
-                  {{ $t('@WORKBENCH:静默 {elapsed}', { elapsed: formatDurationMs(t.live.silentMs) }) }}
+                <!-- 静默只在**显然静默**时才有值（服务端有阈值）；0 不画（reportSilentMs） -->
+                <span v-if="reportSilentMs(t.live.silentMs) !== null" class="kb-card__live-silent">
+                  {{ $t('@WORKBENCH:静默 {elapsed}', { elapsed: formatDurationMs(reportSilentMs(t.live.silentMs)) }) }}
                 </span>
               </p>
               <p v-if="t.live.lastTool" class="kb-card__live-line is-tool" :title="t.live.lastTool">
@@ -612,8 +613,8 @@ function liveSummary(live: BoardTaskLive): string {
                   </span>
                 </template>
                 {{ liveSummary(t.live) }}
-                <span v-if="typeof t.live.silentMs === 'number'" class="kb-table__live-silent">
-                  {{ $t('@WORKBENCH:静默 {elapsed}', { elapsed: formatDurationMs(t.live.silentMs) }) }}
+                <span v-if="reportSilentMs(t.live.silentMs) !== null" class="kb-table__live-silent">
+                  {{ $t('@WORKBENCH:静默 {elapsed}', { elapsed: formatDurationMs(reportSilentMs(t.live.silentMs)) }) }}
                 </span>
               </span>
               <!-- 跑完的任务同理给一行"最后说了什么"：列表视图与看板卡片是同一批任务的

@@ -31,6 +31,7 @@ import {
   reportIntervalLabelParams,
   reportErrorKey,
   reportPercent,
+  reportSilentMs,
 } from './progressReport'
 
 describe('进度报告间隔档位', () => {
@@ -103,5 +104,31 @@ describe('报告里的进度百分比', () => {
     // 光甩一个 62% 会被当成实测进度，所以那四个字和悬停说明必须在
     expect(REPORT_PERCENT_LABEL_KEY).toBe('@WORKBENCH:AI 估计')
     expect(REPORT_PERCENT_HINT_KEY.startsWith('@WORKBENCH:')).toBe(true)
+  })
+})
+
+/**
+ * 「静默 x 秒」是"它可能卡住了"的告警信号。
+ *
+ * 面板读的是**盘上的历史报告**，老版本服务端落盘时把"没有静默"（null）写成了 0
+ * （`Number(null)` 是 0），所以渲染层必须自己挡一次 0 —— 不挡就会在事实卡上
+ * 画出「静默 0 秒」，那是噪声而不是信号（用户 2026-10-04 反馈）。
+ */
+describe('报告事实里的静默时长', () => {
+  it('真的静默过才给值（毫秒取整）', () => {
+    expect(reportSilentMs(6 * 60 * 1000)).toBe(6 * 60 * 1000)
+    expect(reportSilentMs(90_000.7)).toBe(90_000)
+  })
+
+  it('0 与缺字段都不显示（静默 0 秒 = 它刚说过话）', () => {
+    expect(reportSilentMs(0)).toBeNull()
+    expect(reportSilentMs(null)).toBeNull()
+    expect(reportSilentMs(undefined)).toBeNull()
+    expect(reportSilentMs('')).toBeNull()
+    // 字符串也当没有：盘上的值一律由服务端 normalizeSilentMs 归一成 number / null，
+    // 渲染层再"宽容"一点就等于把脏数据画成信号（方向要偏保守 —— 宁可不显示）
+    expect(reportSilentMs('60000')).toBeNull()
+    expect(reportSilentMs(-1)).toBeNull()
+    expect(reportSilentMs(NaN)).toBeNull()
   })
 })

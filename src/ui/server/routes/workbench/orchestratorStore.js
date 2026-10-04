@@ -48,10 +48,10 @@ import {
   nowIso,
   genId,
 } from './shared.js';
-// 百分比的归一化只有一处实现（progressReport.js）—— 报告是它生成的，读回来时
-// 也必须按同一把尺子收脏数据，两处各写一份必然分叉（分叉的表现是"盘上 130 被当成
-// 100% 满格，而生成那一刻明明是当没给"）
-import { normalizePercent } from './progressReport.js';
+// 百分比 / 静默时长的归一化只有一处实现（progressReport.js）—— 报告是它生成的，
+// 读回来时也必须按同一把尺子收脏数据，两处各写一份必然分叉（分叉的表现是"盘上 130
+// 被当成 100% 满格，而生成那一刻明明是当没给"、"盘上的没有静默被当成静默 0 秒"）
+import { normalizePercent, normalizeSilentMs } from './progressReport.js';
 import { projectName, canonicalProjectPath } from './projectRegistry.js';
 import { TARGET_SOURCES } from './targetResolver.js';
 
@@ -382,7 +382,7 @@ function normalizeReport(raw) {
         // 不要硬塞一个默认值冒充"当时它就是在思考 / 当时静默了 0 秒"
         toolMix: typeof t.toolMix === 'string' ? t.toolMix : '',
         lastThought: typeof t.lastThought === 'string' ? t.lastThought : '',
-        silentMs: Number.isFinite(Number(t.silentMs)) ? Math.max(0, Math.floor(Number(t.silentMs))) : null,
+        silentMs: normalizeSilentMs(t.silentMs),
         // 每个任务各自的进度。与整体那条同一个口径（null = 模型没给），
         // 老记录里没有它 —— 一律 null，不拿整体百分比摊到每个任务头上
         percent: normalizePercent(t.percent),

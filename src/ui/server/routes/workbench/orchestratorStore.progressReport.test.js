@@ -248,3 +248,30 @@ test('老记录没有 jobId 时是 null（不是 undefined —— 前端两种�
   assert.ok('jobId' in r.tasks[0], '字段本身必须在');
   assert.equal(r.tasks[0].jobId, null);
 });
+
+// ── 静默时长 ─────────────────────────────────────────────────────────────
+//
+// 「静默 x 秒」是"它可能卡住了"的告警信号，只有真静默过才配画。
+// 归一这步以前把"没有静默"（silentMsOf 给的 null）写成了 0 —— `Number(null)` 是 0 ——
+// 面板读盘上历史报告时照着画，事实卡上就多出一条「静默 0 秒」（用户 2026-10-04 反馈）。
+
+test('没有静默这件事时是 null / 0，不是"静默 0 秒"', async () => {
+  await seed([rawReport({
+    id: 'silent-cases',
+    tasks: [
+      { ...fact('t1', '显式 null'), silentMs: null },
+      { ...fact('t2', '老记录的 0'), silentMs: 0 },
+      { ...fact('t3', '空串'), silentMs: '' },
+      { ...fact('t4', '缺字段'), silentMs: undefined },
+      { ...fact('t5', '负数'), silentMs: -1 },
+      { ...fact('t6', '真静默'), silentMs: 6 * 60 * 1000 },
+      { ...fact('t7', '带零头的真静默'), silentMs: 90_000.7 },
+    ],
+  })]);
+  const [r] = await readReports();
+  assert.deepEqual(
+    r.tasks.map(t => t.silentMs),
+    [null, null, null, null, null, 6 * 60 * 1000, 90_000],
+    '只有正数的静默时长该留下来（毫秒取整）',
+  );
+});

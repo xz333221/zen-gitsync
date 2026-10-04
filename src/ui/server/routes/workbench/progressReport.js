@@ -217,6 +217,21 @@ export function normalizePercent(value) {
   return round >= 0 && round <= 100 ? round : null;
 }
 
+/**
+ * 静默时长归一：正整数毫秒，其余（缺字段 / 脏数据 / 0）一律 null。
+ *
+ * 与 normalizePercent 同一个坑：`Number(null)` 与 `Number('')` 都是 0，直接
+ * `Number.isFinite(Number(v))` 会把"没有静默这个事实"（silentMsOf 给的 null）
+ * 写成 0，面板读盘上历史报告时就画出一个「静默 0 秒」的标签 —— 那是"它刚说过话"，
+ * 不是"它可能卡住了"（用户 2026-10-04 反馈）。
+ */
+export function normalizeSilentMs(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.floor(n);
+}
+
 /** 从一段文本里取第一个整数当百分比（`62%` / `62 分` / `大概 62` 都认） */
 function percentFromText(value) {
   const m = String(value == null ? '' : value).match(/\d+/);

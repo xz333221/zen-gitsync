@@ -46,6 +46,7 @@ import {
   reportIntervalLabelKey,
   reportIntervalLabelParams,
   reportPercent,
+  reportSilentMs,
 } from '@/utils/progressReport'
 import AttachmentZone from '@/components/AttachmentZone.vue'
 import AgentChatSurface from '@/components/AgentChatSurface.vue'
@@ -570,10 +571,12 @@ function historyPct(r: ProgressReport): string {
  */
 const currentPercent = computed(() => reportPercent(currentReport.value?.percent))
 
-/** 当前这份报告的任务事实 + 归一后的百分比（模板里 v-for 用它，省掉每行四次函数调用） */
+/** 当前这份报告的任务事实 + 归一后的百分比与静默时长（模板里 v-for 用它，省掉每行四次函数调用） */
 const currentTasks = computed(() => (currentReport.value?.tasks || []).map(t => ({
   ...t,
   pct: reportPercent(t.percent),
+  // null = 不显示"静默 x 秒"，也不把卡片左侧竖线转成告警色（老数据里 0 会被当成"没静默"）
+  silent: reportSilentMs(t.silentMs),
 })))
 
 /** 历史列表里那一行摘要：有正文就取开头，没有就说清为什么没有 */
@@ -875,7 +878,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
                 v-for="(t, i) in currentTasks"
                 :key="t.taskId || i"
                 class="rpt"
-                :class="{ 'is-silent': typeof t.silentMs === 'number' }"
+                :class="{ 'is-silent': t.silent !== null }"
               >
                 <p class="rpt__title">{{ t.taskTitle || $t('@WORKBENCH:未命名任务') }}</p>
                 <p class="rpt__meta">
@@ -887,9 +890,10 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
                   <span v-if="t.toolCallCount" :title="t.toolMix || ''">
                     {{ $t('@WORKBENCH:工具 {n} 次', { n: t.toolCallCount }) }}
                   </span>
-                  <!-- 静默只在**显然静默**时才有值（服务端有阈值），所以这里不用再过滤 -->
-                  <span v-if="typeof t.silentMs === 'number'" class="rpt__silent">
-                    {{ $t('@WORKBENCH:静默 {elapsed}', { elapsed: formatDurationMs(t.silentMs) }) }}
+                  <!-- 静默只在**显然静默**时才有值（服务端有阈值）；0 一律不画 ——
+                       老版本落盘时把"没有静默"写成了 0，见 reportSilentMs 的注释 -->
+                  <span v-if="t.silent !== null" class="rpt__silent">
+                    {{ $t('@WORKBENCH:静默 {elapsed}', { elapsed: formatDurationMs(t.silent) }) }}
                   </span>
                 </p>
                 <!-- 每个任务自己的进度。整体那条说不清"是哪两个任务拖着的" —— 这一行就是
