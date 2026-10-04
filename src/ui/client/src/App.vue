@@ -447,35 +447,31 @@ function usageColor(percent: number): string {
 }
 
 // 添加分隔条相关逻辑
-// Git 视图现为 2 列布局:左 GitStatus | v-resizer | 右(上 commit-form / h-resizer / 下 log-list)
+// Git 视图现为 2 列布局:左 GitStatus | v-resizer | 右(上 commit-form / 下 log-list)
+// 右侧上下之间原本还有一条可拖拽的 h-resizer;已移除 —— 上方按内容自适应
+// (展开「正文及页脚」时自然变高),下方提交历史吃掉剩余高度,不再有分隔线。
 // 原 v-resizer-2(中间列 | log-list)随 3 列布局一起移除。
 let isVResizing = false;       // 竖分隔条（GitStatus | 右侧列）
-let isHResizing = false;
 let initialX = 0;
-let initialY = 0;
 let initialGridTemplateColumns = '';
-let initialGridTemplateRows = '';
 // RAF 节流:把最近一次 mousemove 的 event 缓存下来,RAF 回调里读取
 let lastMouseEvent: MouseEvent | null = null;
-// 2 个 resizer 的 RAF id,stopXxx 时取消未触发的回调
+// 竖分隔条的 RAF id,stopVResize 时取消未触发的回调
 let vResizeRafId: number | null = null
-let hResizeRafId: number | null = null
 
 // 保存布局比例到 configStore（持久化到 ~/.zen-gitsync/config.json 的 ui.layout 字段）
-// 2 列布局:只存 leftRatio(GitStatus 占比) + topRatio(右侧 commit-form 占比)。
-// midRatio/rightRatio 是旧 3 列布局的遗留字段,这里用 spread 保留旧值,
+// 2 列布局:只存 leftRatio(GitStatus 占比)。
+// topRatio/midRatio/rightRatio 是旧布局的遗留字段,这里用 spread 保留旧值,
 // 不再更新——避免给已存配置的用户制造类型迁移负担(字段在 UiLayout 中保留,无害)。
 function saveLayoutRatios() {
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   if (!gridLayout) return;
-  // 非 Git 仓库:无 h-resizer 可拖,不要保存 grid-template-rows 比例
-  // (否则后续回到 Git 仓库会被旧比例覆盖默认值)
+  // 非 Git 仓库:右侧只有一块面板,没有左右分栏比例可存
   if (!gitStore.isGitRepo) return;
 
   const columns = getComputedStyle(gridLayout).gridTemplateColumns.split(' ');
-  const rows = getComputedStyle(gridLayout).gridTemplateRows.split(' ');
 
-  if (columns.length >= 3 && rows.length >= 3) {
+  if (columns.length >= 3) {
     // 解析两列区域比例(列 0 = 左, 列 2 = 右; 列 1 是 4px 分隔条)
     const leftColWidth = parseFloat(columns[0]);
     const rightColWidth = parseFloat(columns[2]);
@@ -483,84 +479,52 @@ function saveLayoutRatios() {
 
     const leftRatio = leftColWidth / totalWidth;
 
-    // 解析上下区域比例(行 0 = commit-form, 行 2 = log-list; 行 1 是 4px 分隔条)
-    const topRowHeight = parseFloat(rows[0]);
-    const bottomRowHeight = parseFloat(rows[2]);
-    const totalHeight = topRowHeight + bottomRowHeight;
-    const topRatio = topRowHeight / totalHeight;
+    configStore.ui.layout = { ...configStore.ui.layout, leftRatio };
 
-    // 保留旧字段(midRatio/rightRatio)原值,只更新 leftRatio + topRatio
-    configStore.ui.layout = { ...configStore.ui.layout, leftRatio, topRatio };
-
-    console.log(`${$t('@F13B4:布局比例已保存 - 左侧: ')}${(leftRatio * 100).toFixed(0)}${$t('@F13B4:%, 上方: ')}${(topRatio * 100).toFixed(0)}%`);
+    console.log(`${$t('@F13B4:布局比例已保存 - 左侧: ')}${(leftRatio * 100).toFixed(0)}%`);
   }
 }
 
 // 加载布局比例（从 configStore.ui.layout 读取）
-// 2 列布局:只应用 leftRatio(左 GitStatus) + topRatio(右侧上 commit-form)。
-// 旧 3 列配置里的 midRatio/rightRatio 不再使用,忽略即可。
+// 2 列布局:只应用 leftRatio(左 GitStatus)。
+// 右侧上下高度不在这里管:上 commit-form 是 auto 行(内容多高就多高),
+// 下 log-list 是 1fr(吃掉剩余) —— 见 .grid-layout 的 grid-template-rows。
+// 旧 3 列配置里的 midRatio/rightRatio/topRatio 不再使用,忽略即可。
 function loadLayoutRatios() {
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   if (!gridLayout) return;
 
-  // 非 Git 仓库:右侧只保留 RecentDirectoriesList 一块,无 h-resizer / log-list,
-  // 不需要上下分块比例,直接占满整列。清除 inline style 让 CSS class 接管。
-  if (!gitStore.isGitRepo) {
-    gridLayout.style.gridTemplateRows = '';
-    // 刷新给 resizer aria-valuenow 用的百分比
-    refreshGridPercents();
-    return;
+  // 非 Git 仓库:右侧只保留 RecentDirectoriesList 一块,不套左右分栏比例
+  // (`.grid-layout--no-bottom` 用 !important 把列比例钉死)
+  if (gitStore.isGitRepo) {
+    const layout = configStore.ui.layout;
+    const savedLeftRatio = Number.isFinite(layout?.leftRatio) ? layout.leftRatio : null;
+
+    // 应用两列区域比例(左 | 4px | 右),默认 左 25% : 右 75%
+    gridLayout.style.gridTemplateColumns = savedLeftRatio != null
+      ? `${savedLeftRatio}fr 4px ${1 - savedLeftRatio}fr`
+      : "0.25fr 4px 0.75fr";
   }
 
-  const layout = configStore.ui.layout;
-  const savedLeftRatio = Number.isFinite(layout?.leftRatio) ? layout.leftRatio : null;
-  const savedTopRatio = Number.isFinite(layout?.topRatio) ? layout.topRatio : null;
-
-  // 应用两列区域比例(左 | 4px | 右)
-  if (savedLeftRatio != null) {
-    gridLayout.style.gridTemplateColumns = `${savedLeftRatio}fr 4px ${1 - savedLeftRatio}fr`;
-  } else {
-    // 默认比例 左 25% : 右 75%
-    gridLayout.style.gridTemplateColumns = "0.25fr 4px 0.75fr";
-  }
-
-  // 应用上下区域比例
-  if (savedTopRatio != null) {
-    const bottomRatio = 1 - savedTopRatio;
-    gridLayout.style.gridTemplateRows = `${savedTopRatio}fr 4px ${bottomRatio}fr`;
-  } else {
-    gridLayout.style.gridTemplateRows = '';
-  }
-
-  // 刷新给 resizer aria-valuenow 用的百分比
-  refreshGridPercents();
+  // 刷新给竖分隔条 aria-valuenow 用的百分比
+  refreshGridLeftPercent();
 }
 
-/** 读取当前 grid 的两列宽度比(供 aria-valuenow 显示) */
-function readGridPercents(): { left: number; top: number } {
+/** 读取当前 grid 的两列宽度比(供 v-resizer 的 aria-valuenow 显示) */
+function readLeftPercent(): number {
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement | null;
-  if (!gridLayout) return { left: 25, top: 50 }
+  if (!gridLayout) return 25;
   const cols = getComputedStyle(gridLayout).gridTemplateColumns.split(' ')
-  const rows = getComputedStyle(gridLayout).gridTemplateRows.split(' ')
   const leftW = parseFloat(cols[0] ?? '0')
   const rightW = parseFloat(cols[2] ?? '0')
   const totalW = leftW + rightW || 1
-  const topH = parseFloat(rows[0] ?? '0')
-  const bottomH = parseFloat(rows[2] ?? '0')
-  const totalH = topH + bottomH || 1
-  return {
-    left: Math.round((leftW / totalW) * 100),
-    top: Math.round((topH / totalH) * 100),
-  }
+  return Math.round((leftW / totalW) * 100)
 }
 
 const gridLeftPercent = ref(25)
-const gridTopPercent = ref(50)
 
-function refreshGridPercents() {
-  const p = readGridPercents()
-  gridLeftPercent.value = p.left
-  gridTopPercent.value = p.top
+function refreshGridLeftPercent() {
+  gridLeftPercent.value = readLeftPercent()
 }
 
 /** 键盘方向键调整:复用拖拽逻辑,只是不进入 isVResizing 状态 */
@@ -576,22 +540,7 @@ function nudgeV(deltaPercent: number) {
   let newLeft = (leftW / total) * 100 + deltaPercent
   newLeft = Math.min(40, Math.max(8, newLeft))
   gridLayout.style.gridTemplateColumns = `${newLeft}fr 4px ${100 - newLeft}fr`
-  refreshGridPercents()
-  saveLayoutRatios()
-}
-
-function nudgeH(deltaPercent: number) {
-  const gridLayout = document.querySelector('.grid-layout') as HTMLElement | null
-  if (!gridLayout) return
-  const rows = getComputedStyle(gridLayout).gridTemplateRows.split(' ')
-  if (rows.length < 3) return
-  const topH = parseFloat(rows[0])
-  const bottomH = parseFloat(rows[2])
-  const total = topH + bottomH || 1
-  let newTop = (topH / total) * 100 + deltaPercent
-  newTop = Math.min(80, Math.max(20, newTop))
-  gridLayout.style.gridTemplateRows = `${newTop}fr 4px ${100 - newTop}fr`
-  refreshGridPercents()
+  refreshGridLeftPercent()
   saveLayoutRatios()
 }
 
@@ -659,66 +608,6 @@ function stopVResize() {
   document.removeEventListener('mousemove', scheduleVResize);
   document.removeEventListener('mouseup', stopVResize);
 
-  saveLayoutRatios();
-}
-
-function startHResize(event: MouseEvent) {
-  isHResizing = true;
-  initialY = event.clientY;
-
-  const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
-  initialGridTemplateRows = getComputedStyle(gridLayout).gridTemplateRows;
-
-  document.getElementById('h-resizer')?.classList.add('active');
-  document.addEventListener('mousemove', scheduleHResize);
-  document.addEventListener('mouseup', stopHResize);
-  event.preventDefault();
-}
-
-function scheduleHResize(event: MouseEvent) {
-  lastMouseEvent = event
-  if (hResizeRafId !== null) return
-  hResizeRafId = requestAnimationFrame(() => {
-    hResizeRafId = null
-    handleHResize()
-  })
-}
-
-function handleHResize() {
-  if (!isHResizing) return;
-  const event = lastMouseEvent
-  if (!event) return;
-
-  const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
-  const delta = event.clientY - initialY;
-  const rows = initialGridTemplateRows.split(' ');
-
-  if (rows.length >= 3) {
-    const topRowHeight = parseFloat(rows[0]);
-    const bottomRowHeight = parseFloat(rows[2]);
-    const totalHeight = topRowHeight + bottomRowHeight;
-    const newTopRatio = (topRowHeight + delta / gridLayout.clientHeight * totalHeight) / totalHeight;
-    const newBottomRatio = 1 - newTopRatio;
-
-    const minTopRatio = 0.2;
-    const maxTopRatio = 0.8;
-
-    if (newTopRatio < minTopRatio) {
-      gridLayout.style.gridTemplateRows = `${minTopRatio}fr 4px ${1 - minTopRatio}fr`;
-    } else if (newTopRatio > maxTopRatio) {
-      gridLayout.style.gridTemplateRows = `${maxTopRatio}fr 4px ${1 - maxTopRatio}fr`;
-    } else {
-      gridLayout.style.gridTemplateRows = `${newTopRatio}fr 4px ${newBottomRatio}fr`;
-    }
-  }
-}
-
-function stopHResize() {
-  isHResizing = false;
-  document.getElementById('h-resizer')?.classList.remove('active');
-  if (hResizeRafId !== null) { cancelAnimationFrame(hResizeRafId); hResizeRafId = null }
-  document.removeEventListener('mousemove', scheduleHResize);
-  document.removeEventListener('mouseup', stopHResize);
   saveLayoutRatios();
 }
 
@@ -913,12 +802,13 @@ function stopHResize() {
       <!-- VS Code 风格活动栏 -->
       <ActivityBar v-model:activeView="activeView" />
 
-      <!-- Git 视图:2 列布局 — 左 GitStatus | 右(上 commit-form / h-resizer / 下 log-list)
-           非 Git 仓库时:右上 RecentDirectoriesList 占满右侧整列,隐藏 h-resizer + log-list-panel,
+      <!-- Git 视图:2 列布局 — 左 GitStatus | 右(上 commit-form / 下 log-list)
+           右侧上下之间没有分隔条:上按内容自适应,下占满剩余(见 .grid-layout)。
+           非 Git 仓库时:右上 RecentDirectoriesList 占满右侧整列,收起 log-list-panel,
            由 .grid-layout--no-bottom 控制 grid-template-rows 去掉下方行 -->
       <div v-show="activeView === 'git'" class="view-pane git-pane">
       <!-- 三个 Tab:当前项目 / GitHub 仓库 / Gitee 仓库。
-           用 v-show + v-if 混合:当前项目那块要一直挂着(两个 resizer 的拖拽比例、
+           用 v-show + v-if 混合:当前项目那块要一直挂着(竖分隔条的拖拽比例、
            LogList 的滚动位置都在它身上,不能反复销毁重建);
           两个仓库面板则是 v-if,切过去才挂载 —— 启动时不白跑 CLI 检测。 -->
       <div class="git-tabs" role="tablist" :aria-label="$t('@F13B4:Git 视图切换')">
@@ -1007,22 +897,8 @@ function stopHResize() {
         <RecentDirectoriesList refresh-on-mount layout="split" />
       </div>
 
-      <!-- 水平分隔条（提交表单 | 提交历史） -->
-      <div
-        v-show="gitStore.isGitRepo"
-        class="horizontal-resizer"
-        id="h-resizer"
-        role="separator"
-        tabindex="0"
-        aria-orientation="horizontal"
-        :aria-label="$t('@F13B4:调整上方与下方面板高度（上下方向键）')"
-        :aria-valuenow="gridTopPercent"
-        aria-valuemin="20"
-        aria-valuemax="80"
-        @mousedown="startHResize"
-        @keydown.up.prevent="nudgeH(-2)"
-        @keydown.down.prevent="nudgeH(2)"
-      ></div>
+      <!-- 提交表单与提交历史之间不再有可拖拽的水平分隔条:
+           上方(commit-form)按内容自适应高度,下方(log-list)吃掉剩余高度。 -->
 
       <!-- 右侧下方提交历史(仅 Git 仓库显示,非 Git 仓库时 RecentDirectoriesList 占满右侧整列) -->
       <div v-show="gitStore.isGitRepo" class="log-list-panel">
@@ -1289,8 +1165,8 @@ body {
 /* ── Git 视图的 Tab 外壳(当前项目 / GitHub 仓库 / Gitee 仓库) ────────────
    .git-pane 取代原来 .view-pane.grid-layout 的双重身份:自己只负责"列方向
    flex + 撑满",网格布局下移到 .git-pane__body 里的 .grid-layout。
-   .grid-layout 的类名必须保留 —— App.vue 里两个 resizer 都靠
-   querySelector('.grid-layout') 读写 grid-template-rows/columns。 */
+   .grid-layout 的类名必须保留 —— 竖分隔条靠 querySelector('.grid-layout')
+   读写 grid-template-columns(水平分隔条已移除,不再写 grid-template-rows)。 */
 .git-pane {
   display: flex;
   flex-direction: column;
@@ -1363,26 +1239,27 @@ body {
 
 .grid-layout {
   display: grid;
-  /* 2 列:左 GitStatus | 4px 分隔条 | 右(上 commit-form / h-resizer / 下 log-list) */
+  /* 2 列 × 2 行:左 GitStatus(跨两行) | 4px 竖分隔条 | 右(上 commit-form / 下 log-list)
+     右侧两行的高度:上 auto —— 跟着提交表单的内容走(展开「正文及页脚」、出现提交命令
+     预览时自然变高);下 minmax(0, 1fr) —— 提交历史吃掉剩余高度。
+     两行之间没有分隔条,也不再是可按比例拖拽的两块(见 .commit-form-panel 的注释)。 */
   grid-template-columns: 0.25fr 4px 0.75fr;
-  grid-template-rows: 1fr 4px 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
     "git-status v-resizer commit-form"
-    "git-status v-resizer h-resizer"
     "git-status v-resizer log-list";
   gap: 0;
   height: 100%;
 }
 
-/* 非 Git 仓库:右侧只保留 RecentDirectoriesList 一块,
-   隐藏 h-resizer + log-list 行,让 commit-form 行占满右侧整列。
+/* 非 Git 仓库:右侧只保留 RecentDirectoriesList 一块,让它占满右侧整列。
    用 minmax(0, 1fr) 替代 1fr,让 grid row 高度不被子项 min-content 撑大。
    注意:这里也要重置 grid-template-columns,否则 @media (max-width:1024px)
    媒体查询的 5 列布局会覆盖默认 3 列,让右列 (commit-form) 被挤窄。
    selector 重复 .grid-layout 提升 specificity(media query 用了 !important,
    这里 selector 升级到 (0,2,0) 匹配 media query 的 !important 优先级) */
 .grid-layout.grid-layout--no-bottom {
-  grid-template-rows: minmax(0, 1fr) 0fr 0fr;
+  grid-template-rows: minmax(0, 1fr);
   grid-template-columns: 0.25fr 4px 0.75fr !important;
 }
 
@@ -1404,11 +1281,12 @@ body {
   padding: 0;
   background: var(--bg-container);
   border-radius: 0;
-  /* 右侧列上方面板:左贴 v-resizer、下接 h-resizer,内描边给视觉边界 */
+  /* 右侧列上方面板:只给左右内描边(与竖分隔条对齐)。
+     底边不画线 —— 高度按内容自适应,再画一条横线就会和下面「提交历史」
+     之间多出一道分隔线(靠 --bg-container / --bg-panel 的底色差分层就够了)。 */
   box-shadow:
     inset -1px 0 0 var(--border-color-light),
-    inset 1px 0 0 var(--border-color-light),
-    inset 0 -1px 0 var(--border-color-light);
+    inset 1px 0 0 var(--border-color-light);
 }
 /* 非 git 仓库空态:卡片不再贴左右分隔条 */
 .commit-form-panel--empty {
@@ -1426,10 +1304,9 @@ body {
   padding: 0;
   background: var(--bg-panel);
   border-radius: 0;
-  /* 内 1px 描边:与左侧分隔条对齐 + 顶部贴 h-resizer */
-  box-shadow:
-    inset 1px 0 0 var(--border-color-light),
-    inset 0 1px 0 var(--border-color-light);
+  /* 内 1px 描边:只跟左侧竖分隔条对齐。顶边不画线 —— 上方「提交表单」面板
+     已经按内容自适应,这两条相邻的横线就是用户说的那道"分隔线"。 */
+  box-shadow: inset 1px 0 0 var(--border-color-light);
 }
 
 .main-header {
@@ -2129,45 +2006,6 @@ h1 {
   width: 2px;
   background-color: var(--color-primary);
 }
-
-/* 水平分隔条样式 */
-.horizontal-resizer {
-  grid-area: h-resizer;
-  background-color: transparent;
-  cursor: row-resize;
-  transition: background-color var(--transition-base);
-  position: relative;
-  z-index: 10;
-  border-radius: var(--radius-base);
-}
-
-.horizontal-resizer::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 32px;
-  height: 3px;
-  background-color: var(--color-gray-300);
-  border-radius: var(--radius-xs);
-  transition: background-color var(--transition-base), height var(--transition-base), width var(--transition-base), box-shadow var(--transition-base);
-}
-
-.horizontal-resizer:hover,
-.horizontal-resizer.active {
-  background-color: var(--tint-primary-08);
-}
-
-.horizontal-resizer:hover::after,
-.horizontal-resizer.active::after {
-  background-color: var(--color-primary);
-  height: 4px;
-  width: 48px;
-  border-radius: var(--radius-xs);
-}
-
-
 
 .directory-display {
   display: flex;

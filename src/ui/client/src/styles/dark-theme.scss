@@ -391,25 +391,6 @@ html[data-theme="dark"] {
     box-shadow: 0 0 8px rgba(87, 160, 255, 0.5);
   }
 
-  .horizontal-resizer {
-    background-color: transparent;
-  }
-
-  .horizontal-resizer::after {
-    background-color: rgba(255, 255, 255, 0.2);
-  }
-
-  .horizontal-resizer:hover,
-  .horizontal-resizer.active {
-    background-color: var(--tint-primary-08);
-  }
-
-  .horizontal-resizer:hover::after,
-  .horizontal-resizer.active::after {
-    background-color: #57a0ff;
-    box-shadow: 0 0 8px rgba(87, 160, 255, 0.5);
-  }
-
   /* 滚动条深色主题 */
   .preview-content::-webkit-scrollbar-track {
     background: rgba(255, 255, 255, 0.1);
