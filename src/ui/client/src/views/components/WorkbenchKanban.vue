@@ -55,7 +55,7 @@
   键盘仍然可达（:focus-within 照旧浮出），否则 Tab 过去就摸不到这几个按钮。
 -->
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { Search } from '@element-plus/icons-vue'
 import TaskExecutorIcon from '@/components/TaskExecutorIcon.vue'
@@ -142,11 +142,13 @@ const columns = computed(() => {
       : filtered.value.filter(t => t.column === c.key)
     return { ...c, all }
   })
-  /* 空列塌缩成竖排轨道条，把宽度让给有内容的列。
-     实测（2026-10-05 截图量测）：三列强制等宽时，0 条的「进行中」和 159 条的
-     「已完成」各占 312px —— 一屏约 28% 的面积在渲染"没有东西"。
-     两条例外：① 待处理列永不塌，它末尾挂着「新建任务」，塌了就没地方建任务；
-     ② 三列都空时不塌 —— 一屏三条竖条比三列等宽更难读，而且那是刚清空时的过渡态。 */
+  /* 空列**宽度归零、整个不展示**，有内容了再展开。
+     上一轮做的是"收成 58px 竖排轨道条"，实测那条竖排色带在整屏里反而最扎眼，
+     而且 58×1030 的面积照旧是占着的 —— 归零才是真的把宽度让出来。
+     两条例外：
+       ① 待处理列永不塌：它末尾常驻「新建任务」，塌了看板上就没有建任务的入口了
+          （顶栏那两个按钮 2026-09-29 已经删掉，见文件头）。它是看板的收件箱，不是空列。
+       ② 三列都空时不塌：那是"刚清空 / 搜索没命中"的过渡态，一屏三列全不见会像坏了。 */
   const anyContent = raw.some(c => c.all.length > 0)
   return raw.map(c => ({
     key: c.key,
@@ -154,23 +156,39 @@ const columns = computed(() => {
     total: c.all.length,
     hidden: c.key === 'done' ? Math.max(0, c.all.length - doneLimit.value) : 0,
     tasks: c.key === 'done' ? c.all.slice(0, doneLimit.value) : c.all,
-    railed: anyContent && c.all.length === 0 && c.key !== 'todo',
+    collapsed: anyContent && c.all.length === 0 && c.key !== 'todo',
   }))
 })
 
 /**
- * 列轨道：一列一条轨道，宽度按列自己的状态给。
+ * 列轨道：一列一条轨道，空列给 0fr。
+ *
+ * 为什么是 `minmax(0, 0fr)` 而不是 `0px`：**0fr ↔ 1fr 之间 Chromium 会插值**，
+ * 所以 `.kb__columns` 上那条 `transition: grid-template-columns` 能真的动起来；
+ * 写成 `0px` 就跨了轨道类型（定长 ↔ fr），不插值 → 直接跳变，过渡动画等于没有。
+ * min 显式写 0 是必须的：默认的 automatic minimum size 会被列里的内容撑住，塌不到 0。
+ *
  * 写死在 CSS 里的 `repeat(4, ...)` 在去掉「评审中」之后留了一条**空轨道**——
  * 三条列各占 1/4，剩下 1/4 全白，正是"评审列占了很大面积"观感的来源。
  * 这里用内联样式取值（而不是改 CSS 里的数字），增删列时不用再记得改 CSS。
  * 窄屏堆叠走的是 @media 改 `display`（不是改轨道数），所以不会被内联样式压住。
  */
-const RAIL_WIDTH = '58px'
 const columnsStyle = computed(() => ({
   gridTemplateColumns: columns.value
-    .map(c => (c.railed ? RAIL_WIDTH : 'minmax(0, 1fr)'))
+    .map(c => (c.collapsed ? 'minmax(0, 0fr)' : 'minmax(0, 1fr)'))
     .join(' '),
 }))
+
+/**
+ * 首屏不播折叠动画。
+ * 列的开合是**数据到了才定的**：第一帧还没任务，三列都是 1fr，数据一落就有一条塌下去 ——
+ * 开屏抖动一下看着像故障。等第一次绘制之后再打开过渡（两帧 rAF：第一帧让浏览器
+ * 用初始样式完成布局，第二帧改 class 才有得可过渡）。
+ */
+const animateCollapse = ref(false)
+onMounted(() => {
+  requestAnimationFrame(() => requestAnimationFrame(() => { animateCollapse.value = true }))
+})
 
 /**
  * 「已完成」列要回答的是"我刚干完的是什么"，所以按**完成时间**倒序，最新完成的在最上边。
@@ -360,13 +378,21 @@ function liveSummary(live: BoardTaskLive): string {
       </div>
     </div>
 
-    <!-- 看板视图 -->
-    <div v-if="view === 'kanban'" class="kb__columns" :style="columnsStyle">
+    <!-- 看板视图。
+         空列的宽度由 columnsStyle 给 0fr、由 .kb-col.is-collapsed 负责裁掉内容，
+         轨道宽度本身走 .kb__columns 的 transition（is-animated 挡住首屏那次抖动）。 -->
+    <div
+      v-if="view === 'kanban'"
+      class="kb__columns"
+      :class="{ 'is-animated': animateCollapse }"
+      :style="columnsStyle"
+    >
       <section
         v-for="col in columns"
         :key="col.key"
         class="kb-col"
-        :class="['kb-col--' + col.key, { 'is-railed': col.railed }]"
+        :class="['kb-col--' + col.key, { 'is-collapsed': col.collapsed }]"
+        :aria-hidden="col.collapsed ? 'true' : undefined"
       >
         <header class="kb-col__head">
           <!-- 脉冲只在列里真有东西时打：0 条的列上闪着"活着"的点，是这一屏唯一的装饰性假信号 -->
@@ -377,7 +403,10 @@ function liveSummary(live: BoardTaskLive): string {
           <span class="kb-col__count">{{ col.total }}</span>
         </header>
 
-        <ul v-if="!col.railed" class="kb-col__list">
+        <!-- 列表**始终渲染**（空列也渲染）：塌缩是靠轨道宽度 + overflow 裁的，
+             内容得留在 DOM 里，收起那一瞬间才有东西可以跟着一起淡出。
+             空列本来就没有卡片，这里最坏也只是多渲染一条「暂无任务」。 -->
+        <ul class="kb-col__list">
           <li
             v-for="t in col.tasks"
             :key="t.id"
@@ -823,6 +852,17 @@ function liveSummary(live: BoardTaskLive): string {
   min-height: 0;
   overflow: hidden;
 }
+/*
+ * 空列塌成 0 宽 / 有内容时展开的过渡。
+ * 动的是 `grid-template-columns`（内联给的是 0fr ↔ 1fr，同类型轨道可插值）。
+ * ⚠️ 这是**布局属性动画**，一般情况下该避开；这里接受它的理由：轨道只有 3 条、
+ * 每列最多 30 张卡（DONE_PAGE 之后），260ms 内重排这个量级在 Chromium 上实测不卡；
+ * 换成 transform 方案则必须把每列绝对定位，滚动容器和列头吸顶全得重写，得不偿失。
+ * `is-animated` 是首屏闸门：数据落地前先别动（见 animateCollapse 的注释）。
+ */
+.kb__columns.is-animated {
+  transition: grid-template-columns var(--transition-slow) var(--ease-enter);
+}
 /* 2026-10-04：列第一次有了角色色。
    之前三列除了一个 6px 圆点之外全是同一个蓝 + 同一个灰底，三列并排时
    眼睛只能靠位置和文字判断"这是哪一列"；而"单调"也不只是审美问题 ——
@@ -851,8 +891,16 @@ function liveSummary(live: BoardTaskLive): string {
   flex-direction: column;
   min-height: 0;
   min-width: 0;
+  /* **常驻**裁切，不能只写在 is-collapsed 上：展开的那 300ms 里 class 已经摘掉了，
+     而轨道才刚长到几十像素 —— 不裁的话列头那 12px 内边距会直接糊到隔壁列上。
+     （列内的卡片本来就有 12px 内边距，静息/抬升阴影都在这个范围里，裁不到。） */
+  overflow: hidden;
   border-left: 1px solid var(--border-color);
   background: var(--col-surface);
+  /* 收起/展开时内容跟着淡进淡出（宽度那条在 .kb__columns 上）。
+     分隔线也一起过渡：直接 none 会"啪"一下断开，透明化好看得多。 */
+  transition: opacity var(--transition-base) var(--ease-enter),
+              border-color var(--transition-base) var(--ease-enter);
 }
 .kb-col--doing {
   --col-hue: var(--role-active-hue);
@@ -927,22 +975,17 @@ function liveSummary(live: BoardTaskLive): string {
   min-height: 0;
 }
 
-/* 空列塌缩：宽度只剩一条轨道（见 columnsStyle 的 RAIL_WIDTH），列头改成竖排。
-   列头**仍然渲染、底色仍然是那条 26% 的色带** —— verify-wb-colors 的 C3b 按
-   `.kb-col__head` 与列身的相对亮度断言"标识压得住氛围"，塌缩态不能把这条作废，
-   所以这里只改方向（flex-direction / writing-mode），一个颜色都不动。 */
-.kb-col.is-railed .kb-col__head {
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 0;
+/* 空列：宽度归零（轨道在 columnsStyle 里给 0fr），内容靠上面那条常驻的 overflow 裁掉并淡出。
+   · 列头仍然是列头、底色仍然是那条 26% 的色带：verify-wb-colors 的 C3b 按
+     `.kb-col__head` 与列身的相对亮度断言"标识压得住氛围"，塌缩态不能把这条作废
+     （所以这里一个颜色都没改，只是把它裁没了）；
+   · 分隔线走透明而不是 none：border-color 可过渡，收回时那条线是淡掉的，不会"啪"一下断；
+   · pointer-events 关掉：0 宽的盒子上不该还能点到东西。 */
+.kb-col.is-collapsed {
+  border-left-color: transparent;
+  opacity: 0;
+  pointer-events: none;
 }
-.kb-col.is-railed .kb-col__title {
-  /* 横排时 flex:1 吃掉剩余宽度；竖排后它会变成"吃掉剩余高度"把头撑满整列 */
-  flex: 0 0 auto;
-  writing-mode: vertical-rl;
-}
-.kb-col.is-railed .kb-col__count { padding: 1px 6px; }
 
 /* ── 「显示更早的 N 条」：已完成列的续批按钮 ── */
 .kb-col__more {
@@ -1608,5 +1651,10 @@ function liveSummary(live: BoardTaskLive): string {
   .kb-col:first-child { border-top: none; }
   /* 每列不再各自滚：一屏三个滚动区手感很碎，交给外层整块滚 */
   .kb-col__list { overflow: visible; }
+  /* 竖排时没有"宽度"可以让，空列改成**高度**归零（同一条语义：没内容就不占地方）。
+     这里不用 display:none —— 那会让这一列整个退出布局，而响应式探针是按
+     "下一列的 top = 上一列的 bottom"量竖排顺序的（verify-wb-responsive W6e），
+     元素一没盒子那个断言就读到 top=0 而假红。高度 0 保住"它还在流里"这件事。 */
+  .kb-col.is-collapsed { height: 0; border-top-color: transparent; }
 }
 </style>

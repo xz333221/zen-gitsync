@@ -188,11 +188,18 @@ async function main() {
       const live = card.querySelector('.kb-card__live')
       const lines = Array.from(card.querySelectorAll('.kb-card__live-line'))
       const silentEl = card.querySelector('.kb-card__live-silent')
+      const agentEl = card.querySelector('.kb-card__live-agent')
       return {
         found: true,
         running: card.classList.contains('is-running'),
         hasLive: !!live,
         meta: live ? live.querySelector('.kb-card__live-meta').textContent : null,
+        /* 执行器**只画图标、没有文字**（卡片这一行窄，钉一个 "Claude Code" 会把工具次数
+           挤到第二行去 —— 见 WorkbenchKanban 里 .kb-card__live-meta 的注释）。
+           所以这里读的是图标位和它的 title，而不是 meta 文本里有没有 agent 名。
+           图标是 <img>（TaskExecutorIcon 把 svg 当资源 import 进来），别按 <svg> 找。 */
+        executorTitle: agentEl ? agentEl.getAttribute('title') : null,
+        executorHasIcon: !!(agentEl && agentEl.querySelector('img, svg')),
         lines: lines.map(el => ({
           tool: el.classList.contains('is-tool'),
           thought: el.classList.contains('is-thought'),
@@ -210,8 +217,13 @@ async function main() {
 
     // ── A 四行齐全，内容与后端事实逐字一致 ────────────────────────────
     check('A1 运行中的卡片有活动区', card.hasLive && card.running)
-    check('A2 元信息行含「已运行 N」与执行器',
-      norm(card.meta).includes(norm(target.live.agent)) && /已运行|Running for/.test(card.meta), norm(card.meta))
+    /* 2026-10-05 修：这条原来断言 meta 文本里含 agent 名（"claude"）。但执行器早改成
+       **只画图标**了（图标↔执行器的映射由 verify-wb-card-executor-icon 的 39 条断言守着），
+       文本里永远不会再出现那个词 —— 它从改成图标那天起就恒红，只是没人跑到这条。
+       现在断言的是这一行真正该有的两样：时长文案 + 执行器图标位（图标在、title 有）。 */
+    check('A2 元信息行含「已运行 N」与执行器图标位',
+      /已运行|Running for/.test(card.meta) && card.executorHasIcon && !!card.executorTitle,
+      `${norm(card.meta)} | icon=${card.executorHasIcon} title=${card.executorTitle}`)
     check('A3 元信息行的工具次数与后端一致',
       !target.live.toolCallCount || norm(card.meta).includes(`${target.live.toolCallCount}`), norm(card.meta))
     // 左栏那个「执行监控」面板已删（2026-09-29）：它的字段里只有 PID 是卡片上没有的，
@@ -250,15 +262,21 @@ async function main() {
     const silentCard = await readCard(silent.title)
     check('D1 显然静默时给出静默时长', /静默|Silent for/.test(norm(silentCard.silent)),
       norm(silentCard.silent))
+    /* 2026-10-05 修：期望值从 --color-warning 改成 --color-warning-dark。
+       静默那枚是**文字**，而 2026-10-04 的全站对比度修复（ui-audit README 的 P0-01）
+       把状态色的文字一律换成了 --color-*-dark（浅色下 #e6a23c 在面板上只有 2.05:1，
+       深色档 #b45309 才过 AA）。应用侧 .kb-card__live-silent 早就是 warning-dark，
+       这条断言没跟着改，从那天起恒红。verify:ui-consistency 的"状态色不走 color:"
+       那条也要求文字必须用深色档 —— 两处口径本来就该一致。 */
     const warn = await page.evaluate(() => {
       const probe = document.createElement('span')
-      probe.style.color = 'var(--color-warning)'
+      probe.style.color = 'var(--color-warning-dark)'
       document.body.appendChild(probe)
       const c = getComputedStyle(probe).color
       probe.remove()
       return c
     })
-    check('D2 静默用告警色', silentCard.silentColor === warn, `${silentCard.silentColor} vs ${warn}`)
+    check('D2 静默用告警色（文字档 --color-warning-dark）', silentCard.silentColor === warn, `${silentCard.silentColor} vs ${warn}`)
     check('D3 合成任务四行齐全（工具 / 思考 / 回复）',
       silentCard.lines.length >= 3, `lines=${silentCard.lines.length}`)
 
