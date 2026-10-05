@@ -5,6 +5,9 @@
 //
 // 尺寸用 1em 跟随父级 font-size：塞进 11px 的按钮和 14px 的菜单项
 // 都能自动对齐文字，不用每处再写死 px。
+//
+// codex 标是纯黑单色（OpenAI 结），深色主题下要反相成白色 —— 打 .icon-invert-dark，
+// 规则与理由见 styles/dark-theme.scss。
 import { computed } from 'vue'
 import claudeIcon from '@/assets/icons/svg/claudecode-color.svg'
 import opencodeIcon from '@/assets/icons/svg/opencode.svg'
@@ -23,7 +26,13 @@ const src = computed(() => ICONS[props.executor])
 </script>
 
 <template>
-  <img :src="src" alt="" class="task-executor-icon" draggable="false" />
+  <img
+    :src="src"
+    alt=""
+    class="task-executor-icon"
+    :class="{ 'icon-invert-dark': executor === 'codex' }"
+    draggable="false"
+  />
 </template>
 
 <style scoped>

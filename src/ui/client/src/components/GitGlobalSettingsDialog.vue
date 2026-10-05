@@ -389,7 +389,7 @@
                   :class="{ 'is-off': !isHeaderToolVisible(tool.id) }"
                 >
                   <span class="header-tool__icon">
-                    <svg-icon :icon-class="tool.icon" />
+                    <svg-icon :icon-class="tool.icon" :class="{ 'icon-invert-dark': tool.id === 'codex' }" />
                   </span>
                   <span class="header-tool__name">{{ tool.name }}</span>
                   <el-switch

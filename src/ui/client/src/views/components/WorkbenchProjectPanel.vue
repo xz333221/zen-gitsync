@@ -577,7 +577,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
                 @keydown.enter.prevent="openWithTool(p, tool.id)"
                 @keydown.space.prevent="openWithTool(p, tool.id)"
               >
-                <span class="proj-menu__icon"><svg-icon :icon-class="tool.icon" /></span>
+                <span class="proj-menu__icon"><svg-icon :icon-class="tool.icon" :class="{ 'icon-invert-dark': tool.id === 'codex' }" /></span>
                 <span class="proj-menu__label">{{ $t(tool.labelKey) }}</span>
                 <span v-if="toolMissing(tool.id)" class="proj-menu__hint">{{ $t('@67CE7:未安装') }}</span>
               </li>
@@ -642,7 +642,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
                 @keydown.enter.prevent="openWithTool(p, 'codex', 'sandboxed')"
                 @keydown.space.prevent="openWithTool(p, 'codex', 'sandboxed')"
               >
-                <span class="proj-menu__icon"><svg-icon icon-class="codex" /></span>
+                <span class="proj-menu__icon"><svg-icon icon-class="codex" class="icon-invert-dark" /></span>
                 <span class="proj-menu__label">{{ $t('@67CE7:用 Codex 打开（自动批准）') }}</span>
                 <span v-if="!toolMissing('codex')" class="proj-menu__hint">{{ $t('@67CE7:沙箱内') }}</span>
                 <span v-else class="proj-menu__hint">{{ $t('@67CE7:未安装') }}</span>
@@ -656,7 +656,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
                 @keydown.enter.prevent="openWithTool(p, 'codex', 'bypass')"
                 @keydown.space.prevent="openWithTool(p, 'codex', 'bypass')"
               >
-                <span class="proj-menu__icon"><svg-icon icon-class="codex" /></span>
+                <span class="proj-menu__icon"><svg-icon icon-class="codex" class="icon-invert-dark" /></span>
                 <span class="proj-menu__label">{{ $t('@67CE7:用 Codex 打开（完全批准）') }}</span>
               </li>
             </ul>

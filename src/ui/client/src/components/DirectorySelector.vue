@@ -888,7 +888,7 @@ function onBrowserSelect(path: string) {
                 size="large"
                 @click="runOrInstall(tool.id, tool.action)"
               >
-                <svg-icon :icon-class="tool.icon" />
+                <svg-icon :icon-class="tool.icon" :class="{ 'icon-invert-dark': tool.id === 'codex' }" />
               </IconButton>
             </span>
           </template>
@@ -1069,7 +1069,7 @@ function onBrowserSelect(path: string) {
                   :alt="tool.name"
                   class="tools-more__claude-icon"
                 />
-                <svg-icon v-else :icon-class="tool.icon ?? ''" />
+                <svg-icon v-else :icon-class="tool.icon ?? ''" :class="{ 'icon-invert-dark': tool.id === 'codex' }" />
               </span>
               <span class="tools-more__label">{{ tool.name }}</span>
               <span v-if="tool.missing" class="tools-more__hint">{{ $t('@67CE7:未安装') }}</span>
