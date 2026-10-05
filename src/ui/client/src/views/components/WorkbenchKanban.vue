@@ -979,18 +979,27 @@ function coverTitle(img: BoardImage): string {
   color: var(--text-meta);
   pointer-events: none;
 }
+/* 2026-10-05：这一栏原来自己写 `background: var(--bg-subtle)` ——
+   也就是白底上再叠 2% 黑（合成后约 #fafafa）。但同一工具条上的项目 / 标签下拉
+   走的是 Element Plus 的 `--input-bg`（= --bg-container，白），父容器 .board
+   本身也是白：于是这个**原生 input 成了那一行里唯一一块灰**，像蒙了层雾，
+   底色与旁边的下拉框对不上（用户圈的就是它）。
+   现在直接复用 `--input-bg` / `--input-border` —— 与 el-input / el-select
+   同一支口径，连描边深浅都不用自己定。加 hover 是补上原生 input 少的半截
+   （Element Plus 那套本来就有），focus 态原本就有主色描边 + 焦点环，不动。 */
 .kb__search-input {
   width: 168px;
   height: 24px;
   padding: 0 8px 0 24px;
   font-size: var(--font-size-sm);
   color: var(--text-primary);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-color);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
   border-radius: var(--radius-md);
   outline: none;
   transition: border-color var(--transition-fast) var(--ease-custom), width var(--transition-base) var(--ease-custom);
 }
+.kb__search-input:hover:not(:focus) { border-color: var(--input-border-hover); }
 .kb__search-input:focus {
   border-color: var(--color-primary);
   box-shadow: var(--focus-ring-soft);
@@ -1256,7 +1265,12 @@ function coverTitle(img: BoardImage): string {
   border: none;
   border-radius: calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px) 0 0;
   overflow: hidden;
-  background: var(--bg-subtle);
+  /* 2026-10-05：底色原来也是 --bg-subtle（白底上叠 2% 黑）。封面是**出血**到卡片
+     边缘的 —— 上面那条负外边距抵消了 .kb-card 的 12px 内边距 —— 而卡片底是
+     --wb-card-bg = --bg-container，两者并不同源。图片按 object-fit: cover 铺满，
+     但加载中、或 onCoverError 撤块前后那一瞬，这一圈比卡片略暗的灰会露出来，
+     在纯白卡上像一条没对齐的接缝。改成与卡片严格同底。 */
+  background: var(--bg-container);
   cursor: zoom-in;
 }
 .kb-card__cover:focus-visible { outline: var(--focus-outline); outline-offset: -2px; }

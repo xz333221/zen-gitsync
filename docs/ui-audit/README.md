@@ -168,6 +168,34 @@ C6（进度条亮度两头卡）都没被这轮碰坏。
 是探针拿 `sleep(300)` 等异步报告列表的既有 flaky（数据到位慢于 300ms → `.oc__history` 还没挂载），
 **与本轮改动无关**，留待单独修（改成等条件而非等时间）。
 
+### 第七轮：看板工具条的底色回归全站口径（2026-10-05）
+
+用户圈了看板顶部的搜索框与卡片封面，说**「这块背景色也调一调」**。
+
+病根不在"色选错了"，在**同一个控件自己私开了一套**：
+`.kb__search-input` 是原生 `<input>`，样式里自己写了 `background: var(--bg-subtle)` ——
+白底上再叠 2% 黑（合成约 `#fafafa`）；而同一工具条上的项目 / 标签下拉走的是
+Element Plus 的 `--input-bg`（= `--bg-container`，白），父容器 `.board` 本身也是白。
+于是**那一行里只有它是灰的**，像蒙了层雾，底色跟旁边对不上。
+
+`.kb-card__cover`（封面）是同一支 `--bg-subtle`，但它是**出血**到卡片边缘的
+（负外边距抵消 `.kb-card` 的 12px 内边距），而卡片底是 `--wb-card-bg = --bg-container` ——
+两者并不同源。图片按 `object-fit: cover` 铺满，所以这层底平时看不见；
+但加载中、或 `onCoverError` 撤块前后那一瞬，会在纯白卡上露出一圈略暗的接缝。
+
+改法：搜索框 → `--input-bg` + `--input-border`（`#e1e4e8`，与 `el-input` 同口径），
+并补上原生 input 缺的那半截 hover（`--input-border-hover`）；封面 → `--bg-container`，与卡片严格同底。
+
+![搜索框底色前后](./kb-search-bg-before-after.png)
+
+**故意没动**：`.kb__views`（看板 / 列表切换拨片）的 `--bg-subtle` 轨道。
+那层灰是**分段控件的职责** —— 它的选中块是 `--surface-elevated`（白）+ 阴影，
+轨道一旦也改白，选中态就只剩阴影和蓝字，层级会塌。
+同屏另外三处 `--bg-subtle`（空列虚线框 / 表格状态标签 / 卡片按钮 hover）也各按自己的语义留着。
+
+回归：`verify:ui-consistency` 22/22（背景色棘轮 33，红线 36，未涨）、
+`verify:wb-card-cover` 30/30（含 D1 封面出血几何）、tsc 与 build 均通过。
+
 
 
 ## 修复状态（2026-10-04 当轮）
