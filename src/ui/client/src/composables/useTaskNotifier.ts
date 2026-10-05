@@ -23,15 +23,17 @@
 //   副作用是工作台开着时浏览器里会有两条 SSE：服务端 bus 是广播模型，多一个订阅者
 //   不影响推送语义，代价可以接受（比把整个 workbench 数据层提成全局 store 小得多）。
 //
-// 提示形态按「人现在能不能看到这个页面」分：
-//   - 页面在前台 → 应用内 toast（看得见，不必再弹系统窗口）
-//   - 页面在后台 / 别的窗口 → 系统通知（否则等于没提示）
-// 权限被拒时系统通知发不出去，会退回 toast 兜一手。
+// 提示形态由三个**平级且互相独立**的开关决定（设置 → 通用设置，见 configStore）：
+//   页面提示     —— 页面内弹一条 ElMessage
+//   浏览器通知   —— 系统提示（要权限）
+//   提示音       —— 一声"叮"，与"人看不看得到页面"无关
+// 只有浏览器通知一个通道开着时，前台也发系统通知（否则用户什么都收不到）；
+// 页面提示与浏览器通知都开着时按前台/后台二选一，避免同一件事弹两遍
+// （判定见 taskNotify.shouldUseSystemNotification）。
 //
-// 2026-09-29 起额外"叮"一声（见 utils/taskSound）：
-//   声音和"页面在不在前台"无关 —— 系统通知自带的那点动静经常被用户关掉/系统静音，
-//   而且是"人得先注意到通知中心"的被动提示；一声提示音是人不用看屏幕也能知道的信号。
-//   所以它在下面这层"前台/后台"分流之前就响，不参与二选一。
+// 2026-10-05 之前这里只有"总开关 + 提示音子开关"，浏览器通知还默认开且会在页面内
+// 首次点击时自动申请权限 —— 用户反馈"每次开 GUI 都弹授权框"。拆成三个开关后
+// 浏览器通知默认关，权限只在用户拨开它时申请（设置页）。
 
 import { ElMessage } from 'element-plus'
 import { $t } from '@/lang/static'
@@ -40,6 +42,21 @@ import { notifySystem, shouldUseSystemNotification } from '@/utils/taskNotify'
 import { playFinishSound } from '@/utils/taskSound'
 
 export type JobFinishKind = 'done' | 'error' | 'cancelled'
+
+/** 三个提示通道的开关（从 configStore 读一次传进来，别在 announce 里再读一遍 store） */
+export interface NotifySwitches {
+  /** 页面内提示条 */
+  page: boolean
+  /** 浏览器系统通知（需要权限） */
+  browser: boolean
+  /** 提示音 */
+  sound: boolean
+}
+
+/** 三个通道全关 = 这条链路整条不走 */
+export function anyChannelOn(sw: NotifySwitches): boolean {
+  return sw.page || sw.browser || sw.sound
+}
 
 /** 还在跑的状态：由这些状态变成终态才算「执行完了」 */
 export function isLiveJobStatus(s: unknown): boolean {
@@ -106,18 +123,18 @@ export function useTaskNotifier() {
   /**
    * 发一条提示。系统通知发不出去（权限被拒 / 不支持）时退回应用内 toast。
    *
-   * withSound 由调用点从配置里读好传进来（见 handleJob），不在这里再读一次 store ——
-   * 「总开关 + 提示音开关」是一对要一起判的配置，分成两处读容易只更新一处。
+   * sw 由调用点从配置里读好传进来（见 handleJob），不在这里再读一次 store ——
+   * 三个开关要一起判，分成两处读容易只更新一处。
    */
-  function announce(kind: JobFinishKind, job: Record<string, any>, withSound: boolean) {
+  function announce(kind: JobFinishKind, job: Record<string, any>, sw: NotifySwitches) {
     const name = jobNoticeTitle(job)
     const detail = jobNoticeDetail(job)
     const tag = `zen-gitsync-job-${job.id || ''}`
-    // 先出声：这一句跟"页面在不在前台"没关系，必须在下面二选一之前，
-    // 否则用户切到别的窗口时（恰恰是主场景）只能指望系统通知那点动静。
-    // 被自动播放策略拦下/环境不支持都只是返回 false，不用管。
-    if (withSound) playFinishSound(kind)
-    if (shouldUseSystemNotification()) {
+    // 先出声：这一句跟"页面在不在前台"没关系，也跟另外两个通道无关
+    // （用户可能只要声音、不要任何视觉提示）。被自动播放策略拦下/环境不支持
+    // 都只是返回 false，不用管。
+    if (sw.sound) playFinishSound(kind)
+    if (shouldUseSystemNotification(sw)) {
       let sent = false
       if (kind === 'done') {
         sent = notifySystem({ title: $t('@WORKBENCH:任务执行完成'), body: detail ? `${name}\n${detail}` : name, tag })
@@ -128,6 +145,9 @@ export function useTaskNotifier() {
       }
       if (sent) return
     }
+    // 页面提示关着就到此为止：浏览器通知发不出去（权限被拒）是用户自己的选择，
+    // 不该拿一条他没要的 toast 顶上（真发不出去时设置页里也如实标了"已拒绝"）。
+    if (!sw.page) return
     if (kind === 'done') ElMessage.success($t('@WORKBENCH:已完成：{name}', { name }))
     else if (kind === 'error') ElMessage.error($t('@WORKBENCH:执行出错：{name}', { name }))
     else ElMessage.info($t('@WORKBENCH:已停止：{name}', { name }))
@@ -142,16 +162,15 @@ export function useTaskNotifier() {
     const kind = finishKind(next)
     if (!kind) return
     // 开关在 config.json（全局），每次读实时值：用户在设置里关掉后立刻生效
-    let enabled = false
-    let sound = false
+    const sw: NotifySwitches = { page: false, browser: false, sound: false }
     try {
       const store = useConfigStore()
-      enabled = !!store.notifyOnTaskDone
-      sound = !!store.notifySoundOnTaskDone
-    } catch { enabled = false; sound = false }
-    // 总开关关着 = 整条提示链路都不走，提示音也不响（提示音是从属于它的子开关）
-    if (!enabled) return
-    announce(kind, job, sound)
+      sw.page = !!store.notifyPageOnTaskDone
+      sw.browser = !!store.notifyBrowserOnTaskDone
+      sw.sound = !!store.notifySoundOnTaskDone
+    } catch { /* store 不可用（单测 / 极早的启动期）→ 三个都保持 false，即不提示 */ }
+    if (!anyChannelOn(sw)) return
+    announce(kind, job, sw)
   }
 
   function handleRaw(evt: string, payload: any) {

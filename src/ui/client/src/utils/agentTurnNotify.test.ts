@@ -12,28 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// 提示策略的回归测试。要守的是**分流顺序**与**两个"不该提示"**：
+// 提示策略的回归测试。要守的是**分流顺序**与**三个开关各自的作用**：
 //   页面在前台 → 弹应用内 toast；页面在后台 → 发系统通知；系统通知发不出去 → 退回 toast。
-//   总开关关着时一声都不响（提示音是从属于它的子开关）。
+//   三个通道（页面提示 / 浏览器通知 / 提示音）平级且互相独立，全关时一律不提示。
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const state = vi.hoisted(() => ({ notifyEnabled: true, soundEnabled: true }))
+const state = vi.hoisted(() => ({ page: true, browser: true, sound: true }))
 const sys = vi.hoisted(() => ({ useSystem: false, canSend: true, sent: [] as any[] }))
 const snd = vi.hoisted(() => ({ played: [] as string[] }))
 
 vi.mock('@stores/configStore', () => ({
   useConfigStore: () => ({
-    get notifyOnTaskDone() {
-      return state.notifyEnabled
+    get notifyPageOnTaskDone() {
+      return state.page
+    },
+    get notifyBrowserOnTaskDone() {
+      return state.browser
     },
     get notifySoundOnTaskDone() {
-      return state.soundEnabled
+      return state.sound
     },
   }),
 }))
 
 vi.mock('@/utils/taskNotify', () => ({
-  shouldUseSystemNotification: () => sys.useSystem,
+  // 真实的"前台/后台"判定在 taskNotify.test.ts 里测；这里只保住它与开关的耦合关系：
+  // 浏览器通知关着就不该走系统通知那条路（忽略开关的桩会让"关着开关"的用例假通过）。
+  shouldUseSystemNotification: (sw: { browser: boolean }) => sys.useSystem && sw.browser,
   notifySystem: (opts: any) => {
     sys.sent.push(opts)
     return sys.canSend
@@ -55,8 +60,9 @@ const successCalls = () => (ElMessage.success as unknown as { mock: { calls: any
 const errorCalls = () => (ElMessage.error as unknown as { mock: { calls: any[][] } }).mock.calls
 
 beforeEach(() => {
-  state.notifyEnabled = true
-  state.soundEnabled = true
+  state.page = true
+  state.browser = true
+  state.sound = true
   sys.useSystem = false
   sys.canSend = true
   sys.sent = []
@@ -122,16 +128,53 @@ describe('announceAgentTurn 分流', () => {
     expect(errorCalls()).toHaveLength(0)
   })
 
-  it('总开关关着：一律不提示（提示音开关开着也不行，它从属于总开关）', () => {
-    state.notifyEnabled = false
+  it('三个通道全关：一律不提示（返回 false，调用点据此知道没提示出去）', () => {
+    state.page = false
+    state.browser = false
+    state.sound = false
     expect(announceAgentTurn({ kind: 'done', title: '会话 A' })).toBe(false)
     expect(snd.played).toHaveLength(0)
     expect(sys.sent).toHaveLength(0)
     expect(successCalls()).toHaveLength(0)
   })
 
-  it('提示音开关关着：提示照发，只是不出声', () => {
-    state.soundEnabled = false
+  it('只关页面提示：系统通知照发（它是唯一剩下的视觉通道，前台也发）', () => {
+    state.page = false
+    sys.useSystem = true
+    announceAgentTurn({ kind: 'done', title: '会话 A' })
+    expect(sys.sent).toHaveLength(1)
+    expect(successCalls()).toHaveLength(0)
+  })
+
+  it('页面提示关着 + 系统通知也发不出去 → 不拿一条用户没要的 toast 顶上', () => {
+    state.page = false
+    sys.useSystem = true
+    sys.canSend = false
+    announceAgentTurn({ kind: 'done', title: '会话 A' })
+    expect(sys.sent).toHaveLength(1)
+    expect(successCalls()).toHaveLength(0)
+  })
+
+  it('浏览器通知关着：页面提示照弹，一个系统通知都不发', () => {
+    state.browser = false
+    sys.useSystem = true
+    announceAgentTurn({ kind: 'done', title: '会话 A' })
+    expect(sys.sent).toHaveLength(0)
+    expect(successCalls()).toHaveLength(1)
+  })
+
+  it('只开提示音：只有声音，两个视觉通道都不碰', () => {
+    state.page = false
+    state.browser = false
+    state.sound = true
+    announceAgentTurn({ kind: 'done', title: '会话 A' })
+    expect(snd.played).toEqual(['done'])
+    expect(sys.sent).toHaveLength(0)
+    expect(successCalls()).toHaveLength(0)
+  })
+
+  it('提示音关着：提示照发，只是不出声', () => {
+    state.sound = false
     sys.useSystem = true
     announceAgentTurn({ kind: 'done', title: '会话 A' })
     expect(snd.played).toHaveLength(0)

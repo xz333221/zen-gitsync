@@ -1,5 +1,5 @@
 /**
- * 任务结束提示音（2026-09-29）的浏览器验证。
+ * 任务结束提示（声音 + 页面提示 + 浏览器通知）的浏览器验证。
  *
  * 验收契约（改这块时别破坏）：
  *   A 任务从「跑着」变 done → 创建 /sounds/task-done.wav 的 Audio 并真的播出去
@@ -8,13 +8,15 @@
  *   D 音源能在这台机器的真实浏览器里解码（readyState ≥ 2 且时长符合预期）
  *     —— 这条才是"文件是不是真能用"的证明：路径错 / 文件损坏 / 格式浏览器不支持
  *     都会在这里挂掉，而不是在单测里（单测的 Audio 是假的）
- *   E 总开关（notifyOnTaskDone）关着时一声都不响
+ *   E 三个通道全关着时一声都不响、也不弹提示
  *   F hello 快照里的历史 job 不响（页面刚打开看到的一堆"已完成"是老账）
  *   G 页面无 console / page 错误
- *   H 提示音开关（notifySoundOnTaskDone）关着时一个音源都不碰，但**提示照旧**
- *     —— 通知与声音是两个独立的键，关掉一个不该把另一个也带走
- *   I 设置 → 通用设置里的提示音开关：配置能读进 UI、总开关关掉时它置灰、
- *     单独改它时保存的 payload 只带这一个键（不顺手动总开关）
+ *   H 提示音关着、页面提示开着 → 一个音源都不碰，但**提示照旧**
+ *     —— 三个通道各自独立，关掉一个不该把另一个也带走
+ *   I 设置 → 通用设置里的三个通道开关：配置能读进 UI、各自独立（互不置灰）、
+ *     改一个时保存的 payload 只带那一个键
+ *   J **不再自动申请浏览器通知权限**（2026-10-05）：页面内点一下也不该弹授权框 ——
+ *     权限只在用户把「浏览器通知」开关拨开的那一刻申请。这是这次改动的核心诉求。
  *
  * 为什么用 route 拦截 /api/workbench/events 喂合成帧，而不是真跑一个任务：
  *   真跑一次 CLI 要几十秒且结果不可控（可能失败、可能超时），而这里要验的是
@@ -104,6 +106,18 @@ const PROBE = () => {
     PatchedES.prototype = NativeES.prototype
     w.EventSource = PatchedES
   }
+
+  // 浏览器通知权限：只记"有没有人调过 requestPermission"。
+  // 用例 J 要证明"页面内的任何点击都不再自动申请"—— 那正是用户抱怨的授权框来源。
+  w.__permRequests = 0
+  const NativeNotify = w.Notification
+  if (NativeNotify && typeof NativeNotify.requestPermission === 'function') {
+    const origReq = NativeNotify.requestPermission.bind(NativeNotify)
+    NativeNotify.requestPermission = function () {
+      w.__permRequests++
+      return origReq()
+    }
+  }
 }
 
 /** 读探针结果（去掉 el 引用，没法跨进程序列化） */
@@ -158,11 +172,11 @@ async function waitDecoded(page, timeout = 10000) {
 }
 
 /**
- * 开一个页面并装上拦截。两个开关由参数决定，不读用户真实配置。
+ * 开一个页面并装上拦截。三个通道开关由参数决定，不读用户真实配置。
  *
  * ⚠️ sseDelayMs 不是随便加的等待，是这条用例能不能验到东西的前提：
  *   开关是**每次事件实时读** configStore 的（见 useTaskNotifier.handleJob），
- *   而 configStore 里那两个 ref 的初始值都是 true。SSE 在页面刚打开时就建连、
+ *   而 configStore 里那几个 ref 的初始值就是默认值。SSE 在页面刚打开时就建连、
  *   合成帧立刻到达的话，读到的是"还没加载完"的初始值而不是被拦掉的配置，
  *   于是"开关关着"这类场景根本验不到（会假失败）。让帧晚一点到，配置先落地。
  */
@@ -186,16 +200,20 @@ async function openPage(browser, switches, sseDelayMs = 2500) {
     })
   })
 
-  // 拦配置：把两个开关钉死，避免用例结果取决于用户当前设置
+  // 拦配置：把三个通道开关钉死，避免用例结果取决于用户当前设置
+  const cfgPatch = {
+    notifyPageOnTaskDone: switches.page,
+    notifyBrowserOnTaskDone: switches.browser,
+    notifySoundOnTaskDone: switches.sound,
+  }
   await page.route('**/api/config/getConfig*', async (route) => {
     try {
       const resp = await route.fetch()
       const cfg = await resp.json()
-      cfg.notifyOnTaskDone = switches.notifyOnTaskDone
-      cfg.notifySoundOnTaskDone = switches.notifySoundOnTaskDone
+      Object.assign(cfg, cfgPatch)
       await route.fulfill({ response: resp, json: cfg })
     } catch {
-      await route.fulfill({ json: switches })
+      await route.fulfill({ json: cfgPatch })
     }
   })
 
@@ -205,9 +223,22 @@ async function openPage(browser, switches, sseDelayMs = 2500) {
   return { ctx, page }
 }
 
-/** 数页面上的应用内提示条（证明"提示照旧"，与"有没有出声"是两件事） */
-function countToasts(page) {
-  return page.evaluate(() => document.querySelectorAll('.el-message').length)
+/** 提示条的文案（负向用例失败时要能一眼看出"多出来那条是什么"，别对着一个数字猜） */
+function toastTexts(page) {
+  return page.evaluate(() => [...document.querySelectorAll('.el-message')]
+    .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim()))
+}
+
+/**
+ * 只数**本次合成帧带来的**提示条。
+ *
+ * ⚠️ 别数 `.el-message` 的总数：页面自己还会弹别的 toast（启动期的 Git 状态刷新之类），
+ * 那一条与提示通道的开关毫无关系 —— 直接数总数会让"全关时不该有提示"这条假红。
+ * 合成帧用的是固定任务名（提示音验证-*），按名字认领才认得出哪几条是我自己造的。
+ */
+async function noticeToasts(page) {
+  const texts = await toastTexts(page)
+  return texts.filter((t) => t.includes('提示音验证'))
 }
 
 // ── 设置对话框（场景 4）────────────────────────────────────────────────
@@ -232,8 +263,8 @@ async function openSettingsGeneral(page) {
 }
 
 /**
- * 读「任务完成提示」那一行里的两个开关。
- * 总开关 = 行里第一个（直接的）el-switch；提示音开关 = .notify-sub 里的那个。
+ * 读「任务与对话完成提示」那一行里的三个通道开关。
+ * 三个开关**平级**（页面提示 / 浏览器通知 / 提示音），谁也不缩进、谁也不因别人关掉而置灰。
  */
 function readNotifyRow(page) {
   return page.evaluate((src) => {
@@ -249,31 +280,41 @@ function readNotifyRow(page) {
         disabled: sw.classList.contains('is-disabled'),
       }
     }
-    const sub = row.querySelector('.notify-sub')
-    const subStyle = sub ? getComputedStyle(sub) : null
+    const channels = [...row.querySelectorAll('.notify-channel')].map((c) => ({
+      label: (c.querySelector('.notify-channel__label')?.textContent || '').trim(),
+      switch: state(c.querySelector('.el-switch')),
+      hint: (c.querySelector('.notify-hint')?.textContent || '').trim(),
+      // 缩进 = 视觉上宣称"我是谁的子选项"。三个通道平级，这里必须都是 0
+      paddingLeft: parseFloat(getComputedStyle(c).paddingLeft) || 0,
+    }))
     return {
-      master: state(row.querySelector('.el-switch')),
-      sound: state(sub ? sub.querySelector('.el-switch') : null),
-      hasSub: !!sub,
-      subLabel: (sub?.querySelector('.notify-sub__label')?.textContent || '').trim(),
-      // 从属视觉：左侧竖线 + 缩进。数值 > 0 才算"看起来是子选项"
-      borderLeft: subStyle ? parseFloat(subStyle.borderLeftWidth) || 0 : 0,
-      paddingLeft: subStyle ? parseFloat(subStyle.paddingLeft) || 0 : 0,
+      count: channels.length,
+      channels,
     }
-  }, labelRe('任务完成提示', 'task finished notice').source)
+  }, labelRe('任务与对话完成提示', 'task and chat finished notice').source)
 }
 
-/** 拨动提示音开关（.notify-sub 里那个） */
-function toggleSoundSwitch(page) {
-  return page.evaluate((src) => {
-    const re = new RegExp(src, 'i')
+/** 从 readNotifyRow 的结果里按标签文案挑一个通道（标签匹配在 Node 侧做，函数没法跨进程序列化） */
+function channel(row, kw) {
+  const re = new RegExp(kw, 'i')
+  return (row?.channels || []).find((c) => re.test(c.label)) || null
+}
+
+/** 拨动某个通道的开关（按标签文案找，找不到返回 false） */
+function toggleChannel(page, labelSrc) {
+  return page.evaluate((payload) => {
+    const rowRe = new RegExp(payload.rowSrc, 'i')
     const row = [...document.querySelectorAll('.user-settings-dialog .setting-row')]
-      .find(r => re.test(r.querySelector('.setting-label')?.textContent || ''))
-    const sw = row?.querySelector('.notify-sub .el-switch')
+      .find(r => rowRe.test(r.querySelector('.setting-label')?.textContent || ''))
+    if (!row) return false
+    const labelRe = new RegExp(payload.labelSrc, 'i')
+    const channel = [...row.querySelectorAll('.notify-channel')]
+      .find(c => labelRe.test(c.querySelector('.notify-channel__label')?.textContent || ''))
+    const sw = channel?.querySelector('.el-switch')
     if (!sw) return false
     ;(sw.querySelector('.el-switch__core') || sw).click()
     return true
-  }, labelRe('任务完成提示', 'task finished notice').source)
+  }, { rowSrc: labelRe('任务与对话完成提示', 'task and chat finished notice').source, labelSrc })
 }
 
 /** 点保存（按钮只在有改动时渲染） */
@@ -296,8 +337,8 @@ async function main() {
   })
 
   try {
-    // ── 场景 1：两个开关都开 ──────────────────────────────────────────
-    const { ctx, page } = await openPage(browser, { notifyOnTaskDone: true, notifySoundOnTaskDone: true })
+    // ── 场景 1：三个通道都开 ──────────────────────────────────────────
+    const { ctx, page } = await openPage(browser, { page: true, browser: true, sound: true })
     try {
       const got = await waitSoundCount(page, 2)
       check('A0 状态跃迁后确实发起了播放', got, `soundLog=${JSON.stringify((await readSoundLog(page)).map(r => r.src))}`)
@@ -347,10 +388,10 @@ async function main() {
       await ctx.close()
     }
 
-    // ── 场景 2：总开关关掉 ────────────────────────────────────────────
+    // ── 场景 2：三个通道全关 ──────────────────────────────────────────
     consoleErrors.length = 0
     pageErrors.length = 0
-    const { ctx: ctx2, page: page2 } = await openPage(browser, { notifyOnTaskDone: false, notifySoundOnTaskDone: true })
+    const { ctx: ctx2, page: page2 } = await openPage(browser, { page: false, browser: false, sound: false })
     try {
       // 先证明帧确实送到了（否则"没响"可能只是还没到），再多等一小会儿防止竞态，
       // 这时候一个音源都不该被创建
@@ -358,34 +399,51 @@ async function main() {
       await sleep(1000)
       const off = await readSoundLog(page2)
       check('E1 合成帧确实被页面收下（负向用例的前置事实）', frames >= FRAMES.length, `frames=${frames}/${FRAMES.length}`)
-      check('E2 开关关着时一声都不响（声音不绕开总开关）', off.length === 0,
-        JSON.stringify(off.map(r => r.src)))
+      check('E2 全关时一声都不响', off.length === 0, JSON.stringify(off.map(r => r.src)))
+      check('E3 全关时也不弹应用内提示条', (await noticeToasts(page2)).length === 0,
+        JSON.stringify(await toastTexts(page2)))
     } finally {
       await ctx2.close()
     }
 
-    // ── 场景 3：总开关开、提示音关（通知与声音是两个独立的键）──────────
+    // ── 场景 3：页面提示开、提示音关（三个通道各自独立）────────────────
     consoleErrors.length = 0
     pageErrors.length = 0
-    const { ctx: ctx3, page: page3 } = await openPage(browser, { notifyOnTaskDone: true, notifySoundOnTaskDone: false })
+    const { ctx: ctx3, page: page3 } = await openPage(browser, { page: true, browser: false, sound: false })
     try {
       const frames = await waitFrames(page3, FRAMES.length)
       await sleep(1000)
       const off = await readSoundLog(page3)
-      const toasts = await countToasts(page3)
+      const toasts = await noticeToasts(page3)
       check('H1 合成帧确实被页面收下（负向用例的前置事实）', frames >= FRAMES.length, `frames=${frames}/${FRAMES.length}`)
       check('H2 只关提示音时一个音源都不碰', off.length === 0, JSON.stringify(off.map(r => r.src)))
-      // 这一条才是"两个键互相独立"的证据：声音没了，提示还在
-      check('H3 提示照旧弹出（关声音没把通知一起带走）', toasts > 0, `toasts=${toasts}`)
+      // 这一条才是"三个键互相独立"的证据：声音没了，提示还在
+      check('H3 提示照旧弹出（关声音没把提示一起带走）', toasts.length > 0, JSON.stringify(toasts))
     } finally {
       await ctx3.close()
     }
 
-    // ── 场景 4：设置 → 通用设置里的提示音开关 ──────────────────────────
-    // 4a：配置里提示音关着、总开关开着 → UI 上提示音开关应该是关的且可点
+    // ── 场景 3b：只开提示音（两个视觉通道都关）────────────────────────
     consoleErrors.length = 0
     pageErrors.length = 0
-    const { ctx: ctx4, page: page4 } = await openPage(browser, { notifyOnTaskDone: true, notifySoundOnTaskDone: false })
+    const { ctx: ctx3b, page: page3b } = await openPage(browser, { page: false, browser: false, sound: true })
+    try {
+      const played = await waitSoundCount(page3b, 2)
+      await sleep(600)
+      const log3b = await readSoundLog(page3b)
+      check('H4 只开提示音时声音照响（它不依赖另外两个通道）', played,
+        JSON.stringify(log3b.map(r => r.src)))
+      check('H5 两个视觉通道关着 → 不弹提示条', (await noticeToasts(page3b)).length === 0,
+        JSON.stringify(await toastTexts(page3b)))
+    } finally {
+      await ctx3b.close()
+    }
+
+    // ── 场景 4：设置 → 通用设置里的三个通道开关 ────────────────────────
+    // 4a：配置里「页面提示开 / 浏览器通知开 / 提示音关」→ UI 上如实反映
+    consoleErrors.length = 0
+    pageErrors.length = 0
+    const { ctx: ctx4, page: page4 } = await openPage(browser, { page: true, browser: true, sound: false })
     try {
       // ⚠️ 拦掉保存：对话框的保存会 POST 到真实后端，而 ~/.zen-gitsync/config.json
       // 是**用户全局共享**的，验证脚本绝不能顺手把用户的开关改掉。这里只截获
@@ -401,47 +459,80 @@ async function main() {
       if (!opened) throw new Error('设置对话框打不开，后续无法验证')
 
       const row = await readNotifyRow(page4)
-      check('I2 提示音是「任务完成提示」行里的子选项（缩进 + 左侧竖线，不是平级）',
-        !!row?.hasSub && row.borderLeft > 0 && row.paddingLeft > 0,
-        JSON.stringify({ hasSub: row?.hasSub, borderLeft: row?.borderLeft, paddingLeft: row?.paddingLeft }))
-      check('I3 子开关有自己的标签', /提示音|sound cue/i.test(row?.subLabel || ''), row?.subLabel)
-      check('I4 ★ 配置里关着 → UI 上提示音开关就是关的（配置读进了 UI）', row?.sound?.on === false,
-        JSON.stringify(row?.sound))
-      check('I5 总开关开着时提示音开关可点（没被置灰）',
-        row?.master?.on === true && row?.sound?.disabled === false,
-        JSON.stringify({ master: row?.master, sound: row?.sound }))
+      check('I2 ★ 三个通道各有一个开关（页面提示 / 浏览器通知 / 提示音）', row?.count === 3,
+        JSON.stringify(row?.channels?.map((c) => c.label)))
+      const pageCh = channel(row, '页面提示|in-app toast')
+      const browserCh = channel(row, '浏览器通知|browser notification')
+      const soundCh = channel(row, '提示音|sound cue')
+      check('I3 三个通道各有自己的标签', !!pageCh && !!browserCh && !!soundCh,
+        JSON.stringify({ pageCh: !!pageCh, browserCh: !!browserCh, soundCh: !!soundCh }))
+      check('I4 ★ 配置读进了 UI（页面提示开 / 浏览器通知开 / 提示音关）',
+        pageCh?.switch?.on === true && browserCh?.switch?.on === true && soundCh?.switch?.on === false,
+        JSON.stringify({ page: pageCh?.switch, browser: browserCh?.switch, sound: soundCh?.switch }))
+      check('I5 ★ 三个开关互不置灰（平级，没有从属关系）',
+        [pageCh, browserCh, soundCh].every((c) => c?.switch?.disabled === false),
+        JSON.stringify([pageCh, browserCh, soundCh].map((c) => c?.switch)))
+      check('I6 三个通道不缩进（缩进会暗示"我是谁的子选项"）',
+        (row?.channels || []).every((c) => c.paddingLeft === 0),
+        JSON.stringify((row?.channels || []).map((c) => c.paddingLeft)))
 
       // 打开提示音 → 保存，看前端发出去的 payload
-      await toggleSoundSwitch(page4)
+      const toggled = await toggleChannel(page4, '提示音|sound cue')
+      check('I7 前置 提示音开关被点到', toggled)
       await sleep(300)
       const afterToggle = await readNotifyRow(page4)
-      check('I6 拨动后 UI 状态跟着变（开关确实受控，不是画上去的）', afterToggle?.sound?.on === true,
-        JSON.stringify(afterToggle?.sound))
+      check('I8 拨动后 UI 状态跟着变（开关确实受控，不是画上去的）',
+        channel(afterToggle, '提示音|sound cue')?.switch?.on === true,
+        JSON.stringify(channel(afterToggle, '提示音|sound cue')?.switch))
       const shotSettings = path.resolve(__dirname, '../tmp-verify-wb-task-sound-settings.png')
       await page4.locator('.user-settings-dialog').screenshot({ path: shotSettings }).catch(() => {})
       log('设置截图:', shotSettings)
 
       const clickedSave = await clickSave(page4)
       await sleep(600)
-      check('I7 保存按钮出现并被点到（只改提示音也构成 hasChanges）', clickedSave)
-      check('I8 ★ 保存 payload 只带提示音这一个键（不顺手动总开关）',
-        saved.length === 1 && saved[0]?.notifySoundOnTaskDone === true && saved[0]?.notifyOnTaskDone === undefined,
+      check('I9 保存按钮出现并被点到（只改提示音也构成 hasChanges）', clickedSave)
+      check('I10 ★ 保存 payload 只带被改的那一个键（不带另外两个）',
+        saved.length === 1
+          && saved[0]?.notifySoundOnTaskDone === true
+          && saved[0]?.notifyPageOnTaskDone === undefined
+          && saved[0]?.notifyBrowserOnTaskDone === undefined,
         JSON.stringify(saved))
     } finally {
       await ctx4.close()
     }
 
-    // 4b：总开关关着 → 提示音开关置灰（从属关系在 UI 上看得见）
-    const { ctx: ctx5, page: page5 } = await openPage(browser, { notifyOnTaskDone: false, notifySoundOnTaskDone: true })
+    // ── 场景 5：浏览器通知权限不再自动申请（这次改动的核心诉求）────────
+    // 打开页面 + 在页面内点几下 → 一次 requestPermission 都不该发生。
+    // 之前挂的是"页面内首次点击就申请"（那时总开关默认开），用户每开一次 GUI
+    // 就被弹一次授权框。
+    consoleErrors.length = 0
+    pageErrors.length = 0
+    const { ctx: ctx5, page: page5 } = await openPage(browser, { page: true, browser: false, sound: true })
     try {
-      const opened = await openSettingsGeneral(page5)
-      check('I9 前置 第二个页面的设置也能打开', opened)
-      const row = await readNotifyRow(page5)
-      check('I10 ★ 总开关关着时提示音开关置灰（子选项跟着失效，一眼看得出来）',
-        row?.master?.on === false && row?.sound?.disabled === true,
-        JSON.stringify({ master: row?.master, sound: row?.sound }))
+      await page5.mouse.click(400, 400)
+      await sleep(400)
+      await page5.mouse.click(500, 300)
+      await sleep(1500)
+      const reqs = await page5.evaluate(() => window.__permRequests || 0)
+      check('J1 ★ 页面内点击不再自动申请通知权限（不再弹授权框）', reqs === 0,
+        `requestPermission 调用次数=${reqs}`)
     } finally {
       await ctx5.close()
+    }
+
+    // 只有把「浏览器通知」开关拨开的那一刻才申请（用户手势里浏览器才会真的弹）
+    consoleErrors.length = 0
+    pageErrors.length = 0
+    const { ctx: ctx6, page: page6 } = await openPage(browser, { page: true, browser: false, sound: true })
+    try {
+      const opened = await openSettingsGeneral(page6)
+      check('J2 前置 第三个页面的设置也能打开', opened)
+      await toggleChannel(page6, '浏览器通知|browser notification')
+      await sleep(1500)
+      const reqs = await page6.evaluate(() => window.__permRequests || 0)
+      check('J3 ★ 拨开浏览器通知开关时才申请权限', reqs >= 1, `requestPermission 调用次数=${reqs}`)
+    } finally {
+      await ctx6.close()
     }
 
     check('G1 页面无 console / page 错误', consoleErrors.length === 0 && pageErrors.length === 0,

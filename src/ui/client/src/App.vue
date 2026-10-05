@@ -74,7 +74,6 @@ import { ALL_AI_CONTEXT_SECTIONS, refreshAiContext, refreshAiContextForView } fr
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import { useTaskNotifier } from '@/composables/useTaskNotifier'
 import { useServerLifecycle } from '@/composables/useServerLifecycle'
-import { gesturePermissionDecision, notificationPermission, requestNotificationPermission } from '@/utils/taskNotify'
 
 const configInfo = ref('')
 // 添加组件实例类型
@@ -129,25 +128,11 @@ watch(serverGone, (gone) => {
   taskNotifier.stop()
 })
 
-// 通知权限自动申请：开关默认开启后，用户很可能永远不碰设置里那个开关，
-// 而浏览器只在用户手势里弹授权询问 —— 所以挂到页面内第一次点击上，补一次申请。
-// 判定逻辑在 gesturePermissionDecision（配置没加载完的点击不作数，见那里的注释）；
-// 只申请一次，之后无论授权/拒绝都不再打扰。
-let notifyPermissionArmed = true
-function onUserGestureForNotifyPermission() {
-  if (!notifyPermissionArmed) return
-  const decision = gesturePermissionDecision({
-    loaded: configStore.isLoaded,
-    enabled: configStore.notifyOnTaskDone,
-    permission: notificationPermission(),
-  })
-  if (decision === 'wait') return
-  notifyPermissionArmed = false
-  if (decision === 'skip') return
-  // 结果不需要在这里弹提示：拒绝后系统通知自动退回应用内提示，
-  // 设置里也会如实显示"浏览器已拒绝通知权限"。
-  void requestNotificationPermission()
-}
+// 浏览器通知权限**不再自动申请**（2026-10-05）。此前通知总开关默认开，于是挂一条
+// "页面内首次点击就申请权限"的监听，好让默认开不至于静默失效 —— 代价是每个从没要过
+// 系统通知的人，一开 GUI 就被弹授权框（用户反馈的主诉）。
+// 现在浏览器通知是设置里一个默认**关**的独立开关，权限只在用户拨开它的那一刻申请
+// （见 GitGlobalSettingsDialog.onBrowserNotifyToggleChange），这里不再挂任何监听。
 
 // 添加初始化完成状态
 const initCompleted = ref(false)
@@ -210,9 +195,6 @@ onMounted(async () => {
 
   // 启动任务结束提示的 SSE 订阅（同样全局常驻：任务跑完时用户多半不在工作台视图）
   taskNotifier.start()
-
-  // 通知权限：页面内第一次点击时自动申请一次（capture 兜住个别组件 stopPropagation 的点击）
-  window.addEventListener('pointerdown', onUserGestureForNotifyPermission, true)
 
   try {
     // 并行加载配置和目录信息
@@ -303,9 +285,6 @@ onBeforeUnmount(() => {
 
   // 断开任务结束提示的 SSE 订阅（停掉后不再自动重连）
   taskNotifier.stop()
-
-  // 摘掉首次点击申请通知权限的监听
-  window.removeEventListener('pointerdown', onUserGestureForNotifyPermission, true)
 
   // 主题 observer 由 useThemeObserver 自动清理
 

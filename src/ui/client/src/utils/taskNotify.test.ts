@@ -7,7 +7,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   notificationPermission,
   requestNotificationPermission,
-  gesturePermissionDecision,
   shouldUseSystemNotification,
   notifySystem,
 } from './taskNotify'
@@ -102,40 +101,34 @@ describe('requestNotificationPermission', () => {
   })
 })
 
-describe('gesturePermissionDecision', () => {
-  it('权限已定（granted / denied / unsupported）时不再申请', () => {
-    for (const p of ['granted', 'denied', 'unsupported'] as const) {
-      expect(gesturePermissionDecision({ loaded: true, enabled: true, permission: p })).toBe('skip')
-    }
-  })
-
-  it('配置没加载完时 wait：这次点击不作数，别拿"还没读到"的开关值当真', () => {
-    expect(gesturePermissionDecision({ loaded: false, enabled: true, permission: 'default' })).toBe('wait')
-    expect(gesturePermissionDecision({ loaded: false, enabled: false, permission: 'default' })).toBe('wait')
-  })
-
-  it('权限未定 + 配置已加载：开关开着才申请，关着就彻底不打扰', () => {
-    expect(gesturePermissionDecision({ loaded: true, enabled: true, permission: 'default' })).toBe('request')
-    expect(gesturePermissionDecision({ loaded: true, enabled: false, permission: 'default' })).toBe('skip')
-  })
-})
-
 describe('shouldUseSystemNotification', () => {
-  it('页面被切走（visibilityState !== visible）时必须走系统通知', () => {
+  it('浏览器通知关着时永远不发（哪怕页面在后台）', () => {
     Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
-    expect(shouldUseSystemNotification()).toBe(true)
+    expect(shouldUseSystemNotification({ page: true, browser: false })).toBe(false)
+    expect(shouldUseSystemNotification({ page: false, browser: false })).toBe(false)
   })
 
-  it('页面可见且持有焦点时不需要系统通知', () => {
+  it('只开浏览器通知（页面提示关）时前台也发 —— 它是唯一通道，压掉等于什么都没收到', () => {
     Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
     vi.spyOn(document, 'hasFocus').mockReturnValue(true)
-    expect(shouldUseSystemNotification()).toBe(false)
+    expect(shouldUseSystemNotification({ page: false, browser: true })).toBe(true)
   })
 
-  it('页面可见但被别的窗口盖住（hasFocus 为 false）时仍要走系统通知', () => {
+  it('两个都开着时页面被切走（visibilityState !== visible）必须走系统通知', () => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+    expect(shouldUseSystemNotification({ page: true, browser: true })).toBe(true)
+  })
+
+  it('两个都开着、页面可见且持有焦点时不需要系统通知（交给页面内提示条，别弹两遍）', () => {
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true)
+    expect(shouldUseSystemNotification({ page: true, browser: true })).toBe(false)
+  })
+
+  it('两个都开着、页面可见但被别的窗口盖住（hasFocus 为 false）时仍要走系统通知', () => {
     Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
     vi.spyOn(document, 'hasFocus').mockReturnValue(false)
-    expect(shouldUseSystemNotification()).toBe(true)
+    expect(shouldUseSystemNotification({ page: true, browser: true })).toBe(true)
   })
 })
 

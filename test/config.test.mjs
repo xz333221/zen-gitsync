@@ -63,12 +63,15 @@ after(async () => {
 const configMod = await import(pathToFileURL(path.join(projectRoot, 'src/config.js')).href)
 // 注意:saveConfig / loadConfig 等业务函数挂在 default export 上;
 // ConfigWriteError / normalizeProjectPath 是命名导出(用于测试与复用)
-const { normalizeProjectPath, ConfigWriteError, normalizeAiMaxToolIterations, normalizeNotifyOnTaskDone, normalizeNotifySoundOnTaskDone } = configMod
+const { normalizeProjectPath, ConfigWriteError, normalizeAiMaxToolIterations, normalizeNotifySwitch } = configMod
 const { saveConfig } = configMod.default
 
 // 直接读沙箱磁盘上的 config.json：比走 loadConfig 更能暴露"写入位置不对"
 const configFilePath = path.join(fakeHome, '.zen-gitsync', 'config.json')
 const readRawConfig = async () => JSON.parse(await fs.readFile(configFilePath, 'utf-8'))
+// 直接铺一份原始配置（用来造"老版本留下的键"这类迁移场景；saveConfig 是合并语义，
+// 造不出"某个键压根没写过"的状态）
+const writeRawConfig = (raw) => configMod.default.writeRawConfigFile(raw)
 
 // ========== normalizeProjectPath ==========
 
@@ -141,94 +144,116 @@ test('normalizeAiMaxToolIterations: 默认上限不再是 40(用户反馈太小)
   assert.equal(normalizeAiMaxToolIterations(cfg.aiMaxToolIterations), cfg.aiMaxToolIterations)
 })
 
-// ========== normalizeNotifyOnTaskDone(任务执行结束提示开关) ==========
+// ========== normalizeNotifySwitch(任务/对话结束提示的三个通道开关) ==========
+// 2026-10-05：原来是「总开关 notifyOnTaskDone + 子开关 notifySoundOnTaskDone」，
+// 现在拆成三个**平级**的通道键（页面提示 / 浏览器通知 / 提示音），共用同一个规范化函数。
+// 规范化只认布尔值这条契约没变（'false' 强转成 true 会让用户在设置里明明关着却照样被弹）。
 
-test('normalizeNotifyOnTaskDone: 只接受布尔值', () => {
-  assert.equal(normalizeNotifyOnTaskDone(true), true)
-  assert.equal(normalizeNotifyOnTaskDone(false), false)
+test('normalizeNotifySwitch: 只接受布尔值', () => {
+  assert.equal(normalizeNotifySwitch(true), true)
+  assert.equal(normalizeNotifySwitch(false), false)
 })
 
-test('normalizeNotifyOnTaskDone: 非布尔值一律 null(调用方取默认/保留磁盘值)', () => {
-  // 'false' 是重点：如果这里被 !!value 强转成 true，用户在设置里明明关着
-  // 却照样被弹通知，而且错值一旦落盘就一直是错的。
+test('normalizeNotifySwitch: 非布尔值一律 null(调用方取默认/保留磁盘值)', () => {
   for (const bad of [undefined, null, 0, 1, '', 'true', 'false', {}, [], NaN]) {
-    assert.equal(normalizeNotifyOnTaskDone(bad), null, `${JSON.stringify(bad)} 应返回 null`)
+    assert.equal(normalizeNotifySwitch(bad), null, `${JSON.stringify(bad)} 应返回 null`)
   }
 })
 
-test('notifyOnTaskDone: 默认开启', async () => {
+const NOTIFY_KEYS = ['notifyPageOnTaskDone', 'notifyBrowserOnTaskDone', 'notifySoundOnTaskDone']
+
+test('三个通道的默认值：页面提示开、提示音开、浏览器通知关', async () => {
   const cfg = await configMod.default.loadConfig()
-  // 2026-09-28: 默认关 → 开。这个功能只在"任务跑完时用户不在这个页面上"才有价值，
-  // 默认关等于没几个人知道它存在；系统通知的权限由前端在用户手势里申请，
-  // 用户拒绝后也只是退回应用内提示，不存在"默认开就静默骚扰"的问题。
-  assert.equal(cfg.notifyOnTaskDone, true, '新装/未设置时应为开')
+  // 浏览器通知默认关是这次改动的核心 —— 它要申请浏览器通知权限，默认开会 + 自动申请
+  // 就是"每次开 GUI 都弹授权框"（用户反馈的主诉）。想用的人自己去设置里拨开。
+  assert.equal(cfg.notifyPageOnTaskDone, true, '新装/未设置时页面提示应为开')
+  assert.equal(cfg.notifySoundOnTaskDone, true, '新装/未设置时提示音应为开')
+  assert.equal(cfg.notifyBrowserOnTaskDone, false, '新装/未设置时浏览器通知应为关')
 })
 
-test('notifyOnTaskDone: 存成顶层全局键，且能读回/能关掉', async () => {
-  await saveConfig({ defaultCommitMessage: 'test', notifyOnTaskDone: true })
-  assert.equal((await readRawConfig()).notifyOnTaskDone, true, '应写在 config.json 顶层')
-  assert.equal(
-    (await configMod.default.loadConfig()).notifyOnTaskDone,
-    true,
-    'loadConfig 应读回 true（顶层值优先于项目配置里的副本）'
-  )
-
-  // 关得掉才算真的可用
-  await saveConfig({ defaultCommitMessage: 'test', notifyOnTaskDone: false })
-  assert.equal((await readRawConfig()).notifyOnTaskDone, false, '关掉后应落盘为 false')
-})
-
-test('notifyOnTaskDone: 非法值不落盘，保留磁盘旧值', async () => {
-  await saveConfig({ defaultCommitMessage: 'test', notifyOnTaskDone: true })
-  await saveConfig({ defaultCommitMessage: 'test', notifyOnTaskDone: 'false' })
-  assert.equal((await readRawConfig()).notifyOnTaskDone, true, '非法值应被忽略，而不是覆盖成 true')
-})
-
-// ========== notifySoundOnTaskDone(任务完成提示音开关) ==========
-// 与 notifyOnTaskDone 同构的一套契约：它是后者的子选项，但**独立存一个顶层键**，
-// 所以歧义路径（非法值、项目配置污染）必须各自验一遍，不能靠"同上"带过。
-
-test('normalizeNotifySoundOnTaskDone: 只接受布尔值', () => {
-  assert.equal(normalizeNotifySoundOnTaskDone(true), true)
-  assert.equal(normalizeNotifySoundOnTaskDone(false), false)
-})
-
-test('normalizeNotifySoundOnTaskDone: 非布尔值一律 null', () => {
-  for (const bad of [undefined, null, 0, 1, '', 'true', 'false', {}, [], NaN]) {
-    assert.equal(normalizeNotifySoundOnTaskDone(bad), null, `${JSON.stringify(bad)} 应返回 null`)
+test('三个通道各自存成顶层全局键，且能独立开关', async () => {
+  for (const key of NOTIFY_KEYS) {
+    await saveConfig({ defaultCommitMessage: 'test', [key]: true })
+    assert.equal((await readRawConfig())[key], true, `${key}=true 应写在 config.json 顶层`)
+    await saveConfig({ defaultCommitMessage: 'test', [key]: false })
+    assert.equal((await readRawConfig())[key], false, `${key} 关得掉才算真的可用`)
+    assert.equal((await configMod.default.loadConfig())[key], false, `${key} 应能读回顶层值`)
   }
 })
 
-test('notifySoundOnTaskDone: 默认开启', async () => {
-  const cfg = await configMod.default.loadConfig()
-  assert.equal(cfg.notifySoundOnTaskDone, true, '新装/未设置时应为开')
-})
-
-test('notifySoundOnTaskDone: 存成顶层全局键，且能读回/能关掉', async () => {
-  await saveConfig({ defaultCommitMessage: 'test', notifySoundOnTaskDone: false })
-  assert.equal((await readRawConfig()).notifySoundOnTaskDone, false, '应写在 config.json 顶层')
-
-  await saveConfig({ defaultCommitMessage: 'test', notifySoundOnTaskDone: true })
-  assert.equal((await readRawConfig()).notifySoundOnTaskDone, true, '开回来应落盘为 true')
-  assert.equal(
-    (await configMod.default.loadConfig()).notifySoundOnTaskDone,
-    true,
-    'loadConfig 应读回顶层值'
-  )
-})
-
-test('notifySoundOnTaskDone: 非法值不落盘，保留磁盘旧值', async () => {
-  await saveConfig({ defaultCommitMessage: 'test', notifySoundOnTaskDone: false })
-  await saveConfig({ defaultCommitMessage: 'test', notifySoundOnTaskDone: 'false' })
-  assert.equal((await readRawConfig()).notifySoundOnTaskDone, false, "非法值 'false' 不该被当成真值写进去")
-})
-
-test('notifySoundOnTaskDone: 两个开关互不干扰（改一个不动另一个）', async () => {
-  await saveConfig({ defaultCommitMessage: 'test', notifyOnTaskDone: true, notifySoundOnTaskDone: true })
+test('三个通道互不干扰：改一个不动另外两个', async () => {
+  await saveConfig({
+    defaultCommitMessage: 'test',
+    notifyPageOnTaskDone: true,
+    notifyBrowserOnTaskDone: true,
+    notifySoundOnTaskDone: true
+  })
   await saveConfig({ defaultCommitMessage: 'test', notifySoundOnTaskDone: false })
   const raw = await readRawConfig()
   assert.equal(raw.notifySoundOnTaskDone, false, '提示音应被关掉')
-  assert.equal(raw.notifyOnTaskDone, true, '总开关不该被顺手改动')
+  assert.equal(raw.notifyPageOnTaskDone, true, '页面提示不该被顺手改动')
+  assert.equal(raw.notifyBrowserOnTaskDone, true, '浏览器通知不该被顺手改动')
+})
+
+test('三个通道：非法值不落盘，保留磁盘旧值', async () => {
+  for (const key of NOTIFY_KEYS) {
+    await saveConfig({ defaultCommitMessage: 'test', [key]: true })
+    await saveConfig({ defaultCommitMessage: 'test', [key]: 'false' })
+    assert.equal((await readRawConfig())[key], true, `${key} 的非法值应被忽略，而不是覆盖成 true`)
+  }
+})
+
+test('旧键 notifyOnTaskDone 只作迁移输入：显式 false → 三个通道全关', async () => {
+  // 老用户磁盘上是"总开关关着"（那时关掉它 = 什么都不要）。升级后不能让三个默认值
+  // （页面提示 + 提示音开）把提示又弹回来 —— 迁移必须尊重"我以前就是关掉的"。
+  await writeRawConfig({
+    defaultCommitMessage: 'test',
+    projects: {},
+    notifyOnTaskDone: false
+  })
+  const cfg = await configMod.default.loadConfig()
+  for (const key of NOTIFY_KEYS) {
+    assert.equal(cfg[key], false, `旧总开关为 false 时 ${key} 应迁移成 false`)
+  }
+})
+
+test('旧键 notifyOnTaskDone: true → 三个通道走各自的新默认值', async () => {
+  await writeRawConfig({
+    defaultCommitMessage: 'test',
+    projects: {},
+    notifyOnTaskDone: true
+  })
+  const cfg = await configMod.default.loadConfig()
+  assert.equal(cfg.notifyPageOnTaskDone, true)
+  assert.equal(cfg.notifySoundOnTaskDone, true)
+  assert.equal(cfg.notifyBrowserOnTaskDone, false, '浏览器通知即便旧总开关开着也仍是关（新默认）')
+})
+
+test('新键一旦写过，就盖过旧总开关的迁移结果', async () => {
+  await writeRawConfig({
+    defaultCommitMessage: 'test',
+    projects: {},
+    notifyOnTaskDone: false,
+    notifyPageOnTaskDone: true
+  })
+  const cfg = await configMod.default.loadConfig()
+  assert.equal(cfg.notifyPageOnTaskDone, true, '显式写过的新键优先于迁移')
+  assert.equal(cfg.notifySoundOnTaskDone, false, '没写过的新键仍按迁移走')
+})
+
+test('旧键 notifyOnTaskDone 不再被写入，也不会漏进项目配置', async () => {
+  // 全局设置漏进项目级是这一族键最容易踩的坑：saveConfig 的 ...projectConfig 展开
+  // 会把没解构出来的键写进 raw.projects[key]。旧键已不再是活配置，但必须继续被剔除。
+  // 先铺一份干净的 raw（上一条用例可能留下过旧键 —— saveConfig 只写不删，不会清掉它）。
+  await writeRawConfig({ defaultCommitMessage: 'test', projects: {} })
+  await saveConfig({ defaultCommitMessage: 'test', notifyOnTaskDone: true, notifyPageOnTaskDone: true })
+  const raw = await readRawConfig()
+  assert.equal(raw.notifyOnTaskDone, undefined, '旧键不该再被写进顶层')
+  assert.equal(raw.notifyPageOnTaskDone, true, '新键应正常落盘')
+  const polluted = Object.entries(raw.projects || {})
+    .filter(([, p]) => p && typeof p === 'object' && 'notifyOnTaskDone' in p)
+    .map(([k]) => k)
+  assert.deepEqual(polluted, [], `旧键不该出现在项目配置里: ${polluted.join(', ')}`)
 })
 
 test('默认导出对象必须包含路由要用的规范化函数（漏加 = undefined 调用 → 路由 500）', () => {
@@ -240,8 +265,7 @@ test('默认导出对象必须包含路由要用的规范化函数（漏加 = un
   for (const name of [
     'normalizeAiMaxToolIterations',
     'normalizeTaskExecutor',
-    'normalizeNotifyOnTaskDone',
-    'normalizeNotifySoundOnTaskDone'
+    'normalizeNotifySwitch'
   ]) {
     assert.equal(typeof configMod.default[name], 'function', `默认导出缺少 ${name}`)
   }

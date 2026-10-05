@@ -6,22 +6,29 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // vi.hoisted：mock 工厂会在 import 期就执行，直接用普通 let 会撞 TDZ
-const state = vi.hoisted(() => ({ notifyEnabled: false, soundEnabled: true }))
+// 三个通道各自一个开关（页面提示 / 浏览器通知 / 提示音），默认全关 ——
+// 用例里显式打开自己关心的那个，避免"某个用例其实靠默认值通过"。
+const state = vi.hoisted(() => ({ page: false, browser: false, sound: true }))
 const sys = vi.hoisted(() => ({ useSystem: false, canSend: true, sent: [] as any[] }))
 
 vi.mock('@stores/configStore', () => ({
   useConfigStore: () => ({
-    get notifyOnTaskDone() {
-      return state.notifyEnabled
+    get notifyPageOnTaskDone() {
+      return state.page
+    },
+    get notifyBrowserOnTaskDone() {
+      return state.browser
     },
     get notifySoundOnTaskDone() {
-      return state.soundEnabled
+      return state.sound
     },
   }),
 }))
 
 vi.mock('@/utils/taskNotify', () => ({
-  shouldUseSystemNotification: () => sys.useSystem,
+  // 真实的"前台/后台"判定在 taskNotify.test.ts 里测；这里只保住它与开关的耦合关系：
+  // 浏览器通知关着就不该走系统通知那条路（忽略开关的桩会让"关着开关"的用例假通过）。
+  shouldUseSystemNotification: (sw: { browser: boolean }) => sys.useSystem && sw.browser,
   notifySystem: (opts: any) => {
     sys.sent.push(opts)
     return sys.canSend
@@ -84,8 +91,9 @@ const runningJob = (id: string, title = '写代码 / 写代码') => ({ id, title
 
 beforeEach(() => {
   FakeEventSource.instances = []
-  state.notifyEnabled = false
-  state.soundEnabled = true
+  state.page = false
+  state.browser = false
+  state.sound = false
   sys.useSystem = false
   sys.canSend = true
   sys.sent = []
@@ -198,7 +206,8 @@ describe('useTaskNotifier 订阅', () => {
   })
 
   it('hello 快照只记状态，绝不提示（页面刚打开时看到的历史 job 是老账）', () => {
-    state.notifyEnabled = true
+    state.page = true
+    state.browser = true
     sys.useSystem = true
     const { es } = connect()
     es.frame('hello', { jobs: [{ id: 'old', title: 't / t', status: 'done' }] })
@@ -207,7 +216,7 @@ describe('useTaskNotifier 订阅', () => {
   })
 
   it('坏帧（非 JSON）被忽略，不影响后续帧', () => {
-    state.notifyEnabled = true
+    state.page = true
     const { es } = connect()
     expect(() => es.emit('{ not json')).not.toThrow()
     es.frame('job:update', runningJob('j1'))
@@ -216,7 +225,7 @@ describe('useTaskNotifier 订阅', () => {
   })
 
   it('缺少 id 的 job 帧被忽略', () => {
-    state.notifyEnabled = true
+    state.page = true
     const { es } = connect()
     es.frame('job:update', { title: 'x', status: 'done' })
     es.frame('job:update', null)
@@ -225,17 +234,19 @@ describe('useTaskNotifier 订阅', () => {
 })
 
 describe('useTaskNotifier 提示决策', () => {
-  it('开关关着时跑完也不提示', () => {
+  it('三个通道全关着时跑完什么都不做', () => {
     sys.useSystem = true
     const { es } = connect()
     es.frame('job:update', runningJob('j1'))
     es.frame('job:update', { id: 'j1', title: '写代码 / 写代码', status: 'done' })
     expect(sys.sent).toHaveLength(0)
     expect(successCalls()).toHaveLength(0)
+    expect(snd.played).toEqual([])
   })
 
-  it('开关打开 + 页面在后台 → 走系统通知，且不再叠一条应用内提示', () => {
-    state.notifyEnabled = true
+  it('页面提示 + 浏览器通知都开着、页面在后台 → 走系统通知，且不再叠一条应用内提示', () => {
+    state.page = true
+    state.browser = true
     sys.useSystem = true
     const { es } = connect()
     es.frame('job:update', runningJob('j1'))
@@ -250,7 +261,8 @@ describe('useTaskNotifier 提示决策', () => {
   })
 
   it('页面在前台 → 应用内提示（标题复用任务名，正文不再重复）', () => {
-    state.notifyEnabled = true
+    state.page = true
+    state.browser = true
     sys.useSystem = false
     const { es } = connect()
     es.frame('job:update', runningJob('j1'))
@@ -263,7 +275,8 @@ describe('useTaskNotifier 提示决策', () => {
   })
 
   it('前台状态下出错走 error toast、停止走 info toast（提示级别不能一律 success）', () => {
-    state.notifyEnabled = true
+    state.page = true
+    state.browser = true
     sys.useSystem = false
     const { es } = connect()
     es.frame('job:update', runningJob('a'))
@@ -278,7 +291,8 @@ describe('useTaskNotifier 提示决策', () => {
   })
 
   it('系统通知发不出去（权限被拒）时退回应用内提示，不让用户什么都收不到', () => {
-    state.notifyEnabled = true
+    state.page = true
+    state.browser = true
     sys.useSystem = true
     sys.canSend = false
     const { es } = connect()
@@ -288,8 +302,21 @@ describe('useTaskNotifier 提示决策', () => {
     expect(successCalls()).toHaveLength(1)
   })
 
+  it('页面提示关着 + 浏览器通知发不出去 → 不拿一条用户没要的提示条顶上', () => {
+    state.page = false
+    state.browser = true
+    sys.useSystem = true
+    sys.canSend = false
+    const { es } = connect()
+    es.frame('job:update', runningJob('j1'))
+    es.frame('job:update', { id: 'j1', title: '写代码 / 写代码', status: 'done' })
+    expect(sys.sent).toHaveLength(1)
+    expect(successCalls()).toHaveLength(0)
+  })
+
   it('出错 / 主动停止各走各的文案', () => {
-    state.notifyEnabled = true
+    state.page = true
+    state.browser = true
     sys.useSystem = true
     const { es } = connect()
     es.frame('job:update', runningJob('a'))
@@ -304,7 +331,7 @@ describe('useTaskNotifier 提示决策', () => {
   })
 
   it('同一条 job 的重复终态帧只提示一次', () => {
-    state.notifyEnabled = true
+    state.page = true
     const { es } = connect()
     es.frame('job:update', runningJob('j1'))
     es.frame('job:update', { id: 'j1', title: 't / t', status: 'done' })
@@ -313,7 +340,7 @@ describe('useTaskNotifier 提示决策', () => {
   })
 
   it('多条 job 状态互不干扰', () => {
-    state.notifyEnabled = true
+    state.page = true
     const { es } = connect()
     es.frame('job:update', runningJob('a'))
     es.frame('job:update', runningJob('b'))
@@ -324,10 +351,10 @@ describe('useTaskNotifier 提示决策', () => {
   })
 
   it('开关是实时读的：任务跑的过程中关掉，结束时就不提示了', () => {
-    state.notifyEnabled = true
+    state.page = true
     const { es } = connect()
     es.frame('job:update', runningJob('j1'))
-    state.notifyEnabled = false
+    state.page = false
     es.frame('job:update', { id: 'j1', title: 't / t', status: 'done' })
     expect(successCalls()).toHaveLength(0)
   })
@@ -335,7 +362,8 @@ describe('useTaskNotifier 提示决策', () => {
 
 describe('useTaskNotifier 提示音', () => {
   it('正常跑完"叮"一声 done，出错响 error', () => {
-    state.notifyEnabled = true
+    state.page = true
+    state.sound = true
     const { es } = connect()
     es.frame('job:update', runningJob('a'))
     es.frame('job:update', { id: 'a', title: '任务A / 任务A', status: 'done' })
@@ -348,7 +376,8 @@ describe('useTaskNotifier 提示音', () => {
     // cancelled 照样传下去，是因为"停不停止响"属于音源映射（SOUND_SRC.cancelled = ''），
     // 不该在 composable 里再抄一份判断 —— 两边各写一遍迟早会走岔。
     // playFinishSound('cancelled') 返回 false 且不创建 Audio，见 utils/taskSound.test.ts。
-    state.notifyEnabled = true
+    state.page = true
+    state.sound = true
     const { es } = connect()
     es.frame('job:update', runningJob('c'))
     es.frame('job:update', { id: 'c', title: '任务C / 任务C', status: 'cancelled' })
@@ -356,7 +385,9 @@ describe('useTaskNotifier 提示音', () => {
   })
 
   it('页面在前台也响 —— 声音不参与「前台 / 后台」二选一，那是系统通知的分流', () => {
-    state.notifyEnabled = true
+    state.page = true
+    state.browser = true
+    state.sound = true
     sys.useSystem = false
     const { es } = connect()
     es.frame('job:update', runningJob('j1'))
@@ -366,7 +397,9 @@ describe('useTaskNotifier 提示音', () => {
   })
 
   it('系统通知权限被拒、退回应用内提示时，声音照样响', () => {
-    state.notifyEnabled = true
+    state.page = true
+    state.browser = true
+    state.sound = true
     sys.useSystem = true
     sys.canSend = false
     const { es } = connect()
@@ -375,19 +408,21 @@ describe('useTaskNotifier 提示音', () => {
     expect(snd.played).toEqual(['done'])
   })
 
-  it('总开关关着时一声都不响 —— 提示音开关开着也不行（它从属于总开关）', () => {
-    state.notifyEnabled = false
-    state.soundEnabled = true
+  it('只开提示音（两个视觉通道都关）→ 只有声音，不弹提示条也不发通知', () => {
+    state.page = false
+    state.browser = false
+    state.sound = true
     const { es } = connect()
     es.frame('job:update', runningJob('j1'))
     es.frame('job:update', { id: 'j1', title: 't / t', status: 'done' })
-    expect(snd.played).toEqual([])
+    expect(snd.played).toEqual(['done'])
     expect(successCalls()).toHaveLength(0)
+    expect(sys.sent).toHaveLength(0)
   })
 
-  it('提示音开关关着时只弹提示、不出声（通知与声音是两个独立的键）', () => {
-    state.notifyEnabled = true
-    state.soundEnabled = false
+  it('提示音关着时只弹提示、不出声（声音与视觉是两个独立的键）', () => {
+    state.page = true
+    state.sound = false
     sys.useSystem = false
     const { es } = connect()
     es.frame('job:update', runningJob('j1'))
@@ -397,18 +432,19 @@ describe('useTaskNotifier 提示音', () => {
   })
 
   it('提示音开关也是实时读的：任务跑的过程中关掉，结束时就不响了', () => {
-    state.notifyEnabled = true
-    state.soundEnabled = true
+    state.page = true
+    state.sound = true
     const { es } = connect()
     es.frame('job:update', runningJob('j1'))
-    state.soundEnabled = false
+    state.sound = false
     es.frame('job:update', { id: 'j1', title: 't / t', status: 'done' })
     expect(snd.played).toEqual([])
     expect(successCalls()).toHaveLength(1)
   })
 
   it('重复的终态帧只响一次，hello 快照里的历史 job 一声不响', () => {
-    state.notifyEnabled = true
+    state.page = true
+    state.sound = true
     const { es } = connect()
     es.frame('hello', { jobs: [{ id: 'old', title: 't / t', status: 'done' }] })
     es.frame('job:update', runningJob('j1'))

@@ -210,13 +210,16 @@ export const useConfigStore = defineStore('config', () => {
   // 只在「设置 → 通用设置 → 任务执行器」里改。执行入口旁的临时切换记在 ui.lastTaskExecutor，
   // 两者分开存 —— 前者是"配好的默认"，后者是"上次用的"，互相覆盖就没有各自的意义了。
   const taskExecutor = ref<TaskExecutorId>('claude')
-  // 任务执行结束时是否提示（全局配置）。默认开：这个功能只在"用户切到别的窗口"时才有意义，
-  // 默认关等于没几个人知道它存在。浏览器通知权限在页面内首次点击时自动申请一次（见 App.vue），
-  // 用户拒绝后系统通知发不出去，会退回应用内提示（见 useTaskNotifier）。
-  const notifyOnTaskDone = ref(true)
-  // 任务完成提示音（全局配置，默认开）。从属于 notifyOnTaskDone：总开关关着时整条
-  // 提示链路都不走，提示音自然也不会响（见 useTaskNotifier.handleJob 的读取点）。
-  // 单独一个键，是为了"要通知但别出声"和"要声音但不要通知卡片"这两种人都能配。
+  // 任务/对话结束提示的三个通道（全局配置），三者**平级且互相独立**。
+  // 默认值必须与 src/config.js 的 defaultConfig 一致，配置读取前的首屏也靠它们兜底。
+  //
+  // 页面提示（默认开）：结束时弹一条应用内提示条。
+  // 浏览器通知（**默认关**）：页面在后台/别的窗口时发系统通知。默认关是因为它要申请
+  //   浏览器通知权限 —— 默认开 + 自动申请 = 用户每次开 GUI 都被弹一个授权框
+  //   （2026-10-05 用户反馈的主诉）。想用的人自己去设置里拨开，那一刻才申请。
+  // 提示音（默认开）：跑完 / 出错各响一声，主动停止不响（见 utils/taskSound）。
+  const notifyPageOnTaskDone = ref(true)
+  const notifyBrowserOnTaskDone = ref(false)
   const notifySoundOnTaskDone = ref(true)
 
   // ============================================================
@@ -512,11 +515,14 @@ export const useConfigStore = defineStore('config', () => {
       if (isTaskExecutorId(configData.taskExecutor)) {
         taskExecutor.value = configData.taskExecutor
       }
-      // 任务执行结束提示开关（缺省 false —— 老配置里没有这个字段）
-      if (typeof configData.notifyOnTaskDone === 'boolean') {
-        notifyOnTaskDone.value = configData.notifyOnTaskDone
+      // 任务/对话结束提示的三个通道开关（老配置里没有这些字段 → 保持上面的默认值，
+      // 旧总开关 notifyOnTaskDone 的迁移在后端 resolveNotifySwitches 里做完了）
+      if (typeof configData.notifyPageOnTaskDone === 'boolean') {
+        notifyPageOnTaskDone.value = configData.notifyPageOnTaskDone
       }
-      // 任务完成提示音开关（老配置里没有这个字段 → 保持默认开）
+      if (typeof configData.notifyBrowserOnTaskDone === 'boolean') {
+        notifyBrowserOnTaskDone.value = configData.notifyBrowserOnTaskDone
+      }
       if (typeof configData.notifySoundOnTaskDone === 'boolean') {
         notifySoundOnTaskDone.value = configData.notifySoundOnTaskDone
       }
@@ -1585,7 +1591,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 保存通用设置
-  async function saveGeneralSettings(settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: TaskExecutorId, notifyOnTaskDone?: boolean, notifySoundOnTaskDone?: boolean }) {
+  async function saveGeneralSettings(settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: TaskExecutorId, notifyPageOnTaskDone?: boolean, notifyBrowserOnTaskDone?: boolean, notifySoundOnTaskDone?: boolean }) {
     try {
       const response = await fetch('/api/config/save-general-settings', {
         method: 'POST',
@@ -1611,8 +1617,11 @@ export const useConfigStore = defineStore('config', () => {
         if (isTaskExecutorId(settings.taskExecutor)) {
           taskExecutor.value = settings.taskExecutor
         }
-        if (typeof settings.notifyOnTaskDone === 'boolean') {
-          notifyOnTaskDone.value = settings.notifyOnTaskDone
+        if (typeof settings.notifyPageOnTaskDone === 'boolean') {
+          notifyPageOnTaskDone.value = settings.notifyPageOnTaskDone
+        }
+        if (typeof settings.notifyBrowserOnTaskDone === 'boolean') {
+          notifyBrowserOnTaskDone.value = settings.notifyBrowserOnTaskDone
         }
         if (typeof settings.notifySoundOnTaskDone === 'boolean') {
           notifySoundOnTaskDone.value = settings.notifySoundOnTaskDone
@@ -1635,7 +1644,8 @@ export const useConfigStore = defineStore('config', () => {
     taskExecutor,
     resolvedTaskExecutor,
     setLastTaskExecutor,
-    notifyOnTaskDone,
+    notifyPageOnTaskDone,
+    notifyBrowserOnTaskDone,
     notifySoundOnTaskDone,
     defaultCommitMessage,
     descriptionTemplates,

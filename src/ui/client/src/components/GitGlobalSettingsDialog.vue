@@ -177,27 +177,50 @@
                 </div>
               </div>
 
-              <!-- 任务 / 对话执行结束提示：跑完一个任务或一轮对话时给个动静（页面在后台发系统通知） -->
+              <!-- 任务 / 对话执行结束提示：跑完一个任务或一轮对话时给个动静。
+                   三个通道**平级且互相独立**（页面提示 / 浏览器通知 / 提示音），
+                   默认只开页面提示与提示音 —— 浏览器通知要申请系统通知权限，
+                   默认关（默认开 + 自动申请 = 每个用户一开 GUI 就被弹授权框）。 -->
               <div class="setting-row">
                 <label class="setting-label">{{ $t('@42BB9:任务与对话完成提示') }}</label>
-                <div class="project-toggle">
-                  <el-switch v-model="tempNotifyOnTaskDone" @change="onNotifyToggleChange" />
-                  <span class="setting-hint-block notify-hint">{{ $t('@42BB9:任务或对话结束时提醒我：页面在后台发系统通知，在前台弹应用内提示') }}</span>
-                  <span v-if="notifyPermissionState === 'denied'" class="setting-hint-block notify-hint notify-hint--warn">
-                    {{ $t('@42BB9:浏览器已拒绝通知权限，只能在页面内提示（可在浏览器地址栏的站点设置里恢复）') }}
-                  </span>
-                  <span v-else-if="notifyPermissionState === 'unsupported'" class="setting-hint-block notify-hint notify-hint--warn">
-                    {{ $t('@42BB9:当前环境不支持系统通知，只能在页面内提示') }}
-                  </span>
-
-                  <!-- 提示音：总开关的子选项。缩进 + 左侧竖线表达从属关系，总开关关掉时置灰 -->
-                  <div class="notify-sub">
-                    <div class="notify-sub__head">
-                      <el-switch v-model="tempNotifySoundOnTaskDone" size="small" :disabled="!tempNotifyOnTaskDone" />
-                      <span class="notify-sub__label">{{ $t('@42BB9:提示音') }}</span>
+                <div class="project-toggle notify-channels">
+                  <div class="notify-channel">
+                    <div class="notify-channel__head">
+                      <el-switch v-model="tempNotifyPageOnTaskDone" size="small" />
+                      <span class="notify-channel__label">{{ $t('@42BB9:页面提示') }}</span>
                     </div>
-                    <span class="setting-hint-block notify-hint notify-sub__hint">
-                      {{ $t('@42BB9:任务或对话跑完、出错各响一声（主动停止不响）；上面的总开关关着时也不会有声音') }}
+                    <span class="setting-hint-block notify-hint">
+                      {{ $t('@42BB9:任务或对话结束时在页面内弹一条提示') }}
+                    </span>
+                  </div>
+
+                  <div class="notify-channel">
+                    <div class="notify-channel__head">
+                      <el-switch
+                        v-model="tempNotifyBrowserOnTaskDone"
+                        size="small"
+                        @change="onBrowserNotifyToggleChange"
+                      />
+                      <span class="notify-channel__label">{{ $t('@42BB9:浏览器通知') }}</span>
+                    </div>
+                    <span class="setting-hint-block notify-hint">
+                      {{ $t('@42BB9:页面在后台或别的窗口时发系统通知；打开时会向浏览器申请通知权限') }}
+                    </span>
+                    <span v-if="notifyPermissionState === 'denied'" class="setting-hint-block notify-hint notify-hint--warn">
+                      {{ $t('@42BB9:浏览器已拒绝通知权限，只能在页面内提示（可在浏览器地址栏的站点设置里恢复）') }}
+                    </span>
+                    <span v-else-if="notifyPermissionState === 'unsupported'" class="setting-hint-block notify-hint notify-hint--warn">
+                      {{ $t('@42BB9:当前环境不支持系统通知，只能在页面内提示') }}
+                    </span>
+                  </div>
+
+                  <div class="notify-channel">
+                    <div class="notify-channel__head">
+                      <el-switch v-model="tempNotifySoundOnTaskDone" size="small" />
+                      <span class="notify-channel__label">{{ $t('@42BB9:提示音') }}</span>
+                    </div>
+                    <span class="setting-hint-block notify-hint">
+                      {{ $t('@42BB9:任务或对话跑完、出错各响一声（主动停止不响）') }}
                     </span>
                   </div>
                 </div>
@@ -853,10 +876,11 @@ function optionExecutorModelTitle(id: TaskExecutorId): string {
   return [toolsStore.executorModelText(id), toolsStore.executorModelDetail(id)].filter(Boolean).join(' · ')
 }
 
-// 任务执行结束提示开关（全局，默认开）
-const tempNotifyOnTaskDone = ref(false)
-// 任务完成提示音开关（全局，默认开）。从属于上面的总开关：总开关关着时置灰不可点，
-// 但值本身留着（后端也各自存一个键）—— 用户临时关掉总开关再打开，提示音设置还在。
+// 任务/对话结束提示的三个通道开关（全局）。**平级且互相独立** —— 三者之间没有从属
+// 关系，各存各的键（notifyPageOnTaskDone / notifyBrowserOnTaskDone / notifySoundOnTaskDone），
+// 改一个绝不顺带改动另一个。默认值见 configStore（页面提示 + 提示音开，浏览器通知关）。
+const tempNotifyPageOnTaskDone = ref(true)
+const tempNotifyBrowserOnTaskDone = ref(false)
 const tempNotifySoundOnTaskDone = ref(true)
 // 只读镜像，用来在开关下方如实展示"系统通知到底能不能发出去"：
 // 权限已拒 / 环境不支持时，光看开关是不知道的，用户会以为开了却没动静。
@@ -917,7 +941,7 @@ const editingModelInitial = computed(() => {
 const hasChanges = computed(() => {
   if (activeTab.value === 'config') return true
   if (activeTab.value === 'general') {
-    return tempTheme.value !== initTheme || tempLocale.value !== initLocale || tempTaskExecutor.value !== initTaskExecutor || tempNotifyOnTaskDone.value !== initNotifyOnTaskDone || tempNotifySoundOnTaskDone.value !== initNotifySoundOnTaskDone || editingModelId.value !== undefined
+    return tempTheme.value !== initTheme || tempLocale.value !== initLocale || tempTaskExecutor.value !== initTaskExecutor || tempNotifyPageOnTaskDone.value !== initNotifyPageOnTaskDone || tempNotifyBrowserOnTaskDone.value !== initNotifyBrowserOnTaskDone || tempNotifySoundOnTaskDone.value !== initNotifySoundOnTaskDone || editingModelId.value !== undefined
   }
   if (activeTab.value === 'git') {
     return (
@@ -1026,7 +1050,8 @@ let initInitDefaultBranch = 'main'
 let initTheme: 'light' | 'dark' | 'auto' = 'light'
 let initLocale: SupportLocale = 'zh-CN'
 let initTaskExecutor: TaskExecutorId = 'claude'
-let initNotifyOnTaskDone = false
+let initNotifyPageOnTaskDone = true
+let initNotifyBrowserOnTaskDone = false
 let initNotifySoundOnTaskDone = true
 
 // 同步 v-model
@@ -1051,7 +1076,8 @@ watch(() => props.modelValue, async (val) => {
     tempTheme.value = configStore.theme
     tempLocale.value = configStore.locale
     tempTaskExecutor.value = configStore.taskExecutor
-    tempNotifyOnTaskDone.value = configStore.notifyOnTaskDone
+    tempNotifyPageOnTaskDone.value = configStore.notifyPageOnTaskDone
+    tempNotifyBrowserOnTaskDone.value = configStore.notifyBrowserOnTaskDone
     tempNotifySoundOnTaskDone.value = configStore.notifySoundOnTaskDone
     // 每次打开都重读权限：用户可能在浏览器地址栏里改过，或上一次授权弹窗刚被关掉
     notifyPermissionState.value = notificationPermission()
@@ -1089,7 +1115,8 @@ watch(() => props.modelValue, async (val) => {
     initTheme = tempTheme.value
     initLocale = tempLocale.value
     initTaskExecutor = tempTaskExecutor.value
-    initNotifyOnTaskDone = tempNotifyOnTaskDone.value
+    initNotifyPageOnTaskDone = tempNotifyPageOnTaskDone.value
+    initNotifyBrowserOnTaskDone = tempNotifyBrowserOnTaskDone.value
     initNotifySoundOnTaskDone = tempNotifySoundOnTaskDone.value
   }
 }, { immediate: true })
@@ -1303,7 +1330,7 @@ async function saveGlobalGitConfigs() {
 
 // 保存通用设置
 async function saveGeneralSettings() {
-  const settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: TaskExecutorId, notifyOnTaskDone?: boolean, notifySoundOnTaskDone?: boolean } = {}
+  const settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: TaskExecutorId, notifyPageOnTaskDone?: boolean, notifyBrowserOnTaskDone?: boolean, notifySoundOnTaskDone?: boolean } = {}
 
   // 保存主题设置（如果与初始值不同或需要强制保存）
   if (tempTheme.value !== initTheme) {
@@ -1324,20 +1351,23 @@ async function saveGeneralSettings() {
     initTaskExecutor = tempTaskExecutor.value
   }
 
-  // 保存任务完成提示开关（如果与初始值不同）
-  if (tempNotifyOnTaskDone.value !== initNotifyOnTaskDone) {
-    settings.notifyOnTaskDone = tempNotifyOnTaskDone.value
-    initNotifyOnTaskDone = tempNotifyOnTaskDone.value
+  // 保存三个提示通道开关（各自与初始值比较，只把变了的那个发出去 ——
+  // 三个键互相独立，多带一个就等于替用户把他没碰的开关也重写一遍）
+  if (tempNotifyPageOnTaskDone.value !== initNotifyPageOnTaskDone) {
+    settings.notifyPageOnTaskDone = tempNotifyPageOnTaskDone.value
+    initNotifyPageOnTaskDone = tempNotifyPageOnTaskDone.value
   }
-
-  // 保存提示音开关（如果与初始值不同）
+  if (tempNotifyBrowserOnTaskDone.value !== initNotifyBrowserOnTaskDone) {
+    settings.notifyBrowserOnTaskDone = tempNotifyBrowserOnTaskDone.value
+    initNotifyBrowserOnTaskDone = tempNotifyBrowserOnTaskDone.value
+  }
   if (tempNotifySoundOnTaskDone.value !== initNotifySoundOnTaskDone) {
     settings.notifySoundOnTaskDone = tempNotifySoundOnTaskDone.value
     initNotifySoundOnTaskDone = tempNotifySoundOnTaskDone.value
   }
 
   // 只要有设置项就保存（包括主题或语言）
-  if (settings.theme !== undefined || settings.locale !== undefined || settings.taskExecutor !== undefined || settings.notifyOnTaskDone !== undefined || settings.notifySoundOnTaskDone !== undefined) {
+  if (settings.theme !== undefined || settings.locale !== undefined || settings.taskExecutor !== undefined || settings.notifyPageOnTaskDone !== undefined || settings.notifyBrowserOnTaskDone !== undefined || settings.notifySoundOnTaskDone !== undefined) {
     const saved = await configStore.saveGeneralSettings(settings)
     if (saved) {
       ElMessage.success($t('@42BB9:通用设置已保存'))
@@ -1348,14 +1378,14 @@ async function saveGeneralSettings() {
   return true
 }
 
-// 开关被拨到"开"的那一刻申请通知权限（开关默认开，这条平时主要覆盖"关掉过又打开"；
-// 页面内首次点击时的自动申请在 App.vue 的 onUserGestureForNotifyPermission）。
+// 浏览器通知开关被拨到"开"的那一刻申请通知权限 —— 这是**唯一**的申请入口
+// （页面内首次点击的自动申请 2026-10-05 已删除，那正是"每次开 GUI 都弹授权框"的来源）。
 //
 // ⚠️ 必须挂在点击事件上，不能等任务跑完再补申请：浏览器只在**用户手势**里响应
 // requestPermission（Chrome 之后不再允许非手势调用弹窗），在 SSE 回调里调只会拿回
 // 'default'，然后就永久卡住 —— 用户会觉得"开了开关但从来没提示过"。
 // 关掉时不申请（没意义），但把状态回读一次，保证下方提示行即时更新。
-async function onNotifyToggleChange(value: string | number | boolean) {
+async function onBrowserNotifyToggleChange(value: string | number | boolean) {
   if (value === true) {
     notifyPermissionState.value = await requestNotificationPermission()
     if (notifyPermissionState.value === 'denied') {
@@ -1859,29 +1889,27 @@ async function openSystemConfigFile() {
 .notify-hint--warn {
   color: var(--color-warning-dark);
 }
-/* 提示音是「任务完成提示」的子选项：左侧竖线 + 缩进表达从属关系，别让它看起来和
-   总开关平级 —— 平级的两个开关会让人以为"关了总开关声音还在"（实际不会响）。 */
-.notify-sub {
+/* 三个提示通道（页面提示 / 浏览器通知 / 提示音）**平级**，纵向排开、互不缩进 ——
+   2026-10-05 之前是「总开关 + 缩进的提示音子开关」，那种缩进在这儿会撒谎：
+   三者之间没有从属关系，关掉任意一个都不影响另外两个。 */
+.notify-channels {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+.notify-channel {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-top: 4px;
-  /* 2026-10-04：原本是 border-left: 2px solid var(--el-border-color)。
-     那根竖线在这里只承担「缩进」这一个职责（没有语义色彩），去掉之后
-     由 padding-left 独自表达缩进。 */
 }
-.notify-sub__head {
+.notify-channel__head {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
 }
-.notify-sub__label {
+.notify-channel__label {
   font-size: var(--font-size-xs);
   color: var(--el-text-color-regular);
-}
-/* 置灰时连说明一起降透明度，让"现在不生效"一眼看得出来 */
-.notify-sub:has(.el-switch.is-disabled) .notify-sub__hint {
-  opacity: var(--disabled-opacity);
 }
 .ai-iterations-input {
   width: 140px;

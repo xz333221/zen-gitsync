@@ -19,6 +19,11 @@
 //   2. 权限未授予时构造会抛 TypeError（有些浏览器是静默丢弃），调用点不该各自 try/catch；
 //   3. 「页面在前台就别再弹系统窗口」这条策略要跟调用点分开 —— 那是展示决策，不是通知能力。
 // 所以这里全部收敛成「返回布尔值、绝不抛」，业务侧只关心"这条提示有没有发出去"。
+//
+// 2026-10-05：通知权限不再自动申请。此前浏览器通知没有自己的开关（默认开），
+// 于是页面内第一次点击会自动 requestPermission —— 用户反馈"每次开 GUI 都弹授权框"。
+// 现在浏览器通知是设置里一个默认**关**的独立开关，权限只在用户拨开它的那一刻申请
+// （见 GitGlobalSettingsDialog 的 onBrowserNotifyToggleChange）。
 
 export type NotifyPermission = 'granted' | 'denied' | 'default' | 'unsupported'
 
@@ -50,35 +55,21 @@ export async function requestNotificationPermission(): Promise<NotifyPermission>
 }
 
 /**
- * 「页面内首次点击时自动申请权限」这一步该怎么做。
- *
- * 为什么需要它：开关默认开启后，用户很可能一辈子不碰设置里那个开关，而浏览器只在
- * 用户手势里弹授权询问 —— 不补这条，默认开也只是个摆设，后台任务跑完照样没系统通知。
- *
- * 三种结果：
- *   request —— 开关开着、权限还没定（default）、配置也已加载 → 该申请了
- *   wait    —— 配置还没加载完（此刻读到的开关值不可信，可能是"用户其实是关的"）
- *              → 这次点击不作数、也别作废机会，等下一次点击再看
- *   skip    —— 权限已定（granted / denied / unsupported）或开关关着 → 不再打扰
- */
-export function gesturePermissionDecision(state: {
-  loaded: boolean
-  enabled: boolean
-  permission: NotifyPermission
-}): 'request' | 'wait' | 'skip' {
-  if (state.permission !== 'default') return 'skip'
-  if (!state.loaded) return 'wait'
-  return state.enabled ? 'request' : 'skip'
-}
-
-/**
- * 现在该用**系统通知**还是**应用内提示**？
+ * 这一帧该用**系统通知**还是**应用内提示**？
  *
  * 页面在前台可见且持有焦点时，用户看得见应用内提示，再弹一个系统窗口纯属打扰；
  * 一旦切到别的标签页 / 别的窗口（任务跑完时人通常就在别处），应用内提示等于没提示，
  * 必须走系统通知 —— 这正是这个功能存在的理由。
+ *
+ * 开关组合的处理（页面提示 / 浏览器通知是两个独立开关）：
+ *   - 浏览器通知关着 → 永不发（页面提示那边自己决定弹不弹）
+ *   - 只有浏览器通知开着（页面提示关）→ 前台也发。系统通知是用户唯一要的通道，
+ *     再按"前台不发"压掉就等于他什么都没收到
+ *   - 两个都开着 → 保持老行为按前台/后台二选一，避免同一件事弹两遍
  */
-export function shouldUseSystemNotification(): boolean {
+export function shouldUseSystemNotification(switches: { page: boolean; browser: boolean }): boolean {
+  if (!switches.browser) return false
+  if (!switches.page) return true
   if (typeof document === 'undefined') return false
   if (document.visibilityState !== 'visible') return true
   // jsdom 里 hasFocus 恒为 true；真浏览器里"窗口在但被别的窗口盖住"这里才会是 false

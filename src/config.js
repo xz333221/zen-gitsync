@@ -89,27 +89,43 @@ export function normalizeTaskExecutor(value) {
 }
 
 /**
- * 规范化「任务执行结束提示」开关。只接受布尔值，其它类型返回 null
- * （交给调用方取默认），不抛错 —— 与 normalizeTaskExecutor 同一套语义。
+ * 规范化「任务/对话结束提示」的通道开关（页面提示 / 浏览器通知 / 提示音共用）。
+ * 只接受布尔值，其它类型返回 null（交给调用方取默认），不抛错 —— 与
+ * normalizeTaskExecutor 同一套语义。
  *
- * 为什么不做 `!!value`：这个值控制是否弹浏览器系统通知，`'false'` 这种字符串
- * 被强转成 true 之后用户会在设置里明明关着却照样被弹，且落盘后一直错下去。
+ * 为什么不做 `!!value`：这个值控制是否弹提示条、是否弹浏览器系统通知，
+ * `'false'` 这种字符串被强转成 true 之后用户会在设置里明明关着却照样被弹，
+ * 且落盘后一直错下去。
  */
-export function normalizeNotifyOnTaskDone(value) {
+export function normalizeNotifySwitch(value) {
   return typeof value === 'boolean' ? value : null;
 }
 
 /**
- * 规范化「任务完成提示音」开关。语义与 normalizeNotifyOnTaskDone 完全一致
- * （只收布尔值，`'false'` 这种字符串不当真值用 —— 理由同上）。
+ * 三个提示通道（页面提示 / 浏览器通知 / 提示音）的最终取值。
  *
- * 为什么和总开关分开成两个键：有人要"发系统通知但别出声"（开会 / 图书馆 / 夜里），
- * 也有人反过来只要"叮"一声、不想要通知卡片和权限询问。合成一个开关两边都别扭。
- * 从属关系在消费端：总开关关着时整个提示链路都不走，提示音自然也不会响
- * （见 useTaskNotifier.announce 的调用点）。
+ * 2026-10-05 之前只有「总开关 notifyOnTaskDone + 从属的提示音 notifySoundOnTaskDone」，
+ * 浏览器通知没有自己的开关 —— 前台弹 toast、后台发系统通知是自动二选一，而且页面内
+ * 首次点击会自动申请通知权限。用户反馈"每次开 GUI 都弹授权框"（默认开 + 自动申请 =
+ * 一个从没要过系统通知的人被反复打扰），且想要的三件事本来就该分开配。
+ *
+ * 现在三个键平级、各自独立，默认值：页面提示开、提示音开、**浏览器通知关**。
+ * 权限只在用户把浏览器通知拨开的那一刻申请（见设置页的 onBrowserNotifyToggleChange）。
+ *
+ * 旧键 notifyOnTaskDone 只作为**迁移输入**读一次：磁盘上显式 false 且新键都没写过
+ * → 三个通道全关（尊重"我以前就是关掉的"，别让老用户升级后被突然弹一脸）。
+ * 它不再被写入，也不再是任何东西的前置条件 —— 三通道之间没有从属关系。
  */
-export function normalizeNotifySoundOnTaskDone(value) {
-  return typeof value === 'boolean' ? value : null;
+function resolveNotifySwitches(raw) {
+  const page = normalizeNotifySwitch(raw?.notifyPageOnTaskDone);
+  const browser = normalizeNotifySwitch(raw?.notifyBrowserOnTaskDone);
+  const sound = normalizeNotifySwitch(raw?.notifySoundOnTaskDone);
+  const legacyAllOff = raw?.notifyOnTaskDone === false;
+  return {
+    notifyPageOnTaskDone: page ?? (legacyAllOff ? false : defaultConfig.notifyPageOnTaskDone),
+    notifyBrowserOnTaskDone: browser ?? (legacyAllOff ? false : defaultConfig.notifyBrowserOnTaskDone),
+    notifySoundOnTaskDone: sound ?? (legacyAllOff ? false : defaultConfig.notifySoundOnTaskDone),
+  };
 }
 
 // 默认配置
@@ -163,16 +179,17 @@ const defaultConfig = {
   // 决定「执行任务 / 执行子任务 / 从此处开始 / 简单任务续聊」这条链路
   // 默认 spawn 哪个本地 CLI；执行入口可以按次覆盖（见 workbench 执行路由）。
   taskExecutor: 'claude',
-  // 任务执行结束提示（全局，默认开）。开启后工作台任务从"跑着"变终态时，
-  // 页面在后台发浏览器系统通知、在前台发应用内提示条。见 useTaskNotifier。
-  // 2026-09-28: 默认关 → 开。这个功能的价值恰恰在"任务跑完时用户不在这个页面上"，
-  // 默认关等于大部分人永远不知道有它；浏览器通知权限在页面内首次点击时自动申请
-  // （见 App.vue 的 onUserGestureForNotifyPermission），所以默认开不会静默失效。
-  notifyOnTaskDone: true,
-  // 任务完成提示音（全局，默认开）：跑完 / 出错误各响一声，主动停止不响。
-  // 从属于上面的 notifyOnTaskDone —— 总开关关着时整条提示链路都不走，声音也不会响。
-  // 单独一个键是为了"要通知但别出声"和"要声音但不要通知卡片"这两种人都能配。
-  // 音源是 CC0 资源（src/ui/client/public/sounds/），见同目录 CREDITS.txt。
+  // 任务 / 对话执行结束提示的三个通道（全局）。三者**平级且互相独立**，
+  // 见 resolveNotifySwitches 的注释（2026-10-05 从"总开关 + 提示音子开关"拆过来）。
+  //
+  // 页面提示（默认开）：结束时在页面内弹一条 ElMessage。
+  // 浏览器通知（默认关）：页面在后台/别的窗口时发系统通知。默认关是因为它要申请
+  //   浏览器通知权限 —— 默认开 + 自动申请 = 用户每次开 GUI 都被弹一个授权框。
+  //   想用的人自己去设置里拨开，那一刻才申请。
+  // 提示音（默认开）：跑完 / 出错误各响一声，主动停止不响。
+  //   音源是 CC0 资源（src/ui/client/public/sounds/），见同目录 CREDITS.txt。
+  notifyPageOnTaskDone: true,
+  notifyBrowserOnTaskDone: false,
   notifySoundOnTaskDone: true,
   // UI 状态（跨项目共享，存到顶层 ui 对象）
   // 之前散落在 localStorage，因随机端口启动而失效，迁到文件持久化
@@ -503,9 +520,7 @@ async function loadConfig() {
       aiMaxToolIterations: normalizeAiMaxToolIterations(raw.aiMaxToolIterations)
         ?? defaultConfig.aiMaxToolIterations,
       taskExecutor: normalizeTaskExecutor(raw.taskExecutor) ?? defaultConfig.taskExecutor,
-      notifyOnTaskDone: normalizeNotifyOnTaskDone(raw.notifyOnTaskDone) ?? defaultConfig.notifyOnTaskDone,
-      notifySoundOnTaskDone: normalizeNotifySoundOnTaskDone(raw.notifySoundOnTaskDone)
-        ?? defaultConfig.notifySoundOnTaskDone
+      ...resolveNotifySwitches(raw)
     };
   }
 
@@ -525,9 +540,7 @@ async function loadConfig() {
       ?? defaultConfig.aiMaxToolIterations,
     taskExecutor: normalizeTaskExecutor(raw?.taskExecutor) ?? defaultConfig.taskExecutor,
     // 同 taskExecutor：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
-    notifyOnTaskDone: normalizeNotifyOnTaskDone(raw?.notifyOnTaskDone) ?? defaultConfig.notifyOnTaskDone,
-    notifySoundOnTaskDone: normalizeNotifySoundOnTaskDone(raw?.notifySoundOnTaskDone)
-      ?? defaultConfig.notifySoundOnTaskDone
+    ...resolveNotifySwitches(raw)
   };
 }
 
@@ -575,7 +588,16 @@ async function saveConfig(config) {
 
   // 分离全局设置和项目设置
   // models / ui 也是全局配置（跨项目共享），和 theme/locale 一样存到顶层
-  const { theme, locale, models, ui, aiMaxToolIterations, taskExecutor, notifyOnTaskDone, notifySoundOnTaskDone, ...projectConfig } = config;
+  // ⚠️ notifyOnTaskDone 是**旧键**（2026-10-05 拆成下面三个通道键）：这里仍要显式
+  // 解构出来，否则它会跟着 ...projectConfig 被写进**项目配置**里 —— 全局设置漏进
+  // 项目级是这一族键最容易踩的坑。解构出来本身不写回顶层（它已不再被任何地方读取）。
+  const {
+    theme, locale, models, ui, aiMaxToolIterations, taskExecutor,
+    notifyOnTaskDone: legacyNotifyOnTaskDone,
+    notifyPageOnTaskDone, notifyBrowserOnTaskDone, notifySoundOnTaskDone,
+    ...projectConfig
+  } = config;
+  void legacyNotifyOnTaskDone;
 
   // 保存全局设置到根级别
   if (theme !== undefined) {
@@ -600,14 +622,18 @@ async function saveConfig(config) {
   if (normalizedExecutor !== null) {
     raw.taskExecutor = normalizedExecutor;
   }
-  // 任务完成提示开关同属全局设置：非布尔值不落盘(保留磁盘旧值)
-  const normalizedNotify = normalizeNotifyOnTaskDone(notifyOnTaskDone);
-  if (normalizedNotify !== null) {
-    raw.notifyOnTaskDone = normalizedNotify;
-  }
-  const normalizedNotifySound = normalizeNotifySoundOnTaskDone(notifySoundOnTaskDone);
-  if (normalizedNotifySound !== null) {
-    raw.notifySoundOnTaskDone = normalizedNotifySound;
+  // 三个提示通道开关同属全局设置：非布尔值不落盘(保留磁盘旧值)。
+  // 各自独立 —— 写其中一个绝不顺带改动另外两个。
+  const notifySwitches = {
+    notifyPageOnTaskDone,
+    notifyBrowserOnTaskDone,
+    notifySoundOnTaskDone,
+  };
+  for (const [key, value] of Object.entries(notifySwitches)) {
+    const normalized = normalizeNotifySwitch(value);
+    if (normalized !== null) {
+      raw[key] = normalized;
+    }
   }
 
   // 写入当前项目配置（在 defaultConfig 基础上合并，但不清空顶层其它键）
@@ -806,13 +832,12 @@ export default {
   // 工作台任务执行器规范化(GUI 保存前也要用,见 /api/config/save-general-settings)
   normalizeTaskExecutor,
   TASK_EXECUTORS,
-  // 任务执行结束提示开关规范化(同上)
-  normalizeNotifyOnTaskDone,
-  // 任务完成提示音开关规范化(同上)。⚠️ 新增规范化函数务必同步加进这个对象字面量 ——
-  // server 侧 `import config from '../../config.js'` 拿的是**这个默认导出对象**，
-  // 只在下面 `export {}` 里命名导出是不够的：漏加会变成 undefined 调用 → 路由 500，
+  // 任务/对话结束提示三个通道的开关规范化(同上)。
+  // ⚠️ 新增规范化函数务必同步加进这个对象字面量 —— server 侧
+  // `import config from '../../config.js'` 拿的是**这个默认导出对象**，
+  // 只在 `export function` 里命名导出是不够的：漏加会变成 undefined 调用 → 路由 500，
   // 而且因为有 try/catch 兜底，前端只会看到"保存失败"，不知道是哪个函数缺了。
-  normalizeNotifySoundOnTaskDone,
+  normalizeNotifySwitch,
 };
 
 // 命名导出 — 用于测试与外部复用

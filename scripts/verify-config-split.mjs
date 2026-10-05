@@ -268,9 +268,10 @@ try {
   const light = await post('/api/config/save-general-settings', {
     theme: targetTheme,
     locale: fixtureRaw.locale || 'zh-CN',
-    // 顺带带上两个全局开关：它们必须是"顶层全局键"，
+    // 顺带带上三个提示通道开关：它们必须是"顶层全局键"，
     // 一旦被当成项目级字段写进 projects/<fileId>.json，下面 dProjects 就会非空。
-    notifyOnTaskDone: true,
+    notifyPageOnTaskDone: true,
+    notifyBrowserOnTaskDone: true,
     notifySoundOnTaskDone: false,
   })
   const lightMs = Date.now() - t0
@@ -292,41 +293,41 @@ try {
   const afterRaw = JSON.parse(await fs.readFile(configFile, 'utf-8'))
   check(afterRaw.theme === targetTheme, `全局设置应写进 config.json(期望 ${targetTheme},实际 ${afterRaw.theme})`)
 
-  // 任务完成提示开关：落在顶层全局键、且不被项目配置覆盖
-  check(afterRaw.notifyOnTaskDone === true, `notifyOnTaskDone 应写进顶层全局键,实际 ${JSON.stringify(afterRaw.notifyOnTaskDone)}`)
-  const pollutedProjects = Object.entries(afterRaw.projects || {})
-    .filter(([, p]) => p && typeof p === 'object' && 'notifyOnTaskDone' in p)
-    .map(([k]) => k)
-  check(
-    pollutedProjects.length === 0,
-    `notifyOnTaskDone 是全局设置,不该出现在项目配置里: ${pollutedProjects.join(', ')}`
-  )
+  // 三个提示通道开关（页面提示 / 浏览器通知 / 提示音）：平级、各自独立，
+  // 都必须落在顶层全局键、且不被项目配置覆盖。
+  const NOTIFY_KEYS = ['notifyPageOnTaskDone', 'notifyBrowserOnTaskDone', 'notifySoundOnTaskDone']
   const reread = await fetch(`${base}/api/config/getConfig`).then((r) => r.json()).catch(() => null)
-  check(reread?.notifyOnTaskDone === true, `GET /api/config/getConfig 应读回 notifyOnTaskDone=true,实际 ${JSON.stringify(reread?.notifyOnTaskDone)}`)
+  for (const key of NOTIFY_KEYS) {
+    const expect = key === 'notifySoundOnTaskDone' ? false : true
+    check(afterRaw[key] === expect, `${key} 应写进顶层全局键,实际 ${JSON.stringify(afterRaw[key])}`)
+    const polluted = Object.entries(afterRaw.projects || {})
+      .filter(([, p]) => p && typeof p === 'object' && key in p)
+      .map(([k]) => k)
+    check(polluted.length === 0, `${key} 是全局设置,不该出现在项目配置里: ${polluted.join(', ')}`)
+    check(reread?.[key] === expect, `GET /api/config/getConfig 应读回 ${key}=${expect},实际 ${JSON.stringify(reread?.[key])}`)
+  }
 
-  // 非布尔值必须被拒（前端误传字符串 'false' 时不能把它当"开"落盘）
-  const badNotify = await post('/api/config/save-general-settings', { notifyOnTaskDone: 'false' })
-  check(badNotify.status === 200, `非法 notifyOnTaskDone 不应报错,实际 ${badNotify.status}`)
-  const afterBad = JSON.parse(await fs.readFile(configFile, 'utf-8'))
-  check(afterBad.notifyOnTaskDone === true, `非法值应被忽略并保留磁盘旧值(true),实际 ${JSON.stringify(afterBad.notifyOnTaskDone)}`)
+  // 非布尔值必须被拒（前端误传字符串 'false' 时不能把它当"开"落盘），
+  // 且被拒时保留磁盘旧值、不影响其它两个键
+  for (const key of NOTIFY_KEYS) {
+    const before = JSON.parse(await fs.readFile(configFile, 'utf-8'))
+    const bad = await post('/api/config/save-general-settings', { [key]: 'false' })
+    check(bad.status === 200, `非法 ${key} 不应报错,实际 ${bad.status}`)
+    const after = JSON.parse(await fs.readFile(configFile, 'utf-8'))
+    check(after[key] === before[key], `${key} 的非法值应被忽略并保留磁盘旧值(${JSON.stringify(before[key])}),实际 ${JSON.stringify(after[key])}`)
+    const others = NOTIFY_KEYS.filter((k) => k !== key)
+    check(
+      others.every((k) => after[k] === before[k]),
+      `写 ${key} 的非法值不该顺手改动另外两个键,实际 ${JSON.stringify(others.map((k) => [k, after[k]]))}`
+    )
+  }
 
-  // 提示音开关（总开关的子选项，但独立存一个顶层键）走同一套契约
-  check(afterRaw.notifySoundOnTaskDone === false, `notifySoundOnTaskDone 应写进顶层全局键,实际 ${JSON.stringify(afterRaw.notifySoundOnTaskDone)}`)
-  const pollutedSound = Object.entries(afterRaw.projects || {})
-    .filter(([, p]) => p && typeof p === 'object' && 'notifySoundOnTaskDone' in p)
-    .map(([k]) => k)
-  check(
-    pollutedSound.length === 0,
-    `notifySoundOnTaskDone 是全局设置,不该出现在项目配置里: ${pollutedSound.join(', ')}`
-  )
-  check(reread?.notifySoundOnTaskDone === false, `GET /api/config/getConfig 应读回 notifySoundOnTaskDone=false,实际 ${JSON.stringify(reread?.notifySoundOnTaskDone)}`)
-
-  // 开回来（证明这个键真的可双向写），再拿非法值撞一次
+  // 反过来也要能写（证明键真的可双向写）
   await post('/api/config/save-general-settings', { notifySoundOnTaskDone: true })
   const afterSoundOn = JSON.parse(await fs.readFile(configFile, 'utf-8'))
   check(afterSoundOn.notifySoundOnTaskDone === true, `提示音应能开回来,实际 ${JSON.stringify(afterSoundOn.notifySoundOnTaskDone)}`)
-  check(afterSoundOn.notifyOnTaskDone === true, `写提示音不该顺手改动总开关,实际 ${JSON.stringify(afterSoundOn.notifyOnTaskDone)}`)
-
+  check(afterSoundOn.notifyPageOnTaskDone === true, `写提示音不该顺手改动页面提示,实际 ${JSON.stringify(afterSoundOn.notifyPageOnTaskDone)}`)
+  check(afterSoundOn.notifyBrowserOnTaskDone === true, `写提示音不该顺手改动浏览器通知,实际 ${JSON.stringify(afterSoundOn.notifyBrowserOnTaskDone)}`)
   const badSound = await post('/api/config/save-general-settings', { notifySoundOnTaskDone: 'false' })
   check(badSound.status === 200, `非法 notifySoundOnTaskDone 不应报错,实际 ${badSound.status}`)
   const afterBadSound = JSON.parse(await fs.readFile(configFile, 'utf-8'))

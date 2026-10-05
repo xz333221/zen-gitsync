@@ -20,19 +20,21 @@
 //   能力（系统通知 / 提示音）仍复用 taskNotify + taskSound，只有"什么该提示、
 //   提示成什么样"这层策略搬到这里，与任务提示各自独立演进。
 //
-// 判定顺序与任务提示同口径（同一个总开关 + 同一个提示音开关，都在全局设置里）：
-//   1. 总开关关着 = 整条链路都不走，提示音也不响（提示音从属于它）
+// 判定顺序与任务提示同口径（同一套三通道开关，都在全局设置里）：
+//   1. 三个开关全关 = 整条链路都不走
 //   2. 先出声：与页面在不在前台无关 —— 系统通知那点动静经常被静音/被折叠，
 //      一声"叮"是人不用看屏幕也能知道的信号
-//   3. 页面不在前台（切了标签页/别的窗口）→ 系统通知
-//   4. 系统通知发不出去（权限被拒 / 环境不支持）→ 退回应用内 toast
+//   3. 该发系统通知时（浏览器通知开着，且页面提示关着或页面不在前台）→ 发；
+//      发不出去（权限被拒 / 环境不支持）再退回应用内 toast
+//   4. 页面提示关着 → 到第 3 步为止，不拿一条他没要的 toast 顶上
 
 import { ElMessage } from 'element-plus'
 import { $t } from '@/lang/static'
 import { useConfigStore } from '@stores/configStore'
 import { notifySystem, shouldUseSystemNotification } from '@/utils/taskNotify'
 import { playFinishSound } from '@/utils/taskSound'
-import type { JobFinishKind } from '@/composables/useTaskNotifier'
+import type { JobFinishKind, NotifySwitches } from '@/composables/useTaskNotifier'
+import { anyChannelOn } from '@/composables/useTaskNotifier'
 
 /**
  * 对话只可能落在这两种终态上。
@@ -72,25 +74,26 @@ export function announceAgentTurn(opts: {
   alreadyToast?: boolean
 }): boolean {
   // 开关在 config.json（全局），每次读实时值：用户在设置里关掉后立刻生效
-  let enabled = false
-  let sound = false
+  const sw: NotifySwitches = { page: false, browser: false, sound: false }
   try {
     const store = useConfigStore()
-    enabled = !!store.notifyOnTaskDone
-    sound = !!store.notifySoundOnTaskDone
-  } catch { enabled = false; sound = false }
-  if (!enabled) return false
+    sw.page = !!store.notifyPageOnTaskDone
+    sw.browser = !!store.notifyBrowserOnTaskDone
+    sw.sound = !!store.notifySoundOnTaskDone
+  } catch { /* store 不可用（单测 / 极早的启动期）→ 三个都保持 false，即不提示 */ }
+  if (!anyChannelOn(sw)) return false
 
   const name = String(opts.title || '').trim() || $t('@AGENT:无标题')
   const detail = agentTurnDetail(opts.detail)
   const tag = opts.tag || 'zen-gitsync-agent'
   const body = detail ? `${name}\n${detail}` : name
 
-  // 先出声：这一句跟"页面在不在前台"无关，必须在下面的二选一之前
-  if (sound) playFinishSound(opts.kind)
-  if (shouldUseSystemNotification()) {
+  // 先出声：这一句跟"页面在不在前台"无关
+  if (sw.sound) playFinishSound(opts.kind)
+  if (shouldUseSystemNotification(sw)) {
     if (notifySystem({ title: agentTurnNoticeTitle(opts.kind), body, tag })) return true
   }
+  if (!sw.page) return true
   if (opts.alreadyToast) return true
   if (opts.kind === 'done') ElMessage.success($t('@AGENT:对话完成：{name}', { name }))
   else ElMessage.error($t('@AGENT:对话出错：{name}', { name }))

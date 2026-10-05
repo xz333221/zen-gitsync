@@ -989,7 +989,7 @@ export function registerConfigRoutes({
   // 保存通用设置（主题、语言、工作台任务执行器、任务完成提示）
   app.post('/api/config/save-general-settings', express.json(), async (req, res) => {
     try {
-      const { theme, locale, taskExecutor, notifyOnTaskDone, notifySoundOnTaskDone } = req.body
+      const { theme, locale, taskExecutor, notifyPageOnTaskDone, notifyBrowserOnTaskDone, notifySoundOnTaskDone } = req.body
 
       // 读取原始配置以保留项目设置
       const rawConfig = await configManager.readRawConfigFile()
@@ -1007,21 +1007,19 @@ export function registerConfigRoutes({
         rawConfig.taskExecutor = normalizedExecutor
       }
 
-      // 任务执行结束提示开关（全局，默认开）。只接受布尔值，其它类型静默忽略，
-      // 避免前端误传字符串 'false' 被当成真值落盘后永久打开。
+      // 任务/对话结束提示的三个通道开关（全局）：页面提示 / 浏览器通知 / 提示音。
+      // 三者**平级且互相独立** —— 写其中一个绝不顺带改动另外两个（老用户升级时
+      // 由 config.js 的 resolveNotifySwitches 从旧总开关迁移，迁移只发生在读取侧）。
+      // 只接受布尔值，其它类型静默忽略，避免前端误传字符串 'false' 被当成真值落盘后永久打开。
       // ⚠️ 规范化函数对非法值返回的是 **null**（与 normalizeTaskExecutor 同语义），
       // 不是 undefined —— 判 `!== undefined` 会把非法值原样写进去变成 `null`。
-      const normalizedNotify = configManager.normalizeNotifyOnTaskDone(notifyOnTaskDone)
-      if (normalizedNotify !== null) {
-        rawConfig.notifyOnTaskDone = normalizedNotify
-      }
-      // 任务完成提示音开关（全局，默认开）。同上：非布尔值静默忽略。
-      // 它从属于 notifyOnTaskDone —— 这里不替前端做联动（关总开关时不顺带清掉这个），
-      // 两个键各自保留用户的选择，联动只在消费端（useTaskNotifier）。这样用户
-      // 临时关掉总开关再打开，提示音设置还在，不用重设一遍。
-      const normalizedNotifySound = configManager.normalizeNotifySoundOnTaskDone(notifySoundOnTaskDone)
-      if (normalizedNotifySound !== null) {
-        rawConfig.notifySoundOnTaskDone = normalizedNotifySound
+      const normalizedNotifies = {}
+      for (const key of ['notifyPageOnTaskDone', 'notifyBrowserOnTaskDone', 'notifySoundOnTaskDone']) {
+        const normalized = configManager.normalizeNotifySwitch(req.body[key])
+        if (normalized !== null) {
+          rawConfig[key] = normalized
+          normalizedNotifies[key] = normalized
+        }
       }
 
       // 直接写入原始配置，避免覆盖项目设置
@@ -1029,8 +1027,7 @@ export function registerConfigRoutes({
       res.json({
         success: true,
         taskExecutor: normalizedExecutor || undefined,
-        notifyOnTaskDone: normalizedNotify ?? undefined,
-        notifySoundOnTaskDone: normalizedNotifySound ?? undefined
+        ...normalizedNotifies
       })
     } catch (error) {
       res.status(500).json({ success: false, error: error.message })
