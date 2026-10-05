@@ -713,6 +713,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
       <button
         type="button"
         class="oc__toggle"
+        :class="{ 'is-off': !active }"
         :disabled="togglingSchedule"
         :title="active ? $t('@WORKBENCH:暂停后派发只建任务，不会自动执行') : $t('@WORKBENCH:恢复后派发会自动执行')"
         @click="emit('toggle-schedule', !active)"
@@ -1198,8 +1199,8 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border-color-light);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 .oc__live {
@@ -1216,25 +1217,55 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.45; transform: scale(1.35); }
 }
+/* 2026-10-05：面板标题原来和它下面的每一条注脚一样是 12px/500/次要色 ——
+   整栏扫下来没有一处比别处更重，读起来是一堆平级的灰字。标题是这一栏唯一
+   的"我是谁"，给它 13px/600/正文色，把层级从最上面立起来（正文刻度天花板
+   仍是 14px，见 docs/ui-audit 的 P2-17，这里不越界）。 */
 .oc__title {
   margin: 0;
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: var(--text-secondary);
+  font-size: var(--font-size-mid);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
   flex: 1;
   min-width: 0;
 }
+/* 「暂停调度 / 恢复调度」：这一栏唯一的全局动作，原来是一段没有边框的 11px
+   灰字 —— 和标题同为纯文字，看起来像第二个标题而不是能点的东西。
+   现在与「立即报告」同一套胶囊（22px / pill / 1px 描边 / 白底），
+   栏内所有"动作"长得一样。 */
 .oc__toggle {
-  border: none;
-  background: transparent;
-  color: var(--text-meta);
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 22px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-pill);
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
   font-size: var(--font-size-xs);
-  padding: 2px 6px;
-  border-radius: var(--radius-base);
+  font-weight: 500;
+  font-family: inherit;
+  white-space: nowrap;
   cursor: pointer;
-  transition: color var(--transition-fast) var(--ease-custom), background var(--transition-fast) var(--ease-custom);
+  transition: color var(--transition-fast) var(--ease-custom),
+              border-color var(--transition-fast) var(--ease-custom),
+              background var(--transition-fast) var(--ease-custom);
 }
-.oc__toggle:hover:not(:disabled) { color: var(--color-warning-dark); background: color-mix(in srgb, var(--color-warning) 10%, transparent); }
+.oc__toggle:hover:not(:disabled) {
+  color: var(--role-active-ink);
+  border-color: var(--role-active-edge);
+  background: var(--role-active-surface);
+}
+/* 暂停态：这一个按钮同时是"状态"和"动作"。暂停中染角色色（琥珀 = 需要注意），
+   于是"现在没在自动跑"这件事在栏头就能看见，不用读到下面那行状态才明白。 */
+.oc__toggle.is-off {
+  color: var(--role-active-ink);
+  border-color: var(--role-active-edge);
+  background: var(--role-active-surface);
+}
+.oc__toggle.is-off:hover:not(:disabled) { border-color: var(--role-active-ink); }
 .oc__toggle:disabled { opacity: var(--disabled-opacity); cursor: default; }
 .oc__toggle:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
@@ -1258,15 +1289,20 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 .oc__collapse:hover { color: var(--color-primary); }
 .oc__collapse:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
+/* 状态读数条。原来底色是 --gradient-accent-soft（一层极淡的主色渐变），
+   而右下角那块栏底本身就是 #f5f7fa —— 渐变叠上去只是让它"偏蓝一点点"，
+   既不像一条有身份的读数，又让这一屏多出一种没有名字的底色。
+   现在底色退回与拨片同一支中性 --bg-subtle，靠"值加粗放大 + 暂停时整条转角色色"
+   来表达状态。 */
 .oc__state {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 9px 12px;
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
   background: var(--bg-subtle);
-  background-image: var(--gradient-accent-soft);
+  border-bottom: 1px solid var(--border-color-light);
   flex-shrink: 0;
 }
 /* 2026-10-04：这里原本是 `color: var(--warning-dark)` —— 令牌表里只有
@@ -1276,10 +1312,22 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 .oc__state.is-paused {
   color: var(--role-active-ink);
   background: var(--role-active-surface);
+  border-bottom-color: var(--role-active-edge);
 }
 .oc__state-label { color: var(--text-meta); }
-.oc__state-value { font-weight: 500; }
-.oc__state-meta { margin-left: auto; color: var(--text-meta); font-variant-numeric: tabular-nums; }
+/* 值比标签大一档、粗一档：这一行要回答的是"现在到底跑不跑"，标签只是它的名字 */
+.oc__state-value {
+  margin-left: 2px;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.oc__state.is-paused .oc__state-value { color: var(--role-active-ink); }
+.oc__state-meta {
+  margin-left: auto;
+  color: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+}
 
 /* 工作方式切换：一个两段式拨片。
    为什么不做成两个独立按钮：它们互斥且只有两档，拨片能一眼看出"现在是哪一档"，
@@ -1292,7 +1340,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   padding: 2px;
   border-radius: var(--radius-pill);
   background: var(--bg-subtle);
-  border: 1px solid var(--border-color-light);
+  border: 1px solid var(--border-color);
 }
 .oc__mode-btn {
   flex: 1;
@@ -1346,13 +1394,16 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   justify-content: center;
 }
 .oc.is-report-empty .oc__input { min-height: 168px; }
+/* 区块标题：与面板标题同一族的次级档（12px/600）。它下面是整块报告，
+   原来跟着注脚一起挤在 11px，报告和它右边的两个控件谁先被读到全靠位置。 */
 .oc__panel-title {
   display: flex;
   align-items: center;
   gap: 6px;
   margin: 0 12px 6px;
-  font-size: var(--font-size-xs);
-  color: var(--text-meta);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 /* 标题在报告头部里要让位给右边两个控件：占满剩余宽度把「间隔 + 立即报告」顶到行尾 */
@@ -1375,8 +1426,8 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   font-size: var(--font-size-xs);
   font-family: inherit;
   color: var(--text-secondary);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-color-light);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-pill);
   cursor: pointer;
   outline: none;
@@ -1393,9 +1444,9 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   flex-shrink: 0;
   height: 22px;
   padding: 0 8px;
-  border: 1px solid var(--border-color-light);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-pill);
-  background: var(--bg-panel);
+  background: var(--surface-elevated);
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
   font-family: inherit;
@@ -1416,7 +1467,10 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 .oc__report-list {
   list-style: none;
   margin: 0;
-  padding: 0 10px 10px;
+  /* 左右 12px：与栏内其他区的 padding（头部 / 状态条 / 概览 / 派发栏）同一条线，
+     原来是 10px —— 报告卡的左右边和它上面「进度报告」那行标题差 2px，
+     窄栏里一眼能看出没对齐。 */
+  padding: 0 12px 12px;
   overflow-y: auto;
   flex: 1 1 auto;
   min-height: 0;
@@ -1429,18 +1483,29 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 /* 2026-10-04：这一块永远是「正在看的那一份」（模板是 v-if="currentReport"，
    没有别的形态），所以直接给 active 角色即可。之前是纯灰卡片，跟下面历史列表里
    的旧报告长得一模一样，「我现在看的哪份」要靠位置猜。
-   （历史上这里还有个 .rp.is-current，但模板从来没绑这个类，是条死规则。） */
+   （历史上这里还有个 .rp.is-current，但模板从来没绑这个类，是条死规则。）
+
+   2026-10-05：底色原本是 `color-mix(--role-active-ink 4%, --bg-subtle)` ——
+   而 --bg-subtle 本身带 alpha(rgba(0,0,0,.02))，混出来仍是**半透明**的暖灰，
+   压在栏底 #f5f7fa 上再叠一圈 42% 的琥珀描边，整张卡看着发浑发脏（README
+   第三轮的原话是"淡底一律从 hue 兑进 --surface-elevated"，这一处没跟上）。
+   现在把卡面退回体系内的白（--surface-elevated）+ 中性描边，"这一份在跑"
+   的身份改由**顶部 2px 的 --role-active-bar 色带**承担 —— 面积从整张卡收到
+   一条线，同样的信息，不再让整块报告换一个色系。
+   （顶部色带不属于被禁的 left/right 侧边色条。） */
 .rp {
-  padding: 8px 9px;
+  padding: 10px 11px;
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--role-active-ink) 4%, var(--bg-subtle));
-  border: 1px solid var(--role-active-edge);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-color);
+  border-top: 2px solid var(--role-active-bar);
+  box-shadow: var(--shadow-sm);
 }
 .rp__head {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   font-size: var(--font-size-xs);
 }
 .rp__trigger { color: var(--color-primary); font-weight: 500; }
@@ -1518,7 +1583,10 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 }
 .rp__text {
   margin: 0;
-  font-size: var(--font-size-sm);
+  /* 2026-10-05：12px → 13px。这一栏里除了它全是 11px 的注脚，正文再压到 12px
+     就跟注脚只差一档，一段模型写的判断读起来和"工具 35 次"是同一种东西。
+     行高保持 1.6（下面 max-height 的 6 行口径按 em 走，跟着字号一起长）。 */
+  font-size: var(--font-size-mid);
   line-height: 1.6;
   color: var(--text-primary);
   word-break: break-word;
@@ -1537,21 +1605,30 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   -webkit-mask-image: linear-gradient(#000 calc(100% - 1.8em), transparent);
   mask-image: linear-gradient(#000 calc(100% - 1.8em), transparent);
 }
+/* 「展开全文」原来是一串裸的蓝字，紧跟在被渐隐的正文最后一行下面 ——
+   看起来像正文里的一句话，而不是一个动作。给一枚 primary 淡底胶囊：
+   它落在正文与下面的事实区之间，位置本来就是要被看见的。 */
 .rp__more {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  margin: 3px 0 0;
-  padding: 0;
+  margin: 6px 0 0;
+  padding: 2px 9px;
   border: none;
-  background: transparent;
+  border-radius: var(--radius-pill);
+  background: var(--tint-primary-08);
   color: var(--color-primary);
   font-size: var(--font-size-xs);
+  font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  transition: color var(--transition-fast) var(--ease-custom);
+  transition: color var(--transition-fast) var(--ease-custom),
+              background var(--transition-fast) var(--ease-custom);
 }
-.rp__more:hover { color: var(--color-primary-dark); }
+.rp__more:hover {
+  color: var(--color-primary-dark);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+}
 .rp__more:focus-visible { outline: var(--focus-outline); outline-offset: 2px; }
 .rp__notice {
   margin: 0;
@@ -1584,28 +1661,35 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 }
 /* 每个任务一张卡。以前任务与任务之间只有 6px 间隙，谁是谁的证据全靠读，
    窄栏里三组并排就是"一大片字"。左侧那道竖线是状态位：静默过久的那条转告警色 */
+/* 2026-10-05：底色从 --bg-active（7.5% 黑，压在现在这张白卡上偏深）换成
+   --bg-panel —— 它是"面板灰"这一支实色，白卡里一条灰带，边界比 4% 的描边
+   更清楚，也不用再靠边框把两块分开。padding 与圆角各提一档，让每条任务
+   有能呼吸的体量。 */
 .rpt {
   min-width: 0;
-  padding: 5px 7px;
-  border-radius: var(--radius-base);
-  background: var(--bg-active);
+  padding: 7px 9px;
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
   /* 2026-10-04：原本紧跟在这圈 1px 描边后面又写了一条
      border-left: 2px solid var(--border-color) 把左边加粗 —— 视觉上
      就是一根侧边色条。删掉即可，描边保持 1px 均匀。 */
   border: 1px solid var(--border-color-light);
 }
 /* 2026-10-04：原本是 border-left-color（只染左边，配合已删掉的 2px 左边
-     加粗用）。现在描边整圈统一 1px，改成整圈染。 */
+     加粗用）。现在描边整圈统一 1px，改成整圈染。
+   2026-10-05：底色同步换成角色淡底（--role-active-surface，不透明的那支）——
+   --tint-warning-06 是带 alpha 的，叠在 --bg-panel 上合成出来的值深浅两套
+   主题各不相同（README 第三轮记的就是这条）。 */
 .rpt.is-silent {
-  border-color: color-mix(in srgb, var(--color-warning) 40%, transparent);
-  background: var(--tint-warning-06);
+  border-color: var(--role-active-edge);
+  background: var(--role-active-surface);
 }
 /* 任务名是这张卡的标题：比下面那几行证据亮一档、粗一档，
    一列扫下来先看到的是"谁在跑"，再决定要不要读证据 */
 .rpt__title {
   margin: 0;
-  font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1695,14 +1779,16 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 /* 固定宽度：三行各自的标签（工具 / 思考 / 回复）占一样宽，
    正文就从同一条竖线起排，一列扫下来不会左左右右。
    标签用 --text-meta 而不是 --text-tertiary：后者是装饰档（状态点/占位符），
-   而"这行是工具调用还是思考"是实打实要读的信息 */
+   而"这行是工具调用还是思考"是实打实要读的信息。
+   2026-10-05：标签统一加 500 字重 —— 原来只有"思考"那一行加粗，三行标签
+   在正文同为灰色时和正文糊成一体，读不出"标签 + 内容"的格。 */
 .rpt__tag {
   display: inline-block;
   min-width: 20px;
   margin-right: 5px;
+  font-weight: 500;
   color: var(--text-meta);
 }
-.rpt__line.is-thought .rpt__tag { font-weight: 500; }
 
 /* ── 可收起的区块标题行（历史报告 / 项目概览共用）──────────
    标题自己就是开关：窄栏里再塞一枚"收起"按钮就是再挤一处，
@@ -1712,10 +1798,10 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 .oc__sect {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   width: 100%;
   margin: 0 0 4px;
-  padding: 2px;
+  padding: 4px 6px;
   border: none;
   border-radius: var(--radius-base);
   background: transparent;
@@ -1730,8 +1816,10 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 .oc__sect:hover { color: var(--text-secondary); background: var(--bg-subtle); }
 .oc__sect:focus-visible { outline: var(--focus-outline); outline-offset: -2px; }
 /* 箭头跟着开合转（ArrowRight ⇄ ArrowDown），与左栏任务分组同一套 */
-.oc__sect-caret { flex-shrink: 0; font-size: var(--font-size-xs); }
-.oc__sect-title { flex-shrink: 0; }
+.oc__sect-caret { flex-shrink: 0; font-size: var(--font-size-sm); }
+/* 标题比它右边那截 meta 亮一档：这一行是"章节名 + 当前值"，两者同色的话
+   "历史报告 共 20 份"会读成一句话而不是"标题 + 读数" */
+.oc__sect-title { flex-shrink: 0; font-weight: 500; color: var(--text-secondary); }
 /* 行尾那一段。**整行只有这一个 flex 项吃 margin-left: auto** ——
    两个 auto 会把剩余空间对半分，项目名就飘到行中间去了 */
 .oc__sect-meta {
@@ -1759,8 +1847,8 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   flex-shrink: 0;
   max-height: 132px;
   overflow-y: auto;
-  padding: 6px 10px 8px;
-  border-top: 1px solid var(--border-color-light);
+  padding: 6px 12px 8px;
+  border-top: 1px solid var(--border-color);
 }
 .oc__history-list { list-style: none; margin: 0; padding: 0; }
 .oc__history-item {
@@ -1818,7 +1906,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 
 .oc__git {
   padding: 8px 12px 10px;
-  border-top: 1px solid var(--border-color-light);
+  border-top: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 .oc__git-name {
@@ -1854,7 +1942,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 
 .oc__compose {
   padding: 8px 12px 10px;
-  border-top: 1px solid var(--border-color-light);
+  border-top: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 .oc__input {
@@ -1866,8 +1954,10 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   resize: vertical;
   min-height: 76px;
   max-height: min(380px, 45vh);
-  padding: 7px 8px;
-  font-size: var(--font-size-sm);
+  /* 2026-10-05：内边距 7/8 → 9/10，字号 12 → 13。这是这一栏里用户唯一
+     亲手写字的地方，之前它的正文比上面那段模型写的汇报还小一档。 */
+  padding: 9px 10px;
+  font-size: var(--font-size-mid);
   line-height: 1.5;
   font-family: inherit;
   color: var(--text-primary);
@@ -1939,9 +2029,14 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   cursor: pointer;
   user-select: none;
 }
-.oc__autorn input { cursor: pointer; }
+/* 原生 checkbox 的勾选色由浏览器给（Chrome 是 #0075ff 那一支），和本仓的
+   --color-primary 并排时是两个蓝。accent-color 一行就能把它收回主色。 */
+.oc__autorn input { cursor: pointer; accent-color: var(--color-primary); }
 /* 执行器下拉的样式随组件走（TaskExecutorPicker 自带），这里不再留一份 —— 
    同一个下拉在对话模式底下还有一个，样式留在这儿对它无效，只会变成"改了没反应"的死规则 */
+/* 派发是这一栏的主动作，原来只有 24px 高 —— 和它并排的胶囊控件是 22px，
+   一个"主按钮"只比旁边的次要控件高 2px，行尾的落点读不出来。
+   抬到 28px（仍在 --control-height-sm/md 之间，不引入新刻度）。 */
 .oc__send {
   margin-left: auto;
   display: inline-flex;
@@ -1953,8 +2048,9 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   box-shadow: var(--btn-shadow);
   color: #fff;
   font-size: var(--font-size-sm);
-  line-height: 24px;
-  padding: 0 12px;
+  font-weight: 500;
+  line-height: 28px;
+  padding: 0 14px;
   cursor: pointer;
   transition: box-shadow var(--transition-fast) var(--ease-custom),
               opacity var(--transition-fast) var(--ease-custom);
