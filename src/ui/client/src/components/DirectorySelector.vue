@@ -1249,7 +1249,9 @@ function onBrowserSelect(path: string) {
   transition: var(--transition-ui-base);
 }
 
-.directory-selector:hover {
+/* default 变体的 hover 底。加 :not() 是防呆：这条和下面的 --header 变体同特异性，
+   写在前面，一旦 --header 那边漏写 background 就会被它接管（2026-10-05 出过一次）。 */
+.directory-selector:not(.directory-selector--header):hover {
   background: var(--border-component);
 }
 
@@ -1278,7 +1280,15 @@ function onBrowserSelect(path: string) {
   min-width: 72px;
 }
 
+/* 2026-10-05 反馈"hover 之后背景太深"：上一轮把这枚胶囊的渐变底换成实心令牌时
+   删掉了 hover 底色，于是被当时那条 `.directory-selector:hover` 接管 ——
+   它用的是 --border-component(#e9ecef)，语义是"边框色"，铺成底就是整条胶囊变一块灰。
+   这里显式给回中性 hover 底：--bg-hover 叠在 --surface-elevated 上只比白低一档
+   （实测 #ffffff → #f1f2f2，改前是 #e9ecef），暗色下 --bg-hover 会自动变成
+   --bg-hover-dark。注意暗色下这条的 border-color 仍会被 dark-theme.scss 里
+   `[data-theme="dark"] .directory-selector:hover`（特异性更高）接管，属预期。 */
 .directory-selector--header:hover {
+  background: var(--bg-hover);
   border-color: var(--border-color);
   box-shadow: var(--shadow-md);
 }
