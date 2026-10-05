@@ -14,12 +14,26 @@
   ~ limitations under the License.
   -->
 <script setup lang="ts">
+import { computed } from 'vue'
 import { $t } from '@/lang/static'
 import { Setting } from '@element-plus/icons-vue'
 import { useGitStore } from '@stores/gitStore'
 import IconButton from '@components/IconButton.vue'
 
 const gitStore = useGitStore()
+
+/**
+ * 状态栏那一格窄（`.repo-url` 有 max-width: 300px），`git@github.com:xz333221/zen-gitsync.git`
+ * 被省略号切成 `git@github.com:xz333221/zen-gitsyn…` —— 前面那截（协议 + 主机名）每个仓库
+ * 都一样，真正区分仓库的 owner/repo 反而被切掉（2026-10-05 评审）。
+ * 所以这里只显示最后两段；完整地址仍在悬停提示里，点击复制的也还是完整地址
+ * （copyRemoteUrl 一个字没动）。认不出两段形状的（只有一段路径的远程）原样显示。
+ */
+const remoteShort = computed(() => {
+  const url = gitStore.remoteUrl || ''
+  const parts = url.replace(/\.git$/, '').replace(/\/+$/, '').split(/[\\/:]+/).filter(Boolean)
+  return parts.length >= 2 ? parts.slice(-2).join('/') : url
+})
 </script>
 
 <template>
@@ -68,8 +82,13 @@ const gitStore = useGitStore()
           <svg-icon icon-class="remote-repo" class-name="remote-repo-icon" />
         </span>
       </el-tooltip>
-      <el-tooltip :content="$t('@F13B4:复制仓库地址')" placement="top" effect="dark" :show-after="300">
-        <span class="repo-url clickable" @click="gitStore.copyRemoteUrl()">{{ gitStore.remoteUrl }}</span>
+      <el-tooltip
+        :content="`${$t('@F13B4:复制仓库地址')} · ${gitStore.remoteUrl}`"
+        placement="top"
+        effect="dark"
+        :show-after="300"
+      >
+        <span class="repo-url clickable" @click="gitStore.copyRemoteUrl()">{{ remoteShort }}</span>
       </el-tooltip>
     </template>
 

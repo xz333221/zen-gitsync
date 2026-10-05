@@ -235,8 +235,29 @@ async function main() {
     }, title)
 
     // ── A 真实已完成任务：段落在了，文字与后端事实逐字一致 ──────────────
+    /*
+     * 先把目标卡"翻"出来。已完成列从 2026-10-05 起默认只铺最近 30 张
+     * （WorkbenchKanban 的 DONE_PAGE），而本脚本挑的 target 是 tasks.json 顺序里
+     * 第一条"回复以问号结尾"的任务 —— 实测落在已完成列第 158 / 159 位，
+     * 不点开就是查不到。翻页按钮用完还没有才算真没有。
+     */
+    const revealDoneCard = async (title) => {
+      for (let i = 0; i < 12; i++) {
+        const present = await page.evaluate((t) => Array.from(document.querySelectorAll('.kb-col--done .kb-card'))
+          .some((c) => (c.querySelector('.kb-card__title')?.textContent || '').trim() === t), title)
+        if (present) return true
+        const more = page.locator('.kb-col--done .kb-col__more-btn')
+        if ((await more.count()) === 0) return false
+        await more.first().click()
+        await sleep(200)
+      }
+      return false
+    }
+    const revealed = await revealDoneCard(target.title)
     const card = await readCard(target.title)
-    if (!card.found) throw new Error(`看板上找不到「${target.title}」这张卡片，实际有：${JSON.stringify(card.titles)}`)
+    if (!card.found) {
+      throw new Error(`${revealed ? '' : '（「显示更早的」已经点到底）'}看板上找不到「${target.title}」这张卡片，实际有：${JSON.stringify(card.titles)}`)
+    }
     log('真实已完成卡片:', JSON.stringify(card))
 
     check('A1 跑完的任务卡片上有「最后回复」', !!card.reply, norm(card.reply).slice(0, 60))

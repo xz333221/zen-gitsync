@@ -123,13 +123,54 @@ const filtered = computed(() => {
   })
 })
 
-const columns = computed(() =>
-  COLUMNS.map(c =>
-    c.key === 'done'
-      ? { ...c, tasks: filtered.value.filter(t => t.column === c.key).sort(byDoneAtDesc) }
-      : { ...c, tasks: filtered.value.filter(t => t.column === c.key) }
-  )
-)
+/**
+ * 已完成列默认只铺最近这些张，更早的收在一枚按钮后面。
+ * 实测满载态（159 条完成记录）是约 20 屏的滚动，而这一列要回答的问题只有一个：
+ * 「我刚干完的是什么」—— 按完成时间倒序，最近 30 条已经覆盖这个问题。
+ * 不是分页：点一次是"再多给我一点"，不打断当前滚动位置。
+ */
+const DONE_PAGE = 30
+const doneLimit = ref(DONE_PAGE)
+/* 只跟着**搜索词**重置，不跟着 tasks 重置：tasks 每 5s 轮询换一次数组身份，
+   跟着它重置会让用户点开的「显示更早的」在 5 秒内自己缩回去。 */
+watch(search, () => { doneLimit.value = DONE_PAGE })
+
+const columns = computed(() => {
+  const raw = COLUMNS.map(c => {
+    const all = c.key === 'done'
+      ? filtered.value.filter(t => t.column === c.key).sort(byDoneAtDesc)
+      : filtered.value.filter(t => t.column === c.key)
+    return { ...c, all }
+  })
+  /* 空列塌缩成竖排轨道条，把宽度让给有内容的列。
+     实测（2026-10-05 截图量测）：三列强制等宽时，0 条的「进行中」和 159 条的
+     「已完成」各占 312px —— 一屏约 28% 的面积在渲染"没有东西"。
+     两条例外：① 待处理列永不塌，它末尾挂着「新建任务」，塌了就没地方建任务；
+     ② 三列都空时不塌 —— 一屏三条竖条比三列等宽更难读，而且那是刚清空时的过渡态。 */
+  const anyContent = raw.some(c => c.all.length > 0)
+  return raw.map(c => ({
+    key: c.key,
+    labelKey: c.labelKey,
+    total: c.all.length,
+    hidden: c.key === 'done' ? Math.max(0, c.all.length - doneLimit.value) : 0,
+    tasks: c.key === 'done' ? c.all.slice(0, doneLimit.value) : c.all,
+    railed: anyContent && c.all.length === 0 && c.key !== 'todo',
+  }))
+})
+
+/**
+ * 列轨道：一列一条轨道，宽度按列自己的状态给。
+ * 写死在 CSS 里的 `repeat(4, ...)` 在去掉「评审中」之后留了一条**空轨道**——
+ * 三条列各占 1/4，剩下 1/4 全白，正是"评审列占了很大面积"观感的来源。
+ * 这里用内联样式取值（而不是改 CSS 里的数字），增删列时不用再记得改 CSS。
+ * 窄屏堆叠走的是 @media 改 `display`（不是改轨道数），所以不会被内联样式压住。
+ */
+const RAIL_WIDTH = '58px'
+const columnsStyle = computed(() => ({
+  gridTemplateColumns: columns.value
+    .map(c => (c.railed ? RAIL_WIDTH : 'minmax(0, 1fr)'))
+    .join(' '),
+}))
 
 /**
  * 「已完成」列要回答的是"我刚干完的是什么"，所以按**完成时间**倒序，最新完成的在最上边。
@@ -222,21 +263,21 @@ function autoDoneTitle(t: BoardTask): string {
 const listRows = computed(() => [...filtered.value].sort((a, b) => cardTime(b).localeCompare(cardTime(a))))
 
 /**
- * 列轨道数跟着列数走。
- * 写死在 CSS 里的 `repeat(4, ...)` 在去掉「评审中」之后留了一条**空轨道**——
- * 三条列各占 1/4，剩下 1/4 全白，正是"评审列占了很大面积"观感的来源。
- * 这里用内联样式取值（而不是改 CSS 里的数字），增删列时不用再记得改 CSS。
- * 窄屏堆叠走的是 @media 改 `display`（不是改轨道数），所以不会被内联样式压住。
+ * 卡片标题：优先任务标题；没写标题时用描述压平成一行（与侧边栏任务行同一约定）。
+ *
+ * 例外：整段描述**就是一个路径**时只取末段。实测有一条待处理任务的标题位渲染成
+ * `C:\workspace\gitee_work…` —— 前面整段目录对"这条是什么"零信息，还被省略号切掉
+ * 真正区分的那一段；左栏对同类值早就取末段了，卡面没有。
+ * 只认盘符 / UNC 开头，别的描述一律原样（路径出现在正文中间不算）。
  */
-const columnsStyle = computed(() => ({
-  gridTemplateColumns: `repeat(${columns.value.length}, minmax(0, 1fr))`,
-}))
-
-/** 卡片标题：优先任务标题；没写标题时用描述压平成一行（与侧边栏任务行同一约定） */
 function cardTitle(t: BoardTask): string {
   const title = (t.title || '').trim()
   if (title) return title
-  return (t.desc || '').replace(/\s+/g, ' ').trim()
+  const flat = (t.desc || '').replace(/\s+/g, ' ').trim()
+  if (/^[a-zA-Z]:[\\/]/.test(flat) || flat.startsWith('\\\\')) {
+    return flat.split(/[\\/]/).filter(Boolean).pop() || flat
+  }
+  return flat
 }
 
 /**
@@ -321,14 +362,22 @@ function liveSummary(live: BoardTaskLive): string {
 
     <!-- 看板视图 -->
     <div v-if="view === 'kanban'" class="kb__columns" :style="columnsStyle">
-      <section v-for="col in columns" :key="col.key" class="kb-col" :class="'kb-col--' + col.key">
+      <section
+        v-for="col in columns"
+        :key="col.key"
+        class="kb-col"
+        :class="['kb-col--' + col.key, { 'is-railed': col.railed }]"
+      >
         <header class="kb-col__head">
-          <span class="kb-col__dot" aria-hidden="true" />
+          <!-- 脉冲只在列里真有东西时打：0 条的列上闪着"活着"的点，是这一屏唯一的装饰性假信号 -->
+          <span class="kb-col__dot" :class="{ 'is-live': col.total > 0 }" aria-hidden="true" />
           <h3 class="kb-col__title">{{ $t(col.labelKey) }}</h3>
-          <span class="kb-col__count">{{ col.tasks.length }}</span>
+          <!-- 计数报**总数**而不是当前渲染条数：已完成列默认只铺最近 30 条，
+               写 30 会让"一共完成了多少"这件事从界面上消失 -->
+          <span class="kb-col__count">{{ col.total }}</span>
         </header>
 
-        <ul class="kb-col__list">
+        <ul v-if="!col.railed" class="kb-col__list">
           <li
             v-for="t in col.tasks"
             :key="t.id"
@@ -469,6 +518,24 @@ function liveSummary(live: BoardTaskLive): string {
               </span><span class="kb-card__reply-text">{{ t.lastReply }}</span>
             </p>
 
+            <!--
+              出错卡上「重试」常驻。
+              卡片其余动作住在 hover 遮罩里（那是刻意的，见文件头：看板不是操作面板），
+              但出错是**跨列状态**里唯一需要立刻决策的一种：静态屏上那张红卡只有一句
+              `[openCode] certificate has expired`，用户得先把鼠标移上去才知道有出口。
+              单独一颗按钮、**不并进 .kb-card__actions** —— 那一组的宽度被
+              verify-wb-card-fade-band 按 96px 常数反推过渐隐距离，往里塞第三颗要连带改遮罩；
+              位置也必须在动作组**之前**，因为动作组是遮罩的锚点（卡片最后一行）。
+            -->
+            <button
+              v-if="hasError(t) && t.runningJobs === 0"
+              type="button"
+              class="kb-card__retry"
+              :title="$t('@WORKBENCH:重新执行这条任务')"
+              @click.stop="emit('run-task', t)"
+              @keydown.stop
+            >{{ $t('@WORKBENCH:重试') }}</button>
+
             <div class="kb-card__actions">
               <!--
                 这一格是「对这条任务现在能做什么」。头两颗互斥、**不并排**：
@@ -568,6 +635,13 @@ function liveSummary(live: BoardTaskLive): string {
           </li>
           <li v-else-if="col.tasks.length === 0" class="kb-col__empty">
             <span>{{ $t('@WORKBENCH:暂无任务') }}</span>
+          </li>
+          <!-- 「再多给我一点」：已完成列默认只铺最近 30 条（实测满载态 159 条约 20 屏滚动）。
+               不是分页 —— 点一次在当前列表尾巴上续一批，不打断滚动位置。 -->
+          <li v-if="col.hidden > 0" class="kb-col__more">
+            <button type="button" class="kb-col__more-btn" @click="doneLimit += DONE_PAGE">
+              {{ $t('@WORKBENCH:显示更早的 {n} 条', { n: Math.min(DONE_PAGE, col.hidden) }) }}
+            </button>
           </li>
         </ul>
       </section>
@@ -814,7 +888,9 @@ function liveSummary(live: BoardTaskLive): string {
   background: var(--col-ink);
   box-shadow: var(--col-glow);
 }
-.kb-col--doing .kb-col__dot { animation: kb-pulse 1.4s ease-in-out infinite; }
+/* 只在列里真有东西时脉冲（.is-live 由 col.total > 0 给）。
+   0 条的列上闪着"活着"的点，是这一屏唯一的装饰性假信号。 */
+.kb-col--doing .kb-col__dot.is-live { animation: kb-pulse 1.4s ease-in-out infinite; }
 @keyframes kb-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.45; transform: scale(1.35); }
@@ -850,6 +926,46 @@ function liveSummary(live: BoardTaskLive): string {
   flex: 1 1 auto;
   min-height: 0;
 }
+
+/* 空列塌缩：宽度只剩一条轨道（见 columnsStyle 的 RAIL_WIDTH），列头改成竖排。
+   列头**仍然渲染、底色仍然是那条 26% 的色带** —— verify-wb-colors 的 C3b 按
+   `.kb-col__head` 与列身的相对亮度断言"标识压得住氛围"，塌缩态不能把这条作废，
+   所以这里只改方向（flex-direction / writing-mode），一个颜色都不动。 */
+.kb-col.is-railed .kb-col__head {
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+}
+.kb-col.is-railed .kb-col__title {
+  /* 横排时 flex:1 吃掉剩余宽度；竖排后它会变成"吃掉剩余高度"把头撑满整列 */
+  flex: 0 0 auto;
+  writing-mode: vertical-rl;
+}
+.kb-col.is-railed .kb-col__count { padding: 1px 6px; }
+
+/* ── 「显示更早的 N 条」：已完成列的续批按钮 ── */
+.kb-col__more {
+  list-style: none;
+  margin-top: 4px;
+}
+.kb-col__more-btn {
+  width: 100%;
+  padding: 8px;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-base);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: color var(--transition-fast) var(--ease-custom),
+              border-color var(--transition-fast) var(--ease-custom);
+}
+.kb-col__more-btn:hover {
+  color: var(--col-ink);
+  border-color: var(--col-edge);
+}
+.kb-col__more-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
 /* ── 卡片：浮起表面 + 静息阴影，hover 抬升 ── */
 .kb-card {
@@ -1311,6 +1427,27 @@ function liveSummary(live: BoardTaskLive): string {
  */
 .kb-card__btn--done:hover { color: var(--color-success-dark); background: var(--bg-subtle-hover); }
 .kb-card__btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
+
+/*
+ * 出错卡上的「重试」：卡面上唯一一颗常驻动作（其余都在 hover 遮罩里）。
+ * 颜色走角色 error 的三支（edge / surface / ink）—— 它修饰的是卡片**当前的状态**，
+ * 不另起一个色相，也不跟动作组抢"哪颗是主按钮"。位置在动作组之前（遮罩锚点在最后一行）。
+ */
+.kb-card__retry {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 10px;
+  border: 1px solid var(--role-error-edge);
+  border-radius: var(--radius-pill);
+  background: var(--surface-elevated);
+  color: var(--role-error-ink);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  cursor: pointer;
+  transition: background var(--transition-fast) var(--ease-custom);
+}
+.kb-card__retry:hover { background: var(--role-error-surface); }
+.kb-card__retry:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
 .kb-col__empty {
   padding: 18px 8px;

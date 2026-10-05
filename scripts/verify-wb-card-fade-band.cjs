@@ -299,6 +299,18 @@ async function main() {
     await page.waitForSelector('.kb-card[data-task-id="syn-reply"]', { timeout: 15000 })
     await sleep(900)
 
+    /* 把列宽钉回三等分。
+       本脚本量的是**遮罩的像素**（P1/R3 数墨），跟列宽毫无关系；但看板从 2026-10-05 起
+       会把"空列"收成一条 58px 的轨道（WorkbenchKanban 的 RAIL_WIDTH / columnsStyle），
+       而本 fixture 的三张卡分别落在 待处理 ×2 / 进行中 ×1 —— **已完成列是空的**，
+       于是卡片变宽、引文从 3 行折成 2 行，"倒数第二行"换了一行，R3 那条逐像素断言
+       的前提就没了（实测墨 0px → 54px）。
+       这里把轨道钉死，把"列宽"这个无关变量从断言里剔出去；
+       要验轨道本身去看 verify:wb-colors / verify:wb-responsive。 */
+    await page.addStyleTag({
+      content: '.kb__columns { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }',
+    })
+
     if (REVERSE) {
       // 反证：把遮罩打回改动前的样子（单层横向渐隐、没有纵向条带）。
       // !important 是必须的 —— 原规则挂在 :hover 上（还有 :not(.is-opened)），特异性更高。

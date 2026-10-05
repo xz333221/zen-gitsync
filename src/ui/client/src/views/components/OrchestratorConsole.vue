@@ -682,7 +682,13 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 </script>
 
 <template>
-  <aside class="oc" :class="{ 'is-collapsed': collapsed }">
+  <aside
+    class="oc"
+    :class="{
+      'is-collapsed': collapsed,
+      'is-report-empty': mode === 'command' && !collapsed && !currentReport,
+    }"
+  >
     <!-- 折叠后的收纳条：只剩一枚展开按钮 + 竖排标题，宽度收到 32px。
          折叠不是"把宽度压成 0"—— 那样就再没有能点回来的地方了。 -->
     <button
@@ -769,7 +775,11 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
     <!-- 进度报告：主 Agent 隔一会儿读一遍正在跑的 job，写一段"现在到哪一步了"。
          报告由服务端生成（自动那份由服务端定时器产生），这里只渲染 + 两个入口：
          改间隔、立即报告。 -->
-    <div v-show="!collapsed && mode === 'command'" class="oc__report">
+    <div
+      v-show="!collapsed && mode === 'command'"
+      class="oc__report"
+      :class="{ 'is-empty': !currentReport }"
+    >
       <div class="oc__report-head">
         <p class="oc__panel-title">{{ $t('@WORKBENCH:进度报告') }}</p>
         <!-- 间隔设置。做成下拉而不是输入框：这个值直接决定每多久烧一次模型额度，
@@ -1319,6 +1329,23 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   min-height: 0;
   padding: 8px 0 0;
 }
+
+/* ── 空闲态：空态居中，输入框适度加高 ──
+   实测（2026-10-05 截图量测 1718×1300）：没有进度报告时这一块是 458×700 的全白，
+   占整屏约 14%，而空态那行字**顶对齐贴在列表第一行** —— 读起来像加载失败，
+   不像"现在没有在跑的活"。这一版做两件事：
+     ① 空态在剩下的空间里居中，并换成与看板列同一套的虚线框（见 .oc-empty）；
+     ② 输入框下限抬到 6 行（76 → 168）。
+   ⚠️ 试过更激进的一版：让报告区收缩、把 700px 全给输入框（flex:1 + max-height:none），
+   实测输入框会长到 **798px** —— 一个只有占位符的巨框，比原来那块空白更像"没做完"。
+   所以**高度仍然留在报告区**，只是那里面现在是一块说得清话的空态。
+   真要利用它，正确做法是在空闲时自动展开「历史报告」（那是行为改动，单独一轮做）。 */
+.oc__report.is-empty .oc__report-list {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.oc.is-report-empty .oc__input { min-height: 168px; }
 .oc__panel-title {
   display: flex;
   align-items: center;
@@ -1771,12 +1798,22 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 }
 .oc__history-sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* 空态与看板列的空态用同一套语言（虚线框 + 淡底 + --text-meta + xs）。
+   原来这里是**裸文字**，另外两处（看板列空态、待处理列的「新建任务」）都是虚线框 ——
+   同一个"这里没有东西"在一屏里两种长相，用户每次都要重新判断"是坏了还是真没有"
+   （修复清单 E1 记的就是这条）。`.oc-empty` 的文案与 title 被
+   verify-wb-progress-report.cjs 逐字断言，所以这里只动外观、一个字都没改。 */
 .oc-empty {
-  padding: 20px 10px;
+  max-width: 260px;
+  margin: 0 auto;
+  padding: 18px 10px;
   text-align: center;
   font-size: var(--font-size-xs);
   color: var(--text-meta);
   list-style: none;
+  border: 1px dashed var(--border-color-light);
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
 }
 
 .oc__git {

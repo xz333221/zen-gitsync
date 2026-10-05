@@ -365,15 +365,23 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
           <span class="proj-item__num">{{ projects.length }}</span>
         </div>
 
-        <div class="proj-item__row2">
-          <span>{{ $t('@WORKBENCH:{n} 个项目', { n: projects.length }) }}</span>
-          <span v-if="totals.running > 0" class="proj-item__running-text">
+        <!-- 第二行只在真有内容时说。原来这里写「{n} 个项目」，而同一个 28 就在上面
+             那枚 proj-item__num chip 里、面板标题和顶栏也各写了一遍 —— 一屏四个 28。
+             真正只有这一行能说的是"有几个在跑"。 -->
+        <div v-if="totals.running > 0" class="proj-item__row2">
+          <span class="proj-item__running-text">
             {{ $t('@WORKBENCH:{n} 个执行中', { n: totals.running }) }}
           </span>
         </div>
 
-        <!-- 一个任务都没有时整行不渲染（「0/0 任务完成」+ 空进度条是纯噪声） -->
-        <div v-if="totals.total > 0" class="proj-item__row3">
+        <!-- 一个任务都没有时整行不渲染（「0/0 任务完成」+ 空进度条是纯噪声）。
+             title 交代口径：这里只加列表里这些项目的任务，与顶栏「全部任务」不等
+             （实测差 10 条：9 条属于一个已从列表移除的项目 + 1 条属于容器目录）。 -->
+        <div
+          v-if="totals.total > 0"
+          class="proj-item__row3"
+          :title="$t('@WORKBENCH:只统计项目列表里这些项目名下的任务')"
+        >
           <span class="proj-item__bar" aria-hidden="true">
             <i class="proj-item__bar-fill" :style="{ width: overallProgress + '%' }" />
           </span>
@@ -815,9 +823,14 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   box-shadow: inset 0 0 0 1px var(--tint-primary-14);
 }
 .proj-item:focus-visible { outline: var(--focus-outline); outline-offset: -1px; }
-/* 2026-10-04：从字面 color-mix 改成 --role-active-*，与进度条那档同源。 */
+/* 2026-10-04：从字面 color-mix 改成 --role-active-*，与进度条那档同源。
+   2026-10-05：**完成态不再染整行底色**。原来 `.is-complete` 也铺一层
+   --role-done-surface（与看板「已完成」列身同一个令牌），实测载入态 11 个有进度行的
+   项目里 10 个是完成态 —— 整栏读起来是"绿底列表"，而绿色同时在列头色带 / 列身 /
+   计数 chip / 进度条四处出现；真正稀有的信号（在跑的琥珀）反被稀释。
+   判据与第五轮看板卡那条一致：**这个状态能不能从它所在的位置读出来**。
+   这里完成度已经由进度条填满 +「n/n 任务完成」两处说了，行底留给少数状态。 */
 .proj-item.is-running { background: var(--role-active-surface); }
-.proj-item.is-complete { background: var(--role-done-surface); }
 
 /* 「全部项目」：与真实项目同构，但用一条下边线把它和下面的项目列表分隔开 */
 .proj-item--all {

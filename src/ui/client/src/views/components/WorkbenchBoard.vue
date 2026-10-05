@@ -736,8 +736,8 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
           <span class="board__stat-label">{{ $t('@WORKBENCH:项目') }}</span>
           <strong class="board__stat-value">{{ headerStats.projects }}</strong>
         </span>
-        <span class="board__stat">
-          <span class="board__stat-label">{{ $t('@WORKBENCH:任务') }}</span>
+        <span class="board__stat" :title="$t('@WORKBENCH:看板上全部任务（含已从项目列表移除的项目）')">
+          <span class="board__stat-label">{{ $t('@WORKBENCH:全部任务') }}</span>
           <strong class="board__stat-value">{{ headerStats.tasks }}</strong>
         </span>
         <span class="board__stat">
@@ -928,7 +928,11 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
 .board__brand-text { min-width: 0; }
 .board__title {
   margin: 0;
-  font-size: var(--font-size-base);
+  /* 2026-10-05：原来和正文同一个 14px，比旁边那四个统计数字（--font-size-mid）只大 1px ——
+     整屏从上到下没有一个元素比正文大两档（修复清单 E2 记的就是这条）。
+     抬到 --font-size-lg 让"这是哪一页"重新有层级；再往上（20px）会把这一行顶高、
+     和右侧统计抢注意力，而这个头部只是标题栏，不是 hero。 */
+  font-size: var(--font-size-lg);
   font-weight: 600;
   letter-spacing: var(--letter-spacing-heading);
   color: var(--text-primary);

@@ -419,10 +419,24 @@ function formatBytes(bytes: number): string {
   return `${formatted} ${units[i]}`
 }
 
-function usageColor(percent: number): string {
+/**
+ * 顶栏系统占用那两条进度条，**平时不画**（2026-10-05 评审）。
+ *
+ * 原来 15% / 58% 这种完全正常的读数也各配一条绿色进度条，等于在一屏里放进第二套
+ * "进度条"（第一套是项目进度），两套形状相同、语义无关，用户第一眼会误读；
+ * 而彩色条又是浅色界面里饱和度最高的东西之一，占的却是页面最贵的位置。
+ * 现在：阈值以下只留两个灰数字，越过 70%（= usageColor 原本由绿转琥珀的那一档）
+ * 才出现条和颜色 —— 那时候它才是真的需要被看见。
+ */
+function usageAlert(percent: number): string | null {
   if (percent >= 90) return 'var(--color-danger)'
   if (percent >= 70) return 'var(--color-warning)'
-  return 'var(--color-success)'
+  return null
+}
+
+function usageStyle(percent: number): Record<string, string> {
+  const color = usageAlert(percent)
+  return color ? { color } : {}
 }
 
 // 添加分隔条相关逻辑
@@ -654,21 +668,21 @@ function stopVResize() {
           <div class="header-monitor__content">
             <div class="header-monitor__item">
               <span class="header-monitor__label">CPU</span>
-              <span class="header-monitor__value" :style="{ color: usageColor(monitorStore.overview.cpu.usage) }">
+              <span class="header-monitor__value" :style="usageStyle(monitorStore.overview.cpu.usage)">
                 {{ monitorStore.overview.cpu.usage.toFixed(0) }}%
               </span>
-              <div class="header-monitor__bar">
-                <div class="header-monitor__fill" :style="{ width: `${Math.min(monitorStore.overview.cpu.usage, 100)}%`, background: usageColor(monitorStore.overview.cpu.usage) }"></div>
+              <div v-if="usageAlert(monitorStore.overview.cpu.usage)" class="header-monitor__bar">
+                <div class="header-monitor__fill" :style="{ width: `${Math.min(monitorStore.overview.cpu.usage, 100)}%`, background: usageAlert(monitorStore.overview.cpu.usage) ?? undefined }"></div>
               </div>
             </div>
             <div class="header-monitor__divider"></div>
             <div class="header-monitor__item">
               <span class="header-monitor__label">MEM</span>
-              <span class="header-monitor__value" :style="{ color: usageColor(monitorStore.overview.memory.usagePercent) }">
+              <span class="header-monitor__value" :style="usageStyle(monitorStore.overview.memory.usagePercent)">
                 {{ monitorStore.overview.memory.usagePercent.toFixed(0) }}%
               </span>
-              <div class="header-monitor__bar">
-                <div class="header-monitor__fill" :style="{ width: `${Math.min(monitorStore.overview.memory.usagePercent, 100)}%`, background: usageColor(monitorStore.overview.memory.usagePercent) }"></div>
+              <div v-if="usageAlert(monitorStore.overview.memory.usagePercent)" class="header-monitor__bar">
+                <div class="header-monitor__fill" :style="{ width: `${Math.min(monitorStore.overview.memory.usagePercent, 100)}%`, background: usageAlert(monitorStore.overview.memory.usagePercent) ?? undefined }"></div>
               </div>
             </div>
           </div>

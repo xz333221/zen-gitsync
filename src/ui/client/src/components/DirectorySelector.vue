@@ -1253,15 +1253,20 @@ function onBrowserSelect(path: string) {
   background: var(--border-component);
 }
 
+/* 2026-10-05 评审：这是整屏视觉最重的一样东西 —— 全屏唯一带投影的浮起物，
+   用的是三段式重阴影 + 一条 180deg 的渐变底，而全站别处早就改走令牌了
+   （variables.scss 里那条 "禁渐变" 的来龙去脉：该禁的是渐变本身）。
+   名次上它还排在屏幕正中偏上，服务的却是"把当前目录交给别的 app 打开"这类低频动作。
+   结构上的收敛（只留 2 枚 + 「更多」popover）会动到
+   scripts/verify-open-with-permission-menus.cjs 依赖的 .simple-tool-trigger，
+   这一轮先只把视觉权重降到与工作台头部同级：实心底 + 一档阴影。
+   底色/阴影都走令牌，暗色主题不必再各写一套（原来两套 dark 覆盖随之删掉）。 */
 .directory-selector--header {
   padding: 4px 10px;
   border-radius: var(--radius-xl);
-  border: 1px solid rgba(59, 130, 246, 0.16);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 1) 100%);
-  box-shadow:
-    0 14px 34px rgba(15, 23, 42, 0.14),
-    0 4px 12px rgba(15, 23, 42, 0.08),
-    0 0 0 1px rgba(255, 255, 255, 0.75) inset;
+  border: 1px solid var(--border-color-light);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-sm);
 }
 
 /* 目录名：不占额外空白，只在整条胶囊放不下时才被压缩省略。
@@ -1274,12 +1279,8 @@ function onBrowserSelect(path: string) {
 }
 
 .directory-selector--header:hover {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(241, 245, 249, 1) 100%);
-  box-shadow:
-    0 16px 38px rgba(15, 23, 42, 0.16),
-    0 6px 14px rgba(15, 23, 42, 0.1),
-    0 0 0 1px rgba(255, 255, 255, 0.82) inset,
-    0 0 0 3px var(--tint-primary-08);
+  border-color: var(--border-color);
+  box-shadow: var(--shadow-md);
 }
 
 .directory-selector--header .directory-display {
@@ -1294,23 +1295,8 @@ function onBrowserSelect(path: string) {
   padding-left: 8px;
 }
 
-[data-theme="dark"] .directory-selector--header {
-  background: linear-gradient(180deg, rgba(28, 33, 48, 0.92) 0%, rgba(22, 27, 40, 0.96) 100%);
-  border-color: rgba(147, 197, 253, 0.12);
-  box-shadow:
-    0 16px 36px rgba(0, 0, 0, 0.34),
-    0 6px 14px rgba(0, 0, 0, 0.24),
-    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
-}
-
-[data-theme="dark"] .directory-selector--header:hover {
-  background: linear-gradient(180deg, rgba(33, 39, 56, 0.96) 0%, rgba(24, 29, 44, 0.98) 100%);
-  box-shadow:
-    0 18px 42px rgba(0, 0, 0, 0.4),
-    0 8px 16px rgba(0, 0, 0, 0.28),
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
-    0 0 0 3px rgba(96, 165, 250, 0.08);
-}
+/* 暗色不再单写一套：底色走 --surface-elevated、阴影走 --shadow-sm/md，
+   两者都在 dark-theme.scss 里有覆盖（旧写法是两段硬编码 rgba，跟着主题走不了）。 */
 
 .directory-display {
   flex: 1;
