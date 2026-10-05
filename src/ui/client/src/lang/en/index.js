@@ -944,9 +944,11 @@ export default {
   '@42BB9:任务或对话结束时在页面内弹一条提示': 'Show an in-app toast when a task or a chat turn finishes',
   '@42BB9:浏览器通知': 'Browser notification',
   '@42BB9:页面在后台或别的窗口时发系统通知；打开时会向浏览器申请通知权限': 'Send a system notification while the page is in the background or in another window; turning this on asks the browser for notification permission',
-  '@42BB9:浏览器已拒绝通知权限，只能在页面内提示（可在浏览器地址栏的站点设置里恢复）': 'The browser has denied notification permission, so only in-app toasts will show (restore it in the site settings of the address bar)',
-  '@42BB9:当前环境不支持系统通知，只能在页面内提示': 'This environment does not support system notifications, so only in-app toasts will show',
-  '@42BB9:浏览器已拒绝通知权限，将只在页面内提示': 'The browser has denied notification permission, so only in-app toasts will show',
+  // Denied / unsupported say plainly that no system notification will be sent. Don't promise
+  // "in-app toasts only" — the toast has its own switch and the user may well have turned it off.
+  '@42BB9:浏览器已拒绝通知权限，系统通知发不出去（可在浏览器地址栏的站点设置里恢复）': 'The browser has denied notification permission, so no system notification will be sent (restore it in the site settings of the address bar)',
+  '@42BB9:当前环境不支持系统通知': 'This environment does not support system notifications',
+  '@42BB9:浏览器已拒绝通知权限，系统通知发不出去': 'The browser has denied notification permission, so no system notification will be sent',
   // Sound cue (a peer of the two channels above): some want the notice but no noise,
   // others want the chime without any visual channel.
   '@42BB9:提示音': 'Sound cue',

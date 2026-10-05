@@ -207,10 +207,10 @@
                       {{ $t('@42BB9:页面在后台或别的窗口时发系统通知；打开时会向浏览器申请通知权限') }}
                     </span>
                     <span v-if="notifyPermissionState === 'denied'" class="setting-hint-block notify-hint notify-hint--warn">
-                      {{ $t('@42BB9:浏览器已拒绝通知权限，只能在页面内提示（可在浏览器地址栏的站点设置里恢复）') }}
+                      {{ $t('@42BB9:浏览器已拒绝通知权限，系统通知发不出去（可在浏览器地址栏的站点设置里恢复）') }}
                     </span>
                     <span v-else-if="notifyPermissionState === 'unsupported'" class="setting-hint-block notify-hint notify-hint--warn">
-                      {{ $t('@42BB9:当前环境不支持系统通知，只能在页面内提示') }}
+                      {{ $t('@42BB9:当前环境不支持系统通知') }}
                     </span>
                   </div>
 
@@ -1389,7 +1389,7 @@ async function onBrowserNotifyToggleChange(value: string | number | boolean) {
   if (value === true) {
     notifyPermissionState.value = await requestNotificationPermission()
     if (notifyPermissionState.value === 'denied') {
-      ElMessage.warning($t('@42BB9:浏览器已拒绝通知权限，将只在页面内提示'))
+      ElMessage.warning($t('@42BB9:浏览器已拒绝通知权限，系统通知发不出去'))
     }
   } else {
     notifyPermissionState.value = notificationPermission()
