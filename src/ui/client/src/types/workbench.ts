@@ -201,6 +201,13 @@ export interface BoardTaskLive {
   silentMs: number | null
 }
 
+/** 卡片封面用的一张图：拼 `/api/workbench/attachments/:id/raw` 只要 id，另两个是 alt / 悬停提示 */
+export interface BoardImage {
+  id: string
+  originalName: string
+  ext: string
+}
+
 /** 看板卡片：任务的精简形态 */
 export interface BoardTask {
   id: string
@@ -209,6 +216,11 @@ export interface BoardTask {
   projectPath: string
   column: TaskColumn
   attachmentCount: number
+  /**
+   * 附件里的图片（卡片封面 / 点开预览的数据源）。
+   * 与 attachmentCount 是两条口径：那个数"一共挂了几个附件"，这个只数图片。
+   */
+  images: BoardImage[]
   runningJobs: number
   /** 正在跑时的活动摘要（思考 / 工具 / 最新回复 / 时长）；没在跑时为 null */
   live?: BoardTaskLive | null

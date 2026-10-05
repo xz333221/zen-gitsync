@@ -2307,6 +2307,8 @@ export default {
   '@WORKBENCH:删除': '删除',
   '@WORKBENCH:已删除': '已删除',
   '@WORKBENCH:点击预览': '点击预览',
+  '@WORKBENCH:查看图片': '查看图片',
+  '@WORKBENCH:{n} 张图': '{n} 张图',
   '@WORKBENCH:复制图片': '复制图片',
   '@WORKBENCH:图片已复制到剪贴板': '图片已复制到剪贴板',
   '@WORKBENCH:当前浏览器不支持复制图片': '当前浏览器不支持复制图片',

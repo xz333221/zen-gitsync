@@ -171,7 +171,10 @@ async function main() {
   // （卡片宽 → 每行多少字 → 3 行放得下多少字）。换个更窄的视口跑，A6 那条"整段可见"
   // 会假失败，而它验的其实是"这个数选得对不对"，不是"任意宽度都不截断"。
   const page = await (await browser.newContext({ viewport: { width: 2000, height: 1274 } })).newPage()
-  page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()) })
+  // 记 url：H1 要放行「卡片封面图取不到」这一类（见 H1 处的说明）
+  page.on('console', (m) => {
+    if (m.type() === 'error') consoleErrors.push(`${m.text()} @${(m.location() && m.location().url) || ''}`)
+  })
   page.on('pageerror', (e) => pageErrors.push(String(e)))
 
   let shot = null
@@ -388,8 +391,16 @@ async function main() {
     check('G2 列表视图里正在跑的那条仍走活动摘要（不与回复行重复）',
       listRunning.hasLive && !listRunning.reply)
 
-    check('H1 页面无 console / page 错误', consoleErrors.length === 0 && pageErrors.length === 0,
-      [...consoleErrors, ...pageErrors].slice(0, 3).join(' | '))
+    // 卡片封面（2026-10-05 起卡片会画附件里的第一张图）会给附件原图端点发请求，
+    // 而 tasks.json 里**允许**存在"附件记录还在、文件已经没了"的脏数据
+    // （本机实测 4 条，清理过 workbench-images 或换过机器就会这样）。
+    // 那种 404 是用户数据的问题，不是页面坏了 —— 卡片自己会撤掉封面（验收在
+    // verify-wb-card-cover 的 B7/G1）。所以这里只放行**附件原图那一个端点**的失败，
+    // 别的 404 / console error 一律照旧算红。
+    const isAttachmentMiss = (t) => /@http[^ ]*\/api\/workbench\/attachments\//.test(t)
+    const unexpected = consoleErrors.filter(t => !isAttachmentMiss(t))
+    check('H1 页面无 console / page 错误', unexpected.length === 0 && pageErrors.length === 0,
+      [...unexpected, ...pageErrors].slice(0, 3).join(' | '))
   } finally {
     // 只关自己起的这个浏览器实例（按 CDP，不用 taskkill /IM —— 那会连带关掉用户的浏览器）
     await browser.close()

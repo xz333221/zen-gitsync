@@ -61,6 +61,8 @@
     "verify:wb-rerun-label:reverse": "node scripts/verify-wb-rerun-label.cjs --reverse",
     "verify:wb-auto-done": "node scripts/verify-wb-auto-done.cjs",
     "verify:wb-auto-done:reverse": "node scripts/verify-wb-auto-done.cjs --reverse",
+    "verify:wb-card-cover": "node scripts/verify-wb-card-cover.cjs",
+    "verify:wb-card-cover:reverse": "node scripts/verify-wb-card-cover.cjs --reverse",
     "verify:wb-list-view": "node scripts/verify-wb-list-view.cjs",
     "verify:wb-executor-models": "node scripts/verify-wb-executor-models.cjs",
     "verify:wb-task-sound": "node scripts/verify-wb-task-sound.cjs",

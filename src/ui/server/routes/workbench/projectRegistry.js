@@ -35,6 +35,9 @@
 
 import { probeDirectoryGitStates } from '../../utils/directoryGitState.js';
 import { pickLiveActivity, tailExcerpt, jobAgent, jobDurationMs } from './jobActivity.js';
+// 图片后缀白名单只此一份（jobImage.js 的注释里也钉着这条）：卡片封面、附件缩略图、
+// 对话流内嵌图三处要是各写一份，迟早出现"这张缩略图能显示、那张不行"。
+import { IMAGE_EXTS } from './attachmentUtils.js';
 
 /** 看板列，数组顺序即列顺序 */
 export const TASK_COLUMNS = ['todo', 'doing', 'done'];
@@ -347,6 +350,36 @@ export async function listProjects({
  * 两条互斥：有 job 在跑就只给 live（活动区自己会显示"最新回复"），跑完了才给 lastReply，
  * 免得同一张卡片上出现"最新回复"和"最后回复"两段相似但不同时刻的话。
  */
+/** 附件是不是图片：后缀优先，认不出再退回 mime（老记录的 ext 可能缺） */
+function isBoardImageAtt(att) {
+  const ext = String(att.ext || '').toLowerCase();
+  if (ext) return IMAGE_EXTS.has(ext);
+  return String(att.mimeType || '').toLowerCase().startsWith('image/');
+}
+
+/**
+ * 卡片封面用的图片附件清单（2026-10-05 补）。
+ *
+ * 起因：截图是这类任务最常带的证据（"界面这块不对" + 一张图），但附件在列表/看板上
+ * 完全不可见 —— 卡片上连"这条有图"都看不出来，用户只能逐条点进去翻。
+ *
+ * 只挑图片：PDF / 日志 / JSON 这些附件没法用缩略图表达，混在一起反而稀释掉"有图"这个信号。
+ * **不截断**：卡片上只画第一张（配一枚 +N），但点开后要在看图器里左右翻，
+ * 所以整份清单都得送到前端 —— 数量本来就是个位数，多这一小段 JSON 不值得省。
+ * 只给 id / originalName / ext：前端拼 URL 只要 id，另两个是 alt 与悬停提示用的；
+ * absolutePath 是服务端内部事实，没必要随着看板接口漏出去。
+ */
+export function pickBoardImages(attachments) {
+  if (!Array.isArray(attachments)) return [];
+  return attachments
+    .filter(a => a && a.id && isBoardImageAtt(a))
+    .map(a => ({
+      id: a.id,
+      originalName: a.originalName || '',
+      ext: String(a.ext || '').toLowerCase(),
+    }));
+}
+
 export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now() } = {}) {
   const jobs = Array.isArray(jobsForTask) ? jobsForTask : [];
   const last = latestJob(jobs);
@@ -358,6 +391,12 @@ export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now() 
     projectPath: task.projectPath || '',
     column: deriveTaskColumn(task, jobs),
     attachmentCount: Array.isArray(task.attachments) ? task.attachments.length : 0,
+    /**
+     * 附件里的图片（卡片封面的数据源，空数组 = 这张卡不画封面）。
+     * 与 attachmentCount 是两条口径：那个是"一共挂了几个附件"，这是"其中有几张图" ——
+     * 一张卡带 3 张截图 + 1 份日志时，封面上的 +N 得说 2 而不是 3。
+     */
+    images: pickBoardImages(task.attachments),
     runningJobs: jobs.filter(j => j && (j.status === 'running' || j.status === 'pending')).length,
     /** 正在跑时的活动摘要；没有在跑 → null */
     live,

@@ -59,7 +59,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { Search } from '@element-plus/icons-vue'
 import TaskExecutorIcon from '@/components/TaskExecutorIcon.vue'
-import type { BoardTask, BoardTaskLive, TaskColumn } from '@/types/workbench'
+import type { BoardImage, BoardTask, BoardTaskLive, TaskColumn } from '@/types/workbench'
 import { taskExecutorName, type TaskExecutorId } from '@/utils/taskExecutor'
 import { projectTagStyle } from '@/utils/projectTag'
 import { formatDurationMs, relativeTimeFromIso, clockFromIso } from '@/utils/relativeTime'
@@ -340,6 +340,82 @@ function liveSummary(live: BoardTaskLive): string {
   const text = live.lastLine || live.lastThought || live.lastTool
   return text ? `${elapsed} · ${text}` : elapsed
 }
+
+/* ── 附件图片：卡片封面 + 点开看大图 ─────────────────────────────────────
+ *
+ * 截图是这类任务最常带的证据（"界面这块不对" + 一张图），但在此之前卡片上
+ * 完全看不出"这条带图"，只能逐条点进编辑器翻。封面就是补这个信号：
+ * 图本身就是内容，比一枚"有附件"的角标信息量大得多。
+ *
+ * 为什么用按钮包住图（而不是给 <img> 挂 @click）：卡片整体是个 role="button"
+ * 的可点区域（点哪儿都是"打开任务"），图得同时满足两件事 ——
+ * 点它**不**打开任务、键盘也够得着（Tab 到它按回车看大图）。原生 button 一次给全。
+ * @keydown.stop 与卡片上其余几颗按钮同一口径：回车别冒泡到 <li> 上去把任务也打开了。
+ */
+function cardImages(t: BoardTask): BoardImage[] {
+  return Array.isArray(t.images) ? t.images : []
+}
+
+/**
+ * 取不到文件的那几张（<img> onerror 时记进来，见 onCoverError）。
+ * 存组件本地、**不写回 BoardTask**：任务对象是服务端的事实，而"这个文件此刻取不到"
+ * 是我们这边的观测结果（用户可能刚把文件补回来），写进数据会让下一次轮询也画不出来。
+ * 所以每次 onerror 都换一个新 Set —— 就地 add 的话 Vue 收不到变更，封面不会消失。
+ */
+const brokenCoverIds = ref<Set<string>>(new Set())
+
+function onCoverError(id: string) {
+  brokenCoverIds.value = new Set(brokenCoverIds.value).add(id)
+}
+
+/**
+ * 卡片真正该画的图 = images 里**取得到文件**的那些。
+ *
+ * 为什么要过这一层：附件文件真的会消失。实测本机 tasks.json 里有 4 条图片附件
+ * 指向已不存在的文件（清理过 workbench-images 或换过机器），而 <img> 对 404 的
+ * 表现是浏览器那枚裂图图标 —— 比"这张卡没有封面"难看得多，也让人以为看板坏了。
+ * 剔掉之后整块封面自己消失，卡片回到"没有图"的样子（不影响附件在任务详情里照旧可见）。
+ *
+ * 第一张就不见了时，第二张会顶上来当封面：用户要的是"这张卡上有图可看"，
+ * 不是"永远画附件列表里的第一个"。
+ */
+function coverImages(t: BoardTask): BoardImage[] {
+  const all = cardImages(t)
+  if (brokenCoverIds.value.size === 0) return all
+  return all.filter(a => !brokenCoverIds.value.has(a.id))
+}
+
+/** 附件原图地址。与 AttachmentZone.rawOf 同一个端点（§17 的任务附件） */
+function imageRawUrl(id: string): string {
+  return `/api/workbench/attachments/${id}/raw`
+}
+
+/**
+ * 看图器的开关状态。**一次开一整组**：点封面进去之后能左右翻完这条任务的所有图，
+ * 不用退出来再点第二张 —— 附件本来就是同一件事的多张证据。
+ */
+const imageViewer = ref<{ urls: string[]; index: number } | null>(null)
+
+function openImages(t: BoardTask, index = 0) {
+  const imgs = coverImages(t)
+  if (imgs.length === 0) return
+  imageViewer.value = { urls: imgs.map(a => imageRawUrl(a.id)), index }
+}
+
+function closeImages() {
+  imageViewer.value = null
+}
+
+/**
+ * 封面按钮的悬停提示 / 无障碍名。
+ * 带上文件名：卡片上放不下它，而"到底是哪张图"只有文件名能回答
+ * （一张 4K 截图缩到 72px 高，里头的字基本读不出来）。
+ */
+function coverTitle(img: BoardImage): string {
+  return img.originalName
+    ? `${$t('@WORKBENCH:查看图片')} · ${img.originalName}`
+    : $t('@WORKBENCH:查看图片')
+}
 </script>
 
 <template>
@@ -433,6 +509,43 @@ function liveSummary(live: BoardTaskLive): string {
               · 标题不再单独占行，跟着一起上移。
               title 给完整路径：项目名可能重名（两个都叫 notebook），路径才是唯一答案。
             -->
+            <!--
+              封面（第一条有图的附件）：卡片上**看得见**的证据。
+              截图是这类任务最常带的附件，而在此之前卡片上一个字都没提它 ——
+              只能逐条点进去翻。图本身就是内容，摆出来比"有附件"的角标信息量大得多。
+
+              为什么放最顶、还出血到卡片边缘：它是这张卡的"封面"，不是卡里嵌的一个盒子
+              （嵌进去就成 cards-inside-cards 了）。放最顶还有个几何上的好处 ——
+              卡片底部的 hover 操作组压的永远是**最后一行**（见 .kb-card__actions 那段），
+              封面在最上面就一辈子跟它不相干，不用往那套渐隐遮罩里再挂一条规则。
+
+              只画第一张 + 一枚 +N：卡片宽 300px 上下，并排两张缩略图谁也看不清；
+              点开之后看图器能左右翻完整组（见 openImages）。
+              @click.stop / @keydown.stop：卡片整块是"打开任务"的可点区域，
+              封面得把自己摘出来 —— 否则点图会变成打开任务，看不成图。
+            -->
+            <button
+              v-if="coverImages(t).length > 0"
+              type="button"
+              class="kb-card__cover"
+              :title="coverTitle(coverImages(t)[0])"
+              :aria-label="coverTitle(coverImages(t)[0])"
+              @click.stop="openImages(t)"
+              @keydown.stop
+            >
+              <img
+                class="kb-card__cover-img"
+                :src="imageRawUrl(coverImages(t)[0].id)"
+                :alt="coverImages(t)[0].originalName"
+                loading="lazy"
+                decoding="async"
+                @error="onCoverError(coverImages(t)[0].id)"
+              />
+              <span v-if="coverImages(t).length > 1" class="kb-card__cover-more" aria-hidden="true">
+                +{{ coverImages(t).length - 1 }}
+              </span>
+            </button>
+
             <div class="kb-card__row1">
               <span
                 v-if="showProjectLabel && projectLabel(t)"
@@ -697,6 +810,21 @@ function liveSummary(live: BoardTaskLive): string {
             @keydown.space.prevent="emit('open-task', t)"
           >
             <td class="kb-table__td">
+              <!-- 列表视图这边的"这条带图"：与看板卡片的封面同一份数据、同一层含义。
+                   看板默认视图是卡片，所以那边可以铺一张封面；这一格是一行密排的正文
+                   （整格 width 按 table-layout: fixed 平分），塞缩略图会把行高顶出去 ——
+                   .kb-table__time 那边有探针按"整格只有一行"断言，这一格没理由比它松。
+                   所以退成**纯文字的计数标**：零字号变化、零内边距，行高一个像素不动，
+                   但仍然是个按钮（点了看图）——"有图"这件事在两处视图里都消失不了。
+                   同 .kb-table__auto-done：只给颜色，不给框。 -->
+              <button
+                v-if="coverImages(t).length > 0"
+                type="button"
+                class="kb-table__shots"
+                :title="coverTitle(coverImages(t)[0])"
+                @click.stop="openImages(t)"
+                @keydown.stop
+              >{{ $t('@WORKBENCH:{n} 张图', { n: coverImages(t).length }) }}</button>
               <span class="kb-table__name">{{ cardTitle(t) || $t('@WORKBENCH:未命名任务') }}</span>
               <!-- 项目色标：与看板卡片同一枚（见 .kb-card__project-chip 的样式注释），
                    列表视图是同一批任务的另一种画法，两处长得不一样会让人以为是两份数据 -->
@@ -761,6 +889,32 @@ function liveSummary(live: BoardTaskLive): string {
         </tbody>
       </table>
     </div>
+
+    <!--
+      看图器（点封面 / 列表里那枚「N 张图」打开）。
+
+      复用 element-plus 的 el-image-viewer，而不是自己糊一个遮罩：
+      缩放、拖拽、左右翻、Esc 关闭这一整套交互它都现成，而且附件面板
+      （AttachmentZone）点缩略图走的就是它 —— 两处看图的观感与手感一致。
+
+      为什么这里**不**手动 import ElImageViewer 与它的 CSS（AttachmentZone 那样）：
+      那边是因为要在 <script> 里引用组件名才手动 import 的，手动 import 会让
+      unplugin-vue-components 的自动 CSS 注入失效，所以才要补一行 style/css.mjs。
+      这里是纯模板用法，resolver 会自动带上组件与样式，多引反而会重复注入。
+
+      :teleported="true" 必须显式给：内部是 `<Teleport :disabled="!teleported">`，
+      默认 undefined = 关闭 —— 关掉的话遮罩会嵌在 .kb 里，被看板的滚动容器裁掉。
+      也不要再在外面套一层 <teleport to="body">：嵌套 Teleport 在 2.11.x 下会让
+      组件挂不上（AttachmentZone 那边踩过并留了注释）。
+    -->
+    <el-image-viewer
+      v-if="imageViewer"
+      :url-list="imageViewer.urls"
+      :initial-index="imageViewer.index"
+      :hide-on-click-modal="true"
+      :teleported="true"
+      @close="closeImages"
+    />
   </div>
 </template>
 
@@ -1083,6 +1237,56 @@ function liveSummary(live: BoardTaskLive): string {
 .kb-card.is-opened:hover {
   box-shadow: var(--shadow-card-rest);
   transform: none;
+}
+
+/* ── 封面：附件里第一张图（模板那段讲了为什么在最顶、为什么只画一张） ──────
+   出血到卡片边缘：负外边距抵消 .kb-card 的 12px 内边距。它是这张卡的封面，
+   不是卡里嵌的一个盒子（嵌进去就成 cards-inside-cards 了）。
+   圆角只削上面两个、且比卡片自己的 --radius-lg 小 1px —— 卡片那圈 1px 边框
+   会把内部圆角衬出来，不跟着收就会在角上露出一线底色。
+   高度写死 72px 而不用 aspect-ratio：列宽是可拖的、窄屏还会堆叠，
+   按比例算高度在窄列上会高得离谱；72px 在 300px 宽的卡上正好是一条认得出内容的横带。 */
+.kb-card__cover {
+  position: relative;
+  display: block;
+  width: calc(100% + 24px);
+  height: 72px;
+  margin: -12px -12px 10px;
+  padding: 0;
+  border: none;
+  border-radius: calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px) 0 0;
+  overflow: hidden;
+  background: var(--bg-subtle);
+  cursor: zoom-in;
+}
+.kb-card__cover:focus-visible { outline: var(--focus-outline); outline-offset: -2px; }
+.kb-card__cover-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* cover 而不是 contain：contain 会把 4K 截图缩成中间一小块、两侧留空，
+     整张卡看着像图片没加载出来。裁掉两头 —— object-position 钉在上边，
+     因为截图的重点几乎总在上面（标题栏 / 报错行 / 界面顶部），钉中间常只剩一片空白。 */
+  object-fit: cover;
+  object-position: top center;
+  transition: transform var(--transition-base) var(--ease-custom);
+}
+/* 悬停放大的暗示：这张图是可以点开看大图的，不是一块装饰 */
+.kb-card__cover:hover .kb-card__cover-img { transform: scale(1.04); }
+/* 「还有 N 张」压在封面右下角。
+   底色用 --bg-overlay（深浅两套主题下都是深色遮罩），字写死白 ——
+   它压在**图片**上，跟主题色板没关系，用浅底深字那套令牌在这儿会瞎。 */
+.kb-card__cover-more {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 0 5px;
+  border-radius: var(--radius-base);
+  background: var(--bg-overlay);
+  color: #fff;
+  font-size: var(--font-size-xs);
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* 首行：项目色标 + 标题 + 时间 —— 三者都是单行文本。
@@ -1600,6 +1804,23 @@ function liveSummary(live: BoardTaskLive): string {
 .kb-table__dur { color: var(--text-primary); }
 .kb-table__time-sep { margin: 0 3px; opacity: .55; }
 .kb-table__name { color: var(--text-primary); }
+/* 列表行里那枚「N 张图」：摆在**名字之前**（模板那段讲了为什么）。
+   只给颜色、不给框也不给内边距 —— 这一格的行高必须跟 .kb-table__time 一样紧，
+   带内边距的标会把行顶出去（同 .kb-table__auto-done 的那条理由）。
+   字号比正文小一档但**不改行高**：inline 元素的 font-size 不参与行盒高度计算，
+   行盒由所在行的 strut 定，所以这一格的高度与没有这枚标时逐像素相同。 */
+.kb-table__shots {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin-right: 6px;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  cursor: zoom-in;
+}
+.kb-table__shots:hover { color: var(--color-primary); }
+.kb-table__shots:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 /* .kb-table__project 的样式与卡片那枚共用，见上方 .kb-card__project-chip 一段 */
 /* 进行中那一行的"跑到哪了"：与任务名同一格，占满剩余宽度后省略号收尾 */
 .kb-table__live {

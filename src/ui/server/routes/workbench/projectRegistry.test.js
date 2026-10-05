@@ -31,6 +31,7 @@ import {
   OUTPUT_TAIL_CHARS,
   trimJobForDetail,
   buildTaskDetail,
+  pickBoardImages,
 } from './projectRegistry.js';
 import { normalizeOrchestrator, buildActivityFeed, buildRunningAgents } from './orchestratorStore.js';
 
@@ -256,12 +257,59 @@ test('decorateTaskForBoard: 只回卡片需要的字段', () => {
   }, []);
   assert.equal(card.column, 'todo');
   assert.equal(card.attachmentCount, 1);
+  // 这条附件只有一个 id（没有 ext / mime）→ 认不出是图片，卡片就不画封面。
+  // 空数组而不是 undefined：前端模板直接按长度判断，缺字段会让老服务端配新前端时炸
+  assert.deepEqual(card.images, []);
   assert.equal(card.runningJobs, 0);
   // 没跑过就没有完成时间——看板「已完成」列的排序靠它，空值必须显式是 null
   // 而不是 undefined（前端 doneAt 的回退链要能一路退到 updatedAt）
   assert.equal(card.lastJobEndedAt, null);
   // 执行器同理：从没跑过时是空串（前端据此不画品牌图标），不是 undefined
   assert.equal(card.lastJobAgent, '');
+});
+
+// ── 卡片封面：附件里的图片 ──────────────────────────────────────────
+// 截图是这类任务最常带的证据，而在此之前看板上完全看不出"这条带图"。
+// 这里的口径要和客户端 AttachmentZone 的 isImageAttachment 一致：**只认图片**，
+// 混进 PDF / 日志会让卡片上那枚「还有 N 张」的 N 虚高。
+
+test('pickBoardImages: 只挑图片，且不把服务端路径漏出去', () => {
+  const images = pickBoardImages([
+    { id: 'a1', ext: 'png', originalName: 'shot.png', absolutePath: 'C:\\secret\\a1.png' },
+    { id: 'a2', ext: 'pdf', originalName: 'spec.pdf', mimeType: 'application/pdf' },
+    { id: 'a3', ext: 'JPG', originalName: 'photo.JPG' },
+    { id: 'a4', ext: '', mimeType: 'image/webp', originalName: 'no-ext.webp' },
+    { id: 'a5', ext: 'log', originalName: 'run.log' },
+  ]);
+  assert.deepEqual(images, [
+    { id: 'a1', originalName: 'shot.png', ext: 'png' },
+    { id: 'a3', originalName: 'photo.JPG', ext: 'jpg' },
+    { id: 'a4', originalName: 'no-ext.webp', ext: '' },
+  ]);
+  // absolutePath 是服务端内部事实，不该随看板接口发出去
+  assert.equal('absolutePath' in images[0], false);
+});
+
+test('pickBoardImages: 没附件 / 形态不对时给空数组，不抛', () => {
+  assert.deepEqual(pickBoardImages(undefined), []);
+  assert.deepEqual(pickBoardImages(null), []);
+  assert.deepEqual(pickBoardImages([]), []);
+  // 缺 id 的脏记录进不了清单：前端要拿 id 拼 /attachments/:id/raw
+  assert.deepEqual(pickBoardImages([{ ext: 'png' }]), []);
+});
+
+test('decorateTaskForBoard: images 只数图片，attachmentCount 数全部附件', () => {
+  const card = decorateTaskForBoard({
+    id: 't1', title: '', desc: '', projectPath: 'D:\\a',
+    attachments: [
+      { id: 'a1', ext: 'png', originalName: '1.png' },
+      { id: 'a2', ext: 'png', originalName: '2.png' },
+      { id: 'a3', ext: 'log', originalName: 'run.log' },
+    ],
+  }, []);
+  // 两条口径必须分得开：卡片上的 «还有 N 张» 说的是图，不是附件
+  assert.equal(card.attachmentCount, 3);
+  assert.equal(card.images.length, 2);
 });
 
 // ── 卡片上的执行器图标 ──────────────────────────────────────────────

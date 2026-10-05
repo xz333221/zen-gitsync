@@ -2300,6 +2300,8 @@ export default {
   '@WORKBENCH:删除': 'Delete',
   '@WORKBENCH:已删除': 'Deleted',
   '@WORKBENCH:点击预览': 'Click to preview',
+  '@WORKBENCH:查看图片': 'View image',
+  '@WORKBENCH:{n} 张图': '{n} image(s)',
   '@WORKBENCH:复制图片': 'Copy image',
   '@WORKBENCH:图片已复制到剪贴板': 'Image copied to clipboard',
   '@WORKBENCH:当前浏览器不支持复制图片': 'Your browser does not support copying images',
