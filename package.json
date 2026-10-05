@@ -120,7 +120,8 @@
     "verify:wb-inline-images": "node scripts/verify-wb-inline-images.mjs",
     "verify:wb-colors": "node scripts/verify-wb-colors.cjs",
     "verify:wb-colors:reverse": "node scripts/verify-wb-colors.cjs --reverse",
-    "verify:ui-consistency": "node scripts/verify-ui-consistency.cjs"
+    "verify:ui-consistency": "node scripts/verify-ui-consistency.cjs",
+    "verify:header-monitor": "node scripts/verify-header-monitor.cjs"
   },
   "files": [
     "src/ui/public/**",

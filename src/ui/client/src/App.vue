@@ -420,13 +420,11 @@ function formatBytes(bytes: number): string {
 }
 
 /**
- * 顶栏系统占用那两条进度条，**平时不画**（2026-10-05 评审）。
+ * 顶栏那两个**数字**的颜色：低于 70% 不上色。
  *
- * 原来 15% / 58% 这种完全正常的读数也各配一条绿色进度条，等于在一屏里放进第二套
- * "进度条"（第一套是项目进度），两套形状相同、语义无关，用户第一眼会误读；
- * 而彩色条又是浅色界面里饱和度最高的东西之一，占的却是页面最贵的位置。
- * 现在：阈值以下只留两个灰数字，越过 70%（= usageColor 原本由绿转琥珀的那一档）
- * 才出现条和颜色 —— 那时候它才是真的需要被看见。
+ * 浅色界面里饱和度最高的东西就是彩色文字，而顶栏是页面最贵的位置 ——
+ * 15% / 58% 这种完全正常的读数不该被染成绿色抢注意力，越过 70%
+ * （原本由绿转琥珀的那一档）才变色，那时候它才是真的需要被看见。
  */
 function usageAlert(percent: number): string | null {
   if (percent >= 90) return 'var(--color-danger)'
@@ -437,6 +435,25 @@ function usageAlert(percent: number): string | null {
 function usageStyle(percent: number): Record<string, string> {
   const color = usageAlert(percent)
   return color ? { color } : {}
+}
+
+/**
+ * 进度条填充色，**三档都有值** —— 条常驻不隐藏（2026-10-05 用户要求恢复）。
+ *
+ * 上一版只让条在 ≥70% 时出现，用户反馈"看不到水位"。所以条一直都在，
+ * 水位是这排读数里唯一能一眼读出的东西：CPU 抖到 95% 时数字"95"和
+ * 相邻的"61"在字形上没区别，条长才是。
+ *
+ * 填充色不直接用 `--color-success`，走 `--role-*-bar`：实心色块不该继承文字的
+ * 对比度预算（`--color-success` 是照小字压过的档，用户 2026-10-05 报过
+ * "白色主题下黄色和绿色的进度条还是感觉有点深"）。这条口径在
+ * docs/ui-audit/README.md 第四轮已固化：hue 70% + ink 30%，浅色档比 ink 亮一档。
+ * 三档语义：绿 = 正常，琥珀 = 该留意，红 = 该动手。
+ */
+function usageBarColor(percent: number): string {
+  if (percent >= 90) return 'var(--role-error-bar)'
+  if (percent >= 70) return 'var(--role-active-bar)'
+  return 'var(--role-done-bar)'
 }
 
 // 添加分隔条相关逻辑
@@ -671,8 +688,8 @@ function stopVResize() {
               <span class="header-monitor__value" :style="usageStyle(monitorStore.overview.cpu.usage)">
                 {{ monitorStore.overview.cpu.usage.toFixed(0) }}%
               </span>
-              <div v-if="usageAlert(monitorStore.overview.cpu.usage)" class="header-monitor__bar">
-                <div class="header-monitor__fill" :style="{ width: `${Math.min(monitorStore.overview.cpu.usage, 100)}%`, background: usageAlert(monitorStore.overview.cpu.usage) ?? undefined }"></div>
+              <div class="header-monitor__bar">
+                <div class="header-monitor__fill" :style="{ width: `${Math.min(monitorStore.overview.cpu.usage, 100)}%`, background: usageBarColor(monitorStore.overview.cpu.usage) }"></div>
               </div>
             </div>
             <div class="header-monitor__divider"></div>
@@ -681,8 +698,8 @@ function stopVResize() {
               <span class="header-monitor__value" :style="usageStyle(monitorStore.overview.memory.usagePercent)">
                 {{ monitorStore.overview.memory.usagePercent.toFixed(0) }}%
               </span>
-              <div v-if="usageAlert(monitorStore.overview.memory.usagePercent)" class="header-monitor__bar">
-                <div class="header-monitor__fill" :style="{ width: `${Math.min(monitorStore.overview.memory.usagePercent, 100)}%`, background: usageAlert(monitorStore.overview.memory.usagePercent) ?? undefined }"></div>
+              <div class="header-monitor__bar">
+                <div class="header-monitor__fill" :style="{ width: `${Math.min(monitorStore.overview.memory.usagePercent, 100)}%`, background: usageBarColor(monitorStore.overview.memory.usagePercent) }"></div>
               </div>
             </div>
           </div>
