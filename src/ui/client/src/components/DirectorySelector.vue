@@ -1255,20 +1255,18 @@ function onBrowserSelect(path: string) {
   background: var(--border-component);
 }
 
-/* 2026-10-05 评审：这是整屏视觉最重的一样东西 —— 全屏唯一带投影的浮起物，
-   用的是三段式重阴影 + 一条 180deg 的渐变底，而全站别处早就改走令牌了
-   （variables.scss 里那条 "禁渐变" 的来龙去脉：该禁的是渐变本身）。
-   名次上它还排在屏幕正中偏上，服务的却是"把当前目录交给别的 app 打开"这类低频动作。
-   结构上的收敛（只留 2 枚 + 「更多」popover）会动到
-   scripts/verify-open-with-permission-menus.cjs 依赖的 .simple-tool-trigger，
-   这一轮先只把视觉权重降到与工作台头部同级：实心底 + 一档阴影。
-   底色/阴影都走令牌，暗色主题不必再各写一套（原来两套 dark 覆盖随之删掉）。 */
+/* 2026-10-05 二次反馈：静止态「不留阴影、不留底色」，hover 才浮起。
+   它是全屏唯一带投影的浮起物，可服务的却是"把当前目录交给别的 app 打开"这类低频动作
+   —— 静止时压一档阴影 + 一块实心底，视觉权重比它承载的动作大得多。
+   现在静止态 = 透明底（露出顶栏自身底色）+ box-shadow:none，只剩一圈 --border-color-light
+   的细边勾出胶囊形状；底层这条 light 边是刻意留的：去掉底色后它是唯一的边界，再删就散架了。
+   反馈全部由 hover 的阴影 + 边框色承担，底色两个状态都不给（见下条）。 */
 .directory-selector--header {
   padding: 4px 10px;
   border-radius: var(--radius-xl);
   border: 1px solid var(--border-color-light);
-  background: var(--surface-elevated);
-  box-shadow: var(--shadow-sm);
+  background: transparent;
+  box-shadow: none;
 }
 
 /* 目录名：不占额外空白，只在整条胶囊放不下时才被压缩省略。
@@ -1280,15 +1278,15 @@ function onBrowserSelect(path: string) {
   min-width: 72px;
 }
 
-/* 2026-10-05 反馈"hover 之后背景太深"：上一轮把这枚胶囊的渐变底换成实心令牌时
-   删掉了 hover 底色，于是被当时那条 `.directory-selector:hover` 接管 ——
-   它用的是 --border-component(#e9ecef)，语义是"边框色"，铺成底就是整条胶囊变一块灰。
-   这里显式给回中性 hover 底：--bg-hover 叠在 --surface-elevated 上只比白低一档
-   （实测 #ffffff → #f1f2f2，改前是 #e9ecef），暗色下 --bg-hover 会自动变成
-   --bg-hover-dark。注意暗色下这条的 border-color 仍会被 dark-theme.scss 里
-   `[data-theme="dark"] .directory-selector:hover`（特异性更高）接管，属预期。 */
+/* hover：只加阴影 + 边框深一档，**不加底色**。
+   上一轮这里是 --bg-hover（#f1f2f2），这一轮按反馈一并去掉 —— 底色在静止态已撤，
+   hover 再补一块会变成"两个状态两套语言"。注意别把这条删掉：一旦漏写，它会落到前面
+   那条 `.directory-selector:not(.directory-selector--header):hover` 上的 --border-component，
+   整条胶囊会突然变一块灰（2026-10-05 已经出过一次，所以这里显式写 background: transparent）。
+   暗色下 dark-theme.scss 的 `[data-theme="dark"] .directory-selector:hover` 特异性更高且会铺
+   rgba(255,255,255,.1) 的底，已在那条上加 :not() 把 --header 排除掉。 */
 .directory-selector--header:hover {
-  background: var(--bg-hover);
+  background: transparent;
   border-color: var(--border-color);
   box-shadow: var(--shadow-md);
 }

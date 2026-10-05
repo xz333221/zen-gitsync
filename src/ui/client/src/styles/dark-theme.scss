@@ -380,7 +380,10 @@ html[data-theme="dark"] {
     border-color: rgba(255, 255, 255, 0.2);
   }
 
-  .directory-selector:hover {
+  /* 只给非 header 变体：顶栏胶囊（--header）两个状态都不铺底色，反馈走阴影，
+     这条特异性高于组件内的 `.directory-selector--header:hover`，不加 :not() 会把
+     rgba(255,255,255,.1) 又贴回去（深色下表现为 hover 冒出一块灰）。 */
+  .directory-selector:not(.directory-selector--header):hover {
     background: rgba(255, 255, 255, 0.1);
     border-color: rgba(255, 255, 255, 0.2);
   }
