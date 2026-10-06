@@ -15,7 +15,7 @@
   -->
 <script setup lang="ts">
 import { $t } from '@/lang/static'
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Delete, CopyDocument, ArrowDown, ArrowUp, Clock, Loading, Search } from '@element-plus/icons-vue';
 import { useGitStore } from '@stores/gitStore';
@@ -24,6 +24,13 @@ import IconButton from '@/components/IconButton.vue';
 
 // 获取Git Store以访问Socket实例
 const gitStore = useGitStore();
+
+// 按钮尺寸：默认 large（原地不动其他调用方）。2026-10-06 这个按钮从提交区 header
+// 搬到了顶栏（提交区在"无事可做"时会整块收起），顶栏邻居是 32px 的图标按钮，
+// 所以由顶栏传 small/medium 来对齐。
+withDefaults(defineProps<{ size?: 'small' | 'medium' | 'large' }>(), {
+  size: 'large',
+})
 
 // Define the structure of a command history item
 interface CommandHistoryItem {
@@ -402,21 +409,39 @@ function initSocketListeners() {
 }
 
 // 清除WebSocket监听器
-function cleanupSocketListeners() {
-  if (gitStore.socket) {
-    gitStore.socket.off('initial_command_history');
-    gitStore.socket.off('command_history_update');
-    gitStore.socket.off('full_command_history');
-    gitStore.socket.off('command_history_cleared');
-  }
+// 事件清单只写一份：解绑必须和绑定用同一份，否则漏一个就是内存泄漏
+// （原先 cleanup 漏了 'disconnect'，这里顺手补齐）。
+const SOCKET_EVENTS = [
+  'initial_command_history',
+  'command_history_update',
+  'full_command_history',
+  'command_history_cleared',
+  'disconnect',
+] as const;
+
+function cleanupSocketListeners(target = gitStore.socket) {
+  if (!target) return;
+  SOCKET_EVENTS.forEach((evt) => target.off(evt));
 }
+
+// socket 可能**晚于本组件挂载**才建好：这个按钮 2026-10-06 从"懒加载的提交区 header"
+// 搬到了顶栏，挂载时机提前到 App 启动那一刻，而 gitStore.socket 要等 App 初始化
+// 之后才建。原来只在 onMounted 里试一次 —— 拿不到 socket 就只打一条
+// 「Socket实例不可用」然后 return，四个监听器一个都没注册上（弹窗里永远是空的），
+// 而且那句 initSocketListeners() 还排在 initSocketConnection() **前面**，顺序本来就是反的。
+// 改成 watch(socket)：到位就绑；换过对象（重连）先解旧的再绑新的。
+const stopSocketWatch = watch(
+  () => gitStore.socket,
+  (sock, prev) => {
+    if (prev && prev !== sock) cleanupSocketListeners(prev);
+    if (sock) initSocketListeners();
+  },
+  { immediate: true }
+);
 
 // Load history on component mount
 onMounted(() => {
-  // 初始化Socket.io监听器
-  initSocketListeners();
-
-  // 确保Socket已初始化
+  // 确保Socket已初始化（绑定交给上面的 watch —— 它会在 socket 就绪那一刻执行）
   if (!gitStore.socket) {
     console.log($t('@81F0F:尝试初始化Socket连接'));
     gitStore.initSocketConnection();
@@ -427,6 +452,7 @@ onMounted(() => {
 
 // 清理工作
 onUnmounted(() => {
+  stopSocketWatch();
   cleanupSocketListeners();
 });
 </script>
@@ -435,7 +461,7 @@ onUnmounted(() => {
   <!-- 命令历史按钮 -->
   <IconButton
     :tooltip="$t('@81F0F:查看Git命令历史')"
-    size="large"
+    :size="size"
     @click="openCommandHistory"
   >
     <el-icon><Clock /></el-icon>

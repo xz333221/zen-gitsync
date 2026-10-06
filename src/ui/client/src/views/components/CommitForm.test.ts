@@ -35,7 +35,6 @@ function mountCommitForm() {
       GlobalLoading: true,
       SuccessModal: true,
       IconButton: true,
-      CommandHistory: true,
     } },
   })
   return _lastWrapper

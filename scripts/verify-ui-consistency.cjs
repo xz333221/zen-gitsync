@@ -437,14 +437,18 @@ assertNone(
   }
 }
 
-// A15 提交区"无事可做就收起"（2026-10-06 用户提出）
-//     用户原话：「如果上面这些按钮全都是禁用状态的话，那上面这块区域就可以隐藏不展示了」。
-//     这条钉三件事：
+// A15 提交区"无事可做就收起"（2026-10-06，用户提了两轮）
+//     第一轮：「上面这些按钮全是禁用状态的话，那块区域就可以隐藏不展示了」；
+//     第二轮：「没有任何变更的话，那这个 AI 生成按钮也就不用显示了，所以这块就能都隐藏了」。
+//     这条钉四件事：
 //       ① 判据必须在 store 里且**完整**（干净 + 无待推送 + 已到过一次状态 + 非合并中 + 非在跑）——
 //          少一项就会在错误时机收起（首屏闪一下 / 把"有本地提交待推送"也收掉）；
-//       ② 收起用 grid-template-rows: 0fr（可过渡、可测），不许 display: none；
-//       ③ **只收 header-left（按钮行）与 card-content（表单），header-right 那三个图标必须留**——
-//          工作区干净恰好是最想 pull / fetch / merge 的时刻，整块藏掉等于把功能藏没。
+//       ② 收起在 **`.commit-form-panel`** 上做（整块，含 header）：用
+//          grid-template-rows: 1fr↔0fr（可过渡、可测），不许 display: none；
+//       ③ **两个常驻入口（命令历史 / Git 操作）必须在顶栏** —— 它们是"敢整块收掉"的前提：
+//          工作区干净恰好是最想 pull / fetch / merge 的时刻。搬走了但没搬全 = 功能丢。
+//          同时不许在 CommitForm 里留重复的一份。
+//       ④ 主题切换按钮"先不显示"= 用常量门控（代码保留、可一键恢复），不是删掉。
 {
   const store = stripComments(fs.readFileSync(path.join(SRC, 'stores/gitStore.ts'), 'utf8'))
   const idle = (store.match(/const commitAreaIdle = computed\(\(\) => \(([\s\S]*?)\n  \)\)/) || [])[1] || ''
@@ -461,26 +465,43 @@ assertNone(
     bad('commitAreaIdle 判据不完整', `${missing.length} 项缺失：${missing.join('；')}`)
   } else ok('commitAreaIdle 判据完整（干净 + 无待推送 + 已到过一次 + 非合并中 + 非在跑）')
 
-  const filed = path.join(SRC, 'views/components/CommitForm.vue')
-  const flat = stripComments(fs.readFileSync(filed, 'utf8')).replace(/\s+/g, ' ')
-  if (/['"]is-idle['"]:\s*gitStore\.commitAreaIdle/.test(flat)) {
-    ok('CommitForm 根上绑定了 is-idle ← gitStore.commitAreaIdle')
+  const appRaw = stripComments(fs.readFileSync(path.join(SRC, 'App.vue'), 'utf8'))
+  const appSrc = appRaw.replace(/\s+/g, ' ')
+  const commitForm = stripComments(fs.readFileSync(path.join(SRC, 'views/components/CommitForm.vue'), 'utf8')).replace(/\s+/g, ' ')
+
+  // ② 面板级收起
+  if (/commit-form-panel[^"']*['"]is-idle['"]:\s*gitStore\.commitAreaIdle|is-idle['"]:\s*gitStore\.commitAreaIdle/.test(appSrc)) {
+    ok('App.vue 的 .commit-form-panel 绑定了 is-idle ← gitStore.commitAreaIdle')
   } else {
-    bad('CommitForm 没有绑定收起态', "根元素应为 :class=\"{ 'is-idle': gitStore.commitAreaIdle }\"")
+    bad('面板没有绑定收起态', "应为 :class=\"{ 'is-idle': gitStore.commitAreaIdle }\"")
   }
-  const idleRule = (flat.match(/\.card\.app-card\.is-idle \{([^}]*\{[^}]*\}[^}]*|[^}]*)\}/) || [])[1] || ''
-  if (/grid-template-rows:\s*0fr/.test(idleRule)) {
-    ok('收起态走 grid-template-rows: 0fr（可过渡、可测）')
+  // 注意：这段要从**未压平**的文本里取（压平后换行没了，`\n}` 永远匹配不上 →
+  // 规则体取到空串，两条断言会假红）
+  const idleRule = (appRaw.match(/\.commit-form-panel:not\(\.commit-form-panel--empty\)\s*\{([\s\S]*?)\n\}/) || [])[1] || ''
+  if (/grid-template-rows:\s*0fr/.test(idleRule)) ok('收起态走 grid-template-rows: 0fr（可过渡、可测）')
+  else bad('收起态写法不对', '应为 grid-template-rows: 0fr；display: none 既没有过渡也不好量')
+  if (/display:\s*none/.test(idleRule)) bad('收起态用了 display: none', '过渡与"量高度"都会失效')
+  else ok('收起态没有用 display: none')
+  if (/min-height:\s*0/.test(idleRule)) ok('子项 min-height: 0（否则自动最小尺寸会把 0 行顶回去）')
+  else bad('缺 min-height: 0', 'grid 子项的 min-height:auto 会撑住 0 行，收起量不出 0')
+
+  // ③ 两个常驻入口在顶栏、且不在提交区里重复
+  const headerHas = (name) => new RegExp(`<${name}[\\s/>]`).test(appSrc)
+  const bothInHeader = headerHas('CommandHistory') && headerHas('GitOperationsButton')
+  if (bothInHeader) ok('顶栏常驻了「命令历史 + Git 操作」（整块收起的前提）')
+  else bad('顶栏缺了常驻入口', 'CommandHistory / GitOperationsButton 必须渲染在 App.vue 顶栏，否则干净工作区里没有 pull/fetch 入口')
+  const cfDup = /<CommandHistory[\s/>]|<GitOperationsButton[\s/>]/.test(commitForm)
+  if (cfDup) bad('提交区里还留着一份入口', '搬走后不许留重复的一份（会两头都能点、也说明没搬干净）')
+  else ok('提交区里没有重复的入口')
+
+  // ④ 主题按钮：门控隐藏、代码保留
+  if (/const SHOW_THEME_TOGGLE = false/.test(appSrc)) ok('主题切换按钮被常量门控为"先不显示"')
+  else bad('主题按钮没有被门控', '应为 const SHOW_THEME_TOGGLE = false（保留恢复路径，别直接删按钮）')
+  if (/v-if="SHOW_THEME_TOGGLE"/.test(appSrc) && /theme-toggle-btn/.test(appSrc)) {
+    ok('主题按钮代码保留（改一个常量即可恢复）')
   } else {
-    bad('收起态写法不对', '应为 grid-template-rows: 0fr；display: none 既没有过渡也不好测')
+    bad('主题按钮被删而不是被隐藏', '用户说的是"先不显示"，代码要留着')
   }
-  if (/display:\s*none/.test(idleRule)) {
-    bad('收起态用了 display: none', '过渡与"量高度"都会失效')
-  } else ok('收起态没有用 display: none')
-  if (/\.header-right/.test(idleRule)) {
-    bad('收起态把 header-right 也收起来了',
-      'AI 生成 / 命令历史 / Git 操作菜单必须保留 —— 干净工作区正是要 pull/fetch 的时刻')
-  } else ok('收起只作用于 header-left / card-content（header-right 三个图标保留）')
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -37,6 +37,8 @@ import InstanceSwitcher from '@/components/InstanceSwitcher.vue'
 import AppErrorBanner from '@/components/AppErrorBanner.vue'
 import ServerClosedOverlay from '@/components/ServerClosedOverlay.vue'
 import RecentDirectoriesList from '@/components/RecentDirectoriesList.vue'
+import CommandHistory from '@/views/components/CommandHistory.vue'
+import GitOperationsButton from '@/components/buttons/GitOperationsButton.vue'
 // GitHub / Gitee 仓库列表面板(Git 视图的另外两个 Tab)。静态导入:只有切到对应
 // Tab 才挂载,不占首屏请求;但它本身不大,不值得为它多开一个异步 chunk。
 import RemoteReposList from '@/components/RemoteReposList.vue'
@@ -402,6 +404,14 @@ function openUserSettingsDialog(tab?: SettingsTab) {
 // 与 SourceMapView / MonacoEditor 共用同一份实现
 const { theme: isDarkTheme } = useThemeObserver()
 
+// 顶栏主题切换按钮「先不显示」（2026-10-06 用户要求）。
+// 这个位置让给了「命令历史 + Git 操作」——它们原先挂在提交区 header，
+// 而提交区在"无事可做"时会整块收起（`gitStore.commitAreaIdle`），
+// 那两个入口必须留在常驻的顶栏，否则工作区干净时连 pull/fetch/merge 都点不到。
+// 主题仍可在「设置 → 主题」里切；想恢复这个按钮：把下面的常量改回 true 即可
+// （按钮代码原样保留，没有删）。
+const SHOW_THEME_TOGGLE = false
+
 // ── header 系统监控指示器辅助函数 ───────────────────────────────────────
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
@@ -649,8 +659,16 @@ function stopVResize() {
       </div>
       <!-- 实例切换器：显示所有运行中的 GUI 项目 -->
       <InstanceSwitcher />
-      <!-- 主题切换快捷按钮（OPT-2：原本要进设置→通用→主题 4 次点击,现在 1 次） -->
+      <!-- 命令历史 + Git 操作：2026-10-06 从提交区 header 搬到这里（原主题按钮的位置）。
+           提交区在"无事可做"时会整块收起，这两个入口必须常驻 —— 否则工作区干净时
+           连 pull / fetch / merge 都没有入口。尺寸取 medium：顶栏邻居是 32px 的图标按钮
+           （本行下面那个主题按钮就是），large(40) 会明显偏大。 -->
+      <CommandHistory size="small" />
+      <GitOperationsButton variant="icon" size="small" />
+      <!-- 主题切换快捷按钮（OPT-2：原本要进设置→通用→主题 4 次点击,现在 1 次）
+           2026-10-06 用户要求"先不显示"，见 SHOW_THEME_TOGGLE 的注释 -->
       <el-tooltip
+        v-if="SHOW_THEME_TOGGLE"
         :content="isDarkTheme ? $t('@F13B4:切换到浅色主题') : $t('@F13B4:切换到深色主题')"
         placement="bottom"
         effect="dark"
@@ -860,7 +878,7 @@ function stopVResize() {
       ></div>
 
       <!-- 右侧上方提交表单 -->
-      <div class="commit-form-panel" v-if="gitStore.isGitRepo">
+      <div class="commit-form-panel" :class="{ 'is-idle': gitStore.commitAreaIdle }" v-if="gitStore.isGitRepo">
         <!-- 当用户未配置时显示配置提示 -->
         <div v-if="!gitStore.userName || !gitStore.userEmail" class="state-block state-block--warning user-unconfigured-card">
           <div class="state-block__icon user-unconfigured-icon">
@@ -1305,6 +1323,37 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+/* ── 无事可做时把整个提交区收起来（2026-10-06）───────────────────────
+   判据：`gitStore.commitAreaIdle`（工作区干净 + 无待推送 + 状态已到过一次 +
+   非合并中 + 非在跑），绑定在 `.commit-form-panel` 上。
+
+   为什么现在能整块收（而不是像上一版只收按钮行 + 表单）：那一版刻意留着 header
+   右侧三个图标，理由是「工作区干净恰好是最想 pull/fetch 的时刻」。这次用户要求把
+   **命令历史 + Git 操作** 搬到常驻顶栏（顶掉主题切换按钮），于是提交流里的入口
+   一个都不剩 —— 整块收掉不再丢功能；剩下的那个 ✨ AI 生成提交信息在"没有变更"时
+   本来也没意义（正是用户原话点出来的那条）。
+
+   机制：面板正好是"单子元素的 grid item"，用 grid-template-rows: 1fr ↔ 0fr 过渡，
+   0 行时子盒(整张卡片，含它自己的内边距/描边)被 overflow: hidden 剪掉，
+   省下的高度整块让给下面的提交历史。
+   写 0px / max-height 都不插值（见 memory lessons/kanban-empty-column-collapse）。
+   `> * { min-height: 0 }` 不能省：否则子项的自动最小尺寸会把 0 行顶回去。
+   只作用于 git 仓库那一支（:not(--empty)）—— 非 git 空态是另一套 flex 布局，
+   别一起改。 */
+.commit-form-panel:not(.commit-form-panel--empty) {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.28s var(--ease-in-out, ease-in-out);
+
+  > * {
+    min-height: 0;
+  }
+
+  &.is-idle {
+    grid-template-rows: 0fr;
+  }
 }
 
 .log-list-panel {

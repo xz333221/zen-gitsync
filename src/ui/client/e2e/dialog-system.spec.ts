@@ -30,8 +30,15 @@ async function openUserSettings(page: import('@playwright/test').Page) {
 
 /**
  * 主题是持久化设置(点一次写回 /api/config/save-ui-settings),
- * 所以不能假定开局是浅色 —— 先读状态,不一致才点,保证用例幂等;
+ * 所以不能假定开局是浅色 —— 先读状态,不一致才改,保证用例幂等;
  * 结束时用它恢复浅色,避免污染其它 spec。
+ *
+ * 2026-10-06：顶栏的 `.theme-toggle-btn` 按用户要求先不显示了（那个位置让给了
+ * 命令历史 + Git 操作），这里改走它背后**同一条持久化链路**：主题由
+ * `configStore.saveGeneralSettings()` 发到 `/api/config/save-general-settings`
+ * （注意不是 save-ui-settings —— 本文件原来那句注释写错了），改完 reload 让 App
+ * 按新配置重新应用。比去操作「设置 → 主题」那个 el-select 稳得多（少两次点击、
+ * 少两个按文案找的元素，也不会被设置弹窗的遮罩影响后续断言）。
  */
 async function ensureTheme(
   page: import('@playwright/test').Page,
@@ -40,7 +47,16 @@ async function ensureTheme(
   const html = page.locator('html')
   const isDark = await html.evaluate((el) => el.getAttribute('data-theme') === 'dark')
   if ((theme === 'dark') !== isDark) {
-    await page.locator('.theme-toggle-btn').click()
+    await page.evaluate(async (t) => {
+      await fetch('/api/config/save-general-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theme: t }),
+      })
+    }, theme)
+    await page.reload()
+    // 重新等一次 initCompleted（与 beforeEach 同一判据），否则主题可能还没应用
+    await expect(page.locator('.loading-container')).toHaveCount(0, { timeout: 60_000 })
   }
   if (theme === 'dark') {
     await expect(html).toHaveAttribute('data-theme', 'dark')

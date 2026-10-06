@@ -38,13 +38,17 @@ interface Props {
   hasUserCommitMessage?: boolean
   finalCommitMessage?: string
   skipHooks?: boolean
+  // 图标按钮尺寸。默认 large（原地不动其他调用方）。2026-10-06 从提交区 header
+  // 搬到顶栏，顶栏邻居是 32px 的图标按钮，由调用方传 small/medium 对齐。
+  size?: 'small' | 'medium' | 'large'
 }
 
 const props = withDefaults(defineProps<Props>(), {
   variant: 'icon',
   hasUserCommitMessage: false,
   finalCommitMessage: '',
-  skipHooks: false
+  skipHooks: false,
+  size: 'large'
 })
 
 const emit = defineEmits<{
@@ -161,7 +165,7 @@ defineExpose({
     <IconButton
       v-if="props.variant === 'icon'"
       :tooltip="$t('@F13B4:Git 操作')"
-      size="large"
+      :size="props.size"
       custom-class="btn-rotate-on-hover"
       @click="openGitOperationsDrawer"
     >

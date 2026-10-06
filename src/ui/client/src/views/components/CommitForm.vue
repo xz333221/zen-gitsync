@@ -29,7 +29,6 @@ import { isFilePathLocked } from "@/utils/fileLock";
 import TemplateManager from "@components/TemplateManager.vue";
 import GitCommandPreview from "@components/GitCommandPreview.vue";
 import GitActionButtons from "@/components/GitActionButtons.vue";
-import CommandHistory from "@/views/components/CommandHistory.vue";
 import IconButton from "@components/IconButton.vue";
 
 // AI 生成提交信息
@@ -673,7 +672,7 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
 </script>
 
 <template>
-  <div class="card app-card" :class="{ 'is-pushing': gitStore.isPushing, 'is-idle': gitStore.commitAreaIdle }">
+  <div class="card app-card" :class="{ 'is-pushing': gitStore.isPushing }">
     <div class="card-header app-card-header">
       <div class="header-left">
         <GitActionButtons
@@ -705,8 +704,9 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
         >
           <el-icon v-if="aiGenerating" class="is-loading"><Loading /></el-icon>
         </IconButton>
-        <CommandHistory />
-        <GitOperationsButton class="ml-auto" variant="icon" />
+        <!-- 「命令历史」与「Git 操作」2026-10-06 搬到顶栏（App.vue）：这个面板在
+             "无事可做"时会整块收起，那两个入口必须常驻 —— 否则工作区干净时
+             连 pull / fetch / merge 都点不到。 -->
       </div>
     </div>
 
@@ -957,51 +957,13 @@ git config --global user.email "your.email@example.com"</pre
   flex: 1;
 }
 
-/* ── 提交区收起（无事可做时）─────────────────────────────────────────
-   用户 2026-10-06：「如果上面这些按钮全都是禁用状态的话，那上面这块区域就可以隐藏不展示了」。
-   收起的是"用不上的那一半"：
-     .header-left   动作按钮行（暂存 / 提交 / 推送 / 一键提交 / 一键推送所有 / AI 提交并推送）
-     .card-content  提交信息表单 + 正文及页脚 + 命令预览
-   **保留 .header-right 那三个图标**（AI 生成提交信息 / 命令历史 / Git 操作菜单）——
-   工作区干净恰好是最想 pull / fetch / merge 的时刻，整块藏掉会把它们一起藏没。
-   判据唯一出处：`gitStore.commitAreaIdle`（含首屏门槛 statusLoadedOnce 与"待推送"排除）。
-   过渡只能用 `grid-template-rows: 1fr ↔ 0fr`：写 0px / max-height 都不插值
-   （见 memory lessons/kanban-empty-column-collapse）。两个块常态就必须是 grid，
-   否则切 display 无法过渡。两处细节都不能省：
-     · `min-height: 0` —— 否则 flex/grid 的自动最小尺寸（min-height:auto）会把 0 行撑回去
-     · `overflow: hidden` —— 否则 0 行时子盒仍溢出可见，`.card-content` 自己的
-       `overflow-y: auto` 还会冒出一条滚动条 */
-.header-left,
-.card-content {
-  display: grid;
-  grid-template-rows: 1fr;
-  min-height: 0;
-  transition:
-    grid-template-rows 0.28s var(--ease-in-out, ease-in-out),
-    padding 0.28s var(--ease-in-out, ease-in-out),
-    opacity 0.2s var(--ease-in-out, ease-in-out);
-
-  > * {
-    min-height: 0;
-    min-width: 0;
-  }
-}
-
-.card.app-card.is-idle {
-  .header-left,
-  .card-content {
-    grid-template-rows: 0fr;
-    opacity: 0;
-    /* 收起后残留的那点宽度/高度也不该接住鼠标 */
-    pointer-events: none;
-  }
-
-  .card-content {
-    padding-top: 0;
-    padding-bottom: 0;
-    overflow: hidden;
-  }
-}
+/* 无事可做时"整块收起"不在这里做 —— 2026-10-06 起改为在 `.commit-form-panel`
+   （App.vue）上用 grid-template-rows: 1fr↔0fr 整体收，判据同样是
+   `gitStore.commitAreaIdle`。原因：原先只收 .header-left + .card-content、
+   刻意留着 header 右侧三个图标（"干净工作区正是想 pull/fetch 的时刻"），
+   而那两个入口（命令历史 / Git 操作）已经搬到常驻顶栏了，于是这个面板可以整块收掉，
+   连 header 那条只剩 ✨ AI 生成提交信息的工具条一起 —— 那个按钮在"没有变更"时
+   本来就没意义。收起机制的注释见 App.vue 的 `.commit-form-panel:not(--empty)`。 */
 
 .layout-container {
   display: flex;

@@ -64,30 +64,29 @@ test.describe('App smoke', () => {
 
   test('6. CommitForm card mounted (lazy-loaded)', async ({ page }) => {
     // .app-card 是 .card 通用容器,CommitForm 根上挂这个 class
-    // 2026-10-06：「无事可做时提交区整块收起」上线后，`.header-left` 与 `.card-content`
-    // 会被压成 grid-template-rows: 0fr（0 高、opacity 0）—— Playwright 把空盒子判为
-    // **不可见**，所以原来的 toBeVisible 不再是"懒加载成功"的判据。
-    // 懒加载要验的是"挂载了没" → attached；顺手把收起态的自洽性钉住。
+    // 2026-10-06 两轮改动后的契约：
+    //  ①「无事可做时整块收起」现在收的是 `.commit-form-panel`（grid-template-rows: 0fr），
+    //    所以 is-idle 在 **panel** 上、0 高也发生在 panel 上 —— Playwright 把空盒子判为
+    //    不可见，原来的 toBeVisible 不再是"懒加载成功"的判据 → 改成 attached + 自洽断言。
+    //  ②「命令历史 / Git 操作」已搬到常驻顶栏（原主题按钮的位置），它们必须一直在 ——
+    //    否则工作区干净时 pull/fetch/merge 就没有入口了。这条护栏放在这里最省事。
     const card = page.locator('.commit-form-panel .app-card').first()
     await expect(card).toHaveCount(1, { timeout: 30_000 })
-    const m = await card.evaluate((el) => {
-      const q = (s: string) => el.querySelector(s) as HTMLElement | null
-      const box = (n: HTMLElement | null) => (n ? n.getBoundingClientRect() : null)
-      const content = box(q('.card-content'))
-      const icons = box(q('.header-right'))
-      const stageBtn = box(q('.header-left'))
+    const m = await page.locator('.commit-form-panel').first().evaluate((panel) => {
+      const card = panel.querySelector('.app-card') as HTMLElement | null
+      const content = card && (card.querySelector('.card-content') as HTMLElement | null)
       return {
-        idle: el.classList.contains('is-idle'),
-        contentH: content ? content.height : -1,
-        iconsH: icons ? icons.height : -1,
-        stageH: stageBtn ? stageBtn.height : -1,
+        idle: panel.classList.contains('is-idle'),
+        panelH: panel.getBoundingClientRect().height,
+        contentH: content ? content.getBoundingClientRect().height : -1,
       }
     })
-    // 收起 ⇔ 表单区高度为 0；展开则必须有真实高度（两者自洽，防"永远收起"）
-    expect(m.idle ? m.contentH < 1 : m.contentH > 40).toBe(true)
-    // 护栏：收起时**右侧三个图标必须还在**（AI 生成 / 命令历史 / Git 操作菜单）——
-    // 干净工作区恰好是最想 pull / fetch 的时刻，不许把整块面板一起藏掉
-    expect(m.iconsH).toBeGreaterThan(10)
+    // 收起 ⇔ 面板高 0；展开则必须有真实高度（两者自洽，防"永远收起"）
+    expect(m.idle ? m.panelH < 1 && m.contentH < 1 : m.panelH > 100 && m.contentH > 40).toBe(true)
+    // 护栏：两个常驻入口必须在顶栏可见
+    const header = page.locator('.main-header')
+    await expect(header.getByRole('button', { name: /Git 命令历史|命令历史/ }).first()).toBeVisible()
+    await expect(header.getByRole('button', { name: /Git 操作/ }).first()).toBeVisible()
   })
 
   test('7. LogList card visible (lazy-loaded)', async ({ page }) => {
