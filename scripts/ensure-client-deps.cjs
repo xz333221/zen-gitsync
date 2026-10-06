@@ -41,9 +41,32 @@ if (fresh) {
 }
 
 console.log('[ensure-client-deps] 依赖有变化或 node_modules 缺失,执行 npm install…')
-const r = spawnSync(
-  'npm',
-  ['install', '--legacy-peer-deps', '--no-audit', '--no-fund', '--prefer-offline'],
-  { cwd: clientDir, stdio: 'inherit', shell: true } // shell:true 兼容 Windows 的 npm.cmd
-)
-process.exit(r.status == null ? 1 : r.status)
+
+function install(extraArgs) {
+  const args = ['install', '--legacy-peer-deps', '--no-audit', '--no-fund', ...extraArgs]
+  console.log(`[ensure-client-deps] npm ${args.join(' ')}`)
+  const r = spawnSync('npm', args, {
+    cwd: clientDir,
+    stdio: 'inherit',
+    shell: true // shell:true 兼容 Windows 的 npm.cmd
+  })
+  return r.status == null ? 1 : r.status
+}
+
+// 第一枪沿用 --prefer-offline（命中本地缓存，快）。
+let status = install(['--prefer-offline'])
+
+if (status !== 0) {
+  // 失败里最常见的一类是 **缓存里的 packument 过期**：依赖刚发了新版本，而本地缓存的
+  // 元数据还停在上一版，于是 `^x.y.z` 直接报
+  //   npm error code ETARGET
+  //   npm error notarget No matching version found for <pkg>@^x.y.z
+  // 看着像"这个版本不存在"，其实 registry 上早就有。
+  // 实测 2026-10-06：flow-mindmap 从 0.6.3 升到 ^0.6.4 后 dev:vue 直接 exit 1，
+  // 而官方源上 0.6.4 就是 latest —— `--prefer-offline` 用的是缓存里的旧 packument。
+  // 这类事故不该让人去清缓存 / 换 registry / 手改版本号：--prefer-online 重试一枪就好。
+  console.log('[ensure-client-deps] 上面这一步失败，改走 --prefer-online 重试一次（多半是缓存的 packument 过期）…')
+  status = install(['--prefer-online'])
+}
+
+process.exit(status)
