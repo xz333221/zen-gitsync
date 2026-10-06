@@ -178,7 +178,7 @@ async function handleDropdownCommand(command: string) {
 
 <template>
   <div>
-    <div class="push-button-group">
+    <div class="push-button-group" :class="`from-${from}`">
       <el-tooltip :content="tooltipText" placement="top">
         <el-button
           type="primary"
@@ -247,6 +247,21 @@ async function handleDropdownCommand(command: string) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+
+  /* 抽屉里这一列是纵向 flex，按钮要占满组宽。
+     但 .push-button-group 自身是 inline-flex（默认 shrink-to-fit），
+     于是外层给的 width:100% 是相对它自己算出来的内容宽，
+     「推送」就只量到 66px、和同组其它按钮差一大截。
+     改成 flex + 100% 后，主按钮 flex:1 吃掉整行，多远程的 caret 保持自身宽度。 */
+  &.from-drawer {
+    display: flex;
+    width: 100%;
+
+    .push-button {
+      flex: 1;
+      min-width: 0;
+    }
+  }
 }
 
 .push-remote-item {

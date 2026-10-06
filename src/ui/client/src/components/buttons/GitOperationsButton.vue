@@ -392,6 +392,15 @@ defineExpose({
   flex-direction: column;
   gap: 10px;  // 从 --spacing-base (8px) 略增到 10px,按钮之间更分明
 
+  // EP 默认 `.el-button + .el-button { margin-left: 12px }`。
+  // 这条兄弟选择器是给**横排**设计的，在本组这种纵向 flex 列里，
+  // 表现为「凡是不被 div 包裹的按钮（提交 / 获取所有远程分支 / 重置到远程）
+  // 都比同组其它按钮右移 12px」—— gap 管纵向、它管横向，两者互不知情。
+  // GitActionButtons.vue 里早就为提交区清过一次，这里必须再清一次。
+  :deep(.el-button + .el-button) {
+    margin-left: 0;
+  }
+
   // 只确保按钮全宽，其他样式由按钮组件自己的from-drawer样式控制
   :deep(.el-button) {
     width: 100%;

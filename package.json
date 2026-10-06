@@ -122,6 +122,8 @@
     "verify:wb-colors": "node scripts/verify-wb-colors.cjs",
     "verify:wb-colors:reverse": "node scripts/verify-wb-colors.cjs --reverse",
     "verify:ui-consistency": "node scripts/verify-ui-consistency.cjs",
+    "verify:git-operations-drawer": "node scripts/verify-git-operations-drawer.cjs",
+    "verify:git-operations-drawer:reverse": "node scripts/verify-git-operations-drawer.cjs --reverse",
     "verify:header-monitor": "node scripts/verify-header-monitor.cjs"
   },
   "files": [

@@ -109,10 +109,17 @@ async function resetToRemote() {
 </template>
 
 <style scoped lang="scss">
-:deep(.git-reset-icon) {
+/* SvgIcon 组件自带 `.svg-icon { color: var(--text-secondary) }`（scoped），
+   那条声明会盖住按钮的白色文字色 —— 表现就是红底上出现一颗深灰图标。
+   这里选择器写成 `.action-button :deep(...)`（0,3,0）而不是裸 `:deep(...)`（0,2,0），
+   靠特异性稳赢过 SvgIcon 自己那条，不依赖样式表的先后顺序。 */
+.action-button :deep(.git-reset-icon) {
   width: 1em;
   height: 1em;
   vertical-align: middle;
-  margin-right: 4px;
+  /* 图标与文字的间距跟 EP 给 el-icon 的 6px 对齐，
+     别再手写 4px —— 那会让这颗图标比同组其它图标明显偏紧。 */
+  margin-right: 6px;
+  color: inherit;
 }
 </style>

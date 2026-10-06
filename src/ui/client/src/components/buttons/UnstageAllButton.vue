@@ -110,9 +110,16 @@ async function handleClick() {
   :deep(.el-button.from-drawer) {
     padding: 6px var(--spacing-md);
     font-size: var(--font-size-sm);
-    height: 32px;
+    /* 抽屉里全组按钮统一 40px（GitOperationsButton 的 .group-buttons 定的）。
+       这里必须显式跟到 40 而不是留 32 —— 本条选择器编译后是
+       `.unstage-all-button[data-v] .el-button.from-drawer`（0,4,0），
+       比 `.group-buttons[data-v] .el-button`（0,3,0）特异性更高，
+       所以抽屉里唯独这颗按钮会比同组其它按钮矮 8px。
+       别家（StageButton / CommitButton / PushButton）的 from-drawer 写的是
+       `.xxx.from-drawer`（0,3,0），平权时被 .group-buttons 的定义盖住，才没露出来。 */
+    height: 40px;
   }
-  
+
   :deep(.el-button.from-form) {
     padding: 10px var(--spacing-lg);
     height: 40px;
