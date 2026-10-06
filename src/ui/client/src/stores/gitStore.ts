@@ -199,10 +199,10 @@ export const useGitStore = defineStore('git', () => {
   const fileList = ref<{path: string, type: string}[]>([])
   const isLoadingLog = ref(false)
   const isLoadingStatus = ref(false)
-  // 是否**至少成功取到过一次**工作区状态。只用来给"提交区收起"加首屏/切目录的门槛：
-  // 状态还没到过一次时 fileList 同样是空的，没有这道门槛收起会先发生再撤销（闪一下）。
-  // 注意它不是"当前有没有变更"的判据 —— 那个看 fileList.length。
-  const statusLoadedOnce = ref(false)
+  // 用户配置(user.name / user.email)**问过服务端一次没有**。只服务一件事：让提交区在
+  // "还不知道配置"时不要擅自按"未配置"渲染出引导卡（见 commitAreaNeeded）。
+  // getUserInfo() 一回来就置位（失败也置位 —— 读不到就按未配置如实提示）。
+  const userInfoLoadedOnce = ref(false)
   const isAddingFiles = ref(false)
   const isCommiting = ref(false)
   const isResetting = ref(false)
@@ -264,7 +264,7 @@ export const useGitStore = defineStore('git', () => {
     fileList.value = []
     isLoadingLog.value = false
     isLoadingStatus.value = false
-    statusLoadedOnce.value = false
+    userInfoLoadedOnce.value = false
     isAddingFiles.value = false
     isCommiting.value = false
     isResetting.value = false
@@ -551,6 +551,9 @@ export const useGitStore = defineStore('git', () => {
       userEmail.value = data.email || ''
     } catch (error) {
       console.error('获取用户信息失败:', error)
+    } finally {
+      // 失败也算"问过了"：读不到配置就按未配置如实提示，别让引导卡永远不出现
+      userInfoLoadedOnce.value = true
     }
   }
 
@@ -1117,8 +1120,6 @@ export const useGitStore = defineStore('git', () => {
         // 如果没有收到有效的 status 字段，清空文件列表
         fileList.value = []
       }
-      // 到过一次就算的门槛：放在解析成功之后，失败路径（catch）不置位
-      statusLoadedOnce.value = true
       isMergeInProgress.value = Boolean(data.isMergeInProgress)
       // 若处于 MERGING 状态且有默认合并信息，且用户尚未手动填写，则自动填入
       if (data.isMergeInProgress && data.mergeMessage && !pendingMergeMessage.value) {
@@ -2859,33 +2860,41 @@ export const useGitStore = defineStore('git', () => {
   })
 
   // ── 提交区"无事可做"：g ui 主面板顶部那块（动作按钮 + 提交信息表单）收起的唯一判据 ──
-  // 用户 2026-10-06：「如果上面这些按钮全都是禁用状态的话，那上面这块区域就可以隐藏不展示了」。
-  // 判据刻意用**原始 fileList.length === 0**（不吃 lockedFiles 过滤）：隐藏比显示激进，
-  //   宁可多显示一次，也别把"还有锁定文件没处理"的状况一起藏掉。
-  // 与左栏空状态同源（GitStatus 是 v-if="gitStore.fileList.length"）—— 收起后用户
-  //   仍能从左栏读到"没有检测到任何更改 / 工作区是干净的"（不会丢状态）。
-  // statusLoadedOnce 是首屏与切目录的门槛（见它的声明处）：没这道门槛表单会先收再展。
-  // branchAhead === 0 必须留：有本地提交待推送时「AI 提交并推送」走"纯推送"路径**是可用**的，
-  //   那种情况不属于"全都禁用"。
+  // 用户 2026-10-06 两轮：「如果上面这些按钮全都是禁用状态的话，那上面这块区域就可以隐藏不展示了」
+  //   → 第二天的「这个还是没改好，是不是应该把上边高度默认设成 0 呢」。
   //
-  // ⚠️ 判据只吃**数据**（fileList / branchAhead / 配置 / 用户操作中），故意不吃 isLoadingStatus：
-  //   它是"有没有请求在途"的瞬时标志，而用户一回到这个页面就会有静默刷新抢在前头 ——
-  //   切 ActivityBar 回到 Git 视图（App.vue 的 watch(activeView)）、切回浏览器标签页 /
-  //   窗口聚焦（GitStatus 的 visibilitychange + focus）都走 refreshStatusOnFocus → fetchStatus，
-  //   它一置位收起态就翻成"展开"、请求回来再翻回收起，于是**提交历史每次都被推下去又滑上来**
-  //   （用户 2026-10-06：「每次切到这个页面都会从下边过渡上去」）。数据没变就不该动布局。
-  const commitAreaIdle = computed(() => (
+  // 所以判据**反着写**：默认收起，只列出"确知要展示"的那几种情形（commitAreaNeeded），
+  // idle 是它的取反。理由就是用户那句话 —— 面板高度必须**从 0 起步**：
+  //   首屏挂载、切回页面、切目录的那一瞬间，工作区状态与用户配置都还没回来。若按
+  //   "没变更 → 收起"这种正向判据写，那些未知会被当成"有东西可展示"而先渲染成展开态，
+  //   数据一到再收回去 —— 下面的提交历史就跟着跳一下（用户看到的"从下边过渡上去"）。
+  //   未知一律算收起，这一下就没了；真有变更时面板再滑出来（过渡仍留在展开方向）。
+  // 各条与旧的正向判据一一对应，只是从"排除项"翻成了"包含项"：
+  //   · 用户配置：**问过服务端**才敢判"未配置"（userInfoLoadedOnce）—— 否则首屏会先亮
+  //     "Git 用户未配置"引导卡、配置回来再收起来，同样是跳一下。
+  //   · fileList 用**原始**列表（不吃 lockedFiles 过滤）：宁可多展示一次，也别把
+  //     "还有锁定文件没处理"的状况一起藏掉；与左栏空状态同源（GitStatus 是
+  //     v-if="gitStore.fileList.length"），收起后用户仍能从左栏读到"工作区是干净的"。
+  //   · branchAhead !== 0 要展示：有本地提交待推送时「AI 提交并推送」走"纯推送"路径
+  //     **是可用**的，那种情况不属于"全都禁用"。
+  //   · 合并中 / 三个在跑标志：要显示"请输入提交信息完成合并"，以及让"正在提交/推送"可见。
+  //
+  // ⚠️ 判据里不要放 isLoadingStatus 这类**在途请求标志**：一回到这个页面就有静默刷新
+  //   （切 ActivityBar 回 Git 视图 / 切回浏览器标签页）把它反复置位，收起态跟着翻两次
+  //   = 提交历史被推下去又滑上来。数据没变就不该动布局。
+  const commitAreaNeeded = computed(() => (
     isGitRepo.value
-    && statusLoadedOnce.value
-    && userName.value !== ''
-    && userEmail.value !== ''
-    && !isMergeInProgress.value   // 合并中要显示「请输入提交信息完成合并」那条提示
-    && fileList.value.length === 0
-    && branchAhead.value === 0
-    && !isAddingFiles.value
-    && !isCommiting.value
-    && !isPushing.value
+    && (
+      (userInfoLoadedOnce.value && (userName.value === '' || userEmail.value === ''))
+      || fileList.value.length > 0
+      || branchAhead.value !== 0
+      || isMergeInProgress.value
+      || isAddingFiles.value
+      || isCommiting.value
+      || isPushing.value
+    )
   ))
+  const commitAreaIdle = computed(() => !commitAreaNeeded.value)
 
   // ============= 文件多选状态（与 GitStatus 选择模式共享） =============
   // 选择模式开关：开启后文件列表出现复选框

@@ -438,26 +438,34 @@ assertNone(
   }
 }
 
-// A15 提交区"无事可做就收起"（2026-10-06，用户提了两轮）
+// A15 提交区"无事可做就收起"（2026-10-06，用户提了三轮）
 //     第一轮：「上面这些按钮全是禁用状态的话，那块区域就可以隐藏不展示了」；
-//     第二轮：「没有任何变更的话，那这个 AI 生成按钮也就不用显示了，所以这块就能都隐藏了」。
-//     这条钉四件事：
-//       ① 判据必须在 store 里且**完整**（干净 + 无待推送 + 已到过一次状态 + 非合并中 + 非在跑）——
-//          少一项就会在错误时机收起（首屏闪一下 / 把"有本地提交待推送"也收掉）；
+//     第二轮：「没有任何变更的话，那这个 AI 生成按钮也就不用显示了，所以这块就能都隐藏了」；
+//     第三轮：「这个还是没改好，是不是应该把上边高度默认设成 0 呢」—— 于是判据**反着写**：
+//     默认收起，只列"确知要展示"的情形（commitAreaNeeded），idle 取反。
+//     这条钉五件事：
+//       ① 判据必须在 store 里、且"确知有事"的四类情形**齐全**（未配置引导 / 有变更 /
+//          有本地提交待推送 / 合并中或操作在跑）—— 少一项会在该展示时收起（功能丢失）；
+//          且**不许吃在途请求标志**（isLoadingStatus 会被静默刷新反复置位 → 提交历史抖一下）；
+//          用户配置那一项必须带 `userInfoLoadedOnce` 门槛（否则首屏先亮引导卡再收起）；
 //       ② 收起在 **`.commit-form-panel`** 上做（整块，含 header）：用
 //          grid-template-rows: 1fr↔0fr（可过渡、可测），不许 display: none；
-//       ③ **两个常驻入口（命令历史 / Git 操作）必须在顶栏** —— 它们是"敢整块收掉"的前提：
+//       ③ 过渡只在展开方向（收起瞬时），见下面 ⑤；
+//       ④ **两个常驻入口（命令历史 / Git 操作）必须在顶栏** —— 它们是"敢整块收掉"的前提：
 //          工作区干净恰好是最想 pull / fetch / merge 的时刻。搬走了但没搬全 = 功能丢。
 //          同时不许在 CommitForm 里留重复的一份。
-//       ④ 主题切换按钮"先不显示"= 用常量门控（代码保留、可一键恢复），不是删掉。
+//       ⑤ 主题切换按钮"先不显示"= 用常量门控（代码保留、可一键恢复），不是删掉。
 {
   const store = stripComments(fs.readFileSync(path.join(SRC, 'stores/gitStore.ts'), 'utf8'))
-  const idle = (store.match(/const commitAreaIdle = computed\(\(\) => \(([\s\S]*?)\n  \)\)/) || [])[1] || ''
+  // 判据现在叫 commitAreaNeeded（"确知要展示"），idle 是它的取反
+  const needed = (store.match(/const commitAreaNeeded = computed\(\(\) => \(([\s\S]*?)\n  \)\)/) || [])[1] || ''
   const needTerms = [
-    ['fileList.value.length === 0', '干净判据（原始 fileList，不吃 lockedFiles 过滤）'],
-    ['branchAhead.value === 0', '排除"有本地提交待推送"（那时 AI 档走纯推送路径仍可用）'],
-    ['statusLoadedOnce.value', '首屏/切目录门槛（否则收起会先发生再撤销）'],
+    ["userInfoLoadedOnce.value && (userName.value === '' || userEmail.value === '')",
+      '未配置引导卡：必须**问过服务端**才判"未配置"，否则首屏先渲染出引导卡再收起'],
+    ['fileList.value.length > 0', '有变更就要展示（原始 fileList，不吃 lockedFiles 过滤）'],
+    ['branchAhead.value !== 0', '"有本地提交待推送"也要展示（那时 AI 档走纯推送路径仍可用）'],
     ['isMergeInProgress.value', '合并中要显示"请输入提交信息完成合并"的提示条'],
+    ['isCommiting.value', '提交/推送进行中要让忙碌状态可见'],
   ]
   // 判据只吃数据，**不许吃在途请求标志**（2026-10-06 修）：
   // 一回到这个页面（切 ActivityBar 视图 / 切回浏览器标签页）就有静默刷新把 isLoadingStatus
@@ -465,14 +473,20 @@ assertNone(
   const forbiddenTerms = [
     ['isLoadingStatus.value', '在途请求标志会跟着静默刷新翻，收起态跟着翻 = 提交历史抖一下'],
   ]
-  const missing = needTerms.filter(([t]) => !idle.includes(t)).map(([, why]) => why)
-  const leaked = forbiddenTerms.filter(([t]) => idle.includes(t)).map(([, why]) => why)
-  if (!idle) bad('gitStore 里找不到 commitAreaIdle computed', '提交区收起判据的唯一出处丢了')
+  const missing = needTerms.filter(([t]) => !needed.includes(t)).map(([, why]) => why)
+  const leaked = forbiddenTerms.filter(([t]) => needed.includes(t)).map(([, why]) => why)
+  if (!needed) bad('gitStore 里找不到 commitAreaNeeded computed', '提交区"要展示"判据的唯一出处丢了')
   else if (missing.length) {
-    bad('commitAreaIdle 判据不完整', `${missing.length} 项缺失：${missing.join('；')}`)
+    bad('commitAreaNeeded 判据不完整', `${missing.length} 项缺失：${missing.join('；')}`)
   } else if (leaked.length) {
-    bad('commitAreaIdle 吃了在途请求标志', `${leaked.join('；')} —— 静默刷新会让面板抖一下`)
-  } else ok('commitAreaIdle 判据完整（干净 + 无待推送 + 已到过一次 + 非合并中 + 非在跑，且不吃在途标志）')
+    bad('commitAreaNeeded 吃了在途请求标志', `${leaked.join('；')} —— 静默刷新会让面板抖一下`)
+  } else ok('commitAreaNeeded 判据完整（未配置 / 有变更 / 待推送 / 合并中或操作在跑，且不吃在途标志）')
+
+  if (/const commitAreaIdle = computed\(\(\) => !commitAreaNeeded\.value\)/.test(store)) {
+    ok('commitAreaIdle = !commitAreaNeeded（默认收起：未知一律当收起，面板高度从 0 起步）')
+  } else {
+    bad('commitAreaIdle 不是 commitAreaNeeded 的取反', '判据回到正向写法 = 首屏会先展开再收起（用户第三轮反馈）')
+  }
 
   const appRaw = stripComments(fs.readFileSync(path.join(SRC, 'App.vue'), 'utf8'))
   const appSrc = appRaw.replace(/\s+/g, ' ')
