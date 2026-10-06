@@ -662,9 +662,14 @@ function stopVResize() {
       <!-- 命令历史 + Git 操作：2026-10-06 从提交区 header 搬到这里（原主题按钮的位置）。
            提交区在"无事可做"时会整块收起，这两个入口必须常驻 —— 否则工作区干净时
            连 pull / fetch / merge 都没有入口。尺寸取 medium：顶栏邻居是 32px 的图标按钮
-           （本行下面那个主题按钮就是），large(40) 会明显偏大。 -->
-      <CommandHistory size="small" />
-      <GitOperationsButton variant="icon" size="small" />
+           （本行下面那个主题按钮就是），large(40) 会明显偏大。
+           2026-10-06：非 Git 仓库目录下这两个入口整组隐藏（用户反馈"不是 git 仓库的
+           就不用设置这两个按钮了"）—— 命令历史里只有 git 命令有意义，Git 操作抽屉
+           在非仓库里打开也无事可做，留着只是噪音。 -->
+      <template v-if="gitStore.isGitRepo">
+        <CommandHistory size="small" />
+        <GitOperationsButton variant="icon" size="small" />
+      </template>
       <!-- 主题切换快捷按钮（OPT-2：原本要进设置→通用→主题 4 次点击,现在 1 次）
            2026-10-06 用户要求"先不显示"，见 SHOW_THEME_TOGGLE 的注释 -->
       <el-tooltip
