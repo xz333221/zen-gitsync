@@ -192,6 +192,14 @@ defineExpose({
   .one-commit-desc {
     color: #fff;
   }
+  /* 禁用态的身份层：底色用**本档身份的 wash 档**（不是中性灰，也不是实心色），
+     图标保留实心身份色 —— 一行按钮禁用时仍看得出"哪颗是哪档"。
+     表单层（去描边 / 灰字 / 不叠 opacity）在 GitActionButtons.vue 里统一写。 */
+  &.is-disabled {
+    --action-disabled-bg: var(--tint-primary-12);
+    --action-disabled-fg: var(--text-secondary);
+    --action-disabled-icon: var(--color-primary);
+  }
   &.form {
     width: 100%;
     padding: 4px 12px;

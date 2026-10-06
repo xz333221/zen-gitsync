@@ -373,21 +373,22 @@ assertNone(
     offenders.slice(0, 6).forEach((h) => console.log(`          ${h}`))
   }
 
-  // ② 动作区那一份：必须"中性底 + 单层灰字 + 把写死的白字收回来"
+  // ② 动作区那一份：表单层（可读）+ 身份层（各档 wash + 身份色图标），两层都要在
   const f = path.join(SRC, 'components/GitActionButtons.vue')
   const rules = isDisRules(flatOf(f))
   const selectors = rules.map((r) => r.selector).join(' ')
   const bodies = rules.map((r) => r.body).join(' ')
-  if (/background-color:\s*var\(--bg-component-area\)/.test(bodies)) {
-    ok('动作区禁用底是中性底 --bg-component-area')
+  if (/background-color:\s*var\(--action-disabled-bg\s*,\s*var\(--bg-component-area\)\)/.test(bodies)) {
+    ok('禁用底是「各档身份 wash，缺省中性」的可配置写法')
   } else {
-    bad('动作区禁用底不是中性底', '应为 background-color: var(--bg-component-area)')
+    bad('禁用底写法不对',
+      '应为 background-color: var(--action-disabled-bg, var(--bg-component-area)) —— 身份层可配、中性兜底')
   }
-  if (/color:\s*var\(--text-meta\)/.test(bodies)) {
-    ok('动作区禁用文字走 --text-meta（浅色 ≈4.99:1）')
+  if (/color:\s*var\(--action-disabled-fg\s*,\s*var\(--text-meta\)\)/.test(bodies)) {
+    ok('禁用文字是「按底分档的字色，缺省 --text-meta」')
   } else {
-    bad('动作区禁用文字令牌不对',
-      '应 --text-meta；--text-disabled 是 #c0c4cc，浅底上只有 1.75:1')
+    bad('禁用文字令牌不对',
+      '应为 color: var(--action-disabled-fg, var(--text-meta)) —— wash 底上 #686a6f 只有 3.99:1')
   }
   if (/opacity:\s*var\(--disabled-opacity\)/.test(bodies)) {
     bad('动作区禁用态又叠了一层 opacity', '淡由色值表达；再乘 0.5 会把文字推到 2:1 以下')
@@ -395,10 +396,44 @@ assertNone(
     ok('动作区禁用态只淡一次（不叠 opacity）')
   }
   if (/one-commit-icon|one-commit-title/.test(selectors) && /color:\s*inherit/.test(bodies)) {
-    ok('三档按钮写死的白字/白图标在禁用态被收回')
+    ok('三档按钮写死的白字在禁用态被收回')
   } else {
     bad('浅底白字风险',
-      '三档按钮把标题/图标显式染成 #fff（AI 档还是行内 style），禁用态必须用 is-disabled 下的规则收回')
+      '三档按钮把标题显式染成 #fff，禁用态必须用 is-disabled 下的规则收回')
+  }
+
+  // ③ 身份层：三档必须各自声明 wash 底 + 身份色图标。
+  //    为什么单列一条：2026-10-06 第一版把五颗统一压成中性灰（可读性达标），
+  //    用户当天反馈「禁用状态全灰色有点丑」—— 为了治"淡蓝+白字"把三档身份色
+  //    也一起抹了。仓库第二轮审计早就写过：**色相是身份，要压的是浓度不是色相**。
+  //    所以这条钉住"禁用态仍保留各档身份"：底必须是 wash 档（tint / role-wash），
+  //    图标必须是实心身份色（图标是小色块，别跟彩色文字一起清）。
+  const TIERS = [
+    { file: 'components/buttons/QuickCommitButton.vue', icon: /--action-disabled-icon:\s*var\(--color-primary\)/ },
+    { file: 'components/buttons/QuickPushButton.vue', icon: /--action-disabled-icon:\s*var\(--color-primary\)/ },
+    { file: 'components/buttons/AiQuickPushButton.vue', icon: /--action-disabled-icon:\s*var\(--role-ai-ink\)/ },
+  ]
+  const WASH_BG = /--action-disabled-bg:\s*var\(--(tint-[a-z0-9-]+|role-[a-z]+-(wash|surface))\)/
+  const missingTier = []
+  for (const t of TIERS) {
+    const src = flatOf(path.join(SRC, t.file))
+    const wash = (src.match(/--action-disabled-bg:\s*([^;}]+)/) || [])[1] || ''
+    if (!WASH_BG.test(src)) missingTier.push(`${t.file} 缺 wash 档底（当前 ${wash.trim() || '无'}）`)
+    else if (!t.icon.test(src)) missingTier.push(`${t.file} 缺身份色图标声明`)
+    // wash 底比中性底深：字色必须跟着换深一档，否则 #686a6f 在 12% 主色 wash 上只有 3.99:1
+    else if (!/--action-disabled-fg:\s*var\(--text-secondary\)/.test(src)) {
+      missingTier.push(`${t.file} 缺 --action-disabled-fg: var(--text-secondary)`)
+    }
+  }
+  if (missingTier.length === 0) ok('三档禁用态各自保留身份色（wash 底 + 实心身份图标）')
+  else {
+    bad('三档禁用态的身份层不完整', `${missingTier.length} 处`)
+    missingTier.forEach((h) => console.log(`          ${h}`))
+  }
+  if (/color:\s*var\(--action-disabled-icon,\s*var\(--text-meta\)\)/.test(bodies)) {
+    ok('图标走 --action-disabled-icon（缺省跟随文字色）')
+  } else {
+    bad('图标没有独立接管身份色', '应为 color: var(--action-disabled-icon, var(--text-meta))')
   }
 }
 

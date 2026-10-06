@@ -298,6 +298,13 @@ function handleProgressComplete(_success: boolean) {
   .one-push-desc {
     color: #fff;
   }
+  /* 禁用态的身份层：本档身份的 wash 档底 + 实心身份色图标。
+     表单层（去描边 / 灰字 / 不叠 opacity）在 GitActionButtons.vue 里统一写。 */
+  &.is-disabled {
+    --action-disabled-bg: var(--tint-primary-12);
+    --action-disabled-fg: var(--text-secondary);
+    --action-disabled-icon: var(--color-primary);
+  }
   &.form {
     width: 100%;
     padding: 4px 12px;

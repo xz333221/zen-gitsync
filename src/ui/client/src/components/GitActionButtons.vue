@@ -233,53 +233,71 @@ defineExpose({
      主色正文在浅底上只有 ~3.3:1，切色会掉到 AA 以下 */
 }
 
-/* ── 动作区禁用态：五颗按钮一套语言（2026-10-06） ──────────────────
-   改前有**两套**，而且各自都不可读：
+/* ── 动作区禁用态 ──────────────────────────────────────────────────
+   2026-10-06 第一版（治"读不出来"）：原先有**两套**、各自都不可读 ——
      · 右侧三档落到 `.el-button--primary.is-disabled` 的 --color-primary-light
        上，再叠一层 --disabled-opacity → 实测三颗底色**逐位相同** #afd2fc
        （= #60a5fa × 0.5 落白底）+ 文字纯白 → WCAG 对比度 **1.56:1**；
-       整条按钮带里紫色像素 0 个（AI 档的身份色也一起没了）。
-       "三档层级"在禁用态完全消失 —— 而禁用态本来也没有层级可表达。
-     · 左侧"暂存/提交/推送"走中性描边 + --text-disabled，然后**又乘一次**
-       0.5 → 文字 ≈ #dfe1e5（≈1.2:1），比右侧还看不见。
-   改后：统一成一套中性，且**只淡一次**：
-     底色 --bg-component-area  浅色 #f9f9f9 / 暗色 rgba(255,255,255,.06)
-     描边 transparent          描边是"可点"的 affordance，禁用就去掉它
-  ·  文字 --text-meta         浅色 #686a6f ≈ 4.99:1 / 暗色 #cbd0d6（可读）
-   **不再叠 --disabled-opacity**：淡由色值本身表达。颜色淡一档已经够表达"关掉"，
-   再乘一层透明度只会把文字推到 2:1 以下 —— 上一版左侧就是这么掉到 1.2:1 的。
-   实测（1600×900 dev，禁用一个真跑起来的前端，逐颗读 computed style）：
-     禁用 4 颗 = rgb(249,249,249) 底 + #686a6f 字 = **5.14:1**、opacity 1、图标不再是白；
-     暗色档 rgba(255,255,255,.06) 底 = **7.22:1**；
-     可用态没被串：一键提交/一键推送所有 #2563eb + 白字 5.17:1、AI 档 #6d28d9 + 白字 7.1:1。
-   顺带把 `:hover` / `:active` 一起列进来：基类的 `&:hover { transform: scale(1.02);
-   box-shadow }` 对禁用按钮本来是生效的，只是被 unified-dialogs.scss 里那条全局
-   `.el-button.is-disabled:hover { box-shadow: none !important; transform: none !important }`
-   顺带压住了（实测 hover 后 transform/box-shadow 都是 none）。这里再写一遍是为了让
-   本组件的口径自洽、不依赖另一张表的存在与加载顺序，不是为了修一个当时就存在的 bug。 */
+       整条按钮带里紫色像素 0 个。
+     · 左侧"暂存/提交/推送"走中性描边 + --text-disabled，**又乘一次** 0.5
+       → 文字 ≈ #dfe1e5（≈1.2:1），比右侧还看不见。
+   第一版把它们统一成一套中性灰，可读性达标了，但用户当天反馈
+   **「禁用状态全灰色有点丑」** —— 因为为了治"淡蓝 + 白字"把三档的身份色也一起抹了，
+   一行六个灰块、按钮带失去身份。这正是本仓库早就写过的那条：
+   **色相是身份，要压的是浓度不是色相**（见 docs/ui-audit/README.md 第二轮）。
+
+   现行口径（两层）：
+     ① 表单层（本文件）：禁用 = 去掉"可点"的 affordance + 可读但更淡的文字
+        描边 transparent（描边本身是"可点"的信号）
+        文字 见 ② 的 --action-disabled-fg（按底分档，两档都 ≥4.5:1）
+        **不叠 --disabled-opacity**：淡由色值表达，再乘一层透明度只会把文字
+        推到 2:1 以下（第一版之前的左侧就是这么掉到 1.2:1 的）
+        顺带把 `:hover` / `:active` 也列进选择器：基类的 `&:hover { transform:
+        scale(1.02); box-shadow }` 对禁用按钮本来是生效的，只是被 unified-dialogs.scss
+        里那条全局 `.el-button.is-disabled:hover { box-shadow/transform: none !important }`
+        顺带压住了（实测 hover 后两者都是 none）。这里再写一遍是为了让本组件的口径自洽、
+        不依赖另一张表的存在与加载顺序，不是为了修一个当时就存在的 bug。
+     ② 身份层（各档自己声明，见三个 button 组件）：
+        --action-disabled-bg   该档身份色的 **wash 档**（一档/二档 --tint-primary-12、
+                               AI 档 --role-ai-wash）；没声明 → 落中性 --bg-component-area
+                               （左侧"暂存/提交/推送"本来就是中性描边，不参与身份色）
+        --action-disabled-fg   **字色按底分档**：wash 底比中性底深，同一个灰在两种底上
+                               过不了同一条线 —— 12% 主色 wash 上 #686a6f 只有 3.99:1
+                               （实测），所以身份档的字用 --text-secondary（≈4.7:1），
+                               中性档继续用更淡的 --text-meta（≈5.1:1，"更淡"正好当 off 信号）
+        --action-disabled-icon 该档实心身份色 —— **图标留色、文字压灰**：
+                               图标是小色块（见 lessons review-hide-vs-read），
+                               彩色小色块别跟彩色文字一起清掉
+   ⚠️ wash 的浓度上限是被字色对比度卡住的：14% 主色 wash + --text-meta = 3.99:1（不过 AA）。
+   想再加浓必须先换更深的字色，别只调 wash。 */
 :deep(.el-button.is-disabled),
 :deep(.el-button.is-disabled:hover),
 :deep(.el-button.is-disabled:active) {
-  background-color: var(--bg-component-area) !important;
+  /* 各档的身份色 wash；没声明就走中性底（左侧三颗） */
+  background-color: var(--action-disabled-bg, var(--bg-component-area)) !important;
   border-color: transparent !important;
-  color: var(--text-meta) !important;
+  color: var(--action-disabled-fg, var(--text-meta)) !important;
   opacity: 1 !important;
   box-shadow: none !important;
   transform: none !important;
   cursor: not-allowed;
 }
 
-/* 三档按钮把图标/文字**显式**染成了 #fff（EP 把 label 包在 span 里，父级 color
-   不保证落到文字节点），AI 档那颗甚至是行内 style。禁用后底色是浅灰，
-   白字/白图标就彻底看不见了，所以要把它们收回来跟着按钮的 color 走。
-   选择器挂在 .is-disabled 下，可用态一个字都不动。 */
+/* 图标：跟着各档自己的身份色（--action-disabled-icon），文字另走上面的 --text-meta */
 :deep(.el-button.is-disabled .one-commit-icon),
+:deep(.el-button.is-disabled .one-push-icon),
+:deep(.el-button.is-disabled .one-ai-push-icon) {
+  color: var(--action-disabled-icon, var(--text-meta)) !important;
+}
+
+/* 三档按钮把标题/副标题**显式**染成了 #fff（EP 把 label 包在 span 里，父级 color
+   不保证落到文字节点），AI 档那颗图标甚至是行内 style。禁用后底色是浅的，
+   白字/白图标就彻底看不见了，所以要把它们收回来 —— 标题/副标题跟随按钮的
+   --text-meta（可读），图标由上一条单独接管身份色。可用态一个字都不动。 */
 :deep(.el-button.is-disabled .one-commit-title),
 :deep(.el-button.is-disabled .one-commit-desc),
-:deep(.el-button.is-disabled .one-push-icon),
 :deep(.el-button.is-disabled .one-push-title),
 :deep(.el-button.is-disabled .one-push-desc),
-:deep(.el-button.is-disabled .one-ai-push-icon),
 :deep(.el-button.is-disabled .one-ai-push-title),
 :deep(.el-button.is-disabled .one-ai-push-desc) {
   color: inherit !important;

@@ -185,6 +185,14 @@ function handleClick() {
   .one-ai-push-desc {
     color: #fff;
   }
+  /* 禁用态的身份层：AI 档自己的 wash + 实心紫图标 —— 一行禁用时紫色仍然认得出来
+     （第一版统一压成中性灰时，实测整条按钮带紫色像素为 0，用户反馈"全灰有点丑"）。
+     表单层（去描边 / 灰字 / 不叠 opacity）在 GitActionButtons.vue 里统一写。 */
+  &.is-disabled {
+    --action-disabled-bg: var(--role-ai-wash);
+    --action-disabled-fg: var(--text-secondary);
+    --action-disabled-icon: var(--role-ai-ink);
+  }
   &.form {
     width: 100%;
     padding: 4px 12px;
