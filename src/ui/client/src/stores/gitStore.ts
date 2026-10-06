@@ -3048,6 +3048,7 @@ export const useGitStore = defineStore('git', () => {
     fileList,
     isLoadingLog,
     isLoadingStatus,
+    userInfoLoadedOnce,
     isAddingFiles,
     isCommiting,
     isResetting,

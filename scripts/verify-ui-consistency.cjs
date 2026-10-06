@@ -508,12 +508,11 @@ assertNone(
   if (/min-height:\s*0/.test(idleRule)) ok('子项 min-height: 0（否则自动最小尺寸会把 0 行顶回去）')
   else bad('缺 min-height: 0', 'grid 子项的 min-height:auto 会撑住 0 行，收起量不出 0')
 
-  // ⑤ 过渡只在"展开"方向（2026-10-06）：收起瞬时，否则首屏/切回页面时提交历史会滑一下。
-  //    过渡属性取自变化后的样式，所以"只关收起"= 在 .is-idle 里写 transition: none。
-  if (/transition:\s*none/.test(idleRule)) ok('收起态关闭过渡（.is-idle 里 transition: none）')
-  else bad('收起态还带过渡', '收起只由后台状态落定触发，做过渡 = 提交历史白滑一下（用户 2026-10-06 反馈）')
-  if (/transition:\s*grid-template-rows/.test(idleRule)) ok('展开方向保留过渡（工作区出现变更时提交框滑出来）')
-  else bad('展开方向没有过渡', '应为 transition: grid-template-rows 0.28s …（写在外层规则上）')
+  // ⑤ 两个方向都不做过渡（2026-10-06）：这块高度一变，下面的提交历史就被推着走 ——
+  //    任何过渡都会被读成"提交历史在滑"。用户两轮：「从下边过渡上去」→「连滑出来都不想要」。
+  if (/transition\s*:[^;}]*grid-template-rows/.test(idleRule)) {
+    bad('提交区给 grid-template-rows 加了过渡', '面板高度变化会把提交历史推着走，过渡 = 看得见的滑（用户明确不要）')
+  } else ok('提交区两个方向都不做过渡（瞬时切换）')
 
   // ③ 两个常驻入口在顶栏、且不在提交区里重复
   const headerHas = (name) => new RegExp(`<${name}[\\s/>]`).test(appSrc)

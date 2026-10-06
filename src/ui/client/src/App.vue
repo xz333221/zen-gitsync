@@ -884,8 +884,13 @@ function stopVResize() {
 
       <!-- 右侧上方提交表单 -->
       <div class="commit-form-panel" :class="{ 'is-idle': gitStore.commitAreaIdle }" v-if="gitStore.isGitRepo">
+        <!-- 用户配置还没问回来（getUserInfo 未落地）：这块**什么都不渲染**，先占一个 0 高的空盒。
+             不能直接落到下面那条"未配置"分支：那张引导卡自带 32px 上下内边距，而 padding 不参与
+             `> * { min-height: 0 }` 的收缩 —— 收起态也会撑出 64px，把下面的提交历史顶下去
+             （verify-commit-area-no-bounce 的 B0 在"配置响应慢"的夹具下量到的就是这个 64px 跳变）。 -->
+        <div v-if="!gitStore.userInfoLoadedOnce" class="commit-form-placeholder"></div>
         <!-- 当用户未配置时显示配置提示 -->
-        <div v-if="!gitStore.userName || !gitStore.userEmail" class="state-block state-block--warning user-unconfigured-card">
+        <div v-else-if="!gitStore.userName || !gitStore.userEmail" class="state-block state-block--warning user-unconfigured-card">
           <div class="state-block__icon user-unconfigured-icon">
             <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="8" r="4"/>
@@ -1331,8 +1336,8 @@ body {
 }
 
 /* ── 无事可做时把整个提交区收起来（2026-10-06）───────────────────────
-   判据：`gitStore.commitAreaIdle`（工作区干净 + 无待推送 + 状态已到过一次 +
-   非合并中 + 非在跑），绑定在 `.commit-form-panel` 上。
+   判据：`gitStore.commitAreaIdle`（= `commitAreaNeeded` 取反 —— 工作区无变更、无待推送、
+   用户配置问过且配好了、非合并中、没有操作在跑），绑定在 `.commit-form-panel` 上。
 
    为什么现在能整块收（而不是像上一版只收按钮行 + 表单）：那一版刻意留着 header
    右侧三个图标，理由是「工作区干净恰好是最想 pull/fetch 的时刻」。这次用户要求把
@@ -1340,7 +1345,7 @@ body {
    一个都不剩 —— 整块收掉不再丢功能；剩下的那个 ✨ AI 生成提交信息在"没有变更"时
    本来也没意义（正是用户原话点出来的那条）。
 
-   机制：面板正好是"单子元素的 grid item"，用 grid-template-rows: 1fr ↔ 0fr 过渡，
+   机制：面板正好是"单子元素的 grid item"，用 grid-template-rows: 1fr ↔ 0fr，
    0 行时子盒(整张卡片，含它自己的内边距/描边)被 overflow: hidden 剪掉，
    省下的高度整块让给下面的提交历史。
    写 0px / max-height 都不插值（见 memory lessons/kanban-empty-column-collapse）。
@@ -1348,27 +1353,23 @@ body {
    只作用于 git 仓库那一支（:not(--empty)）—— 非 git 空态是另一套 flex 布局，
    别一起改。
 
-   ⚠️ 过渡**只在"展开"方向**做（2026-10-06 用户：「每次切到这个页面都会从下边过渡上去」）：
-   · 展开（.is-idle 摘掉）带上 transition —— 工作区出现变更时提交框滑出来，是有用的提示；
-   · 收起一律瞬时（.is-idle 里 transition: none）—— 收起只由"后台状态落定"触发，
-     给它 0.28s 过渡 = 提交历史白滑一下（首屏那次尤其明显）。
-   过渡属性取自**变化后**的样式，所以在 .is-idle 里写 transition: none 就能"只关收起这一向"。
+   ⚠️ **两个方向都不做过渡**：用户 2026-10-06 先提「每次切到这个页面都会从下边过渡上去」，
+   再提「连"滑出来"都不想要」。这块高度一变，下面的提交历史就被推着走 —— 任何过渡都会被
+   读成"提交历史在滑"；而它只在两种时机变：后台状态落定（不是用户动作）和工作区出现/清空
+   变更。两者都不值得为它做动画，瞬时切换最干净。**别再顺手加 transition（一个方向也别加）**。
 
    配合：面板高度**默认就是 0** —— `gitStore.commitAreaIdle` 是"确知有东西要展示"的取反，
-   状态/配置还没回来时一律算收起。这样首屏根本不存在"先展开再收起"那一下，只有"真有变更"
-   时才从 0 滑出来。改判据时别退回成正向写法（详见 store 里那段注释）。 */
+   状态/配置还没回来时一律算收起。这样首屏根本不存在"先展开再收起"那一下。
+   改判据时别退回成正向写法（详见 store 里那段注释）。 */
 .commit-form-panel:not(.commit-form-panel--empty) {
   display: grid;
   grid-template-rows: 1fr;
-  transition: grid-template-rows 0.28s var(--ease-in-out, ease-in-out);
 
   > * {
     min-height: 0;
   }
 
   &.is-idle {
-    /* 收起不做过渡（见上），瞬时归零 */
-    transition: none;
     grid-template-rows: 0fr;
   }
 }

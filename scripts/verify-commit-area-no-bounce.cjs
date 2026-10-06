@@ -9,8 +9,9 @@
  *       切 ActivityBar 回到 Git 视图（App.vue 的 watch(activeView)）、切回浏览器标签页 /
  *       窗口聚焦（GitStatus 的 visibilitychange + focus）都走 refreshStatusOnFocus → fetchStatus，
  *       它一置位收起态就翻成"展开"（历史被推下去），请求回来再翻回收起（又滑上来）。
- *   E2) 收起方向也带 0.28s 过渡 —— 首屏那一下「展开 → 收起来」于是成了动画。
- *       修法：过渡只在展开方向做，收起瞬时。
+ *   E2) 收起/展开方向都带 0.28s 过渡 —— 面板高度一变就把提交历史推着走，任何过渡都会被
+ *       读成"提交历史在滑"。用户先要「别从下边过渡上去」，再要「连"滑出来"都不想要」，
+ *       最终两个方向都不做过渡，瞬时切换。
  *   E3) 更根上的一条：判据原本是**正向**写的（"没变更就收起"），于是首屏挂载时
  *       "工作区状态 / 用户配置还不知道"被当成"有东西可展示" → 面板先按展开态画出来，
  *       数据一到再收回去（用户第三轮：「这个还是没改好，是不是应该把上边高度默认设成 0 呢」）。
@@ -20,7 +21,8 @@
  *   B0 冷启动（干净工作区）：从**第一帧**起，提交区高度一直是 0、提交历史 top 一动不动
  *   B1 静默刷新（visibilitychange + focus，就是"切回页面"）前后 top 不动
  *   B2 切到别的 ActivityBar 视图再切回 Git，落位后 top 不动
- *   B3 收起态对 grid-template-rows 没有过渡、展开态有（= E2 的修法）
+ *   B3 两个方向对 grid-template-rows 都没有过渡（= E2 的修法）
+ *   B4 工作区有变更时面板照常展开，且**一步到位**（逐帧看不到中间高度）
  *
  * ⚠️ 采样器必须用 addInitScript 装（app 代码之前），否则采不到首帧 —— B0 就是量首帧的。
  *
@@ -34,7 +36,7 @@
  *
  * 用法：
  *   node scripts/verify-commit-area-no-bounce.cjs
- *   node scripts/verify-commit-area-no-bounce.cjs --reverse   # 反证：把两处修法撤掉，B0/B1 应变红
+ *   node scripts/verify-commit-area-no-bounce.cjs --reverse   # 反证：撤掉三处修法，B0/B1/B3/B4 各自变红
  *
  * 依赖：src/ui/client/node_modules/playwright + 5544 上的 dev server。
  * 没有就 NOTE 跳过，不算失败。
@@ -47,10 +49,12 @@ const ROOT = path.resolve(__dirname, '..')
 const SRC = path.join(ROOT, 'src/ui/client/src')
 const VITE = process.env.ZEN_BASE || 'http://127.0.0.1:5544'
 const PW = path.join(ROOT, 'src/ui/client/node_modules/playwright')
-const TARGET = path.join(SRC, 'stores/gitStore.ts')
 const REVERSE = process.argv.includes('--reverse')
 const TOL = 1.5 // px：允许的落位误差
-const API_DELAY_MS = 350 // 夹具延迟，见头注释
+const API_DELAY_MS = 350 // 状态/分支夹具的假延迟，见头注释
+// 用户信息**故意拖得更长**：面板的挂载点在 `isGitRepo = true` 那一刻，早于 getUserInfo 的响应，
+// 所以"配置还没到"这个窗口必须是确定的 —— 不然反证里 B0 会时红时绿（竞态）。
+const USER_INFO_DELAY_MS = 1500
 
 let failed = 0
 function ok(n, d) { console.log(`  PASS  ${n}${d ? '  ' + d : ''}`) }
@@ -58,19 +62,31 @@ function bad(n, d) { failed++; console.log(`  FAIL  ${n}${d ? '  ' + d : ''}`) }
 function note(s) { console.log(`  NOTE  ${s}`) }
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
-// ── 反证：把两处修法一起撤掉（还原成修复前的形状）──
-// 这条一次撤掉两件事，各自对应一条断言：
-//   · `userInfoLoadedOnce.value` 门槛 = 旧的"状态/配置没到就按展开渲染"（B0 抓它）
-//     —— 面板挂载发生在 `isGitRepo = true` 那一刻、早于 getUserInfo 的响应，
-//     所以没有这道门槛时首屏会先渲染出"用户未配置"引导卡再收起来。
-//   · `!isLoadingStatus.value` = 旧的"在途请求标志进判据"（B1 抓它）
-const REVERSALS = [
-  {
-    what: '把"未知一律当收起"退回成"未知按展开"，并把 !isLoadingStatus 钉回判据',
-    from: `const commitAreaIdle = computed(() => !commitAreaNeeded.value)`,
-    to: `const commitAreaIdle = computed(() => !commitAreaNeeded.value && userInfoLoadedOnce.value && !isLoadingStatus.value)`,
-  },
-]
+// ── 反证用的"撤法"（还原成修复前的形状），每条对应一条断言 ──
+//   · 判据侧：`userInfoLoadedOnce` 门槛 + 模板占位 = 旧的"状态/配置没到就照常渲染"
+//     （B0 抓它 —— 面板挂载发生在 isGitRepo=true 那一刻，早于 getUserInfo 的响应）；
+//     `!isLoadingStatus` 进判据 = 旧的"在途请求标志进判据"（B1 抓它）。
+//   · 过渡侧：给 grid-template-rows 加回 0.28s = 旧的"高度变化带动画"（B3 / B4 抓它）。
+// ⚠️ 反证要**分两趟**跑（见文件末尾）：判据侧和过渡侧一起撤会互相抵消 —— 判据塌了之后
+//    面板一路展开，展开方向的过渡根本不会发生，B4 就抓不到了。
+const REV_STORE = {
+  file: 'stores/gitStore.ts',
+  what: '把"未知一律当收起"退回成"未知按展开"，并把 !isLoadingStatus 钉回判据',
+  from: `const commitAreaIdle = computed(() => !commitAreaNeeded.value)`,
+  to: `const commitAreaIdle = computed(() => !commitAreaNeeded.value && userInfoLoadedOnce.value && !isLoadingStatus.value)`,
+}
+const REV_PLACEHOLDER = {
+  file: 'App.vue',
+  what: '删掉"配置未知先不渲染"的占位：未配置引导卡会在配置回来前就画出来（自带 64px 内边距）',
+  from: `        <div v-if="!gitStore.userInfoLoadedOnce" class="commit-form-placeholder"></div>\n        <!-- 当用户未配置时显示配置提示 -->\n        <div v-else-if="!gitStore.userName || !gitStore.userEmail"`,
+  to: `        <!-- 当用户未配置时显示配置提示 -->\n        <div v-if="!gitStore.userName || !gitStore.userEmail"`,
+}
+const REV_TRANSITION = {
+  file: 'App.vue',
+  what: '给提交区的 grid-template-rows 加回 0.28s 过渡（两个方向都会滑）',
+  from: `  grid-template-rows: 1fr;\n\n  > * {`,
+  to: `  grid-template-rows: 1fr;\n  transition: grid-template-rows 0.28s var(--ease-in-out, ease-in-out);\n\n  > * {`,
+}
 
 async function launchBrowser(chromium) {
   const attempts = [['chromium', {}], ['msedge', { channel: 'msedge' }], ['chrome', { channel: 'chrome' }]]
@@ -127,7 +143,7 @@ async function measure() {
       await r.fulfill({ json: { ahead: 0, behind: 0, hasUpstream: true, upstreamBranch: 'origin/main' } })
     })
     await page.route('**/api/user-info*', async r => {
-      await slow(API_DELAY_MS)
+      await slow(USER_INFO_DELAY_MS)
       await r.fulfill({ json: { name: 'probe', email: 'probe@example.com' } })
     })
 
@@ -241,20 +257,24 @@ function report(m) {
     else { bad(`${label}：提交历史动了`, `top 漂到 ${d.min}..${d.max}，偏离落位 ${m.settled.lpTop} 达 ${d.dev.toFixed(1)}px —— 静默刷新不该翻收起态`); pass = false }
   }
 
-  // B3：收起态无过渡、展开态有（E2 的修法）
-  const idleDur = !/grid-template-rows/.test(m.settled.cfTransition) || /0s/.test(m.settled.cfTransition.split(' / ')[1] || '')
-  if (idleDur) ok('B3a 收起态对 grid-template-rows 没有过渡（落定不滑）', `transition=${m.settled.cfTransition}`)
-  else { bad('B3a 收起态还带过渡', `transition=${m.settled.cfTransition} —— "展开→收起"会变成从下边浮上来`); pass = false }
-  if (/grid-template-rows/.test(m.expandedTransition) && !/0s/.test((m.expandedTransition.split(' / ')[1] || ''))) {
-    ok('B3b 展开方向仍保留过渡（出现变更时提交框滑出来）', `transition=${m.expandedTransition}`)
-  } else {
-    bad('B3b 展开方向没有过渡', `transition=${m.expandedTransition}`)
-    pass = false
+  // B3：两个方向都不该有过渡（E2 的修法）
+  pass = reportTransition(m.settled.cfTransition, m.expandedTransition) && pass
+  return pass
+}
+
+/** B3 用：两个方向都不该有过渡 —— 面板高度只能一步到位 */
+function reportTransition(settledTransition, expandedTransition) {
+  let pass = true
+  for (const [label, t] of [['收起态', settledTransition], ['展开态', expandedTransition]]) {
+    if (/grid-template-rows/.test(t) && !/0s/.test((t.split(' / ')[1] || ''))) {
+      bad(`B3 ${label}给 grid-template-rows 加了过渡`, `transition=${t} —— 面板高度一变就把提交历史推着走`)
+      pass = false
+    } else ok(`B3 ${label}对 grid-template-rows 没有过渡`, `transition=${t}`)
   }
   return pass
 }
 
-/** B4 用：夹具换成"有变更"，确认面板**该展开时确实展开**（别把"默认收起"做成"永远收起"） */
+/** B4 用：夹具换成"有变更"，确认面板**该展开时确实展开**，且是**一步到位**（不滑） */
 async function measureDirty() {
   const { chromium } = require(PW)
   const browser = await launchBrowser(chromium)
@@ -271,15 +291,17 @@ async function measureDirty() {
       await r.fulfill({ json: { ahead: 0, behind: 0, hasUpstream: true, upstreamBranch: 'origin/main' } })
     })
     await page.route('**/api/user-info*', async r => {
-      await slow(API_DELAY_MS)
+      await slow(USER_INFO_DELAY_MS)
       await r.fulfill({ json: { name: 'probe', email: 'probe@example.com' } })
     })
+    await page.addInitScript(SAMPLER) // 逐帧盯着高度：有过渡就会出现中间值
     await page.goto(VITE, { waitUntil: 'domcontentloaded' })
     await page.waitForFunction(
       () => (document.querySelector('#app')?.querySelectorAll('*').length || 0) > 100,
       null, { timeout: 30000 })
     await sleep(9000)
-    return await page.evaluate(() => {
+    const frames = await page.evaluate(() => window.__frames)
+    const settled = await page.evaluate(() => {
       const lp = document.querySelector('.log-list-panel')
       const cf = document.querySelector('.commit-form-panel')
       const lpcs = lp && getComputedStyle(lp)
@@ -290,65 +312,107 @@ async function measureDirty() {
         lpVisible: lpcs ? lpcs.display !== 'none' : false,
       }
     })
+    return { settled, frames }
   } finally {
     await browser.close()
   }
 }
 
-function reportDirty(d) {
+function reportDirty({ settled: d, frames }) {
   if (!d.lpVisible) { bad('B4 工作区有变更', '提交历史面板没渲染出来，这次测量无效'); return false }
-  if (d.idle && d.cfH <= 1) {
-    bad('B4 工作区有变更时提交区被收起了', `is-idle=${d.idle} 高度=${d.cfH}px —— "默认收起"变成了"永远收起"，用户就没法提交了`)
-    return false
-  }
   if (d.cfH < 50) {
-    bad('B4 有变更时提交区没展开出来', `高度只有 ${d.cfH}px（应为整块表单）`)
+    bad('B4 有变更时提交区没展开出来',
+      `is-idle=${d.idle} 高度=${d.cfH}px —— "默认收起"变成了"永远收起"，用户就没法提交了`)
     return false
   }
   ok('B4 工作区有变更时提交区照常展开', `高度=${d.cfH}px 提交历史 top=${d.lpTop}（让位给它）`)
+
+  // 高度只能一步到位：出现"中间高度"就说明还在做过渡（B0 抓不到展开方向，这里补上）
+  const hs = [...new Set(frames.filter(f => f.cfH !== null).map(f => f.cfH))].sort((a, b) => a - b)
+  const mid = hs.filter(h => h > 2 && h < d.cfH - 2)
+  if (mid.length) {
+    bad('B4 展开过程有中间高度（还在滑）', `观测到的中间高度：${mid.slice(0, 8).join(', ')}${mid.length > 8 ? ' …' : ''} —— 用户要的是瞬时切换`)
+    return false
+  }
+  ok('B4 展开是一步到位（没有中间高度 = 没有过渡）', `观测到的高度只有 ${hs.join(' / ')}`)
   return true
+}
+
+/** 从一次测量里算出四条断言各自"是不是红了"（反证用，正向那侧直接走 report） */
+function redness(m, dirty) {
+  const d0 = drift(m.cold, m.settled.lpTop, 'B0')
+  const d1 = drift(m.b1, m.settled.lpTop, 'B1')
+  const dur = (m.settled.cfTransition.split(' / ')[1] || '')
+  const hs = [...new Set(dirty.frames.filter(f => f.cfH !== null).map(f => f.cfH))].sort((a, b) => a - b)
+  const mid = hs.filter(h => h > 2 && h < dirty.settled.cfH - 2)
+  return {
+    B0: {
+      red: !d0.err && d0.dev > TOL,
+      detail: `首屏提交区涨到 ${d0.maxCfH}px，提交历史漂 ${d0.err ? 'n/a' : d0.dev.toFixed(1) + 'px'}`,
+    },
+    B1: {
+      red: !d1.err && d1.dev > TOL,
+      detail: `切回页面提交历史漂 ${d1.err ? 'n/a' : d1.dev.toFixed(1) + 'px'}`,
+    },
+    B3: {
+      red: /grid-template-rows/.test(m.settled.cfTransition) && !/0s/.test(dur),
+      detail: `transition=${m.settled.cfTransition}`,
+    },
+    B4: {
+      red: mid.length > 0,
+      detail: `展开过程出现中间高度 ${mid.slice(0, 6).join(', ')}${mid.length > 6 ? ' …' : ''}（观测到 ${hs.join(' / ')}）`,
+    },
+  }
 }
 
 ;(async () => {
   console.log('── 提交历史面板：到页面时不动 ──\n')
 
   if (REVERSE) {
-    const original = fs.readFileSync(TARGET, 'utf8')
-    const missingPatch = REVERSALS.filter(r => !original.includes(r.from))
-    if (missingPatch.length) {
-      note(`源里没找到待撤的锚点（判据结构变了？）：${missingPatch.map(r => r.what).join(' / ')}`)
-      process.exit(1)
-    }
-    let good = false
-    try {
-      let patched = original
-      for (const r of REVERSALS) {
-        patched = patched.replace(r.from, r.to)
-        console.log(`  关掉  ${r.what}`)
+    // 反证分**两趟**，一趟只撤一侧的修法 —— 一起撤会互相抵消：
+    // 判据塌了（面板一路展开）之后，展开方向的过渡根本不会发生，B4 就抓不到了。
+    const PASSES = [
+      { name: '第 1 趟：撤判据侧', expect: ['B0', 'B1'], patches: [REV_STORE, REV_PLACEHOLDER] },
+      { name: '第 2 趟：撤过渡侧', expect: ['B3', 'B4'], patches: [REV_TRANSITION] },
+    ]
+    let good = true
+    for (const pass of PASSES) {
+      const files = [...new Set(pass.patches.map(p => p.file))]
+      const originals = {}
+      for (const f of files) originals[f] = fs.readFileSync(path.join(SRC, f), 'utf8')
+      const missing = pass.patches.filter(p => !originals[p.file].includes(p.from))
+      if (missing.length) {
+        note(`${pass.name}：源里没找到待撤的锚点（结构变了？）：${missing.map(p => p.what).join(' / ')}`)
+        process.exitCode = 1
+        continue
       }
-      fs.writeFileSync(TARGET, patched)
-      await sleep(4000) // 等 HMR 把新模块推上去（store 改动通常整页 reload）
-      const m = await measure()
-      if (m.errs.length) { note('反证中断：页面报错 ' + m.errs.join(' | ')); process.exitCode = 1 }
-      else {
-        const d0 = drift(m.cold, m.settled.lpTop, 'B0')
-        const d1 = drift(m.b1, m.settled.lpTop, 'B1')
-        const coldMoved = !d0.err && d0.dev > TOL
-        const silentMoved = !d1.err && d1.dev > TOL
-        console.log(coldMoved
-          ? `\n· 撤掉 userInfoLoadedOnce 门槛后 B0 如期变红（提交区最高到过 ${d0.maxCfH}px，top 漂 ${d0.dev.toFixed(1)}px）`
-          : `\n· B0 仍是绿的（dev=${d0.err ? 'n/a' : d0.dev.toFixed(1)}px）—— 冷启动那条断言不敏感`)
-        console.log(silentMoved
-          ? `· 把 !isLoadingStatus 钉回判据后 B1 如期变红（top 漂 ${d1.dev.toFixed(1)}px）`
-          : `· B1 仍是绿的（dev=${d1.err ? 'n/a' : d1.dev.toFixed(1)}px）—— 静默刷新那条断言不敏感`)
-        good = coldMoved && silentMoved
-        console.log(good ? '\n反证成立：两处修法各自都能被对应断言抓到' : '\n反证失败：至少一处撤掉后断言没变红')
+      console.log(`\n${pass.name}`)
+      try {
+        const patched = { ...originals }
+        for (const p of pass.patches) {
+          patched[p.file] = patched[p.file].replace(p.from, p.to)
+          console.log(`  关掉  [${p.file}] ${p.what}`)
+        }
+        for (const f of files) fs.writeFileSync(path.join(SRC, f), patched[f])
+        await sleep(4000) // 等 HMR 把新模块推上去（store 改动通常整页 reload）
+
+        const m = await measure()
+        const dirty = await measureDirty()
+        if (m.errs.length) note('页面报错（不一定是反证造成的）：' + m.errs.join(' | '))
+        const r = redness(m, dirty)
+        for (const name of pass.expect) {
+          console.log(`  ${r[name].red ? '红' : '绿'}  ${name}：${r[name].detail}`)
+          if (!r[name].red) good = false
+        }
+      } finally {
+        for (const f of files) fs.writeFileSync(path.join(SRC, f), originals[f])
+        console.log('已还原 ' + files.join(' / '))
       }
-    } finally {
-      fs.writeFileSync(TARGET, original)
-      console.log('已还原')
-      if (!good) process.exitCode = 1
     }
+    console.log(good
+      ? '\n反证成立：撤掉哪一侧，对应断言就变红'
+      : '\n反证失败：至少一处撤掉后对应断言没变红（先怀疑撤错地方，别急着说断言不敏感）')
+    if (!good) process.exitCode = 1
     return
   }
 
