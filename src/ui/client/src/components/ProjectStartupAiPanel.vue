@@ -311,31 +311,45 @@ watch([cacheKey, hasModel], () => sync())
           <div class="suggestion-order">{{ item.order }}</div>
 
           <div class="suggestion-main">
-            <span class="suggestion-name" :title="item.title">{{ item.title }}</span>
-            <span class="suggestion-cmd" :title="item.command">{{ item.command }}</span>
-            <span v-if="item.reason" class="suggestion-reason" :title="item.reason">{{ item.reason }}</span>
-
-            <!-- 类型/目录/启动按钮收成一条底栏:左栏最窄时(≈210px)标题得独占整行,
-                 否则三个元素抢一行会把标题挤成「客户端…」 -->
-            <div class="suggestion-foot">
-              <span class="suggestion-tag" :class="item.kind === 'npm' ? 'is-npm' : 'is-shell'">
-                {{ item.kind === 'npm' ? $t('@NPM02:npm 脚本') : $t('@NPM02:命令行') }}
-              </span>
-              <span class="suggestion-where" :title="item.packagePath || item.cwd">
-                {{ item.packageLabel || item.cwdLabel }}
-              </span>
+            <!-- 标题独占剩下的宽度(窄栏时最多折成两行),「启动」按钮贴着右上角。
+                 按钮能上移是因为它只占 ~52px,不像「类型 pill + 目录」会把标题挤成两三个字
+                 (见 lessons/left-column-card-footer.md) —— 那两个元素仍旧待在命令行那一行。
+                 "已启动"直接长在按钮上,不再另起一个文字标签:标签会把窄栏标题再砍掉 33px,
+                 而卡片绿边框 + 禁用按钮本来就在说同一件事。 -->
+            <div class="suggestion-head">
+              <span class="suggestion-name" :title="item.title">{{ item.title }}</span>
               <div class="suggestion-actions">
-                <span v-if="launchedIds.has(item.id)" class="suggestion-launched">{{ $t('@NPM02:已启动') }}</span>
                 <el-button
-                  type="primary"
+                  :type="launchedIds.has(item.id) ? 'default' : 'primary'"
                   size="small"
+                  :disabled="launchedIds.has(item.id)"
                   :loading="runningId === item.id"
                   @click="launch(item)"
                 >
-                  {{ $t('@NPM02:启动') }}
+                  {{ launchedIds.has(item.id) ? $t('@NPM02:已启动') : $t('@NPM02:启动') }}
                 </el-button>
               </div>
             </div>
+
+            <!-- 命令行右侧放类型/目录:命令普遍很短(``npm run dev``),右侧本来就有空;
+                 单独占一行的底栏只为了摆这两个元素,现在这一行省掉了 -->
+            <div class="suggestion-cmdline">
+              <span class="suggestion-cmd" :title="item.command">{{ item.command }}</span>
+              <span class="suggestion-meta">
+                <span class="suggestion-tag" :class="item.kind === 'npm' ? 'is-npm' : 'is-shell'">
+                  {{ item.kind === 'npm' ? $t('@NPM02:npm 脚本') : $t('@NPM02:命令行') }}
+                </span>
+                <span
+                  v-if="item.packageLabel || item.cwdLabel"
+                  class="suggestion-where"
+                  :title="item.packagePath || item.cwd"
+                >
+                  {{ item.packageLabel || item.cwdLabel }}
+                </span>
+              </span>
+            </div>
+
+            <span v-if="item.reason" class="suggestion-reason" :title="item.reason">{{ item.reason }}</span>
           </div>
         </div>
       </div>
@@ -517,6 +531,8 @@ watch([cacheKey, hasModel], () => sync())
 }
 
 .suggestion-name {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: var(--font-size-sm);
   font-weight: 600;
   line-height: 1.35;
@@ -529,12 +545,35 @@ watch([cacheKey, hasModel], () => sync())
   word-break: break-word;
 }
 
-/* 类型 + 目录 + 启动按钮:同一行的底栏,按钮靠右 */
-.suggestion-foot {
+/* 标题 + 启动按钮:同一行。按钮 flex-shrink:0 靠右,标题吃掉剩下的宽度
+   (窄栏时折两行,见 .suggestion-name 的 line-clamp) */
+.suggestion-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.suggestion-actions {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 2px;
+}
+
+/* 命令 + 类型 pill + 目录:同一行。命令换行时整块自然下移,不会把 pill 挤没 */
+.suggestion-cmdline {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  min-width: 0;
+}
+
+.suggestion-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -559,9 +598,12 @@ watch([cacheKey, hasModel], () => sync())
   }
 }
 
+/* 目录名在 pill 右边,窄了截断(配 title 提示);不再 flex:1 去撑满 —— 撑满会把
+   命令挤到换行,反而更松散 */
 .suggestion-where {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 45%;
   font-size: var(--font-size-xs);
   color: var(--text-meta);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -571,6 +613,8 @@ watch([cacheKey, hasModel], () => sync())
 }
 
 .suggestion-cmd {
+  flex: 0 1 auto;
+  min-width: 0;
   padding: 1px 5px;
   border-radius: var(--radius-xs);
   font-size: var(--font-size-xs);
@@ -587,19 +631,6 @@ watch([cacheKey, hasModel], () => sync())
   line-height: 1.5;
   color: var(--text-secondary);
   overflow-wrap: anywhere;
-}
-
-.suggestion-actions {
-  flex-shrink: 0;
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.suggestion-launched {
-  font-size: var(--font-size-xs);
-  color: var(--color-success-dark);
 }
 
 .suggestion-list::-webkit-scrollbar {

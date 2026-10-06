@@ -346,8 +346,9 @@ assertNone(
    *  ① `:not(.is-disabled)` 是**反向**选择器（"可用态"），必须先从文本里抹掉，
    *     否则 InstanceSwitcher 的 `:not(.is-disabled):hover` 会被当成禁用态规则判红。
    *  ② 口径只针对 `.el-button`。`InstanceSwitcher` 的
-   *     `.instance-menu-item--current.is-disabled::before` 拿主色画的是"当前实例"
-   *     那根 2px 竖条（跟"禁用"无关，禁用项也可以是当前项），不该被这条扫到。
+   *     `.instance-menu-item--current.is-disabled`（当前实例行，2026-10-06
+   *     已去掉主色竖条、不再是选中态）用的是 list item 不是按钮，
+   *     禁用只是"点自己没意义"，不该被这条扫到。
    */
   const isDisRules = (text) =>
     [...text.replace(/:not\(\.is-disabled\)/g, ':-x-')

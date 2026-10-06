@@ -86,6 +86,8 @@
     "verify:startup-ai-panel": "node scripts/verify-startup-ai-panel.cjs",
     "verify:startup-ai-panel:reverse": "node scripts/verify-startup-ai-panel.cjs --reverse",
     "verify:startup-ai-panel:empty": "node scripts/verify-startup-ai-panel.cjs --empty",
+    "verify:instance-close-hover": "node scripts/verify-instance-close-hover.cjs",
+    "verify:instance-close-hover:reverse": "node scripts/verify-instance-close-hover.cjs --reverse",
     "e2e": "cd src/ui/client && npx playwright test",
     "e2e:headed": "cd src/ui/client && npx playwright test --headed",
     "e2e:install": "cd src/ui/client && npx playwright install chromium",

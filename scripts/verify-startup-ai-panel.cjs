@@ -10,8 +10,10 @@
  *   P5 shell 类建议点「启动」→ **先弹确认框**(框里必须出现完整命令),取消则一个请求都不发;
  *      确认后才打 /api/exec-in-terminal(command + workingDirectory)
  *   P6 反向护栏:两个接口都给得出内容时,两个面板**都在**(E1/E2 的阳性对照)
- *   P7 左栏拖到最窄(212px)时**标题仍独占整行、没被裁** —— 标题曾被「类型 pill + 目录」
- *      抢成「客户端…」(见组件里 .suggestion-foot 的注释);这条量的是标题几何,不是文案
+ *   P7 左栏拖到最窄(212px)时**标题仍看得全、没被横向裁掉** —— 「启动」按钮上移到标题
+ *      行(为的是省掉一条底栏),这条量的是"扣掉按钮之后标题还剩多少宽度"
+ *   P8 布局口径:「启动」按钮与标题**同一行**(top 差 ≤ 按钮高度),类型 pill 与命令行
+ *      **同一行**,且不存在 .suggestion-foot 底栏 —— 这三样曾经各占一行,用户圈着说"空太多"
  *
  * 空态(--empty):两个面板都没有内容时**整块不渲染** —— 一个点开只有"没找到/没看出"
  *   的空壳在左栏既占地方又像自己配错了。
@@ -252,6 +254,7 @@ async function main() {
       title: el.querySelector('.suggestion-name')?.textContent?.trim(),
       cmd: el.querySelector('.suggestion-cmd')?.textContent?.trim(),
       tag: el.querySelector('.suggestion-tag')?.textContent?.trim(),
+      hasFoot: !!el.querySelector('.suggestion-foot'),
       hasButton: !!Array.from(el.querySelectorAll('button')).find((b) => b.textContent.trim() === '启动'),
     })))
     check('P3 序号按 order 连续', rendered.map((r) => r.order).join(',') === '1,2,3', JSON.stringify(rendered.map((r) => r.order)))
@@ -261,6 +264,27 @@ async function main() {
     check('P3 npm 与 shell 两类标签都在',
       rendered[0].tag === 'npm 脚本' && rendered[2].tag === '命令行',
       rendered.map((r) => r.tag).join(' | '))
+
+    // ── P8 紧凑布局:按钮跟标题一行,pill 跟命令一行,底栏整条消失 ────────
+    const layout = await page.locator('.startup-ai-panel .suggestion-item').evaluateAll((els) => els.map((el) => {
+      const name = el.querySelector('.suggestion-name')?.getBoundingClientRect()
+      const btn = Array.from(el.querySelectorAll('button')).find((b) => b.textContent.trim() === '启动')
+        ?.getBoundingClientRect()
+      const cmd = el.querySelector('.suggestion-cmd')?.getBoundingClientRect()
+      const tag = el.querySelector('.suggestion-tag')?.getBoundingClientRect()
+      return {
+        btnWithTitle: !!(name && btn && Math.abs(name.top - btn.top) <= btn.height + 1),
+        tagWithCmd: !!(cmd && tag && Math.abs(cmd.top - tag.top) <= Math.max(cmd.height, tag.height) + 1),
+        hasFoot: !!el.querySelector('.suggestion-foot'),
+        lines: el.querySelectorAll('.suggestion-name, .suggestion-cmdline, .suggestion-reason').length,
+      }
+    }))
+    check('P8「启动」按钮与标题同一行',
+      layout.every((r) => r.btnWithTitle), JSON.stringify(layout))
+    check('P8 类型 pill 与命令行同一行',
+      layout.every((r) => r.tagWithCmd), JSON.stringify(layout))
+    check('P8 每条只剩三行(标题 / 命令+类型 / 说明),没有独立底栏',
+      layout.every((r) => !r.hasFoot && r.lines === 3), JSON.stringify(layout))
 
     // ── P4 npm 建议:直接跑 ────────────────────────────────────────────
     await page.locator('.startup-ai-panel .suggestion-item').nth(1)
@@ -306,10 +330,17 @@ async function main() {
     check('P6 展开后渲染出 2 条脚本', scriptItems === 2, `count=${scriptItems}`)
     await page.locator('.npm-scripts-panel .accordion-header').click() // 收回去,别挡住后面的截图
 
-    // ── P7 左栏压到最窄时,标题仍得独占整行(不出现「客户端…」) ──────────
-    //    左栏是可拖拽的,窄的时候标题和「类型 pill + 目录」抢一行会把标题挤成 4 个字。
-    //    这里把栅格列宽钉到 212px(用户截图里那种宽度)再量:标题必须拿到条目
-    //    宽度的一半以上,且没有被横向裁掉。
+    if (SHOT) {
+      await page.locator('.startup-ai-panel').screenshot({ path: SHOT.replace(/\.png$/, '-wide.png') })
+      console.log(`  截图(默认宽度): ${SHOT.replace(/\.png$/, '-wide.png')}`)
+    }
+
+    // ── P7 左栏压到最窄时,标题仍看得全(按钮上移后不被挤没) ─────────────
+    //    左栏是可拖拽的,窄的时候「标题 + 按钮」抢一行会各吃一半。
+    //    这里把栅格列宽钉到 212px(用户截图里那种宽度)再量:扣掉按钮之后,
+    //    标题必须还拿得到条目宽度的一半左右,且标题本身没有被横向裁掉。
+    //    （阈值 0.42 而非 0.5:按钮 ≈52px 固定占位,212px 条目里就是 25%。
+    //      与其放宽"不裁"这条硬底线,不如把占比判据调成"按钮占掉的那点之外还够读"。）
     await page.evaluate(() => {
       const grid = document.querySelector('.grid-layout')
       if (grid) grid.style.gridTemplateColumns = '212px 4px 1fr'
@@ -325,14 +356,14 @@ async function main() {
       }
     }))
     const narrowOk = narrow.length === 3
-      && narrow.every((r) => !r.clipped && r.title >= r.item * 0.5)
-    check('P7 左栏 212px 宽时标题仍占满整行、没有被裁',
+      && narrow.every((r) => !r.clipped && r.title >= r.item * 0.42)
+    check('P7 左栏 212px 宽时标题仍看得全、没有被裁',
       narrowOk,
       JSON.stringify(narrow))
 
     if (SHOT) {
-      await page.locator('.startup-ai-panel').screenshot({ path: SHOT })
-      console.log(`  截图: ${SHOT}`)
+      await page.locator('.startup-ai-panel').screenshot({ path: SHOT.replace(/\.png$/, '-narrow.png') })
+      console.log(`  截图(钉到 212px): ${SHOT.replace(/\.png$/, '-narrow.png')}`)
     }
   }
 
