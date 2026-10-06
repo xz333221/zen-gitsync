@@ -224,7 +224,6 @@ async function requestCloseAll() {
               <el-icon v-else><Close /></el-icon>
               <span>{{ $t('@INSSW:关闭所有实例 {count}', { count }) }}</span>
             </button>
-            <span class="instance-total">{{ count }}</span>
           </div>
         </li>
 
@@ -318,8 +317,13 @@ async function requestCloseAll() {
   padding: 0;
   cursor: pointer;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border-component);
-  background: var(--bg-subtle);
+  /* 2026-10-06：默认态跟顶栏另外两个图标按钮（命令历史 / Git 操作，都是
+     IconButton 的 border:none + background:transparent）对齐 —— 之前这里
+     写的是 1px --border-component + --bg-subtle，在同排三个按钮里只有它
+     带框带底，看起来像"另一个东西"。hover / is-open 仍保留 primary 描边
+     和 7% 底色，所以"可点"这件事没丢，只是默认不再抢眼。 */
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium, 500);
@@ -524,19 +528,9 @@ async function requestCloseAll() {
   font-size: var(--font-size-xs);
 }
 
-:global(.instance-switcher-popper .instance-menu-header .instance-total) {
-  display: grid;
-  place-items: center;
-  min-width: 24px;
-  height: 24px;
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  background: var(--bg-panel);
-  font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-}
-
+/* 2026-10-06：删掉了原来的 .instance-total 徽章 —— 它和左边
+   「关闭所有实例 (6)」里的数字是同一个count，同屏出现两次、就贴在旁边，
+   纯冗余。计数信息没丢，仍由那枚按钮的文案承载。 */
 :global(.instance-switcher-popper .instance-header-actions) {
   display: inline-flex;
   align-items: center;
@@ -595,20 +589,18 @@ async function requestCloseAll() {
   background: var(--bg-panel-hover);
 }
 
+/* 2026-10-06：当前实例行**不再做「选中」态**。
+   原来这里给的是 `color-mix(--color-primary 7%)` 淡蓝底 + 一根 2px 主色竖条
+   （::before），看上去像"这一项被选中了"，而它其实只是"你正在看这一项"——
+   而且它是 disabled 的（点不动，也不该被点），根本不是可选列表里的一个选项。
+   降级成普通行：底色交给 hover 规则统一管，竖条删掉。
+   「当前」两个字保留 —— 那是**标识**（哪个是我），不是**选中态**（我选了哪个），
+   去掉的话这一行就彻底看不出是本页面了。 */
 :global(.instance-switcher-popper .instance-menu-item--current.is-disabled) {
   position: relative;
   opacity: 1;
   cursor: default;
-  background: color-mix(in srgb, var(--color-primary) 7%, transparent);
-}
-
-:global(.instance-switcher-popper .instance-menu-item--current.is-disabled::before) {
-  content: '';
-  position: absolute;
-  inset: 7px auto 7px 0;
-  width: 2px;
-  border-radius: var(--radius-xs);
-  background: var(--color-primary);
+  background: transparent;
 }
 
 :global(.instance-switcher-popper .instance-menu-item:not(.is-disabled):hover .port-badge),
@@ -624,33 +616,42 @@ async function requestCloseAll() {
   pointer-events: auto;
 }
 
-/* 当前实例行的关闭按钮始终可见(不像其他实例要 hover 才显示),
-   让用户一眼能看到"我也能被关"。
-   注意:关闭按钮默认 position:absolute 叠在端口徽章上,若只改 opacity
-   会导致默认状态下两个元素重叠 —— 所以当前行额外改成并排布局:
-   端口徽章与关闭按钮各占独立位置,都不隐藏,port-badge 也无需再淡出。 */
-:global(.instance-switcher-popper .instance-menu-item--current .instance-action) {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  min-width: 0;
-}
-
-:global(.instance-switcher-popper .instance-menu-item--current .instance-close) {
-  position: static;
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
+/* 当前实例行是 disabled 的（点自己没意义），吃不到上面那条
+   `:not(.is-disabled):hover` —— 所以单独给一份不含 `:not()` 的。
+   `:not()` 不提升特异性，`:not(.is-disabled):hover` 与 `:hover`
+   同为 (0,3,0)，两条并存时按书写顺序后者生效，所以这条必须写在它后面。 */
+:global(.instance-switcher-popper .instance-menu-item--current:hover .instance-close),
+:global(.instance-switcher-popper .instance-menu-item--current:focus-within .instance-close) {
   opacity: 1;
-  transform: none;
+  transform: scale(1);
   pointer-events: auto;
 }
 
-:global(.instance-switcher-popper .instance-menu-item--current .port-badge) {
-  opacity: 1;
-  transform: none;
+/* 同样两条：hover 时让端口徽章淡出，给 × 让位。
+   写在一起是因为它们永远是成对出现——只淡出不显现会留下一个空档。 */
+:global(.instance-switcher-popper .instance-menu-item--current:hover .port-badge),
+:global(.instance-switcher-popper .instance-menu-item--current:focus-within .port-badge) {
+  opacity: 0;
+  transform: scale(0.88);
 }
+
+/* 2026-10-06：当前实例行的关闭按钮**也改成 hover 才显示**，
+   与其余实例行一致。
+
+   改前这里有一整套"当前行例外"（`position: static` + `opacity: 1` +
+   `pointer-events: auto` + port-badge 不淡出），理由是"让用户一眼能看到
+   我也能被关"。但这个理由站不住：
+     · 列表顶部已经有一枚显眼的「关闭所有实例 (6)」按钮，关闭能力不缺曝光；
+     · 平时 6 行里 5 行的 × 都是隐的，只有第一行常驻，反而像"这一行特殊"；
+     · 端口徽章和 × 并排常驻，把这一行的右端塞得比别的行满。
+
+   ⚠️ 关键：不能只删这几条。当前行是 **disabled** 的（点自己没意义），
+   而 hover 显现那条规则写的是 `.instance-menu-item:not(.is-disabled):hover`
+   —— 所以删完之后当前行会**永远不显现**。必须给 `--current` 补一条
+   不带 `:not(.is-disabled)` 的 hover/focus-within 规则（下一段）。
+
+   也因此这里不能靠"通用 hover 规则"覆盖：`:not()` 不参与提升特异性，
+   `:not(.is-disabled):hover` 与 `:hover` 同为 (0,3,0)，谁写在后面谁赢。 */
 
 :global(.instance-switcher-popper .port-badge) {
   transition: opacity var(--transition-fast) ease, transform var(--transition-fast) ease;
