@@ -331,8 +331,10 @@ watch([cacheKey, hasModel], () => sync())
               </div>
             </div>
 
-            <!-- 命令行右侧放类型/目录:命令普遍很短(``npm run dev``),右侧本来就有空;
-                 单独占一行的底栏只为了摆这两个元素,现在这一行省掉了 -->
+            <!-- 命令行右侧放类型/目录/说明:命令普遍很短(``npm run dev``),右侧本来就有空;
+                 单独占一行的底栏只为了摆这几个元素,现在这一行省掉了。
+                 说明(模型给的理由)也并进这一行 —— 它原本自己占第三行,而这条行尾通常还空着
+                 一半宽度;放不下就省略号截断(全文在 title 里),不留换行把卡片撑回三行 -->
             <div class="suggestion-cmdline">
               <span class="suggestion-cmd" :title="item.command">{{ item.command }}</span>
               <span class="suggestion-meta">
@@ -347,9 +349,8 @@ watch([cacheKey, hasModel], () => sync())
                   {{ item.packageLabel || item.cwdLabel }}
                 </span>
               </span>
+              <span v-if="item.reason" class="suggestion-reason" :title="item.reason">{{ item.reason }}</span>
             </div>
-
-            <span v-if="item.reason" class="suggestion-reason" :title="item.reason">{{ item.reason }}</span>
           </div>
         </div>
       </div>
@@ -626,11 +627,20 @@ watch([cacheKey, hasModel], () => sync())
   overflow-wrap: anywhere;
 }
 
+/* 说明跟在「类型 pill + 目录」后面,吃掉行尾剩下的宽度 —— 这就是卡片第三行消失的原因。
+   flex-basis 必须是 0 而不是 auto:这一行是 flex-wrap 的(长命令要能换行),
+   而换行判据看的是各个元素的**假定宽度**(basis),写 auto 的话说明一长(普遍都长)
+   整块会被挤到第二行,卡片又变回三行。basis=0 让它永远留在本行、再按剩余宽度截断。
+   拿不到宽度(窄栏 / 命令特别长)时整块宽度为 0,自然看不见,不留半截省略号。 */
 .suggestion-reason {
+  flex: 1 1 0;
+  min-width: 0;
   font-size: var(--font-size-xs);
   line-height: 1.5;
   color: var(--text-secondary);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .suggestion-list::-webkit-scrollbar {

@@ -12,8 +12,9 @@
  *   P6 反向护栏:两个接口都给得出内容时,两个面板**都在**(E1/E2 的阳性对照)
  *   P7 左栏拖到最窄(212px)时**标题仍看得全、没被横向裁掉** —— 「启动」按钮上移到标题
  *      行(为的是省掉一条底栏),这条量的是"扣掉按钮之后标题还剩多少宽度"
- *   P8 布局口径:「启动」按钮与标题**同一行**(top 差 ≤ 按钮高度),类型 pill 与命令行
- *      **同一行**,且不存在 .suggestion-foot 底栏 —— 这三样曾经各占一行,用户圈着说"空太多"
+ *   P8 布局口径:卡片只有**两块** —— ①「标题 + 启动按钮」②「命令 + 类型 pill + 目录 + 说明」。
+ *      按钮与标题同一行、pill 与命令同一行、说明也长在命令行行尾(放不下按行尾宽度截断),
+ *      且不存在任何独立底栏 —— 这些都曾经各占一行,用户先后圈着说"空太多"「2 行就够了」
  *
  * 空态(--empty):两个面板都没有内容时**整块不渲染** —— 一个点开只有"没找到/没看出"
  *   的空壳在左栏既占地方又像自己配错了。
@@ -265,26 +266,47 @@ async function main() {
       rendered[0].tag === 'npm 脚本' && rendered[2].tag === '命令行',
       rendered.map((r) => r.tag).join(' | '))
 
-    // ── P8 紧凑布局:按钮跟标题一行,pill 跟命令一行,底栏整条消失 ────────
+    // ── P8 紧凑布局:整张卡片只有两块(标题+按钮 / 命令+类型+目录+说明) ────────
+    //    第三块曾经是"说明"自己一行,而命令行行尾通常空着一半 —— 并进去之后按剩余宽度截断。
+    //    ⚠️ 判据必须量**几何**(直接子块占几行 + 说明与命令行是否同一行),不能数 DOM 节点数:
+    //       说明挪进 .suggestion-cmdline 之后,`name/cmdline/reason` 三个选择器照样各命中一个,
+    //       数节点会恒等于 3,把"又变回三行"的回归放过去。
     const layout = await page.locator('.startup-ai-panel .suggestion-item').evaluateAll((els) => els.map((el) => {
-      const name = el.querySelector('.suggestion-name')?.getBoundingClientRect()
-      const btn = Array.from(el.querySelectorAll('button')).find((b) => b.textContent.trim() === '启动')
-        ?.getBoundingClientRect()
-      const cmd = el.querySelector('.suggestion-cmd')?.getBoundingClientRect()
-      const tag = el.querySelector('.suggestion-tag')?.getBoundingClientRect()
+      const main = el.querySelector('.suggestion-main')
+      const box = (sel) => el.querySelector(sel)?.getBoundingClientRect() || null
+      const name = box('.suggestion-name')
+      const btnEl = Array.from(el.querySelectorAll('button')).find((b) => b.textContent.trim() === '启动')
+      const btn = btnEl ? btnEl.getBoundingClientRect() : null
+      const cmd = box('.suggestion-cmd')
+      const tag = box('.suggestion-tag')
+      const cmdline = box('.suggestion-cmdline')
+      const reason = box('.suggestion-reason')
       return {
         btnWithTitle: !!(name && btn && Math.abs(name.top - btn.top) <= btn.height + 1),
         tagWithCmd: !!(cmd && tag && Math.abs(cmd.top - tag.top) <= Math.max(cmd.height, tag.height) + 1),
         hasFoot: !!el.querySelector('.suggestion-foot'),
-        lines: el.querySelectorAll('.suggestion-name, .suggestion-cmdline, .suggestion-reason').length,
+        // 卡片堆了几块:直接子块各占一行,块数 = 行数
+        blocks: main ? main.children.length : 0,
+        blockTops: main ? Array.from(main.children).map((c) => Math.round(c.getBoundingClientRect().top)) : [],
+        // 说明与命令行同一行(baseline 对齐,top 差只有几像素;自己占一行会差一整行高)
+        reasonWithCmd: !!(reason && cmdline && Math.abs(reason.top - cmdline.top) <= 8),
+        // 说明是**单行**截断:12px 字号 line-height 1.5 → 一行 18px,换行就会翻倍
+        reasonOneLine: reason ? reason.height <= 20 : null,
+        reasonWidth: reason ? Math.round(reason.width) : 0,
       }
     }))
     check('P8「启动」按钮与标题同一行',
       layout.every((r) => r.btnWithTitle), JSON.stringify(layout))
     check('P8 类型 pill 与命令行同一行',
       layout.every((r) => r.tagWithCmd), JSON.stringify(layout))
-    check('P8 每条只剩三行(标题 / 命令+类型 / 说明),没有独立底栏',
-      layout.every((r) => !r.hasFoot && r.lines === 3), JSON.stringify(layout))
+    check('P8 每张卡片只剩两块(标题+按钮 / 命令+类型+说明),没有独立底栏',
+      layout.every((r) => r.blocks === 2 && new Set(r.blockTops).size === 2 && !r.hasFoot),
+      JSON.stringify(layout.map((r) => ({ blocks: r.blocks, foot: r.hasFoot }))))
+    // ⚠️ 块数那条只挡"又加回第三个兄弟块"(比如老的 .suggestion-foot);说明现在住在
+    //    .suggestion-cmdline 里面,它被挤到下一行时块数照样是 2 —— 挡这一档得靠下面这条。
+    check('P8 说明长在命令行行尾(不再自己占第三行),且是单行截断不换行',
+      layout.every((r) => r.reasonWithCmd && r.reasonOneLine && r.reasonWidth > 0),
+      JSON.stringify(layout.map((r) => ({ same: r.reasonWithCmd, one: r.reasonOneLine, w: r.reasonWidth }))))
 
     // ── P4 npm 建议:直接跑 ────────────────────────────────────────────
     await page.locator('.startup-ai-panel .suggestion-item').nth(1)
@@ -360,6 +382,15 @@ async function main() {
     check('P7 左栏 212px 宽时标题仍看得全、没有被裁',
       narrowOk,
       JSON.stringify(narrow))
+
+    // 说明在窄栏里只允许两种形态:整块不显示,或宽到能读。
+    // 「命令 + 类型 + 目录」在 212px 里已经把这行吃满,说明要么被挤到下一行(宽度是整行的),
+    // 要么只剩几个像素 —— 后者会渲染成一个半截省略号碎片,那种一律算红。
+    const narrowReason = await page.locator('.startup-ai-panel .suggestion-item .suggestion-reason')
+      .evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().width)))
+    check('P7 窄栏里说明不残留半截省略号(要么整块不显示,要么 ≥60px 能读)',
+      narrowReason.length === 3 && narrowReason.every((w) => w === 0 || w >= 60),
+      JSON.stringify(narrowReason))
 
     if (SHOT) {
       await page.locator('.startup-ai-panel').screenshot({ path: SHOT.replace(/\.png$/, '-narrow.png') })
