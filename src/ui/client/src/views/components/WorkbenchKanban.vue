@@ -48,11 +48,11 @@
   tasks.json 里的 updatedAt 一直停在创建/编辑时刻，于是十几行全是同一个时间。
   现在时间列与排序键都统一到 cardTime（与看板卡片同一口径），排序键 = 显示键。
 
-  被点开过的那张卡片（.kb-card.is-opened，id 由上层给的 openedTaskId）取消 hover：
-  「执行 / 停止 / ×」不再随鼠标浮出、卡片也不再抬升、正文右侧的渐隐一并撤掉。
-  理由是这条任务已经在编辑器里了（执行 / 停止 / 删除在那儿都有），卡片上再摆一份
-  只会跟正文抢右下角那块地方 —— 顺带把"鼠标恰好停在这张上"的误触也堵掉。
-  键盘仍然可达（:focus-within 照旧浮出），否则 Tab 过去就摸不到这几个按钮。
+  被点开过的那张卡片（.kb-card.is-opened，id 由上层给的 openedTaskId）现在**只留一枚标记**：
+  常驻一圈主色描边 + aria-current，意思是"你最后点开的是这条"。
+  它曾经连 hover 一起取消（操作组不浮出、卡片不抬升、正文不渐隐，2026-09-30 加的），
+  2026-10-05 撤掉了 —— 那条规则真实的效果只有「关掉编辑器之后这张卡片整整一个会话
+  都不再响应 hover，而点一下（拿到焦点）又能让它冒出来」，见 .kb-card__actions 那段。
 -->
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
@@ -72,9 +72,9 @@ const props = defineProps<{
   showProjectLabel: boolean
   /**
    * 用户从看板上点开过的任务 id（null = 还没点开过任何一条）。
-   * 这张卡片取消 hover —— 见文件头那段说明。
+   * 只用来给那张卡片挂一枚「你最后点开的是这条」的标记，与 hover 无关 —— 见文件头那段说明。
    * 刻意**不**复用上层的 selectedTaskId：它在首次加载时就会自动落到某条任务上
-   * （applyRestoredSelection），拿它当"点开过"会让一张从没被碰过的卡片莫名丢掉操作按钮。
+   * （applyRestoredSelection），拿它当"点开过"会让一张从没被碰过的卡片莫名戴上标记。
    */
   openedTaskId: string | null
 }>()
@@ -1235,17 +1235,14 @@ function coverTitle(img: BoardImage): string {
   border-color: var(--role-error-edge);
   background: var(--role-error-wash);
 }
-/* 点开过的那张（.is-opened）：常驻一圈主色描边，让"这张不再有 hover 操作"看着是条规则，
-   而不是"这张卡坏了"。描边色与上面两个状态色同用 color-mix 那一套写法。
-   hover 时描边不变（还是主色），只把抬升撤掉 —— 抬升是"我要点你了"的暗示，
-   而这张卡的操作已经在编辑器里了，不该再暗示。 */
-.kb-card.is-opened,
-.kb-card.is-opened:hover {
+/* 点开过的那张（.is-opened）：常驻一圈主色描边 + aria-current，就是一枚"你最后点开的是这条"的标记。
+   描边色与上面两个状态色同用 color-mix 那一套写法。
+   ⚠️ 2026-10-05：这枚标记原先还负责解释"这张卡为什么没有 hover 操作"（那时 hover 被撤掉了）。
+   现在 hover 照常（见 .kb-card__actions 那段），标记就只剩"刚才在这条上"这一个含义，
+   所以 hover 时它跟别的卡片一样抬升 —— 卡片照样可点（点开就是回到编辑器），
+   之前那条 `:is-opened:hover { transform: none }` 是跟着"不再暗示可点"写的，一并去掉。 */
+.kb-card.is-opened {
   border-color: color-mix(in srgb, var(--color-primary) 42%, var(--border-color));
-}
-.kb-card.is-opened:hover {
-  box-shadow: var(--shadow-card-rest);
-  transform: none;
 }
 
 /* ── 封面：附件里第一张图（模板那段讲了为什么在最顶、为什么只画一张） ──────
@@ -1580,14 +1577,28 @@ function coverTitle(img: BoardImage): string {
   transition: opacity var(--transition-fast) var(--ease-custom);
 }
 /*
- * 点开过的卡片（.is-opened）不参与 hover 那套：操作组不浮出、正文右侧也不渐隐。
- * 用 `:not(.is-opened)` 改**触发侧**而不是事后去覆盖 opacity / mask ——
- * 遮罩与浮层是成对的（遮罩是遮**字**的），只撤一个就会留下"按钮没了但字白少一截"的半吊子状态。
- * :focus-within 那一路**不加**这个条件：Tab 进卡片里的按钮时操作组照旧浮出，
- * 否则「执行 / 停止 / ×」对键盘用户就等于消失了（它们 pointer-events 也归零，鼠标和键盘都点不到）。
+ * 浮出的两个触发条件：鼠标停在卡上，或者**键盘**把焦点送进来。
+ *
+ * ⚠️ 2026-10-05 重写，原先是 `:not(.is-opened):hover` + `:focus-within`，两条各自都出了岔子：
+ *   · `:not(.is-opened)`（点开过的卡不响应 hover）想表达的是"这条任务正在编辑器里，
+ *     卡片上别再摆一份执行 / 删除"。可编辑器弹窗盖住整个看板、鼠标根本够不到底下的卡片，
+ *     于是这条规则**唯一能生效的时刻反而是关掉编辑器之后** —— 用户看到的是
+ *     「hover 没反应，点一下（拿到焦点）反倒冒出来了」（2026-10-05 报的）。
+ *   · `:focus-within` 想表达的是"键盘用户够得到这几个按钮"，但它**不只认键盘**：
+ *     鼠标点一下卡片也算焦点在里面。于是点开一条任务、关掉编辑器
+ *     （el-dialog 会把焦点还给触发它的那张卡片），按钮就停在卡上不走，直到点别处 ——
+ *     那正是 2026-09-30 说的"点开之后按钮应该取消显示"，上一版没治到根上。
+ * 现在两端都收窄到真正想要的那件事：**hover 一律浮出**（不再看 is-opened），
+ * 焦点那一路只认 `:focus-visible`（键盘 Tab 出来的才算，鼠标点出来的焦点不算）。
+ * 卡片自己拿到键盘焦点要写 `.kb-card:focus-visible`（`:focus-visible` 不会向上传给祖先），
+ * 焦点落进组里的按钮要写 `:has(:focus-visible)`（`:focus-within` 那套不分键盘鼠标，用不了）——
+ * 所以是三条，不是一条。键盘可达本身没丢：Tab 到卡片命中第一条，再 Tab 进按钮命中第二条。
+ * 浮层与遮罩**成对**（遮罩是遮**字**的），下面几处 mask 的触发侧必须与这里逐字一致，
+ * 只改一处会留下"按钮浮出来了但字白少一截 / 按钮没了字还在"的半吊子状态。
  */
-.kb-card:not(.is-opened):hover .kb-card__actions,
-.kb-card:focus-within .kb-card__actions {
+.kb-card:hover .kb-card__actions,
+.kb-card:focus-visible .kb-card__actions,
+.kb-card:has(:focus-visible) .kb-card__actions {
   opacity: 1;
   pointer-events: auto;
 }
@@ -1634,12 +1645,15 @@ function coverTitle(img: BoardImage): string {
  * 只有两颗按钮的那张（自己跑完的已完成卡：执行 + ×）更窄，窄不会露字形，不用另算。
  */
 /* 活动区的那一行：它渲染在哪一行取决于哪个字段有值（工具 / 思考 / 回复 / 只有时长），
-   所以对**最后渲染出来的那个孩子**渐隐，而不是逐个类名去猜 */
-.kb-card:not(.is-opened):hover .kb-card__live > :last-child,
-.kb-card:focus-within .kb-card__live > :last-child,
+   所以对**最后渲染出来的那个孩子**渐隐，而不是逐个类名去猜。
+   触发侧（三条）与 .kb-card__actions 那组逐字一致 —— 成对，见那边的注释 */
+.kb-card:hover .kb-card__live > :last-child,
+.kb-card:focus-visible .kb-card__live > :last-child,
+.kb-card:has(:focus-visible) .kb-card__live > :last-child,
 /* 「最后回复」是卡片的最后一块，操作组正压在它右下角 */
-.kb-card:not(.is-opened):hover .kb-card__reply,
-.kb-card:focus-within .kb-card__reply {
+.kb-card:hover .kb-card__reply,
+.kb-card:focus-visible .kb-card__reply,
+.kb-card:has(:focus-visible) .kb-card__reply {
   /* 层序 = 「上面横向渐隐、下面带外不透明」，两层 add（= mask-composite 的默认值，
      这里显式写出来：这一行是这个效果的全部机关所在，写出来才看得见）。
      推导见 .kb-card 上 --kb-mask-outside-band 那段 —— **不能改成 intersect**。 */
@@ -1650,9 +1664,11 @@ function coverTitle(img: BoardImage): string {
 }
 /* 标题：只在它自己是卡片最后一行时才遮（判据与理由见上），位置按标题自己的右边缘另算。
    `~ *:not(.kb-card__actions)` = 「row1 后面还有别的兄弟节点」，操作组本身不算。
-   单行元素：纵向那层的两个 stop 都被 clamp 掉 → 与改动前的整行渐隐等价。 */
-.kb-card:not(.is-opened):hover .kb-card__row1:not(:has(~ *:not(.kb-card__actions))) .kb-card__title,
-.kb-card:focus-within .kb-card__row1:not(:has(~ *:not(.kb-card__actions))) .kb-card__title {
+   单行元素：纵向那层的两个 stop 都被 clamp 掉 → 与改动前的整行渐隐等价。
+   触发侧同样与 .kb-card__actions 那组逐字一致。 */
+.kb-card:hover .kb-card__row1:not(:has(~ *:not(.kb-card__actions))) .kb-card__title,
+.kb-card:focus-visible .kb-card__row1:not(:has(~ *:not(.kb-card__actions))) .kb-card__title,
+.kb-card:has(:focus-visible) .kb-card__row1:not(:has(~ *:not(.kb-card__actions))) .kb-card__title {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 68px), transparent calc(100% - 52px)), var(--kb-mask-outside-band);
   mask-image: linear-gradient(to right, #000 calc(100% - 68px), transparent calc(100% - 52px)), var(--kb-mask-outside-band);
   -webkit-mask-composite: source-over;

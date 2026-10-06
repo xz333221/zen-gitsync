@@ -330,8 +330,9 @@ async function main() {
     // 悬停时才出现的「执行 / ×」是绝对定位在右下角的，而这段摘录正是卡片最后一块 ——
     // 少了渐隐，按钮会直接压在字上。（看板原有的 mask 规则只认活动区的最后一个孩子，
     // 这里新加的元素必须一起进那条规则。）
-    // 注意：「点开过的那张卡片取消 hover」（.kb-card.is-opened，2026-09-30）不影响这条断言 ——
-    // 本脚本全程不点卡片，所以断言对象一定处于 hover 态。那条契约由 verify-wb-card-opened 验。
+    // 注意：「点开过的那张卡片取消 hover」（.kb-card.is-opened，2026-09-30）2026-10-05 已撤掉
+    // ——现在 hover 一律浮出、不看 is-opened，本脚本全程也不点卡片，断言对象一定处于 hover 态。
+    // 标记与触发侧那套契约由 verify-wb-card-opened 验。
     const box = await page.evaluate((t) => {
       const cards = Array.from(document.querySelectorAll('.kb-card'))
       const el = cards.find(c => (c.querySelector('.kb-card__title')?.textContent || '').trim() === t)

@@ -1,21 +1,32 @@
 /**
- * 看板卡片「点开之后取消 hover」的验证。
+ * 看板卡片「点开过的那张」的验证：**标记**与**hover 触发侧**。
  *
- * 背景：卡片右下角的「执行 / ×」是 hover 才浮出来的（绝对定位，正文右侧为此做了渐隐遮罩）。
- * 用户在编辑器里已经能执行 / 删除这条任务了，卡片上再摆一份只会跟正文抢右下角那块地方，
- * 顺带把"鼠标恰好停在自己正在编辑的那张卡上"的误触也堵掉 —— 所以点开过的那张卡片
- * （.kb-card.is-opened）不再响应 hover。同一条规则必须**成对**撤干净：只撤按钮不撤遮罩，
- * 会留下"按钮没了但字白少一截"的半吊子状态。
+ * 背景（2026-10-05 改过一次契约，别再照旧注释理解）：
+ *   卡片右下角的「执行 / ×」是 hover 才浮出来的（绝对定位，正文右侧为此做了渐隐遮罩）。
+ *   2026-09-30 用户提过「点开之后按钮应该取消显示」，当时实现成"点开过的那张卡片不再响应 hover"
+ *   （`:not(.is-opened):hover`），暴露出两个问题：
+ *     · 编辑器弹窗盖住整个看板、鼠标够不到底下的卡片，这条规则唯一生效的时刻反而是**关掉编辑器之后**
+ *       —— 那张卡片整整一个会话都不再浮出操作组，用户看到的是「hover 没反应」（2026-10-05 报的）；
+ *     · 而 `:focus-within` 那一路**不分键盘鼠标**：点一下卡片（卡片拿到焦点）操作组照样亮着、
+ *       关掉编辑器后还停在那儿不走 —— 09-30 那条诉求压根没治到根上。
+ *   现在的契约：**hover 一律浮出**（不看 is-opened）；焦点那一路只认 `:focus-visible`
+ *   （键盘 Tab 出来的才算），`.is-opened` 退化成一枚"你最后点开的是这条"的标记（描边 + aria-current）。
  *
  * 验收契约（改这块时别破坏）：
  *   A 点开之前 hover 照旧：操作组浮出（opacity 1）+ 正文渐隐（mask 是 gradient）+ 卡片抬升
  *   B 点开（走 open-task）之后：那张卡片带 .is-opened / aria-current，别的卡片没有
- *   C 点开之后 hover 它：操作组不浮出（opacity 0 且 pointer-events none）、正文不再渐隐、
- *     卡片也不再抬升 —— 三件一起撤，缺一件就是半吊子
- *   D 没点开过的卡片不受影响（不能因为"有过一次点开"就整板都失去 hover 操作）
- *   E 键盘仍然可达：Tab 进卡片里的按钮时操作组照旧浮出（:focus-within 那一路没加条件）
- *   F 标记只跟着**最后点开的那条**：点开第二张之后第一张恢复 hover 操作
+ *   C 点开之后 hover 它：**三件照旧**（操作组浮出 / 正文渐隐 / 卡片抬升）——
+ *     2026-10-05 用户报的"hover 没显示"就是这条；而且鼠标点出来的焦点不算数：
+ *     关掉编辑器、鼠标挪开，操作组必须收回去（09-30 那条诉求的根）
+ *   D 没点开过的卡片一致（标记不该改变任何交互）
+ *   E 键盘仍然可达：真的按 Tab 走进去，操作组照旧浮出（触发侧是 :focus-visible，不能只测鼠标）
+ *   F 标记只跟着**最后点开的那条**
  *   G 页面无 console / page 错误
+ *   R 反证（--reverse）：把 2026-09-30 那版「点开过的卡不响应 hover」注回去，
+ *     C1 / C3 / C4 必须翻红 —— 那三条量的是**触发侧**，注回旧规则还绿就说明量错了对象。
+ *
+ * ⚠️ E 组不能用 `locator.focus()` 代替按键：脚本 focus 算不算 `:focus-visible` 取决于
+ *   上一个交互是不是键盘（实测同一脚本里两次结论能相反），拿它当探针等于测 Chromium 的心情。
  *
  * 为什么 fixture 是手搓的、而不是像 verify-wb-card-live / -reply 那样去 import 服务端
  * decorateTaskForBoard：这里验的是**纯 CSS + class 契约**，与服务端怎么算列 / 摘录无关。
@@ -25,7 +36,7 @@
  *
  * 前置：dev server 已启动（vite 5544）。后端**不需要**——本脚本把编辑器要用的几个接口
  * 也一并拦掉，避免编辑器弹窗里刷一串 fetch 失败把 G 那条带崩。
- * 用法：node scripts/verify-wb-card-opened.cjs
+ * 用法：node scripts/verify-wb-card-opened.cjs [--reverse]
  * 退出码：0 全通过，1 有失败项。
  */
 const fs = require('node:fs')
@@ -37,6 +48,8 @@ const { chromium } = require('playwright')
 
 const BASE = process.env.ZEN_BASE || 'http://localhost:5544'
 const CHROME = process.env.ZEN_CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe'
+/** --reverse：把 2026-09-30 那版「点开过的卡不响应 hover」注回去，C 组必须翻红（R 组） */
+const REVERSE = process.argv.includes('--reverse')
 
 const results = []
 const consoleErrors = []
@@ -203,21 +216,56 @@ async function main() {
     check('B2 同时对读屏声明 aria-current', openedA.ariaCurrent === 'true', String(openedA.ariaCurrent))
     check('B3 没点开的卡片没有这个标记（不是整板生效）', !otherB.opened)
 
-    // ── C 点开之后 hover 它：操作组 / 遮罩 / 抬升三件一起撤 ─────────
-    // 先把焦点挪走再量。点卡片那一下会让它自己拿到焦点（卡片本身可聚焦，读数是
-    // LI.kb-card is-opened），于是 :focus-within 那一路照样把操作组亮着 —— 那是**键盘可达**
-    // 的设计（E 组专门验它），不是 hover 那一路没撤干净。不 blur 就量，C1–C3 恒红，
-    // 而 C4（抬升只挂在 :hover 上）正常绿 —— 2026-09-30 实测就是这么个"三条红一条绿"。
-    await page.evaluate(() => document.activeElement && document.activeElement.blur())
+    // ── C 点开之后 hover 它：操作组 / 遮罩 / 抬升三件照旧 ─────────────
+    // 2026-10-05 改的契约。上一版这里是"三件一起撤"（is-opened 取消 hover）——
+    // 那条规则唯一能生效的时刻反而是**关掉编辑器之后**（编辑器弹窗盖住整个看板，
+    // 鼠标够不到底下的卡片），效果是那张卡片整整一个会话都不再浮出操作组，
+    // 而鼠标点一下（卡片拿到焦点）又能让它冒出来。用户 2026-10-05 报的正是这个。
+    // 现在 hover 一律浮出，不看 is-opened；点出来的焦点不算数（C5 守的就是这条）。
     await hoverCard('syn-a')
     const after = await readCard(page, 'syn-a')
-    check('C1 hover 不再浮出操作组', after.actionsOpacity === '0', `opacity=${after.actionsOpacity}`)
-    // 只藏起来不够：opacity 0 的按钮仍会吃掉落在它上面的点击（卡片因此点不开）
-    check('C2 操作组连点击一起让开', after.actionsPointer === 'none', after.actionsPointer)
-    check('C3 正文不再被渐隐（撤按钮必须连遮罩一起撤）', after.replyMask === 'none', String(after.replyMask).slice(0, 40))
-    check('C4 卡片不再抬升', after.transform === 'none', after.transform)
+    check('C1 点开过的那张，hover 照样浮出操作组', after.actionsOpacity === '1', `opacity=${after.actionsOpacity}`)
+    check('C2 操作组可点（浮出时 pointer-events 一起开）', after.actionsPointer === 'auto', after.actionsPointer)
+    check('C3 正文照旧渐隐（浮层与遮罩成对）', /gradient/.test(after.replyMask || ''), String(after.replyMask).slice(0, 40))
+    check('C4 卡片照旧抬升', after.transform !== 'none', after.transform)
     await page.screenshot({ path: path.resolve(__dirname, '../tmp-verify-wb-card-opened.png') })
     log('截图:', path.resolve(__dirname, '../tmp-verify-wb-card-opened.png'))
+
+    // ── C5 鼠标点出来的焦点不算数 ───────────────────────────────────
+    // 点卡片那一下会让卡片拿到焦点，关掉编辑器时 el-dialog 还会把焦点**还给**它。
+    // 触发侧收窄到 :focus-visible 之后，这枚"鼠标焦点"不该把操作组留在卡上：
+    // 鼠标一挪开就必须收回去。（以前那一路是 :focus-within，不看键盘鼠标，
+    // 于是点开一条任务、关掉编辑器，按钮就停在卡上不走 —— 2026-09-30 用户说的
+    // "点开之后按钮应该取消显示"，上一版没治到根上。）
+    await hoverAway()
+    const stuck = await readCard(page, 'syn-a')
+    check('C5 关掉编辑器后鼠标挪开：操作组不留（鼠标焦点 ≠ :focus-visible）',
+      stuck.actionsOpacity === '0', `opacity=${stuck.actionsOpacity}`)
+
+    if (REVERSE) {
+      // 反证：把 2026-09-30 那版规则（点开过的卡不再响应 hover）注回去，
+      // C1 / C3 / C4 的判据必须**翻红** —— 否则那三条断言测的不是触发侧。
+      // 注入的是**样式**不是数据：SFC 跑在 vite dev server 里，换数据改不了 CSS 那一层。
+      await page.addStyleTag({
+        content: `
+          .kb-card.is-opened:hover .kb-card__actions { opacity: 0 !important; pointer-events: none !important; }
+          .kb-card.is-opened:hover .kb-card__reply,
+          .kb-card.is-opened:hover .kb-card__live > :last-child {
+            -webkit-mask-image: none !important;
+            mask-image: none !important;
+          }
+          .kb-card.is-opened:hover { transform: none !important; }`,
+      })
+      await hoverCard('syn-a')
+      const rev = await readCard(page, 'syn-a')
+      check('R1 反证：注回旧规则后操作组不浮出（C1 的判据是真的）',
+        rev.actionsOpacity === '0', `opacity=${rev.actionsOpacity}`)
+      check('R2 反证：注回旧规则后正文不再渐隐（C3 的判据是真的）',
+        rev.replyMask === 'none', String(rev.replyMask).slice(0, 40))
+      check('R3 反证：注回旧规则后卡片不再抬升（C4 的判据是真的）',
+        rev.transform === 'none', rev.transform)
+      log('已注入 2026-09-30 那版规则（is-opened 取消 hover）')
+    }
 
     // ── D 没点开过的卡片照旧 ────────────────────────────────────────
     await hoverCard('syn-c')
@@ -227,12 +275,30 @@ async function main() {
       /gradient/.test(other.liveMask || ''), String(other.liveMask).slice(0, 40))
 
     // ── E 键盘仍然可达 ──────────────────────────────────────────────
+    // 触发侧从 :focus-within 收窄成 :focus-visible 之后，这里**必须真的按 Tab**：
+    // 脚本 focus（locator.focus()）算不算 :focus-visible 取决于上一个交互是不是键盘
+    // （实测同一次会话里两次结论能相反），拿它当探针等于测 Chromium 的心情。
     await hoverAway()
-    await page.locator('.kb-card[data-task-id="syn-a"] .kb-card__btn').first().focus()
-    await sleep(300)
-    const focused = await readCard(page, 'syn-a')
-    check('E1 Tab 进按钮时操作组照旧浮出（键盘用户不能因此够不到执行 / 删除）',
-      focused.actionsOpacity === '1', `opacity=${focused.actionsOpacity}`)
+    await page.evaluate(() => document.activeElement && document.activeElement.blur())
+    await sleep(200)
+    let tabbed = null
+    for (let i = 0; i < 60 && !tabbed; i++) {
+      await page.keyboard.press('Tab')
+      tabbed = await page.evaluate(() => {
+        const el = document.activeElement
+        const card = el && el.closest ? el.closest('.kb-card') : null
+        return card ? { id: card.dataset.taskId, cls: String(el.className) } : null
+      })
+    }
+    check('E0 Tab 能走到卡片上（走不到，后面两条是空断言）', !!tabbed,
+      tabbed ? `落点=${tabbed.cls} @${tabbed.id}` : '按了 60 次 Tab 都没进卡片')
+    if (tabbed) {
+      const focused = await readCard(page, tabbed.id)
+      check('E1 Tab 进卡片时操作组浮出（键盘用户不能因此够不到执行 / 删除）',
+        focused.actionsOpacity === '1', `opacity=${focused.actionsOpacity} @${tabbed.id}`)
+      const mask = focused.replyMask || focused.liveMask || ''
+      check('E2 遮罩同步跟上（浮层与遮罩成对）', /gradient/.test(mask), String(mask).slice(0, 40))
+    }
     await page.evaluate(() => document.activeElement && document.activeElement.blur())
 
     // ── F 标记只跟着最后点开的那条 ──────────────────────────────────
@@ -254,7 +320,7 @@ async function main() {
   }
 
   const failed = results.filter(r => !r.ok)
-  console.log(`\n[verify] ${results.length - failed.length}/${results.length} 通过`)
+  console.log(`\n[verify] ${results.length - failed.length}/${results.length} 通过${REVERSE ? '（反证模式：已注入 2026-09-30 那版规则，R 组确认 C 的判据量的是触发侧）' : ''}`)
   for (const f of failed) console.log(`  FAIL  ${f.name}  ::  ${f.extra}`)
   process.exit(failed.length ? 1 : 0)
 }
