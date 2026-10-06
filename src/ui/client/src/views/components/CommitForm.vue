@@ -694,20 +694,13 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
           @ai-quick-push="handleAiQuickPush"
         />
       </div>
-      <div class="header-right">
-        <IconButton
-          :tooltip="$t('@76872:AI生成提交信息')"
-          :icon-class="aiGenerating ? '' : 'ai-commit'"
-          size="medium"
-          :disabled="aiGenerating"
-          @click="handleAiGenerateCommit"
-        >
-          <el-icon v-if="aiGenerating" class="is-loading"><Loading /></el-icon>
-        </IconButton>
-        <!-- 「命令历史」与「Git 操作」2026-10-06 搬到顶栏（App.vue）：这个面板在
-             "无事可做"时会整块收起，那两个入口必须常驻 —— 否则工作区干净时
-             连 pull / fetch / merge 都点不到。 -->
-      </div>
+      <!-- 「命令历史」与「Git 操作」2026-10-06 搬到顶栏（App.vue）：这个面板在
+           "无事可做"时会整块收起，那两个入口必须常驻 —— 否则工作区干净时
+           连 pull / fetch / merge 都点不到。
+           2026-10-06：✨「AI 生成提交信息」也从这条工具条搬进了输入框那一行
+           （见下面 type-scope-container / description-container 末尾）——
+           它生成的就是这个输入框的内容，放在输入框里语义更直接，也省掉一条
+           只放一个图标的空工具条。 -->
     </div>
 
     <div class="card-content app-card-content">
@@ -766,6 +759,23 @@ git config --global user.email "your.email@example.com"</pre
                   @select="handleMessageSelect"
                   @keydown="handleEnterKey"
                 />
+                <!-- 普通模式（3 行 textarea）**不能**像标准模式那样走 suffix 插槽：
+                     EP 的 el-input 在 type="textarea" 时切到 el-textarea 分支，
+                     suffix 插槽被 v-if 短路，整个 .el-input__suffix 容器根本不渲染
+                     （实测 dump 出来只有 textarea 元素 + 两个 v-if 注释）。
+                     所以这里回到绝对定位：贴框内右上角，靠 padding-right 让开。
+                     类名刻意区分（ai-suffix-btn--ta），别和标准模式共用 ——
+                     两者的定位机制完全不同，共用一套样式会在其中一个上失效。 -->
+                <IconButton
+                  custom-class="ai-suffix-btn ai-suffix-btn--ta"
+                  :tooltip="$t('@76872:AI生成提交信息')"
+                  :icon-class="aiGenerating ? '' : 'ai-commit'"
+                  size="small"
+                  :disabled="aiGenerating"
+                  @click="handleAiGenerateCommit"
+                >
+                  <el-icon v-if="aiGenerating" class="is-loading"><Loading /></el-icon>
+                </IconButton>
               </div>
             </div>
 
@@ -808,7 +818,29 @@ git config --global user.email "your.email@example.com"</pre
                       clearable
                       @select="handleDescriptionSelect"
                       @keydown="handleEnterKey"
-                    />
+                    >
+                      <!-- 2026-10-06：✨ 从「输入框外侧的兄弟节点」搬进输入框**边框内部**
+                           （el-input 的 suffix 插槽）。
+                           改前它是 .description-container 里紧挨 .el-input__wrapper 的
+                           兄弟节点，靠 flex 的 gap 5px + 按钮自身边距隔开 ——
+                           实测按钮左边缘 x=1564、输入框右边缘 x=1556，
+                           `btnOutsideRight=true`，也就是浮在框外，读起来像"框旁边多一颗钮"。
+                           放进 suffix 之后它就是框的一部分，和 clear 图标（EP 自己就在
+                           .el-input__suffix 里）同列，hover/聚焦时一起被框包住。
+                           尺寸仍用 small(28)：输入框高 40，28 上下各留 6px。 -->
+                      <template #suffix>
+                        <IconButton
+                          custom-class="ai-suffix-btn"
+                          :tooltip="$t('@76872:AI生成提交信息')"
+                          :icon-class="aiGenerating ? '' : 'ai-commit'"
+                          size="small"
+                          :disabled="aiGenerating"
+                          @click="handleAiGenerateCommit"
+                        >
+                          <el-icon v-if="aiGenerating" class="is-loading"><Loading /></el-icon>
+                        </IconButton>
+                      </template>
+                    </el-autocomplete>
                   </div>
                 </div>
               </div>
@@ -945,10 +977,38 @@ git config --global user.email "your.email@example.com"</pre
     margin: 0;
   }
 }
-.header-right{
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
+/* ✨「AI 生成提交信息」现在住在 el-input 的 suffix 插槽里（2026-10-06）。
+   必须用 :deep() —— 类名是通过 IconButton 的 customClass prop 落到的
+   它内部那个 <button> 上，不是 CommitForm 模板里的直接子元素，
+   scoped 的 [data-v-xxx] 属性不会自动加到它身上。
+
+   suffix 里已经有一颗 EP 的 clear 图标（.el-input__clear），所以：
+     · 不写 border —— 否则框内凭空多一道竖线，和 clear 图标打架
+     · margin-right: 0 —— suffix-inner 自己已有间距（EP 给图标留的）
+     · flex-shrink: 0 —— 输入框 flex:1，窗口窄时按钮会被压扁
+   顺带把原先的两条 ai-inline-btn / ai-inline-btn--top 一起删了：
+   按钮不再浮在框外，align-self 那套修正的前提（"被 3 行 textarea 拉到垂直中间"）
+   已经不存在。 */
+:deep(.ai-suffix-btn) {
+  flex-shrink: 0;
+  border: none;
+  margin-right: 0;
+}
+
+/* 普通模式（textarea）：EP 不渲染 suffix 容器（见模板里的注释），
+   改由 .commit-form 的 position:relative + 这里的绝对定位贴进框内右上角。
+   top/right 的取值让 28px 按钮和 3 行 textarea 的上沿留白对齐
+   （textarea 自身 padding-top 约 5px + 边框 1px，所以是 6 / 9）。 */
+:deep(.ai-suffix-btn--ta) {
+  position: absolute;
+  top: 6px;
+  right: 9px;
+  z-index: 1;
+}
+
+/* 普通模式下 .description-container 只是壳，要给它开定位上下文 */
+.commit-form .description-container {
+  position: relative;
 }
 
 .card-content {
@@ -1156,6 +1216,10 @@ git config --global user.email "your.email@example.com"</pre
 
     font-weight: 500;
     transition: var(--transition-ui-fast);
+    /* 右侧给框内的 ✨ 让出 28 + 10 = 38px，否则文字会顶到按钮底下。
+       padding 只加 padding-right，不动上下 —— 上下有原生 padding，
+       加了会改 textarea 的 min-height 计算（EP 按 padding 算高度）。 */
+    padding-right: 38px;
   }
 
   .el-textarea__inner:hover {

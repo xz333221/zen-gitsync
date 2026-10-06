@@ -124,6 +124,8 @@
     "verify:ui-consistency": "node scripts/verify-ui-consistency.cjs",
     "verify:git-operations-drawer": "node scripts/verify-git-operations-drawer.cjs",
     "verify:git-operations-drawer:reverse": "node scripts/verify-git-operations-drawer.cjs --reverse",
+    "verify:commit-ai-suffix": "node scripts/verify-commit-ai-suffix.cjs",
+    "verify:commit-ai-suffix:reverse": "node scripts/verify-commit-ai-suffix.cjs --reverse",
     "verify:header-monitor": "node scripts/verify-header-monitor.cjs"
   },
   "files": [
