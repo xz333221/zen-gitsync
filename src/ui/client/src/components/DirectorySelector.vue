@@ -1258,13 +1258,17 @@ function onBrowserSelect(path: string) {
 /* 2026-10-05 二次反馈：静止态「不留阴影、不留底色」，hover 才浮起。
    它是全屏唯一带投影的浮起物，可服务的却是"把当前目录交给别的 app 打开"这类低频动作
    —— 静止时压一档阴影 + 一块实心底，视觉权重比它承载的动作大得多。
-   现在静止态 = 透明底（露出顶栏自身底色）+ box-shadow:none，只剩一圈 --border-color-light
-   的细边勾出胶囊形状；底层这条 light 边是刻意留的：去掉底色后它是唯一的边界，再删就散架了。
-   反馈全部由 hover 的阴影 + 边框色承担，底色两个状态都不给（见下条）。 */
+   2026-10-06 三次反馈（用户：「header 中间这块默认不用显示 border 了」）：
+   **静止态连那圈 1px 细边也不留**（原话是"去掉底色后它是唯一的边界，再删就散架了"，
+   实测它在 #fcfdfe 的顶栏底上渲染成 #f4f5f6 的一圈实线，在放大截图里很显眼）——
+   边界改由 hover 承担：悬停时长出边框 + 阴影，静止时完全裸露在顶栏底色上。
+   写法必须是 `1px solid transparent` 而**不是 `border: none`**：
+     · hover 那条只改 `border-color` 就能让边"长出来"，不必再改 border-width；
+     · 保留 1px 占位 → 悬停前后零布局跳动（写 none 会少 1px，整条胶囊宽度跟着变）。 */
 .directory-selector--header {
   padding: 4px 10px;
   border-radius: var(--radius-xl);
-  border: 1px solid var(--border-color-light);
+  border: 1px solid transparent;
   background: transparent;
   box-shadow: none;
 }
@@ -1278,10 +1282,13 @@ function onBrowserSelect(path: string) {
   min-width: 72px;
 }
 
-/* hover：只加阴影 + 边框深一档，**不加底色**。
-   上一轮这里是 --bg-hover（#f1f2f2），这一轮按反馈一并去掉 —— 底色在静止态已撤，
-   hover 再补一块会变成"两个状态两套语言"。注意别把这条删掉：一旦漏写，它会落到前面
-   那条 `.directory-selector:not(.directory-selector--header):hover` 上的 --border-component，
+/* hover：长边界 + 加阴影，**不加底色**。
+   2026-10-06 起静止态不再留边（见上一条），所以这条是**唯一**让胶囊显形的地方：
+   `border-color` 从 transparent 换成 --border-color，配合阴影"浮起"。
+   上一轮这里是 --bg-hover（#f1f2f2），按反馈一并去掉 —— 底色在静止态已撤，
+   hover 再补一块会变成"两个状态两套语言"。
+   注意别把这条删掉：一旦漏写，它会落到前面那条
+   `.directory-selector:not(.directory-selector--header):hover` 上的 --border-component，
    整条胶囊会突然变一块灰（2026-10-05 已经出过一次，所以这里显式写 background: transparent）。
    暗色下 dark-theme.scss 的 `[data-theme="dark"] .directory-selector:hover` 特异性更高且会铺
    rgba(255,255,255,.1) 的底，已在那条上加 :not() 把 --header 排除掉。 */

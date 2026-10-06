@@ -504,6 +504,26 @@ assertNone(
   }
 }
 
+// A16 顶栏目录胶囊：静止态不画边界，边界交给 hover（2026-10-06 用户提）
+//     用户原话：「header 中间这块默认不用显示 border 了」。
+//     ⚠️ 这条**推翻**了组件里原有的一段论证（"去掉底色后那圈 light 边是唯一的边界，
+//     再删就散架了"）—— 实测那圈边在 #fcfdfe 的顶栏底上是 #f4f5f6 的实线，放大看很显眼。
+//     所以必须用断言钉住，否则下个读旧注释的人会把它加回来。
+//     写法细节：静止态用 `1px solid transparent` 占位而不是 `border: none` ——
+//     hover 只改颜色就能显形，且前后零布局跳动。
+{
+  const raw = stripComments(fs.readFileSync(path.join(SRC, 'components/DirectorySelector.vue'), 'utf8'))
+  const body = (sel) => (raw.match(new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' \\{([\\s\\S]*?)\\n\\}')) || [])[1] || ''
+  const base = body('.directory-selector--header')
+  const hov = body('.directory-selector--header:hover')
+  if (/border:\s*1px solid transparent/.test(base)) ok('目录胶囊静止态无可见边界（1px transparent 占位）')
+  else bad('目录胶囊静止态还在画边界', '应为 border: 1px solid transparent（不是 --border-color-light，也不是 border: none）')
+  if (/border:\s*none/.test(base)) bad('静止态用了 border: none', '会少 1px 占位 → hover 长边界时整条胶囊宽度跳动')
+  else ok('静止态保留 1px 占位（hover 显形不跳动）')
+  if (/border-color:\s*var\(--border-color\)/.test(hov)) ok('hover 才让边界显形（border-color: var(--border-color)）')
+  else bad('hover 没有让边界显形', '静止态已删边，hover 必须补回来，否则胶囊永远没有边界')
+}
+
 // ─────────────────────────────────────────────────────────────
 // B. 运行时抽样（可选）
 // ─────────────────────────────────────────────────────────────
