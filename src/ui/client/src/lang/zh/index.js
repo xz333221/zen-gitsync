@@ -2166,11 +2166,11 @@ export default {
   '@INSSW:当前实例已关闭标题': '实例已关闭',
   '@INSSW:当前实例已关闭描述': '{name} 的后台服务已停止，当前标签页已断开连接。',
   '@INSSW:当前实例已关闭提示': '浏览器不允许脚本关闭手动打开的标签页，可以放心手动关闭此页。',
-  '@INSSW:关闭全部实例': '关闭全部',
-  '@INSSW:关闭全部实例 {count}': '关闭全部 ({count})',
-  '@INSSW:关闭全部实例确认内容': '将关闭 {count} 个其他运行中的实例，当前实例不受影响。继续吗？',
-  '@INSSW:关闭全部实例成功': '已关闭 {closed} 个实例',
-  '@INSSW:关闭全部实例部分失败': '已关闭 {closed} 个，{failed} 个失败',
+  '@INSSW:关闭所有实例': '关闭所有实例',
+  '@INSSW:关闭所有实例 {count}': '关闭所有实例 ({count})',
+  '@INSSW:关闭所有实例确认内容': '将关闭全部 {count} 个运行中的实例，包括当前实例 —— 本页面也会随之关闭。继续吗？',
+  '@INSSW:关闭所有实例成功': '已关闭 {closed} 个实例',
+  '@INSSW:关闭所有实例部分失败': '已关闭 {closed} 个，{failed} 个失败',
   // @INSSW: file end
   // @ACTBAR: file path: components/ActivityBar.vue
   '@ACTBAR:工作台': '工作台',

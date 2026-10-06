@@ -84,6 +84,8 @@ export const useInstancesStore = defineStore('instances', () => {
     closed: number
     failed: number
     total: number
+    /** 当前实例是否也在这批关闭里（现在恒为 true）。调用方据此关 tab / 亮兜底遮罩。 */
+    selfClose: boolean
   }
 
   async function closeAllInstances(): Promise<CloseAllResult> {
@@ -93,6 +95,7 @@ export const useInstancesStore = defineStore('instances', () => {
       closed?: number
       failed?: number
       total?: number
+      selfClose?: boolean
       error?: string
     } | null
     if (!res.ok || !data) {
@@ -102,18 +105,22 @@ export const useInstancesStore = defineStore('instances', () => {
     const closed = data.closed ?? 0
     const failed = data.failed ?? 0
     const total = data.total ?? 0
+    const selfClose = data.selfClose === true
 
-    // 后端已把所有非当前实例 unregister，立刻同步本地视图（保留当前实例）。
-    if (closed > 0) {
+    // 后端已把所有实例 unregister，立刻同步本地视图（保留当前实例）。
+    // 但含当前实例时**不刷新**：服务端随后就 graceful 退出，这一次请求既拿不到
+    // 最终状态，还会占住调用方的关 tab 时机（window.close 只有用户手势后的短
+    // 窗口里才可能生效）。
+    if (closed > 0 && !selfClose) {
       await refresh()
     }
     lastError.value = null
 
     if (!data.success) {
       // 部分失败仍返回结果，调用方决定如何提示。
-      return { closed, failed, total }
+      return { closed, failed, total, selfClose }
     }
-    return { closed, failed, total }
+    return { closed, failed, total, selfClose }
   }
 
   // 监听后端 Socket.IO 推送

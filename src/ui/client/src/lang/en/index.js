@@ -2157,11 +2157,11 @@ export default {
   '@INSSW:当前实例已关闭标题': 'Instance closed',
   '@INSSW:当前实例已关闭描述': 'The backend service of {name} has stopped. This tab is now disconnected.',
   '@INSSW:当前实例已关闭提示': 'The browser does not allow scripts to close tabs opened manually. It is safe to close this tab.',
-  '@INSSW:关闭全部实例': 'Close all',
-  '@INSSW:关闭全部实例 {count}': 'Close all ({count})',
-  '@INSSW:关闭全部实例确认内容': 'Close {count} other running instances? The current instance is not affected.',
-  '@INSSW:关闭全部实例成功': 'Closed {closed} instance(s)',
-  '@INSSW:关闭全部实例部分失败': 'Closed {closed}, failed {failed}',
+  '@INSSW:关闭所有实例': 'Close all instances',
+  '@INSSW:关闭所有实例 {count}': 'Close all instances ({count})',
+  '@INSSW:关闭所有实例确认内容': 'This closes all {count} running instance(s), including this one — this page will be closed too. Continue?',
+  '@INSSW:关闭所有实例成功': 'Closed {closed} instance(s)',
+  '@INSSW:关闭所有实例部分失败': 'Closed {closed}, failed {failed}',
   // @INSSW: file end
   // @ACTBAR: file path: components/ActivityBar.vue
   '@ACTBAR:工作台': 'Workbench',

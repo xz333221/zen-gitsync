@@ -44,10 +44,10 @@ onBeforeUnmount(() => {
 const hasAny = computed(() => store.list.length > 0)
 
 const count = computed(() => store.list.length)
-const otherCount = computed(() => store.otherInstances.length)
 
-// 是否有可以批量关闭的非当前实例
-const canCloseAll = computed(() => otherCount.value > 0)
+// 「关闭全部」现在把当前实例也算进去，所以只要列表里有实例就能用
+// （极端情况：只剩自己一个 → 按钮显示「关闭所有实例 (1)」，点了就关掉自己 + 本页）。
+const canCloseAll = computed(() => count.value > 0)
 
 // 触发器文本：总数 + 当前项目名
 const triggerText = computed(() => `${count.value} ${$t('@INSSW:个实例')}`)
@@ -67,6 +67,26 @@ function pathSubtitle(instance: InstanceInfo): string {
 
 function instanceInitial(instance: InstanceInfo): string {
   return (instance.projectName || pathSubtitle(instance) || '?').slice(0, 1).toUpperCase()
+}
+
+// 「当前实例的后台已经关了，收尾这个 tab」——「关闭当前实例」与「关闭所有实例
+// （含当前）」共用同一套收尾：
+//   1) 先试着 window.close()；Chrome 90+ 禁止脚本关闭用户手动打开的 tab，
+//      这里大概率被静默忽略 —— 能关则最好；
+//   2) 250ms 后页面还活着(window.close 被拦截)就亮全屏遮罩，并停掉 store 的
+//      轮询 / socket 重连，避免僵尸页面对已关闭的端口无限重连。
+//      若 window.close 成功，页面已卸载，这个定时器自然不会执行。
+function beginSelfClose(name: string) {
+  selfClosedName.value = name
+  try { window.close() } catch (_) { /* 浏览器拦截,忽略 */ }
+  if (selfCloseFallbackTimer != null) {
+    window.clearTimeout(selfCloseFallbackTimer)
+  }
+  selfCloseFallbackTimer = window.setTimeout(() => {
+    selfCloseFallbackTimer = null
+    selfClosed.value = true
+    try { store.stop() } catch (_) { /* store 未启动,忽略 */ }
+  }, 250)
 }
 
 async function requestClose(instance: InstanceInfo) {
@@ -98,24 +118,9 @@ async function requestClose(instance: InstanceInfo) {
         ? $t('@INSSW:当前实例已关闭', { name: instance.projectName })
         : $t('@INSSW:实例已关闭', { name: instance.projectName })
     )
-    // 关掉当前实例的后台服务后,再尝试关当前 tab。
-    // Chrome 90+ 禁止脚本关闭用户手动打开的 tab,这里大概率被浏览器静默
-    // 忽略 —— 能关则最好;关不掉时页面还活着,靠下面的兜底遮罩收尾。
+    // 关掉当前实例的后台服务后,再尝试关当前 tab(关不掉则亮兜底遮罩)。
     if (isSelf) {
-      selfClosedName.value = instance.projectName
-      try { window.close() } catch (_) { /* 浏览器拦截,忽略 */ }
-      // 兜底:稍等片刻后若页面仍未被关掉(window.close 被拦截),
-      // 显示「实例已关闭」全屏遮罩,并停掉 store 的轮询 / socket 重连,
-      // 避免僵尸页面对已关闭的端口无限重连。若 window.close 成功,
-      // 页面已卸载,这个定时器自然不会执行。
-      if (selfCloseFallbackTimer != null) {
-        window.clearTimeout(selfCloseFallbackTimer)
-      }
-      selfCloseFallbackTimer = window.setTimeout(() => {
-        selfCloseFallbackTimer = null
-        selfClosed.value = true
-        try { store.stop() } catch (_) { /* store 未启动,忽略 */ }
-      }, 250)
+      beginSelfClose(instance.projectName)
     }
   } catch (error) {
     ElMessage.error(`${$t('@INSSW:关闭实例失败')}: ${(error as Error).message}`)
@@ -127,11 +132,12 @@ async function requestClose(instance: InstanceInfo) {
 
 async function requestCloseAll() {
   if (!canCloseAll.value || closingAll.value) return
-  const target = otherCount.value
+  // 文案里的数字是**总数**（含当前实例），与按钮上的 (N)、下拉里的实例条数一致。
+  const target = count.value
   try {
     await ElMessageBox.confirm(
-      $t('@INSSW:关闭全部实例确认内容', { count: target }),
-      $t('@INSSW:关闭全部实例'),
+      $t('@INSSW:关闭所有实例确认内容', { count: target }),
+      $t('@INSSW:关闭所有实例'),
       {
         confirmButtonText: $t('@INSSW:确认关闭'),
         cancelButtonText: $t('@INSSW:取消'),
@@ -147,11 +153,16 @@ async function requestCloseAll() {
   try {
     const result = await store.closeAllInstances()
     if (result.failed === 0) {
-      ElMessage.success($t('@INSSW:关闭全部实例成功', { closed: result.closed }))
+      ElMessage.success($t('@INSSW:关闭所有实例成功', { closed: result.closed }))
     } else {
       ElMessage.warning(
-        $t('@INSSW:关闭全部实例部分失败', { closed: result.closed, failed: result.failed }),
+        $t('@INSSW:关闭所有实例部分失败', { closed: result.closed, failed: result.failed }),
       )
+    }
+    // 当前实例也在这批里：后端已经在 graceful 退出，本页跟着收尾
+    // （与「关闭当前实例」同一条路：先试关 tab，关不掉亮兜底遮罩）。
+    if (result.selfClose) {
+      beginSelfClose(store.currentInstance?.projectName ?? '')
     }
   } catch (error) {
     ElMessage.error(`${$t('@INSSW:关闭实例失败')}: ${(error as Error).message}`)
@@ -205,13 +216,13 @@ async function requestCloseAll() {
               class="instance-close-all"
               :class="{ 'is-loading': closingAll }"
               :disabled="closingAll || closingPid != null"
-              :aria-label="$t('@INSSW:关闭全部实例')"
-              :title="$t('@INSSW:关闭全部实例 {count}', { count: otherCount })"
+              :aria-label="$t('@INSSW:关闭所有实例')"
+              :title="$t('@INSSW:关闭所有实例 {count}', { count })"
               @click.stop.prevent="requestCloseAll"
             >
               <el-icon v-if="closingAll"><Loading /></el-icon>
               <el-icon v-else><Close /></el-icon>
-              <span>{{ $t('@INSSW:关闭全部实例 {count}', { count: otherCount }) }}</span>
+              <span>{{ $t('@INSSW:关闭所有实例 {count}', { count }) }}</span>
             </button>
             <span class="instance-total">{{ count }}</span>
           </div>

@@ -36,7 +36,7 @@ const fakeStore = {
   currentInstance: null as InstanceInfo | null,
   otherInstances: [] as InstanceInfo[],
   closeInstance: vi.fn<(pid: number) => Promise<void>>().mockResolvedValue(undefined),
-  closeAllInstances: vi.fn().mockResolvedValue({ closed: 0, failed: 0, total: 0 }),
+  closeAllInstances: vi.fn().mockResolvedValue({ closed: 0, failed: 0, total: 0, selfClose: false }),
   refresh: vi.fn().mockResolvedValue(undefined),
   // 「关闭当前实例」兜底流程会调用 stop() 停掉轮询/socket 重连
   stop: vi.fn(),
@@ -167,12 +167,26 @@ describe('InstanceSwitcher.vue 结构', () => {
     expect(otherRows(w)).toHaveLength(0)
     expect(w.find('.instance-empty').exists()).toBe(true)
   })
+
+  test('ISSW-15: 只有当前实例时「关闭所有实例」按钮仍渲染(count 用总数)', () => {
+    // 回归点:「关闭全部」曾经只在 otherCount > 0 时出现,且只关别人;
+    // 现在它关的是**所有**实例(含当前),所以只剩自己一个时也必须能点。
+    setInstances(100, [makeInstance(100, 'self', 433)])
+    const w = mountSwitcher()
+
+    const btn = w.find('button.instance-close-all')
+    expect(btn.exists()).toBe(true)
+    // $t 在测试里被 mock 成 identity(不插值),所以断言的是文案 key
+    expect(btn.attributes('title')).toBe('@INSSW:关闭所有实例 {count}')
+    expect(btn.text()).toContain('@INSSW:关闭所有实例 {count}')
+  })
 })
 
 describe('InstanceSwitcher.vue 关闭流程', () => {
   beforeEach(() => {
     vi.mocked(ElMessageBox.confirm).mockClear()
     fakeStore.closeInstance.mockClear()
+    fakeStore.closeAllInstances.mockClear()
     vi.mocked(ElMessageBox.confirm).mockResolvedValue('confirm' as any)
   })
 
@@ -271,6 +285,51 @@ describe('InstanceSwitcher.vue 关闭流程', () => {
     await otherRows(w)[0].find('button.instance-close').trigger('click')
     await new Promise((resolve) => setTimeout(resolve, 350))
 
+    expect(document.querySelector('.self-closed-overlay')).toBeNull()
+    expect(fakeStore.stop).not.toHaveBeenCalled()
+  }, 5000)
+
+  test('ISSW-16: 关闭所有实例含当前实例 → 确认后关 tab 并亮兜底遮罩', async () => {
+    setInstances(100, [makeInstance(100, 'self', 433), makeInstance(200, 'zen-gitsync', 5510)])
+    fakeStore.closeAllInstances.mockResolvedValueOnce({ closed: 2, failed: 0, total: 2, selfClose: true })
+    fakeStore.stop.mockClear()
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
+    const w = mountSwitcher()
+
+    await w.find('button.instance-close-all').trigger('click')
+    await flush()
+
+    expect(ElMessageBox.confirm).toHaveBeenCalledTimes(1)
+    const [content, title] = vi.mocked(ElMessageBox.confirm).mock.calls[0] as [string, string]
+    expect(title).toBe('@INSSW:关闭所有实例')
+    // 确认文案必须说清「包括当前实例」——这是与旧行为的唯一区别,
+    // 不写清楚用户会以为只关别人。
+    expect(content).toBe('@INSSW:关闭所有实例确认内容')
+
+    expect(fakeStore.closeAllInstances).toHaveBeenCalledTimes(1)
+    // 走的是与「关闭当前实例」同一条收尾:先试 window.close
+    expect(closeSpy).toHaveBeenCalledTimes(1)
+    // 刚关完、250ms 兜底定时器未到:遮罩不应出现
+    expect(document.querySelector('.self-closed-overlay')).toBeNull()
+
+    await new Promise((resolve) => setTimeout(resolve, 350))
+
+    // window.close 被拦截 → 遮罩出现,僵尸页面停止轮询/重连
+    expect(document.querySelector('.self-closed-overlay')).not.toBeNull()
+    expect(fakeStore.stop).toHaveBeenCalledTimes(1)
+  }, 5000)
+
+  test('ISSW-17: selfClose 为假时(当前实例不在关闭批次里)不关 tab', async () => {
+    setInstances(100, [makeInstance(100, 'self', 433)])
+    fakeStore.closeAllInstances.mockResolvedValueOnce({ closed: 1, failed: 0, total: 1, selfClose: false })
+    fakeStore.stop.mockClear()
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
+    const w = mountSwitcher()
+
+    await w.find('button.instance-close-all').trigger('click')
+    await new Promise((resolve) => setTimeout(resolve, 350))
+
+    expect(closeSpy).not.toHaveBeenCalled()
     expect(document.querySelector('.self-closed-overlay')).toBeNull()
     expect(fakeStore.stop).not.toHaveBeenCalled()
   }, 5000)

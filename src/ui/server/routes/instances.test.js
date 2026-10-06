@@ -48,9 +48,12 @@ test('instances close: 关闭已注册的其他实例并反注册', async () => 
 })
 
 test('instances close: 允许关闭当前实例(selfClose=true),并 emit SIGTERM 触发自身 graceful shutdown', async () => {
-  // 当前实例的关闭走自身 SIGTERM handler(server/index.js:648),由
-  // instances.js 在 res.json 之后 setImmediate(() => process.emit('SIGTERM'))
-  // 触发。本测试用一个临时 listener 验证 emit 真的发生了一次。
+  // 当前实例的关闭走自身 SIGTERM handler(server/index.js),由 instances.js 在
+  // res.json 之后 setImmediate(() => process.emit('SIGTERM')) 触发。本测试用一个
+  // 临时 listener 验证 emit 真的发生了一次。
+  //
+  // 关键前提:当前实例**不能**走 killProcess —— Windows 上 kill(自身 pid) 是
+  // TerminateProcess,会当场终止本进程,res.json 都发不出去。所以 killed 必须为空。
   const target = { pid: 100, port: 5800, projectName: 'self' }
   let sigtermCount = 0
   const onSigterm = () => { sigtermCount++ }
@@ -68,7 +71,7 @@ test('instances close: 允许关闭当前实例(selfClose=true),并 emit SIGTERM
     assert.equal(result.statusCode, 200)
     assert.equal(result.payload.success, true)
     assert.equal(result.payload.selfClose, true, 'should mark current instance as self-close')
-    assert.deepEqual(killed, [[100, 'SIGTERM']], 'killProcess 仍要正常调用(SIGTERM handler 真正入口)')
+    assert.deepEqual(killed, [], '当前实例不能走 killProcess(Windows 上等于当场自杀)')
     assert.deepEqual(unregistered, [100])
     assert.equal(sigtermCount, 1, 'self-close 后应 emit 一次 SIGTERM 触发自身 shutdown handler')
   } finally {
@@ -130,44 +133,64 @@ async function callCloseAll(handler) {
   return { statusCode, payload }
 }
 
-test('instances close-all: 关闭所有非当前实例并反注册', async () => {
+test('instances close-all: 关闭所有实例 —— 其他实例 kill + 反注册,当前实例走自身 SIGTERM', async () => {
   const current = { pid: 100, port: 5800, projectName: 'self' }
   const otherA = { pid: 200, port: 5801, projectName: 'other-a' }
   const otherB = { pid: 300, port: 5802, projectName: 'other-b' }
-  const { routes, killed, unregistered } = setup({
-    currentPid: 100,
-    instances: [current, otherA, otherB],
-  })
+  let sigtermCount = 0
+  const onSigterm = () => { sigtermCount++ }
+  process.on('SIGTERM', onSigterm)
+  try {
+    const { routes, killed, unregistered } = setup({
+      currentPid: 100,
+      instances: [current, otherA, otherB],
+    })
 
-  const result = await callCloseAll(routes.get('POST /api/instances/close-all'))
+    const result = await callCloseAll(routes.get('POST /api/instances/close-all'))
+    // 等 setImmediate 队列跑完,让 emit SIGTERM 触发 listener
+    await new Promise((resolve) => setImmediate(resolve))
 
-  assert.equal(result.statusCode, 200)
-  assert.equal(result.payload.success, true)
-  assert.equal(result.payload.closed, 2)
-  assert.equal(result.payload.failed, 0)
-  assert.equal(result.payload.total, 2)
-  // 不能误杀当前实例
-  assert.ok(!killed.find(([pid]) => pid === 100), 'current instance must not be killed')
-  assert.ok(killed.find(([pid]) => pid === 200), 'other-a must be killed')
-  assert.ok(killed.find(([pid]) => pid === 300), 'other-b must be killed')
-  assert.deepEqual(
-    unregistered.sort(),
-    [200, 300],
-    'only non-current instances should be unregistered',
-  )
+    assert.equal(result.statusCode, 200)
+    assert.equal(result.payload.success, true)
+    assert.equal(result.payload.closed, 3, '当前实例也算在关闭计数里')
+    assert.equal(result.payload.failed, 0)
+    assert.equal(result.payload.total, 3)
+    assert.equal(result.payload.selfClose, true, 'close-all 现在包含当前实例,必须告诉前端')
+    assert.deepEqual(
+      killed.map(([pid]) => pid).sort(),
+      [200, 300],
+      '当前实例不能走 killProcess(Windows 上等于当场自杀,响应发不出去)',
+    )
+    // 当前实例的注册表条目由自身 shutdown 流程摘除,这里只摘别人
+    assert.deepEqual(unregistered.sort(), [200, 300])
+    assert.equal(sigtermCount, 1, '含当前实例时必须 emit 一次 SIGTERM 触发自身 shutdown')
+  } finally {
+    process.off('SIGTERM', onSigterm)
+  }
 })
 
-test('instances close-all: 没有非当前实例时返回空结果', async () => {
+test('instances close-all: 只有当前实例时也要把它关掉', async () => {
   const current = { pid: 100, port: 5800, projectName: 'self' }
-  const { routes, killed, unregistered } = setup({ currentPid: 100, instances: [current] })
+  let sigtermCount = 0
+  const onSigterm = () => { sigtermCount++ }
+  process.on('SIGTERM', onSigterm)
+  try {
+    const { routes, killed, unregistered } = setup({ currentPid: 100, instances: [current] })
 
-  const result = await callCloseAll(routes.get('POST /api/instances/close-all'))
+    const result = await callCloseAll(routes.get('POST /api/instances/close-all'))
+    await new Promise((resolve) => setImmediate(resolve))
 
-  assert.equal(result.statusCode, 200)
-  assert.equal(result.payload.success, true)
-  assert.equal(result.payload.total, 0)
-  assert.deepEqual(killed, [])
-  assert.deepEqual(unregistered, [])
+    assert.equal(result.statusCode, 200)
+    assert.equal(result.payload.success, true)
+    assert.equal(result.payload.closed, 1)
+    assert.equal(result.payload.total, 1)
+    assert.equal(result.payload.selfClose, true)
+    assert.deepEqual(killed, [])
+    assert.deepEqual(unregistered, [])
+    assert.equal(sigtermCount, 1)
+  } finally {
+    process.off('SIGTERM', onSigterm)
+  }
 })
 
 test('instances close-all: 部分 kill 失败不影响其他项', async () => {
