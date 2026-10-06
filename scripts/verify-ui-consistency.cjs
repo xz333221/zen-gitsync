@@ -327,6 +327,81 @@ assertNone(
   }
 }
 
+// A14 动作区禁用态：不许回到"主色当淡底 + 白字"。
+//     2026-10-06 实测（用户截图 + 逐像素扫色）：工作区干净 → 五颗动作按钮全 disabled，
+//     三颗实心色落到 .el-button--primary.is-disabled 的 --color-primary-light 上、
+//     再叠一层 --disabled-opacity → **三颗底色逐位相同 #afd2fc**（= #60a5fa × 0.5
+//     落白底）、文字纯白 → WCAG 对比度 **1.56:1**；整条按钮带里紫色像素 0 个
+//     （AI 档的身份色也没了）；左侧"暂存/提交/推送"另走一套（中性描边 +
+//     --text-disabled 再乘 0.5 ≈ 1.2:1）—— 同屏两套禁用语言，两边都读不出按钮叫什么。
+//     口径：禁用态 = 中性底（--bg-component-area）+ 单层灰字（--text-meta，
+//     浅色 ≈4.99:1），淡由**色值**表达，**不再叠 --disabled-opacity**。
+//     这条是从"同一屏里值的种类数"里学不到的那类问题：禁用态只在"没活儿干"时出现，
+//     棘轮抽样那一屏未必渲染得到，所以必须静态钉住。
+{
+  const flatOf = (p) => stripComments(fs.readFileSync(p, 'utf8')).replace(/\s+/g, ' ')
+  /**
+   * 取「`.is-disabled` 规则」的 selector / body。
+   * 两个坑（首跑各踩过一次，别简化掉）：
+   *  ① `:not(.is-disabled)` 是**反向**选择器（"可用态"），必须先从文本里抹掉，
+   *     否则 InstanceSwitcher 的 `:not(.is-disabled):hover` 会被当成禁用态规则判红。
+   *  ② 口径只针对 `.el-button`。`InstanceSwitcher` 的
+   *     `.instance-menu-item--current.is-disabled::before` 拿主色画的是"当前实例"
+   *     那根 2px 竖条（跟"禁用"无关，禁用项也可以是当前项），不该被这条扫到。
+   */
+  const isDisRules = (text) =>
+    [...text.replace(/:not\(\.is-disabled\)/g, ':-x-')
+      .matchAll(/([^{}]*\.is-disabled[^{}]*)\{([^{}]*)\}/g)]
+      .map((m) => ({ selector: m[1], body: m[2] }))
+      .filter((r) => /\.el-button/.test(r.selector))
+
+  // ① 全仓：禁用态不许用主色家族 / 角色实心色当底
+  const offenders = []
+  for (const file of files) {
+    for (const r of isDisRules(flatOf(file))) {
+      if (
+        /background(-color)?:\s*var\(--color-(primary|primary-light|primary-dark|warning)\)/.test(r.body) ||
+        /background(-color)?:\s*var\(--role-ai-ink\)/.test(r.body)
+      ) {
+        offenders.push(`${path.relative(ROOT, file)}  ${r.selector.trim().slice(0, 80)}`)
+      }
+    }
+  }
+  if (offenders.length === 0) ok('禁用态不用主色/角色实心色当底')
+  else {
+    bad('禁用态还有拿主色当底的按钮规则', `${offenders.length} 处`)
+    offenders.slice(0, 6).forEach((h) => console.log(`          ${h}`))
+  }
+
+  // ② 动作区那一份：必须"中性底 + 单层灰字 + 把写死的白字收回来"
+  const f = path.join(SRC, 'components/GitActionButtons.vue')
+  const rules = isDisRules(flatOf(f))
+  const selectors = rules.map((r) => r.selector).join(' ')
+  const bodies = rules.map((r) => r.body).join(' ')
+  if (/background-color:\s*var\(--bg-component-area\)/.test(bodies)) {
+    ok('动作区禁用底是中性底 --bg-component-area')
+  } else {
+    bad('动作区禁用底不是中性底', '应为 background-color: var(--bg-component-area)')
+  }
+  if (/color:\s*var\(--text-meta\)/.test(bodies)) {
+    ok('动作区禁用文字走 --text-meta（浅色 ≈4.99:1）')
+  } else {
+    bad('动作区禁用文字令牌不对',
+      '应 --text-meta；--text-disabled 是 #c0c4cc，浅底上只有 1.75:1')
+  }
+  if (/opacity:\s*var\(--disabled-opacity\)/.test(bodies)) {
+    bad('动作区禁用态又叠了一层 opacity', '淡由色值表达；再乘 0.5 会把文字推到 2:1 以下')
+  } else {
+    ok('动作区禁用态只淡一次（不叠 opacity）')
+  }
+  if (/one-commit-icon|one-commit-title/.test(selectors) && /color:\s*inherit/.test(bodies)) {
+    ok('三档按钮写死的白字/白图标在禁用态被收回')
+  } else {
+    bad('浅底白字风险',
+      '三档按钮把标题/图标显式染成 #fff（AI 档还是行内 style），禁用态必须用 is-disabled 下的规则收回')
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
 // B. 运行时抽样（可选）
 // ─────────────────────────────────────────────────────────────
