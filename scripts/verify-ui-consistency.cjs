@@ -437,6 +437,52 @@ assertNone(
   }
 }
 
+// A15 提交区"无事可做就收起"（2026-10-06 用户提出）
+//     用户原话：「如果上面这些按钮全都是禁用状态的话，那上面这块区域就可以隐藏不展示了」。
+//     这条钉三件事：
+//       ① 判据必须在 store 里且**完整**（干净 + 无待推送 + 已到过一次状态 + 非合并中 + 非在跑）——
+//          少一项就会在错误时机收起（首屏闪一下 / 把"有本地提交待推送"也收掉）；
+//       ② 收起用 grid-template-rows: 0fr（可过渡、可测），不许 display: none；
+//       ③ **只收 header-left（按钮行）与 card-content（表单），header-right 那三个图标必须留**——
+//          工作区干净恰好是最想 pull / fetch / merge 的时刻，整块藏掉等于把功能藏没。
+{
+  const store = stripComments(fs.readFileSync(path.join(SRC, 'stores/gitStore.ts'), 'utf8'))
+  const idle = (store.match(/const commitAreaIdle = computed\(\(\) => \(([\s\S]*?)\n  \)\)/) || [])[1] || ''
+  const needTerms = [
+    ['fileList.value.length === 0', '干净判据（原始 fileList，不吃 lockedFiles 过滤）'],
+    ['branchAhead.value === 0', '排除"有本地提交待推送"（那时 AI 档走纯推送路径仍可用）'],
+    ['statusLoadedOnce.value', '首屏/切目录门槛（否则收起会先发生再撤销）'],
+    ['isMergeInProgress.value', '合并中要显示"请输入提交信息完成合并"的提示条'],
+    ['isLoadingStatus.value', '取状态过程中不算无事可做'],
+  ]
+  const missing = needTerms.filter(([t]) => !idle.includes(t)).map(([, why]) => why)
+  if (!idle) bad('gitStore 里找不到 commitAreaIdle computed', '提交区收起判据的唯一出处丢了')
+  else if (missing.length) {
+    bad('commitAreaIdle 判据不完整', `${missing.length} 项缺失：${missing.join('；')}`)
+  } else ok('commitAreaIdle 判据完整（干净 + 无待推送 + 已到过一次 + 非合并中 + 非在跑）')
+
+  const filed = path.join(SRC, 'views/components/CommitForm.vue')
+  const flat = stripComments(fs.readFileSync(filed, 'utf8')).replace(/\s+/g, ' ')
+  if (/['"]is-idle['"]:\s*gitStore\.commitAreaIdle/.test(flat)) {
+    ok('CommitForm 根上绑定了 is-idle ← gitStore.commitAreaIdle')
+  } else {
+    bad('CommitForm 没有绑定收起态', "根元素应为 :class=\"{ 'is-idle': gitStore.commitAreaIdle }\"")
+  }
+  const idleRule = (flat.match(/\.card\.app-card\.is-idle \{([^}]*\{[^}]*\}[^}]*|[^}]*)\}/) || [])[1] || ''
+  if (/grid-template-rows:\s*0fr/.test(idleRule)) {
+    ok('收起态走 grid-template-rows: 0fr（可过渡、可测）')
+  } else {
+    bad('收起态写法不对', '应为 grid-template-rows: 0fr；display: none 既没有过渡也不好测')
+  }
+  if (/display:\s*none/.test(idleRule)) {
+    bad('收起态用了 display: none', '过渡与"量高度"都会失效')
+  } else ok('收起态没有用 display: none')
+  if (/\.header-right/.test(idleRule)) {
+    bad('收起态把 header-right 也收起来了',
+      'AI 生成 / 命令历史 / Git 操作菜单必须保留 —— 干净工作区正是要 pull/fetch 的时刻')
+  } else ok('收起只作用于 header-left / card-content（header-right 三个图标保留）')
+}
+
 // ─────────────────────────────────────────────────────────────
 // B. 运行时抽样（可选）
 // ─────────────────────────────────────────────────────────────
@@ -504,7 +550,14 @@ async function runtime() {
       图标按钮尺寸: { n: g.iconBtn.length, limit: 12, detail: g.iconBtn.join(' ') },
       间距: {
         n: Object.keys(g.spacing).length,
-        limit: 16,
+        /* 16 → 18（2026-10-06）：**又一个随状态浮动的量**，跟背景色同一个毛病。
+           它统计的是"同屏出现多少种 paddingTop/marginTop/gap 取值"，而左栏文件行的
+           操作按钮（`.file-action-btn`）只在**工作区有变更**时才渲染，它们带
+           `padding-top: 7px` —— 干净工作区那一屏里压根没有这个值。
+           实测：干净 16 种 / 有未提交改动 17 种（7px 全部来自 .file-action-btn，逐元素点过名）。
+           所以红线按"观测上限 + 1"定在 18，别再贴着定（贴 17 会随机变红，本仓库最烦假红）。
+           想真收敛：要么给这条也加"排除某个容器"的定语并说清理由，要么去别处找刻度外的值。 */
+        limit: 18,
         detail: Object.keys(g.spacing).sort().join(' '),
       },
       背景色: {

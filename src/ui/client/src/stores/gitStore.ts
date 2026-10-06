@@ -199,6 +199,10 @@ export const useGitStore = defineStore('git', () => {
   const fileList = ref<{path: string, type: string}[]>([])
   const isLoadingLog = ref(false)
   const isLoadingStatus = ref(false)
+  // 是否**至少成功取到过一次**工作区状态。只用来给"提交区收起"加首屏/切目录的门槛：
+  // 状态还没到过一次时 fileList 同样是空的，没有这道门槛收起会先发生再撤销（闪一下）。
+  // 注意它不是"当前有没有变更"的判据 —— 那个看 fileList.length。
+  const statusLoadedOnce = ref(false)
   const isAddingFiles = ref(false)
   const isCommiting = ref(false)
   const isResetting = ref(false)
@@ -260,6 +264,7 @@ export const useGitStore = defineStore('git', () => {
     fileList.value = []
     isLoadingLog.value = false
     isLoadingStatus.value = false
+    statusLoadedOnce.value = false
     isAddingFiles.value = false
     isCommiting.value = false
     isResetting.value = false
@@ -1112,6 +1117,8 @@ export const useGitStore = defineStore('git', () => {
         // 如果没有收到有效的 status 字段，清空文件列表
         fileList.value = []
       }
+      // 到过一次就算的门槛：放在解析成功之后，失败路径（catch）不置位
+      statusLoadedOnce.value = true
       isMergeInProgress.value = Boolean(data.isMergeInProgress)
       // 若处于 MERGING 状态且有默认合并信息，且用户尚未手动填写，则自动填入
       if (data.isMergeInProgress && data.mergeMessage && !pendingMergeMessage.value) {
@@ -2851,6 +2858,29 @@ export const useGitStore = defineStore('git', () => {
     return fileList.value.some(file => file.type === 'conflicted')
   })
 
+  // ── 提交区"无事可做"：g ui 主面板顶部那块（动作按钮 + 提交信息表单）收起的唯一判据 ──
+  // 用户 2026-10-06：「如果上面这些按钮全都是禁用状态的话，那上面这块区域就可以隐藏不展示了」。
+  // 判据刻意用**原始 fileList.length === 0**（不吃 lockedFiles 过滤）：隐藏比显示激进，
+  //   宁可多显示一次，也别把"还有锁定文件没处理"的状况一起藏掉。
+  // 与左栏空状态同源（GitStatus 是 v-if="gitStore.fileList.length"）—— 收起后用户
+  //   仍能从左栏读到"没有检测到任何更改 / 工作区是干净的"（不会丢状态）。
+  // statusLoadedOnce 是首屏与切目录的门槛（见它的声明处）：没这道门槛表单会先收再展。
+  // branchAhead === 0 必须留：有本地提交待推送时「AI 提交并推送」走"纯推送"路径**是可用**的，
+  //   那种情况不属于"全都禁用"。
+  const commitAreaIdle = computed(() => (
+    isGitRepo.value
+    && statusLoadedOnce.value
+    && !isLoadingStatus.value
+    && userName.value !== ''
+    && userEmail.value !== ''
+    && !isMergeInProgress.value   // 合并中要显示「请输入提交信息完成合并」那条提示
+    && fileList.value.length === 0
+    && branchAhead.value === 0
+    && !isAddingFiles.value
+    && !isCommiting.value
+    && !isPushing.value
+  ))
+
   // ============= 文件多选状态（与 GitStatus 选择模式共享） =============
   // 选择模式开关：开启后文件列表出现复选框
   const isSelectionMode = ref(false)
@@ -2988,6 +3018,7 @@ export const useGitStore = defineStore('git', () => {
     isRemoteBrowsable,
     openRemoteWebUrl,
     hasConflictedFiles,
+    commitAreaIdle,
     
     // stash相关状态
     stashes,

@@ -62,9 +62,32 @@ test.describe('App smoke', () => {
     await expect(page.locator('.git-status-card')).toBeVisible()
   })
 
-  test('6. CommitForm card visible (lazy-loaded)', async ({ page }) => {
+  test('6. CommitForm card mounted (lazy-loaded)', async ({ page }) => {
     // .app-card 是 .card 通用容器,CommitForm 根上挂这个 class
-    await expect(page.locator('.app-card').first()).toBeVisible({ timeout: 30_000 })
+    // 2026-10-06：「无事可做时提交区整块收起」上线后，`.header-left` 与 `.card-content`
+    // 会被压成 grid-template-rows: 0fr（0 高、opacity 0）—— Playwright 把空盒子判为
+    // **不可见**，所以原来的 toBeVisible 不再是"懒加载成功"的判据。
+    // 懒加载要验的是"挂载了没" → attached；顺手把收起态的自洽性钉住。
+    const card = page.locator('.commit-form-panel .app-card').first()
+    await expect(card).toHaveCount(1, { timeout: 30_000 })
+    const m = await card.evaluate((el) => {
+      const q = (s: string) => el.querySelector(s) as HTMLElement | null
+      const box = (n: HTMLElement | null) => (n ? n.getBoundingClientRect() : null)
+      const content = box(q('.card-content'))
+      const icons = box(q('.header-right'))
+      const stageBtn = box(q('.header-left'))
+      return {
+        idle: el.classList.contains('is-idle'),
+        contentH: content ? content.height : -1,
+        iconsH: icons ? icons.height : -1,
+        stageH: stageBtn ? stageBtn.height : -1,
+      }
+    })
+    // 收起 ⇔ 表单区高度为 0；展开则必须有真实高度（两者自洽，防"永远收起"）
+    expect(m.idle ? m.contentH < 1 : m.contentH > 40).toBe(true)
+    // 护栏：收起时**右侧三个图标必须还在**（AI 生成 / 命令历史 / Git 操作菜单）——
+    // 干净工作区恰好是最想 pull / fetch 的时刻，不许把整块面板一起藏掉
+    expect(m.iconsH).toBeGreaterThan(10)
   })
 
   test('7. LogList card visible (lazy-loaded)', async ({ page }) => {
