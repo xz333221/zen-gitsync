@@ -1346,7 +1346,14 @@ body {
    写 0px / max-height 都不插值（见 memory lessons/kanban-empty-column-collapse）。
    `> * { min-height: 0 }` 不能省：否则子项的自动最小尺寸会把 0 行顶回去。
    只作用于 git 仓库那一支（:not(--empty)）—— 非 git 空态是另一套 flex 布局，
-   别一起改。 */
+   别一起改。
+
+   ⚠️ 过渡**只在"展开"方向**做（2026-10-06 用户：「每次切到这个页面都会从下边过渡上去」）：
+   · 展开（.is-idle 摘掉）带上 transition —— 工作区出现变更时提交框滑出来，是有用的提示；
+   · 收起一律瞬时（.is-idle 里 transition: none）—— 收起只由"后台状态落定"触发
+     （首屏/切目录拿到状态、提交完最后一个文件），给它 0.28s 过渡 = 提交历史白滑一下：
+     首屏那次是「展开(还不知道状态) → 收起来」，用户看到的就是历史面板从下面浮上来。
+   过渡属性取自**变化后**的样式，所以在 .is-idle 里写 transition: none 就能"只关收起这一向"。 */
 .commit-form-panel:not(.commit-form-panel--empty) {
   display: grid;
   grid-template-rows: 1fr;
@@ -1357,6 +1364,8 @@ body {
   }
 
   &.is-idle {
+    /* 收起不做过渡（见上），瞬时归零 */
+    transition: none;
     grid-template-rows: 0fr;
   }
 }

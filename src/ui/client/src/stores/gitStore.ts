@@ -2867,10 +2867,16 @@ export const useGitStore = defineStore('git', () => {
   // statusLoadedOnce 是首屏与切目录的门槛（见它的声明处）：没这道门槛表单会先收再展。
   // branchAhead === 0 必须留：有本地提交待推送时「AI 提交并推送」走"纯推送"路径**是可用**的，
   //   那种情况不属于"全都禁用"。
+  //
+  // ⚠️ 判据只吃**数据**（fileList / branchAhead / 配置 / 用户操作中），故意不吃 isLoadingStatus：
+  //   它是"有没有请求在途"的瞬时标志，而用户一回到这个页面就会有静默刷新抢在前头 ——
+  //   切 ActivityBar 回到 Git 视图（App.vue 的 watch(activeView)）、切回浏览器标签页 /
+  //   窗口聚焦（GitStatus 的 visibilitychange + focus）都走 refreshStatusOnFocus → fetchStatus，
+  //   它一置位收起态就翻成"展开"、请求回来再翻回收起，于是**提交历史每次都被推下去又滑上来**
+  //   （用户 2026-10-06：「每次切到这个页面都会从下边过渡上去」）。数据没变就不该动布局。
   const commitAreaIdle = computed(() => (
     isGitRepo.value
     && statusLoadedOnce.value
-    && !isLoadingStatus.value
     && userName.value !== ''
     && userEmail.value !== ''
     && !isMergeInProgress.value   // 合并中要显示「请输入提交信息完成合并」那条提示

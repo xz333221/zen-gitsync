@@ -458,13 +458,21 @@ assertNone(
     ['branchAhead.value === 0', '排除"有本地提交待推送"（那时 AI 档走纯推送路径仍可用）'],
     ['statusLoadedOnce.value', '首屏/切目录门槛（否则收起会先发生再撤销）'],
     ['isMergeInProgress.value', '合并中要显示"请输入提交信息完成合并"的提示条'],
-    ['isLoadingStatus.value', '取状态过程中不算无事可做'],
+  ]
+  // 判据只吃数据，**不许吃在途请求标志**（2026-10-06 修）：
+  // 一回到这个页面（切 ActivityBar 视图 / 切回浏览器标签页）就有静默刷新把 isLoadingStatus
+  // 置位，收起态跟着翻两次 = 提交历史被推下去又滑上来，用户原话「每次切到这个页面都会从下边过渡上去」。
+  const forbiddenTerms = [
+    ['isLoadingStatus.value', '在途请求标志会跟着静默刷新翻，收起态跟着翻 = 提交历史抖一下'],
   ]
   const missing = needTerms.filter(([t]) => !idle.includes(t)).map(([, why]) => why)
+  const leaked = forbiddenTerms.filter(([t]) => idle.includes(t)).map(([, why]) => why)
   if (!idle) bad('gitStore 里找不到 commitAreaIdle computed', '提交区收起判据的唯一出处丢了')
   else if (missing.length) {
     bad('commitAreaIdle 判据不完整', `${missing.length} 项缺失：${missing.join('；')}`)
-  } else ok('commitAreaIdle 判据完整（干净 + 无待推送 + 已到过一次 + 非合并中 + 非在跑）')
+  } else if (leaked.length) {
+    bad('commitAreaIdle 吃了在途请求标志', `${leaked.join('；')} —— 静默刷新会让面板抖一下`)
+  } else ok('commitAreaIdle 判据完整（干净 + 无待推送 + 已到过一次 + 非合并中 + 非在跑，且不吃在途标志）')
 
   const appRaw = stripComments(fs.readFileSync(path.join(SRC, 'App.vue'), 'utf8'))
   const appSrc = appRaw.replace(/\s+/g, ' ')
@@ -485,6 +493,13 @@ assertNone(
   else ok('收起态没有用 display: none')
   if (/min-height:\s*0/.test(idleRule)) ok('子项 min-height: 0（否则自动最小尺寸会把 0 行顶回去）')
   else bad('缺 min-height: 0', 'grid 子项的 min-height:auto 会撑住 0 行，收起量不出 0')
+
+  // ⑤ 过渡只在"展开"方向（2026-10-06）：收起瞬时，否则首屏/切回页面时提交历史会滑一下。
+  //    过渡属性取自变化后的样式，所以"只关收起"= 在 .is-idle 里写 transition: none。
+  if (/transition:\s*none/.test(idleRule)) ok('收起态关闭过渡（.is-idle 里 transition: none）')
+  else bad('收起态还带过渡', '收起只由后台状态落定触发，做过渡 = 提交历史白滑一下（用户 2026-10-06 反馈）')
+  if (/transition:\s*grid-template-rows/.test(idleRule)) ok('展开方向保留过渡（工作区出现变更时提交框滑出来）')
+  else bad('展开方向没有过渡', '应为 transition: grid-template-rows 0.28s …（写在外层规则上）')
 
   // ③ 两个常驻入口在顶栏、且不在提交区里重复
   const headerHas = (name) => new RegExp(`<${name}[\\s/>]`).test(appSrc)
