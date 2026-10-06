@@ -2004,6 +2004,7 @@ export default {
   // @CMDCON: file path: components\CommandConsole.vue
   '@CMDCON:终端会话': 'Terminal Sessions',
   '@CMDCON:暂无终端会话': 'No terminal sessions',
+  '@CMDCON:从左侧「自定义命令」运行一条命令，会话会出现在这里': 'Run a command from "Custom Commands" on the left and the session shows up here',
   '@CMDCON:显示终端会话': 'Show terminal sessions ({count})',
   '@CMDCON:刷新': 'Refresh',
   '@CMDCON:隐藏': 'Hide',
@@ -2651,6 +2652,8 @@ export default {
   '@MONITOR:暂无端口占用': 'No ports in use',
   '@MONITOR:磁盘占用': 'Disk Usage',
   '@MONITOR:暂无磁盘数据': 'No disk data',
+  '@MONITOR:系统进程，不可终止': 'System process, cannot be killed',
+  '@MONITOR:系统': 'System',
   // @MONITOR: file end
 
   // @MINDMAP: file path: views/MindmapView.vue

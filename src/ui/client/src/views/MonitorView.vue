@@ -112,6 +112,24 @@ function usageColor(percent: number): string {
 // ── kill 进程 ────────────────────────────────────────────────────────────
 const killingPids = ref<Set<string | number>>(new Set())
 
+/* 系统关键进程：整表 76 行如果每行都给一颗「终止」，一半是系统进程 ——
+   既是一片红噪声，也是真会把机器按死的按钮。
+   只能靠 pid + 进程名判（后端 /api/monitor/ports 不返回所属账户）。
+   名单只收「杀了会导致会话崩溃/系统重启」的，不收 explorer.exe 这类可自愈的。 */
+const SYSTEM_PIDS = new Set([0, 1, 4])
+const SYSTEM_PROCESS_NAMES = new Set([
+  'system', 'idle', 'registry', 'memory compression', 'secure system',
+  'smss.exe', 'csrss.exe', 'wininit.exe', 'winlogon.exe', 'services.exe',
+  'lsass.exe', 'svchost.exe', 'fontdrvhost.exe', 'dwm.exe',
+])
+
+function isProtectedProcess(port: PortEntry): boolean {
+  if (SYSTEM_PIDS.has(Number(port.pid))) return true
+  const name = (port.processName || '').trim().toLowerCase()
+  if (!name) return false
+  return SYSTEM_PROCESS_NAMES.has(name) || SYSTEM_PROCESS_NAMES.has(name.replace(/\.exe$/, ''))
+}
+
 async function handleKill(port: PortEntry) {
   const pid = port.pid
   const procName = port.processName || $t('@MONITOR:未知进程')
@@ -316,23 +334,32 @@ onBeforeUnmount(() => {
           <span>{{ $t('@MONITOR:磁盘占用') }}</span>
         </div>
         <div class="disks-rows" v-if="store.overview.disks.drives.length > 0">
-          <div class="disk-row" v-for="d in store.overview.disks.drives" :key="d.mount">
-            <span class="disk-mount">{{ d.mount }}</span>
-            <el-progress
-              class="disk-bar"
-              :percentage="d.usagePercent"
-              :stroke-width="6"
-              :show-text="false"
-              :color="usageColor(d.usagePercent)"
-            />
-            <span class="disk-usage">{{ formatBytes(d.used) }} / {{ formatBytes(d.total) }}</span>
-            <span class="disk-percent" :style="{ color: usageColor(d.usagePercent) }">
-              {{ d.usagePercent.toFixed(1) }}%
-            </span>
+          <div class="disk-item" v-for="d in store.overview.disks.drives" :key="d.mount">
+            <div class="disk-row">
+              <span class="disk-mount">{{ d.mount }}</span>
+              <el-progress
+                class="disk-bar"
+                :percentage="d.usagePercent"
+                :stroke-width="6"
+                :show-text="false"
+                :color="usageColor(d.usagePercent)"
+              />
+              <span class="disk-percent" :style="{ color: usageColor(d.usagePercent) }">
+                {{ d.usagePercent.toFixed(1) }}%
+              </span>
+            </div>
+            <!-- 用量走第二行（挂在进度条左边界下面）：卡片最窄时也放得下，
+                 不会把百分比挤出卡片右边缘 -->
+            <div class="disk-usage">{{ formatBytes(d.used) }} / {{ formatBytes(d.total) }}</div>
           </div>
         </div>
         <div v-else class="disks-empty">{{ $t('@MONITOR:暂无磁盘数据') }}</div>
-        <div class="metric-card__footer disks-summary">
+        <!-- 汇总行只在「多块盘」时才有信息量：单盘时它逐字等于上面那一行，
+             同屏写两遍同一组数字 -->
+        <div
+          v-if="store.overview.disks.drives.length > 1"
+          class="metric-card__footer disks-summary"
+        >
           {{ formatBytes(store.overview.disks.used) }} / {{ formatBytes(store.overview.disks.total) }}
           · {{ store.overview.disks.usagePercent.toFixed(1) }}%
         </div>
@@ -410,10 +437,16 @@ onBeforeUnmount(() => {
               <td class="col-pid">{{ p.pid }}</td>
               <td class="col-process" :title="p.processName">{{ p.processName || $t('@MONITOR:未知') }}</td>
               <td class="col-action">
+                <span
+                  v-if="isProtectedProcess(p)"
+                  class="kill-protected"
+                  :title="$t('@MONITOR:系统进程，不可终止')"
+                >{{ $t('@MONITOR:系统') }}</span>
                 <el-button
+                  v-else
+                  class="kill-btn"
                   size="small"
-                  type="danger"
-                  plain
+                  text
                   :loading="killingPids.has(p.pid)"
                   :disabled="killingPids.has(p.pid)"
                   @click="handleKill(p)"
@@ -571,31 +604,42 @@ onBeforeUnmount(() => {
 /* ── 磁盘卡片 ───────────────────────────────────────────────────────── */
 .disk-card {
   min-width: 0;
+  /* 兜底：任何情况下内容都不许画到卡片外面
+     （1280 宽下曾是 5 列布局、卡片只有 291px，
+     原来的四列 grid + nowrap 用量文本需要 300px，25.5% 直接落到卡外） */
+  overflow: hidden;
 }
 
 .disks-rows {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   flex: 1;
   min-height: 0;
 }
 
+.disk-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .disk-row {
-  display: grid;
-  /* 盘符 + 进度条 + 用量 + 百分比 */
-  grid-template-columns: 40px minmax(60px, 1fr) auto 56px;
+  display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
 .disk-bar {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 40px;
 }
 
 .disk-mount {
+  flex: 0 0 34px;
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   font-weight: 600;
@@ -606,19 +650,25 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-base);
 }
 
+/* 用量行挂到进度条左边界下面（34 + 8 = 42），形成悬挂缩进 */
 .disk-usage {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
+  padding-left: 42px;
+  font-size: var(--font-size-xs);
+  color: var(--text-meta);
   font-variant-numeric: tabular-nums;
-  text-align: right;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .disk-percent {
+  flex: 0 0 auto;
+  min-width: 46px;
   font-size: var(--font-size-sm);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   text-align: right;
+  white-space: nowrap;
 }
 
 .disks-summary {
@@ -771,6 +821,40 @@ onBeforeUnmount(() => {
 .col-process { width: auto; }
 .col-action { width: 80px; text-align: right; }
 
+/* 终止按钮：
+   原来是 `type="danger" plain` —— 76 行 × 红描边药丸 = 一整片红，
+   破坏性动作的颜色被摊到"什么都不是"的程度。
+   现在默认中性（meta 色、无底色），只有手真的伸过去（hover / focus）才转红；
+   系统进程那一列干脆不给按钮，写一个不可点的「系统」。 */
+.kill-btn.el-button {
+  height: 24px;
+  min-width: 40px;
+  padding: 0 6px;
+  font-size: var(--font-size-xs);
+  color: var(--text-meta);
+  background: transparent;
+}
+
+.kill-btn.el-button:hover,
+.kill-btn.el-button:focus-visible {
+  color: var(--color-danger-dark);
+  background: var(--tint-danger-08);
+}
+
+.kill-btn.el-button.is-disabled,
+.kill-btn.el-button.is-loading {
+  color: var(--text-meta);
+  background: transparent;
+}
+
+.kill-protected {
+  display: inline-block;
+  padding: 0 6px;
+  font-size: var(--font-size-xs);
+  color: var(--text-meta);
+  cursor: help;
+}
+
 /* 协议徽标 */
 .proto-badge {
   display: inline-flex;
@@ -868,11 +952,9 @@ onBeforeUnmount(() => {
   .ports-search {
     width: 160px;
   }
-  .disk-row {
-    grid-template-columns: 40px 1fr 60px;
-  }
+  /* 单列时磁盘卡已经很窄，用量行不再悬挂缩进，省下 42px */
   .disk-usage {
-    display: none;
+    padding-left: 0;
   }
 }
 </style>

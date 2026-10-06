@@ -19,6 +19,7 @@ import { ArrowDown, FullScreen, VideoPlay, Loading, Close, Position, Monitor, Do
 import { ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '@components/SvgIcon/index.vue';
 import IconButton from '@components/IconButton.vue';
+import EmptyState from '@components/EmptyState.vue';
 import CommonDialog from '@components/CommonDialog.vue'
 // 弹窗型重型组件改异步:仅在用户主动打开时才下载 FlowOrchestrationWorkspace/FlowExecutionViewer 等
 // (它们各自带 @vue-flow + dagre,体积巨大,不应阻塞首屏)
@@ -2546,9 +2547,20 @@ onActivated(() => {
                 </div>
 
                 <div v-loading="terminalSessionsLoading" class="terminal-sessions-body">
-                  <div v-if="terminalSessions.length === 0" class="terminal-sessions-empty">
-                    {{ $t('@CMDCON:暂无终端会话') }}
-                  </div>
+                  <EmptyState
+                    v-if="terminalSessions.length === 0"
+                    class="terminal-sessions-empty"
+                    :title="$t('@CMDCON:暂无终端会话')"
+                    :hint="$t('@CMDCON:从左侧「自定义命令」运行一条命令，会话会出现在这里')"
+                  >
+                    <template #icon>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="4" width="20" height="16" rx="2" />
+                        <path d="M6 9l3 3-3 3" />
+                        <line x1="12" y1="15" x2="17" y2="15" />
+                      </svg>
+                    </template>
+                  </EmptyState>
 
                   <div v-else class="terminal-sessions-list">
                     <div v-for="session in terminalSessions" :key="session.id" class="terminal-session-item">
@@ -3042,10 +3054,11 @@ onActivated(() => {
    overflow: auto;
  }
 
+ /* 空态排版交给 EmptyState，这里只给它一块站得住的高度：
+    「暂无终端会话」原来是一行 13px 灰字贴在 200px 空白面板的顶上。 */
  .terminal-sessions-empty {
+   min-height: 140px;
    padding: 10px 0;
-   color: var(--text-console-muted);
-   font-size: var(--font-size-mid);
  }
 
  .terminal-sessions-list {

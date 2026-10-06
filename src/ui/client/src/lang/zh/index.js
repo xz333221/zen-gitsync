@@ -2011,6 +2011,7 @@ export default {
   // @CMDCON: file path: components\CommandConsole.vue
   '@CMDCON:终端会话': '终端会话',
   '@CMDCON:暂无终端会话': '暂无终端会话',
+  '@CMDCON:从左侧「自定义命令」运行一条命令，会话会出现在这里': '从左侧「自定义命令」运行一条命令，会话会出现在这里',
   '@CMDCON:显示终端会话': '显示终端会话 ({count})',
   '@CMDCON:刷新': '刷新',
   '@CMDCON:隐藏': '隐藏',
@@ -2659,6 +2660,8 @@ export default {
   '@MONITOR:暂无端口占用': '暂无端口占用',
   '@MONITOR:磁盘占用': '磁盘占用',
   '@MONITOR:暂无磁盘数据': '暂无磁盘数据',
+  '@MONITOR:系统进程，不可终止': '系统进程，不可终止',
+  '@MONITOR:系统': '系统',
   // @MONITOR: file end
 
   // @MINDMAP: file path: views/MindmapView.vue

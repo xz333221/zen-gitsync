@@ -35,6 +35,7 @@ import { useConfigStore } from '@/stores/configStore'
 import { useLocaleStore } from '@/stores/localeStore'
 import { openPathInFileManager } from '@/composables/useDirectoryOpenActions'
 import { storeToRefs } from 'pinia'
+import EmptyState from '@/components/EmptyState.vue'
 
 const store = useMindmapStore()
 const configStore = useConfigStore()
@@ -549,9 +550,12 @@ function formatSize(bytes: number): string {
 
         <div class="mm-sidebar-list" v-loading="store.refreshing">
           <div v-if="store.error" class="mm-sidebar-error">{{ store.error }}</div>
-          <div v-if="store.dirs.length === 0" class="mm-sidebar-empty">
-            {{ $t('@MINDMAP:请先添加目录') }}
-          </div>
+          <EmptyState
+            v-if="store.dirs.length === 0"
+            class="mm-sidebar-empty"
+            size="inline"
+            :title="$t('@MINDMAP:请先添加目录')"
+          />
           <template v-else>
             <div v-for="group in store.groups" :key="group.dir" class="mm-group">
               <div
@@ -583,9 +587,12 @@ function formatSize(bytes: number): string {
                     @click="handleRemoveDir(group.dir)"
                   >{{ $t('@MINDMAP:移除目录') }}</el-button>
                 </div>
-                <div v-else-if="group.files.length === 0" class="mm-sidebar-empty">
-                  {{ $t('@MINDMAP:该目录暂无思维导图') }}
-                </div>
+                <EmptyState
+                  v-else-if="group.files.length === 0"
+                  class="mm-sidebar-empty"
+                  size="inline"
+                  :title="$t('@MINDMAP:该目录暂无思维导图')"
+                />
                 <template v-else>
                   <div
                     v-for="f in group.files"
@@ -627,23 +634,26 @@ function formatSize(bytes: number): string {
 
       <!-- 右侧编辑区 -->
       <div class="mm-editor">
-        <div v-if="!store.current" class="mm-editor-empty">
-          <svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="2" />
-            <circle cx="5" cy="5" r="2" />
-            <circle cx="19" cy="5" r="2" />
-            <circle cx="5" cy="19" r="2" />
-            <circle cx="19" cy="19" r="2" />
-            <line x1="10.5" y1="10.5" x2="6.5" y2="6.5" />
-            <line x1="13.5" y1="10.5" x2="17.5" y2="6.5" />
-            <line x1="10.5" y1="13.5" x2="6.5" y2="17.5" />
-            <line x1="13.5" y1="13.5" x2="17.5" y2="17.5" />
-          </svg>
-          <p class="mm-editor-empty-title">{{ $t('@MINDMAP:思维导图编辑器') }}</p>
-          <p class="mm-editor-empty-hint">
-            {{ store.dirs.length > 0 ? $t('@MINDMAP:从左侧选择或新建') : $t('@MINDMAP:先选择目录提示') }}
-          </p>
-        </div>
+        <EmptyState
+          v-if="!store.current"
+          class="mm-editor-empty"
+          :title="$t('@MINDMAP:思维导图编辑器')"
+          :hint="store.dirs.length > 0 ? $t('@MINDMAP:从左侧选择或新建') : $t('@MINDMAP:先选择目录提示')"
+        >
+          <template #icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="2" />
+              <circle cx="5" cy="5" r="2" />
+              <circle cx="19" cy="5" r="2" />
+              <circle cx="5" cy="19" r="2" />
+              <circle cx="19" cy="19" r="2" />
+              <line x1="10.5" y1="10.5" x2="6.5" y2="6.5" />
+              <line x1="13.5" y1="10.5" x2="17.5" y2="6.5" />
+              <line x1="10.5" y1="13.5" x2="6.5" y2="17.5" />
+              <line x1="13.5" y1="13.5" x2="17.5" y2="17.5" />
+            </svg>
+          </template>
+        </EmptyState>
         <MindMap
           v-else
           :key="mmKey"
@@ -833,15 +843,15 @@ function formatSize(bytes: number): string {
   padding: 4px;
 }
 
-.mm-sidebar-empty,
+/* 空态排版交给 EmptyState（inline 档），这里只留"在侧栏里占多大地方" */
+.mm-sidebar-empty {
+  padding: 24px 12px;
+}
+
 .mm-sidebar-error {
   padding: 24px 12px;
   text-align: center;
   font-size: var(--font-size-sm);
-  color: var(--text-meta);
-}
-
-.mm-sidebar-error {
   color: var(--color-danger-dark);
 }
 
@@ -1032,29 +1042,6 @@ html:not(.dark) .mm-file-actions :deep(.el-button--danger) {
 .mm-editor-empty {
   position: absolute;
   inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--text-meta);
-}
-
-.mm-editor-empty svg {
-  opacity: 0.4;
-}
-
-.mm-editor-empty-title {
-  font-size: var(--font-size-md);
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin: 8px 0 0;
-}
-
-.mm-editor-empty-hint {
-  font-size: var(--font-size-mid);
-  color: var(--text-meta);
-  margin: 0;
 }
 
 /* ── 目录右键菜单 ─────────────────────────────────────────────── */

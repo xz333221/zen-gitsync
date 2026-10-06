@@ -1601,7 +1601,10 @@ onBeforeUnmount(stopPolling)
   padding: 0 var(--spacing-md);
   border: 1px solid var(--border-color-light);
   border-radius: var(--radius-md);
-  background: var(--bg-panel);
+  /* 与同一行右侧两个下拉严格同底（都是 --input-bg = --bg-container，白）。
+     原来写的是 --bg-panel（#f5f7fa），在白底工具条上这一行里只有它是灰的 ——
+     与 2026-10-05 第七轮看板搜索框是同一类问题，口径也照那条来。 */
+  background: var(--input-bg);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 .repo-list__search:focus-within {

@@ -518,103 +518,113 @@ async function runCommand(cmd: any) {
       <div class="schedule-body">
         <div class="schedule-row">
           <span class="schedule-label">{{ $t('@CMDPANEL:提交间隔') }}</span>
-          <el-input-number
-            v-model="scheduleInterval"
-            :min="1"
-            :max="999"
-            :step="scheduleUnit === 'min' ? 5 : 1"
-            size="small"
-            controls-position="right"
-            class="schedule-interval-input"
-            :disabled="scheduleEnabled"
-          />
-          <el-select
-            v-model="scheduleUnit"
-            size="small"
-            class="schedule-unit-select"
-            :disabled="scheduleEnabled"
-          >
-            <el-option :label="$t('@CMDPANEL:分钟')" value="min" />
-            <el-option :label="$t('@CMDPANEL:小时')" value="hour" />
-            <el-option :label="$t('@CMDPANEL:天')" value="day" />
-          </el-select>
-          <el-checkbox
-            v-model="scheduleCommitNow"
-            size="small"
-            :disabled="scheduleEnabled"
-            class="schedule-commit-now"
-          >
-            {{ $t('@CMDPANEL:启动时立即提交一次') }}
-          </el-checkbox>
+          <div class="schedule-controls">
+            <el-input-number
+              v-model="scheduleInterval"
+              :min="1"
+              :max="999"
+              :step="scheduleUnit === 'min' ? 5 : 1"
+              size="small"
+              controls-position="right"
+              class="schedule-interval-input"
+              :disabled="scheduleEnabled"
+            />
+            <el-select
+              v-model="scheduleUnit"
+              size="small"
+              class="schedule-unit-select"
+              :disabled="scheduleEnabled"
+            >
+              <el-option :label="$t('@CMDPANEL:分钟')" value="min" />
+              <el-option :label="$t('@CMDPANEL:小时')" value="hour" />
+              <el-option :label="$t('@CMDPANEL:天')" value="day" />
+            </el-select>
+            <el-checkbox
+              v-model="scheduleCommitNow"
+              size="small"
+              :disabled="scheduleEnabled"
+              class="schedule-commit-now"
+            >
+              {{ $t('@CMDPANEL:启动时立即提交一次') }}
+            </el-checkbox>
+          </div>
         </div>
 
         <div class="schedule-row">
           <span class="schedule-label">{{ $t('@CMDPANEL:提交信息') }}</span>
-          <el-radio-group
-            v-model="scheduleMessageMode"
-            size="small"
-            :disabled="scheduleEnabled"
-          >
-            <el-radio value="default">{{ $t('@CMDPANEL:默认提交信息') }}</el-radio>
-            <el-radio value="ai">
-              {{ $t('@CMDPANEL:AI 生成') }}
-              <el-tooltip placement="top" effect="dark" :show-after="200">
-                <template #content>
-                  <span>{{ $t('@CMDPANEL:使用通用设置中已配置的默认模型，按当前变更生成 Conventional Commits 信息') }}</span>
-                </template>
-                <el-icon class="schedule-help-icon"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M512 64a448 448 0 1 1 0 896 448 448 0 0 1 0-896zm0 64a384 384 0 1 0 0 768 384 384 0 0 0 0-768zm0 128a96 96 0 0 1 96 96c0 36.032-20.864 64.192-51.392 82.752-8.832 5.376-16.832 9.6-27.264 14.272l-5.312 2.368v16.832a32 32 0 0 1-63.488 5.632L448 576v-64a32 32 0 0 1 32-32c22.528 0 32.896-3.776 44.48-10.816C537.344 461.632 544 452.032 544 416a32 32 0 0 0-64 0 32 32 0 0 1-64 0 96 96 0 0 1 96-96zm0 416a40 40 0 1 1 0-80 40 40 0 0 1 0 80z"/></svg></el-icon>
-              </el-tooltip>
-            </el-radio>
-          </el-radio-group>
-          <el-button
-            size="small"
-            class="schedule-once-btn"
-            :disabled="!gitStore.isGitRepo || scheduleBusy"
-            :loading="scheduleBusy"
-            @click="commitOnceNow"
-          >
-            {{ $t('@CMDPANEL:立即提交一次') }}
-          </el-button>
+          <div class="schedule-controls">
+            <el-radio-group
+              v-model="scheduleMessageMode"
+              size="small"
+              :disabled="scheduleEnabled"
+            >
+              <el-radio value="default">{{ $t('@CMDPANEL:默认提交信息') }}</el-radio>
+              <el-radio value="ai">
+                {{ $t('@CMDPANEL:AI 生成') }}
+                <el-tooltip placement="top" effect="dark" :show-after="200">
+                  <template #content>
+                    <span>{{ $t('@CMDPANEL:使用通用设置中已配置的默认模型，按当前变更生成 Conventional Commits 信息') }}</span>
+                  </template>
+                  <el-icon class="schedule-help-icon"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M512 64a448 448 0 1 1 0 896 448 448 0 0 1 0-896zm0 64a384 384 0 1 0 0 768 384 384 0 0 0 0-768zm0 128a96 96 0 0 1 96 96c0 36.032-20.864 64.192-51.392 82.752-8.832 5.376-16.832 9.6-27.264 14.272l-5.312 2.368v16.832a32 32 0 0 1-63.488 5.632L448 576v-64a32 32 0 0 1 32-32c22.528 0 32.896-3.776 44.48-10.816C537.344 461.632 544 452.032 544 416a32 32 0 0 0-64 0 32 32 0 0 1-64 0 96 96 0 0 1 96-96zm0 416a40 40 0 1 1 0-80 40 40 0 0 1 0 80z"/></svg></el-icon>
+                </el-tooltip>
+              </el-radio>
+            </el-radio-group>
+            <el-button
+              size="small"
+              class="schedule-once-btn"
+              :disabled="!gitStore.isGitRepo || scheduleBusy"
+              :loading="scheduleBusy"
+              @click="commitOnceNow"
+            >
+              {{ $t('@CMDPANEL:立即提交一次') }}
+            </el-button>
+          </div>
         </div>
 
         <!-- 默认模式:展示实际会用的信息并可编辑;留空则回落到全局默认/时间戳兜底 -->
         <div v-if="scheduleMessageMode === 'default'" class="schedule-row">
           <span class="schedule-label">{{ $t('@CMDPANEL:信息内容') }}</span>
-          <el-input
-            v-model="scheduleCustomMessage"
-            size="small"
-            class="schedule-message-input"
-            :placeholder="defaultMessagePreview"
-            :maxlength="200"
-            clearable
-            :disabled="scheduleEnabled"
-          />
+          <div class="schedule-controls">
+            <el-input
+              v-model="scheduleCustomMessage"
+              size="small"
+              class="schedule-message-input"
+              :placeholder="defaultMessagePreview"
+              :maxlength="200"
+              clearable
+              :disabled="scheduleEnabled"
+            />
+          </div>
         </div>
 
         <div class="schedule-row">
           <span class="schedule-label">{{ $t('@CMDPANEL:推送') }}</span>
-          <el-checkbox
-            v-model="scheduleAutoPush"
-            size="small"
-            :disabled="scheduleEnabled"
-          >
-            {{ $t('@CMDPANEL:提交后自动推送到远程') }}
-          </el-checkbox>
+          <div class="schedule-controls">
+            <el-checkbox
+              v-model="scheduleAutoPush"
+              size="small"
+              :disabled="scheduleEnabled"
+            >
+              {{ $t('@CMDPANEL:提交后自动推送到远程') }}
+            </el-checkbox>
+          </div>
         </div>
 
         <!-- 等效命令行:把当前设置翻译成等价的 CLI 调用,可一键复制到终端执行 -->
         <div class="schedule-row schedule-cli-row">
           <span class="schedule-label">{{ $t('@CMDPANEL:等效命令行') }}</span>
-          <div class="schedule-cli-box">
-            <code class="schedule-cli-text">{{ cliEquivalentCommand }}</code>
-            <IconButton
-              size="small"
-              :tooltip="$t('@CMDPANEL:复制命令行')"
-              custom-class="schedule-cli-copy"
-              @click="copyCliCommand"
-            >
-              <el-icon><CopyDocument /></el-icon>
-            </IconButton>
+          <div class="schedule-controls">
+            <div class="schedule-cli-box">
+              <code class="schedule-cli-text">{{ cliEquivalentCommand }}</code>
+              <IconButton
+                size="small"
+                :tooltip="$t('@CMDPANEL:复制命令行')"
+                custom-class="schedule-cli-copy"
+                @click="copyCliCommand"
+              >
+                <el-icon><CopyDocument /></el-icon>
+              </IconButton>
+            </div>
           </div>
         </div>
         <div v-if="cliHints.length > 0" class="schedule-cli-hints">
@@ -900,14 +910,30 @@ async function runCommand(cmd: any) {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 2px var(--spacing-md) 8px;
+  padding: 2px var(--spacing-md) var(--spacing-md);
 }
 
+/* 每行 = 固定左列标签 + 控件组。
+   标签列宽 52 + gap 8 = 60px，与 .schedule-cli-hints 的 padding-left 同一口径，
+   所有控件都从这一条左边界开始。
+   注意这里**不给 .schedule-row 开 flex-wrap**：一旦整行换行，第二行会从 x=0 起
+   （贴着侧栏边），与上一行控件差 60px —— 这就是之前「分钟/复选框掉到第二行、
+   对齐全断」的成因。现在改成让控件组自己换行（.schedule-controls 带 flex-wrap），
+   换行后仍然对齐在 60px 那条线上。 */
 .schedule-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
+}
+
+.schedule-controls {
+  display: flex;
+  align-items: center;
   flex-wrap: wrap;
+  gap: 8px;
+  row-gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .schedule-label {
@@ -915,18 +941,37 @@ async function runCommand(cmd: any) {
   color: var(--text-secondary);
   flex-shrink: 0;
   min-width: 52px;
+  /* 行盒高度写死成控件高度（--control-height-sm = 24px），
+     这样 align-items:flex-start 下标签文字仍然与同行控件垂直居中 ——
+     等价命令那行控件更高时，标签留在第一行而不是被拉到中间。 */
+  line-height: 24px;
 }
 
+/* 提交间隔是一个值：数字框 + 单位下拉必须同行、同高、相邻。
+   窄侧栏（180px）下这对会一起换行，不拆开。 */
 .schedule-interval-input {
-  width: 90px;
-}
-
-.schedule-unit-select {
+  flex: 0 0 78px;
   width: 78px;
 }
 
+.schedule-unit-select {
+  flex: 0 0 72px;
+  width: 72px;
+}
+
 .schedule-commit-now {
-  margin-left: 4px;
+  margin-left: 0;
+}
+
+/* 控件组的出现压缩了单选项的可用宽度：EP 默认给 .el-radio 30px 右外边距。
+   实测两枚（默认提交信息 92px + AI 生成 73px）+ 30px = 195，而控件列只有 175px
+   → 各自掉一行。收到 8px 后 173 ≤ 175，回到同一行。 */
+.schedule-section :deep(.el-radio) {
+  margin-right: 8px;
+}
+
+.schedule-section :deep(.el-radio:last-of-type) {
+  margin-right: 0;
 }
 
 .schedule-commit-now :deep(.el-checkbox__label) {
@@ -934,8 +979,10 @@ async function runCommand(cmd: any) {
   color: var(--text-secondary);
 }
 
+/* 「立即提交一次」跟在校验项后面，不再 margin-left:auto 甩到右端 ——
+   它属于这一行，不属于行的另一端。 */
 .schedule-once-btn {
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .schedule-message-input {
@@ -961,9 +1008,14 @@ async function runCommand(cmd: any) {
   align-items: flex-start;
 }
 
+.schedule-cli-row .schedule-controls {
+  align-items: flex-start;
+}
+
 .schedule-cli-box {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+  width: 100%;
   display: flex;
   align-items: flex-start;
   gap: 2px;

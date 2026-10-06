@@ -27,6 +27,7 @@ import OfficePreview from '@/components/OfficePreview.vue'
 import MarkdownPreview from '@/components/MarkdownPreview.vue'
 import MindmapPreview from '@/components/MindmapPreview.vue'
 import EditorAgentPanel from '@/components/EditorAgentPanel.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import SvgIcon from '@/components/SvgIcon/index.vue'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import { PREVIEW_IFRAME_SANDBOX, injectHtmlPreviewShims } from '@/utils/previewSandbox'
@@ -1802,14 +1803,19 @@ function stopPreviewResize() {
       </div>
 
       <!-- 无文件打开时的提示 -->
-      <div v-if="tabs.length === 0" class="editor-empty">
-        <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.3">
-          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-          <polyline points="14 2 14 8 20 8"/>
-        </svg>
-        <p>{{ $t('@EDITOR:从左侧选择文件打开') }}</p>
-        <p class="editor-empty-hint">{{ $t('@EDITOR:Ctrl+S 保存') }}</p>
-      </div>
+      <EmptyState
+        v-if="tabs.length === 0"
+        class="editor-empty"
+        :title="$t('@EDITOR:从左侧选择文件打开')"
+        :hint="$t('@EDITOR:Ctrl+S 保存')"
+      >
+        <template #icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+        </template>
+      </EmptyState>
 
       <!-- Monaco 容器（始终挂载，tab 为空或 image tab 时隐藏） -->
       <div class="editor-body">
@@ -2359,25 +2365,9 @@ function stopPreviewResize() {
   color: var(--color-danger-dark);
 }
 
+/* 空态只剩「占满这块区域」这一件事，图标/标题/说明的排版全部交给 EmptyState */
 .editor-empty {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  color: var(--text-meta);
-  font-size: var(--font-size-mid);
-  user-select: none;
-}
-
-.editor-empty p {
-  margin: 0;
-}
-
-.editor-empty-hint {
-  font-size: var(--font-size-xs);
-  opacity: 0.6;
 }
 
 .monaco-container {
