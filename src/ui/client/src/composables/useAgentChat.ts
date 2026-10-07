@@ -774,6 +774,13 @@ export function useAgentChat() {
                 assistantMsg.reasoning = ''
                 assistantMsg.reasoningStatus = 'streaming'
               }
+              // 思考段计时：第一个分片记起点，之后每个分片把终点往前推。
+              // ThinkingBlock 靠这两个时间戳在标题右侧显示「思考中 3.2s」，
+              // 流式期间实时跳、结束后定格（见 zen-ai-chat-ui 的「思考过程」一节）
+              if (typeof assistantMsg.reasoningStartedAt !== 'number') {
+                assistantMsg.reasoningStartedAt = Date.now()
+              }
+              assistantMsg.reasoningEndedAt = Date.now()
               assistantMsg.reasoning += String(evt.delta || '')
               assistantMsg.status = 'streaming'
               break
