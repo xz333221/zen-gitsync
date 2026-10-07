@@ -112,6 +112,84 @@ test('图片降级只发生在请求副本上,会话记录里的图还在', () =
     { role: 'user', content: [{ type: 'text', text: 'b' }, { type: 'image_url', image_url: { url: 'new' } }] },
   ]
   const request = prepareRequestMessages(messages, { locale: 'zh-CN' })
-  assert.equal(request[1].content[1].type, 'text')
+  // 老消息里的图降级成文字占位后,整个数组会塌回字符串(见 collapseTextParts)——
+  // 所以这里断言的是"请求副本里再也找不到那张老图",而不是某个部件的 type。
+  assert.equal(typeof request[1].content, 'string')
+  assert.match(request[1].content, /图片已从历史中省略/)
+  assert.ok(!JSON.stringify(request.slice(1)).includes('"old"'), '请求体里不许再出现老图的 data URL')
+  assert.equal(request[3].content[1].type, 'image_url', '最新一张图必须留着')
   assert.equal(messages[1].content[1].type, 'image_url')
+})
+
+// ── read_image 的图必须活到请求体 ──
+// buildRequestMessages 以前用 `content: clip(textOf(m), 6000)` 覆盖**每一条** tool 消息,
+// 那会把 read_image 刚附上的图悄悄删掉,而模型仍然收到"已读取图片 xxx.png"的文本,
+// 于是理直气壮地编内容 —— 不报错、只答错。下面三条钉住这个静默丢图不许回来。
+
+const toolImage = (n, payload = `PAYLOAD${n}`) => ({
+  role: 'tool', tool_call_id: `call${n}`, name: 'read_image',
+  content: [
+    { type: 'text', text: `已读取图片 shot${n}.png` },
+    { type: 'image_url', image_url: { url: `data:image/png;base64,${payload}` } },
+  ],
+})
+
+test('tool 消息里的图必须活到请求体', () => {
+  const messages = [
+    { role: 'system', content: 'rules' },
+    { role: 'user', content: '看下 shot1.png' },
+    { role: 'assistant', content: null, tool_calls: [call(1)] },
+    toolImage(1),
+  ]
+  const tool = prepareRequestMessages(messages, { locale: 'zh-CN' }).find(m => m.role === 'tool')
+  assert.ok(Array.isArray(tool.content), 'tool 消息应保持多模态数组')
+  assert.equal(tool.content[1].type, 'image_url')
+  assert.match(tool.content[1].image_url.url, /PAYLOAD1/)
+})
+
+test('tool 消息正文超长被截断时,图仍然留着', () => {
+  const messages = [
+    { role: 'system', content: 'rules' },
+    { role: 'user', content: 'x' },
+    { role: 'assistant', content: null, tool_calls: [call(9)] },
+    { role: 'tool', tool_call_id: 'call9', name: 'read_image', content: [
+      { type: 'text', text: 'y'.repeat(20000) },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,KEEP' } },
+    ] },
+  ]
+  const tool = prepareRequestMessages(messages, { locale: 'zh-CN' }).find(m => m.role === 'tool')
+  assert.ok(tool.content[0].text.length < 20000, '正文该截还是得截')
+  assert.match(tool.content[1].image_url.url, /KEEP/)
+})
+
+test('图片名额由 user 与 tool 共用：只留最新一张,老图连 data URL 一起消失', () => {
+  const messages = [
+    { role: 'system', content: 'rules' },
+    { role: 'user', content: [
+      { type: 'text', text: '看这两张' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,USERIMG' } },
+    ] },
+    { role: 'assistant', content: null, tool_calls: [call(1)] },
+    toolImage(1),
+  ]
+  const body = JSON.stringify(prepareRequestMessages(messages, { locale: 'zh-CN' }))
+  assert.ok(!body.includes('USERIMG'), '更早的 user 图应被降级')
+  assert.match(body, /PAYLOAD1/, '最新的 tool 图要留着')
+})
+
+test('已经不含图片的多模态数组塌回字符串(贴着最保守的线格式)', () => {
+  const messages = [
+    { role: 'system', content: 'rules' },
+    { role: 'user', content: [{ type: 'text', text: 'a' }] },   // 本来就是纯文本数组
+    { role: 'assistant', content: null, tool_calls: [call(1)] },
+    toolImage(1),                                                // 会被后来的图顶掉
+    { role: 'user', content: [
+      { type: 'text', text: '再看这张' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,NEWER' } },
+    ] },
+  ]
+  const request = prepareRequestMessages(messages, { locale: 'zh-CN' })
+  assert.equal(request[1].content, 'a')
+  assert.equal(request[3].content, '已读取图片 shot1.png\n[图片已从历史中省略]')
+  assert.equal(request[4].content[1].type, 'image_url', '最新那张仍是多模态数组')
 })

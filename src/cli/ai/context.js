@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 
 const textOf = m => typeof m?.content === 'string' ? m.content : (m?.content || []).filter?.(p => p.type === 'text').map(p => p.text).join('\n') || ''
+const imagePartsOf = content => Array.isArray(content) ? content.filter(p => p?.type === 'image_url') : []
 const clip = (text, limit) => text.length <= limit ? text : text.slice(0, Math.floor(limit / 2)) + '\n[… earlier output omitted …]\n' + text.slice(-Math.floor(limit / 2))
 
 // A saved turn may have been interrupted between tools. Mark missing results,
@@ -29,9 +30,19 @@ export function repairToolHistory(messages) {
 // Build a bounded request copy. The complete transcript on disk is never trimmed.
 // Budgets are characters/messages, not purported token counts.
 export function buildRequestMessages(messages, { maxMessages = 40, maxChars = 80000 } = {}) {
-  const copy = repairToolHistory(messages).map(m => ({ ...m,
-    ...(m.role === 'tool' ? { content: clip(textOf(m), 6000) } : {}),
-  }))
+  // tool 消息的正文按 6000 字符截断,但**图片部件必须原样留着**。这里以前是
+  // `content: clip(textOf(m), 6000)` 直接覆盖 —— 那会把 read_image 刚附上的图
+  // 悄悄删掉,而模型仍然收到"已读取图片 xxx.png"的文本,于是理直气壮地编内容。
+  // (有单测钉住这条:tool 消息里的图必须活到请求体。)
+  const copy = repairToolHistory(messages).map(m => {
+    if (m.role !== 'tool') return { ...m }
+    const images = imagePartsOf(m.content)
+    const text = clip(textOf(m), 6000)
+    return { ...m, content: images.length ? [{ type: 'text', text }, ...images] : text }
+  })
+  // size 只算文本:图片是 base64,一张截图就上百万字符。若把它计进预算,第一轮
+  // 就会因为"超预算"把刚读进来的那张图所在的消息组整组丢掉 —— 越需要看图越丢图。
+  // 图片总量另有约束:stripStaleImages 只留最新一张,详见那里的注释。
   const size = m => textOf(m).length + JSON.stringify(m.tool_calls || []).length
   if (copy.length <= maxMessages && copy.reduce((n, m) => n + size(m), 0) <= maxChars) return copy
   const keep = new Set()
@@ -94,9 +105,15 @@ export function sanitizeMessages(messages) {
   return messages
 }
 
-// Base64 images dominate the payload, so only the newest image-bearing user message
+// Base64 images dominate the payload, so only the newest image-bearing message
 // keeps its images; older ones degrade to a text placeholder (the model still knows
 // an image was there). Reassigns `content` on the request copy, never on the transcript.
+//
+// 覆盖**两种**能带图的角色,而且它们共用同一个"最新"名额:
+//   - user → 用户粘贴 / 附件发的图(gai 的 /image、Alt+V、Web 面板附件框)
+//   - tool → read_image 自己读进来的图
+// 为什么必须共用名额而不是各留一张:一个"看截图改样式"的任务里,模型会连着读好几张
+// 图,每张都随历史每轮重发,几张 4MB 的图能把上下文和账单一起顶穿。
 export function stripStaleImages(messages, locale) {
   const placeholder = String(locale || '').startsWith('en')
     ? '[image omitted from history]'
@@ -104,10 +121,23 @@ export function stripStaleImages(messages, locale) {
   let seenLatest = false
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i]
-    if (m?.role !== 'user' || !Array.isArray(m.content)) continue
-    if (!m.content.some(p => p?.type === 'image_url')) continue
+    const parts = Array.isArray(m?.content) ? m.content : null
+    if (!parts || !parts.some(p => p?.type === 'image_url')) continue
     if (!seenLatest) { seenLatest = true; continue }
-    m.content = m.content.map(p => p?.type === 'image_url' ? { type: 'text', text: placeholder } : p)
+    m.content = parts.map(p => p?.type === 'image_url' ? { type: 'text', text: placeholder } : p)
+  }
+  return messages
+}
+
+// 已经不含图片的多模态数组一律塌回字符串。理由:OpenAI 兼容的各家实现里,
+// 「content 是数组」的支持面明显窄于「content 是字符串」,Moonshot / 智谱 /
+// MiniMax 这些在别处已经踩过形状坑(见下面 sanitizeMessages 的注释)。
+// 塌回字符串等于让被省略掉图的那条历史走最保守的线格式,不赌厂商实现。
+export function collapseTextParts(messages) {
+  for (const m of messages) {
+    if (!Array.isArray(m?.content)) continue
+    if (m.content.some(p => p?.type === 'image_url')) continue
+    m.content = m.content.filter(p => p?.type === 'text').map(p => p.text || '').join('\n')
   }
   return messages
 }
@@ -119,6 +149,7 @@ export function stripStaleImages(messages, locale) {
 export function prepareRequestMessages(messages, { locale, maxMessages = 40, maxChars = 80000 } = {}) {
   const copy = buildRequestMessages(messages, { maxMessages, maxChars })
   stripStaleImages(copy, locale)
+  collapseTextParts(copy)
   return sanitizeMessages(copy)
 }
 

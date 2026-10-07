@@ -41,7 +41,7 @@ import os from 'os';
 import { logger } from './shared.js';
 
 // 从 CLI 侧导入工具定义、执行器与 LLM 传输层（同一 monorepo，路径可达）
-import { TOOL_DEFINITIONS, executeTool, normalizePlanSteps, summarizePlan } from '../../../../cli/ai/tools.js';
+import { TOOL_DEFINITIONS, executeTool, normalizePlanSteps, summarizePlan, splitToolOutput, toolMessageContent } from '../../../../cli/ai/tools.js';
 import { prepareRequestMessages } from '../../../../cli/ai/context.js';
 import { streamChatOnce } from '../../../../cli/ai/transport.js';
 import { checkDangerousCommand } from '../../../../cli/ai/safety.js';
@@ -92,6 +92,7 @@ ${isWin ? `- 当前是 Windows,以下 Unix 命令**不存在**,用了必定报"�
   · 列目录 → list_files 工具 或 cmd 的 dir
   · 搜内容 → search_text 工具 或 cmd 的 findstr
   · 看文件 → read_file 工具 或 cmd 的 type
+  · 看图片 → read_image 工具(截图/设计稿/示意图)。read_file 读图片只会得到乱码,别浪费那一轮
   · 看输出末尾 → PowerShell "命令 | Select-Object -Last N"
   · 文本处理 → node -e "..." 或 PowerShell
   · 查命令路径 → cmd 的 where(不是 which)
@@ -153,7 +154,11 @@ ${isWin ? `- 当前是 Windows,以下 Unix 命令**不存在**,用了必定报"�
 - 需要暂停当前任务并等待用户决定或补充信息时,调用 ask_user,不要猜测或只在普通文本里提问
 - 一次要让用户从多个选项里选好几项时(如"要我改哪几个文件"),传 multiple: true,用户会勾选后统一提交
 - 不要调用不存在的工具,可用工具只有上面列出的 ${builtinToolCount} 个
-- 用户可能随消息附带图片:图片以 image_url 部件出现在 user 消息里;如果当前模型不支持视觉(带图请求报错),提醒用户换用支持视觉的模型
+- 图片有两条来路:
+  · 用户随消息附带(附件框/粘贴) → 图片以 image_url 部件出现在 user 消息里,直接就能看到
+  · 用户只给了**路径**(或你自己在翻文件时遇到图)→ 用 read_image 工具读它,别用 read_file
+    (read_file 按 UTF-8 解码,图片只会是乱码),也别根据文件名猜内容
+  如果当前模型不支持视觉(带图请求报错),提醒用户换用支持视觉的模型
 - 发现高风险或状态不一致的情况时:先用文本说明发现和影响,停下来等用户指示,不要擅自继续破坏性操作
 
 # 输出
@@ -182,6 +187,7 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
   · List dirs → list_files tool, or cmd's dir
   · Search content → search_text tool, or cmd's findstr
   · Read files → read_file tool, or cmd's type
+  · Look at an image → read_image tool (screenshots, mockups, diagrams). read_file only decodes text and returns garbage for images
   · Tail output → PowerShell "command | Select-Object -Last N"
   · Text processing → node -e "..." or PowerShell
   · Find executable → cmd's where (not which)` : `- POSIX environment: Unix commands are available`}
@@ -232,7 +238,11 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 - Use offset/limit for large files
 - git operations via run_command
 - run_command defaults to the working directory; default timeout 120s, max 600s
-- When the task must pause for a decision or missing detail, call ask_user and wait for the user's answer. The user may attach images to a message; they arrive as image_url parts in the user message. If the current model rejects images (no vision support), tell the user to switch to a vision-capable model
+- Images reach you two ways:
+  · The user attached one to a message → it arrives as an image_url part in the user message; you can see it directly
+  · The user only gave you a **path** (or you run into an image while exploring) → read it with the read_image tool, not read_file
+    (read_file decodes UTF-8 and returns garbage for images), and never guess an image's content from its filename
+  If the current model rejects images (no vision support), tell the user to switch to a vision-capable model
 
 # Task plan (required for multi-step work)
 - When a task takes several steps (code changes, debugging, research, multi-file edits), call update_plan
@@ -442,8 +452,12 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
         });
       }
       const output = await executeTool(name, args, toolCtx);
-      send({ type: 'tool_result', toolCallId, name, result: output });
-      session.messages.push({ role: 'tool', tool_call_id: toolCallId, name, content: output });
+      // read_image 会返回 { text, images }。前端只吃文本(result 是字符串,
+      // 直接把对象丢过去会渲染成 "[object Object]"),图片进会话历史里的
+      // 多模态 tool 消息 —— 模型看得见图,用户看到的是"已读取图片 xxx.png"。
+      const { text: outText, images: outImages } = splitToolOutput(output);
+      send({ type: 'tool_result', toolCallId, name, result: outText });
+      session.messages.push({ role: 'tool', tool_call_id: toolCallId, name, content: toolMessageContent(outText, outImages) });
     }
     // 工具结果全部入历史后继续循环，让模型基于结果决定下一步
   }
@@ -460,6 +474,7 @@ function summarizeArgs(name, args) {
       case 'run_command':
         return String(args.command || '').slice(0, 200);
       case 'read_file':
+      case 'read_image':
       case 'write_file':
       case 'edit_file':
         return String(args.path || '');

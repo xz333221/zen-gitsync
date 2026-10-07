@@ -672,4 +672,36 @@ describe('convertSessionToMessages 合并一次 AI 回合', () => {
     expect(msgs[3].content).toBe('好的')
     expect(msgs[3].toolCalls).toBeUndefined()
   })
+
+  // read_image 的 tool 消息是多模态数组(text + image_url)。历史里要只还原文本部分:
+  // 以前这里只认字符串,数组会整条塌成 "(non-text result)" —— 用户回看历史时
+  // 看到的是"这个工具啥也没干",而不是"它读了一张图"。
+  test('read_image 的多模态 tool 消息在历史里还原成文本', () => {
+    const msgs = convertSessionToMessages(toSession([
+      { role: 'user', content: '看下 shot.png' },
+      {
+        role: 'assistant',
+        content: '读一下',
+        tool_calls: [
+          { id: 'c1', type: 'function', function: { name: 'read_image', arguments: '{"path":"shot.png"}' } }
+        ]
+      },
+      {
+        role: 'tool',
+        tool_call_id: 'c1',
+        name: 'read_image',
+        content: [
+          { type: 'text', text: '已读取图片 shot.png(1.2 KB)' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } }
+        ]
+      },
+      { role: 'assistant', content: '左红，右蓝' }
+    ]))
+
+    const call = msgs[1].toolCalls?.[0]
+    expect(call?.name).toBe('read_image')
+    expect(call?.result).toBe('已读取图片 shot.png(1.2 KB)')
+    // 图片本体不进对话流气泡(base64 大图塞进去没有意义,用户当时是看着回答的)
+    expect(call?.result).not.toContain('base64')
+  })
 })

@@ -19,7 +19,12 @@
 //   - 唯一限制来自 safety.js 的系统级红线(格式化、删根目录、关机等)
 //
 // 输出约束:
-//   - 所有工具结果都是字符串,直接作为 role:'tool' 消息回喂给模型
+//   - 工具结果默认是字符串,直接作为 role:'tool' 消息回喂给模型
+//   - 唯一例外是 read_image:它返回 { text, images[] },images 是 data URL。
+//     agent 循环用 toolMessageContent() 把它拼成**多模态 tool 消息**
+//     (content 数组里同时有 text 部件和 image_url 部件),模型才真的能看见图。
+//     这是本仓唯一"工具结果不是字符串"的地方 —— 新增工具请沿用字符串,
+//     否则 turn.js / agentChat.js / context.js / termui.js 四处都要跟着改。
 //   - 大输出在源头截断(头 + 尾保留),避免撑爆上下文窗口
 //   - 工具内部异常一律 catch 成字符串返回,不抛给 agent 循环 ——
 //     让模型看到错误信息自己修正,而不是中断整轮对话
@@ -32,6 +37,7 @@ import { trackChild } from '../cleanup.js'
 import { checkDangerousCommand } from './safety.js'
 import { guardCommand } from './platformGuard.js'
 import { augmentEnvPath, isCommandNotFound, pathValueOf } from '../../utils/shellPath.js'
+import { checkImageFile, imageToDataUrl, formatBytes, isImagePath, SUPPORTED_IMAGE_EXTS } from './images.js'
 
 // ──────────────────────────────────────────────
 // 常量
@@ -42,6 +48,10 @@ const MAX_LINE_WIDTH = 2000        // 单行截断宽度
 const MAX_LIST_ENTRIES = 400       // list_files 最多条目
 const MAX_SEARCH_HITS = 100        // search_text 最多命中
 const MAX_SEARCH_FILE_SIZE = 1024 * 1024  // search_text 跳过大文件(1MB)
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024   // read_image 单张上限(原始字节)
+// 为什么要有上限:图片要以 base64 进请求体,体积膨胀 4/3,而且**每一轮都要重发**。
+// 一张 10MB 的截图能直接把上下文和账单顶穿。4MB 覆盖绝大多数截图/设计稿,
+// 超了让模型自己先压缩(它手上有 run_command),比我们默默截断成半张图好。
 const CMD_TIMEOUT_DEFAULT = 120    // run_command 默认超时(秒)
 const CMD_TIMEOUT_MAX = 600        // run_command 超时上限(秒)
 
@@ -98,13 +108,29 @@ export const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'read_file',
-      description: '读取文本文件内容,带行号返回。大文件用 offset/limit 分段读取。',
+      description: '读取**文本**文件内容,带行号返回。大文件用 offset/limit 分段读取。看图片请用 read_image —— 本工具按 UTF-8 解码,读图片只会得到乱码。',
       parameters: {
         type: 'object',
         properties: {
           path: { type: 'string', description: '文件路径(相对智能体启动目录或绝对路径)' },
           offset: { type: 'number', description: '起始行(1 起始),默认 1' },
           limit: { type: 'number', description: `最多读取行数,默认 ${MAX_READ_LINES}` },
+        },
+        required: ['path'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'read_image',
+      description: '读取本地图片并**真的看到它**(PNG/JPG/GIF/WebP/BMP),用于看截图、设计稿、示意图、报错弹窗、图表。'
+        + '用户给你一个图片路径、"看看这张图""照这个设计做"时用它,不要用 read_file(read_file 只按文本解码,图片会是乱码)。'
+        + '单张上限 4MB,超了先用 run_command 压缩再读。',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: '图片路径(相对智能体启动目录或绝对路径)' },
         },
         required: ['path'],
       },
@@ -490,6 +516,11 @@ async function toolRunCommand(args, ctx) {
 
 async function toolReadFile(args, ctx) {
   const filePath = resolvePath(ctx, args.path)
+  // 图片用 read_file 只会拿到乱码。与其让模型对着乱码猜"我看不到内容",不如当场
+  // 把它推到正确的工具上 —— 这是"用户把图片路径写进普通消息"最常见的翻车点。
+  if (isImagePath(filePath)) {
+    return `错误: ${filePath} 是图片,read_file 按 UTF-8 解码只能得到乱码。请改用 read_image 工具读取它。`
+  }
   let raw
   try {
     raw = await fs.readFile(filePath, 'utf-8')
@@ -509,6 +540,38 @@ async function toolReadFile(args, ctx) {
     ? `# ${filePath} (共 ${total} 行, 显示 ${offset}-${offset + slice.length - 1})`
     : `# ${filePath} (共 ${total} 行)`
   return `${header}\n${numbered.join('\n')}`
+}
+
+/**
+ * read_image —— 本仓唯一返回**非字符串**的处理器。
+ *
+ * 返回 { text, images },由 agent 循环(turn.js / agentChat.js)用 toolMessageContent()
+ * 拼成多模态 tool 消息。这里只管校验 + 转 data URL,不发请求。
+ */
+async function toolReadImage(args, ctx) {
+  const filePath = resolvePath(ctx, args.path)
+  if (!isImagePath(filePath)) {
+    return `错误: ${filePath} 不是支持的图片格式(仅 ${SUPPORTED_IMAGE_EXTS})。文本文件请用 read_file。`
+  }
+  const img = await checkImageFile(filePath)
+  if (!img) {
+    return `错误: 无法读取图片 ${filePath}:文件不存在、不是普通文件,或内容为空。`
+  }
+  if (img.bytes > MAX_IMAGE_BYTES) {
+    return `错误: 图片 ${filePath} 有 ${formatBytes(img.bytes)},超过单张上限 ${formatBytes(MAX_IMAGE_BYTES)}。`
+      + '(图片会以 base64 每轮重发,过大会顶穿上下文。)请先用 run_command 压缩后再读。'
+  }
+  let url
+  try {
+    url = await imageToDataUrl(filePath)
+  } catch (err) {
+    return `错误: 读取图片 ${filePath} 失败: ${err.message}`
+  }
+  return {
+    text: `已读取图片 ${filePath}(${formatBytes(img.bytes)})。`
+      + '图片已附在本条工具结果里 —— 直接基于你实际看到的内容回答,不要再 read_file 它。',
+    images: [url],
+  }
 }
 
 async function toolWriteFile(args, ctx) {
@@ -811,6 +874,7 @@ async function toolDispatchTask(args, ctx) {
 const TOOL_HANDLERS = {
   run_command: toolRunCommand,
   read_file: toolReadFile,
+  read_image: toolReadImage,
   write_file: toolWriteFile,
   edit_file: toolEditFile,
   list_files: toolListFiles,
@@ -825,9 +889,13 @@ const TOOL_HANDLERS = {
  * 执行一个工具调用,返回字符串结果(直接作为 role:'tool' 消息内容)。
  * 所有异常都在内部消化成字符串,不向外抛。
  *
+ * **唯一例外**:read_image 返回 { text, images }。调用方必须先过 splitToolOutput()
+ * 再决定怎么用 —— 直接把返回值当字符串会得到 "[object Object]"。
+ *
  * @param {string} name - 工具名
  * @param {object} args - 已解析的参数对象
  * @param {{ cwd: string, onChild?: (child: object) => void }} ctx
+ * @returns {Promise<string | { text: string, images: string[] }>}
  */
 export async function executeTool(name, args, ctx) {
   if (ctx.signal?.aborted) return 'Cancelled by user; this tool was not executed.'
@@ -840,4 +908,39 @@ export async function executeTool(name, args, ctx) {
   }
 }
 
-export default { TOOL_DEFINITIONS, executeTool }
+/**
+ * 把 executeTool 的返回值归一化成 { text, images }。
+ * 字符串(绝大多数工具)→ images 为空;对象(read_image)→ 取出 text 与 data URL 列表。
+ * 两个 agent 循环(turn.js / agentChat.js)必须都走这里,否则又会长出第二套口径。
+ *
+ * @param {unknown} output
+ * @returns {{ text: string, images: string[] }}
+ */
+export function splitToolOutput(output) {
+  if (output && typeof output === 'object' && !Array.isArray(output)) {
+    return {
+      text: typeof output.text === 'string' ? output.text : String(output.text ?? ''),
+      images: Array.isArray(output.images) ? output.images.filter(u => typeof u === 'string') : [],
+    }
+  }
+  return { text: typeof output === 'string' ? output : String(output ?? ''), images: [] }
+}
+
+/**
+ * 构造 role:'tool' 消息的 content。
+ * 没有图片时返回纯字符串 —— 老链路的序列化、截断、厂商兼容性一个字都不用改;
+ * 有图片时才升级成多模态数组(OpenAI 兼容格式里 tool 消息的 content 部件)。
+ *
+ * @param {string} text
+ * @param {string[]} images - data URL 列表
+ * @returns {string | Array<{type: string, text?: string, image_url?: {url: string}}>}
+ */
+export function toolMessageContent(text, images) {
+  if (!Array.isArray(images) || images.length === 0) return text
+  return [
+    { type: 'text', text },
+    ...images.map(url => ({ type: 'image_url', image_url: { url } })),
+  ]
+}
+
+export default { TOOL_DEFINITIONS, executeTool, splitToolOutput, toolMessageContent }

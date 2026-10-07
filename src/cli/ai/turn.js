@@ -1,4 +1,4 @@
-import { executeTool } from './tools.js'
+import { executeTool, splitToolOutput, toolMessageContent } from './tools.js'
 import { streamChatOnce } from './transport.js'
 import { createThinkFilter } from './streamFilter.js'
 import { imageToDataUrl } from './images.js'
@@ -115,9 +115,12 @@ export async function runAgentTurn(state, userText, t, images = [], dependencies
       for (const tc of toolCalls) {
         const name = tc.function?.name || ''
         let output
-        if (cancelled()) output = 'Cancelled by user; this tool was not executed.'
-        else {
-          let args
+        let args
+        let toolMs            // 只有真执行过的工具才有耗时(见下面的渲染判断)
+        if (cancelled()) {
+          // 与改动前一致:取消的这次调用只入历史,不渲染结果块
+          output = 'Cancelled by user; this tool was not executed.'
+        } else {
           try { args = JSON.parse(tc.function?.arguments || '{}') }
           catch { output = '错误: 工具参数不是合法 JSON，请修正后重试。' }
           if (output === undefined) {
@@ -126,14 +129,21 @@ export async function runAgentTurn(state, userText, t, images = [], dependencies
             const toolStart = performance.now()
             stats.toolCalls++
             try { output = await execute(name, args, { ...state.ctx, signal: state.abortController?.signal }) }
-            finally { toolSpinner?.stop(); stats.toolsMs += performance.now() - toolStart }
-            ui.printToolResult(output, undefined, performance.now() - toolStart, { full: state.fullTools, locale: state.locale })
-            // 工具级的收尾渲染(目前只有 update_plan 画计划清单)。
-            // 走钩子而不是在这里写 if (name === 'x'):再加工具时这一行不用动。
-            ui.afterTool?.(name, args, output, { locale: state.locale })
-          } else ui.printToolResult(output)
+            finally { toolSpinner?.stop(); toolMs = performance.now() - toolStart; stats.toolsMs += toolMs }
+          } else {
+            ui.printToolResult(output)
+          }
         }
-        state.messages.push({ role: 'tool', tool_call_id: tc.id, name, content: output })
+        // 工具结果可能是多模态的(read_image)。渲染层和回灌的消息都只吃**文本部分**,
+        // 图片要进 content 数组 —— 拆在最后统一做,免得上面每个分支各写一遍。
+        const { text: outText, images: outImages } = splitToolOutput(output)
+        if (toolMs !== undefined) {
+          ui.printToolResult(outText, undefined, toolMs, { full: state.fullTools, locale: state.locale })
+          // 工具级的收尾渲染(目前只有 update_plan 画计划清单)。
+          // 走钩子而不是在这里写 if (name === 'x'):再加工具时这一行不用动。
+          ui.afterTool?.(name, args, outText, { locale: state.locale })
+        }
+        state.messages.push({ role: 'tool', tool_call_id: tc.id, name, content: toolMessageContent(outText, outImages) })
         await checkpoint()
       }
     }

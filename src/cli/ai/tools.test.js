@@ -19,7 +19,11 @@ import assert from 'node:assert/strict'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { TOOL_DEFINITIONS, executeTool, resolveCommandTimeout, normalizePlanSteps, isPlanToolName } from './tools.js'
+import { TOOL_DEFINITIONS, executeTool, resolveCommandTimeout, normalizePlanSteps, isPlanToolName, splitToolOutput, toolMessageContent } from './tools.js'
+
+// 1×1 红色 PNG。用真字节而不是造一个空文件:checkImageFile 只校验扩展名与体积,
+// 但"读出来能还原成原图"这件事值得顺手钉一下(imageToDataUrl 会把内容 base64)。
+const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
 let tmpDir
 const ctx = { cwd: null, onChild: null }
@@ -448,4 +452,56 @@ test('isPlanToolName：归一化后判定，update_plan 与 updatePlan 同义', 
   assert.equal(isPlanToolName('TodoWrite'), true)
   assert.equal(isPlanToolName('read_file'), false)
   assert.equal(isPlanToolName(''), false)
+})
+
+// ========== read_image：本仓唯一返回非字符串的工具 ==========
+// 真实场景:用户在消息里写了一个图片路径。过去模型只能拿 read_file 硬读,
+// 拿到乱码后回一句"我这个模型没有视觉能力"(它其实有)。这三个测试钉住新分工。
+
+test('read_image 返回 { text, images }，图片以 data URL 附在结果里', async () => {
+  await fs.writeFile(path.join(tmpDir, 'shot.png'), Buffer.from(PNG_1PX, 'base64'))
+  const out = await executeTool('read_image', { path: 'shot.png' }, ctx)
+
+  assert.equal(typeof out, 'object', 'read_image 必须返回对象，不能是字符串')
+  assert.match(out.text, /已读取图片/)
+  assert.equal(out.images.length, 1)
+  assert.match(out.images[0], /^data:image\/png;base64,/)
+  // data URL 里的 base64 必须能还原成原始字节(不是把路径当内容编码了)
+  assert.equal(Buffer.from(out.images[0].split(',')[1], 'base64').toString('base64'), PNG_1PX)
+})
+
+test('read_image 对非图片 / 不存在的文件都返回可照做的错误字符串', async () => {
+  await fs.writeFile(path.join(tmpDir, 'note.txt'), 'hello')
+  const notImage = await executeTool('read_image', { path: 'note.txt' }, ctx)
+  assert.equal(typeof notImage, 'string', '错误也要是字符串，否则调用方会去读 .images')
+  assert.match(notImage, /不是支持的图片格式/)
+
+  assert.match(await executeTool('read_image', { path: 'nope.png' }, ctx), /无法读取图片/)
+})
+
+test('read_file 遇到图片时把模型推给 read_image，而不是吐乱码', async () => {
+  await fs.writeFile(path.join(tmpDir, 'shot2.png'), Buffer.from(PNG_1PX, 'base64'))
+  const out = await executeTool('read_file', { path: 'shot2.png' }, ctx)
+  assert.match(out, /read_image/)
+  assert.ok(!out.includes('�'), '不该把二进制按 UTF-8 解出来给模型看')
+})
+
+test('splitToolOutput / toolMessageContent：字符串工具结果原样通过，不引入多模态', () => {
+  // 老链路一个字都不能变 —— tool 消息仍是纯字符串，厂商兼容性不受影响
+  assert.deepEqual(splitToolOutput('plain'), { text: 'plain', images: [] })
+  assert.equal(toolMessageContent('plain', []), 'plain')
+  assert.deepEqual(splitToolOutput({ text: 'x', images: ['u'] }), { text: 'x', images: ['u'] })
+
+  const multimodal = toolMessageContent('see image', ['data:image/png;base64,AAA'])
+  assert.equal(multimodal[0].type, 'text')
+  assert.equal(multimodal[1].type, 'image_url')
+  assert.equal(multimodal[1].image_url.url, 'data:image/png;base64,AAA')
+})
+
+test('read_image 与 read_file 的描述互指 —— 模型选错工具时能自己纠正', () => {
+  const readFile = TOOL_DEFINITIONS.find(t => t.function.name === 'read_file')
+  const readImage = TOOL_DEFINITIONS.find(t => t.function.name === 'read_image')
+  assert.ok(readImage, 'TOOL_DEFINITIONS 里必须有 read_image')
+  assert.match(readFile.function.description, /read_image/)
+  assert.match(readImage.function.description, /read_file/)
 })

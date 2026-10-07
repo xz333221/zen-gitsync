@@ -724,6 +724,8 @@ export function summarizeToolArgs(name, args, { chars = '字符' } = {}) {
         : ''
       return clamp(`${args?.path || ''}${range}`)
     }
+    case 'read_image':
+      return clamp(args?.path || '')
     case 'write_file':
       return clamp(`${args?.path || ''} (${String(args?.content ?? '').length} ${chars})`)
     case 'edit_file':

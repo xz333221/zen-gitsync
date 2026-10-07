@@ -440,7 +440,7 @@ A dedicated view (robot icon in the activity bar) for chatting with the built-in
 | Engine choice | Run new sessions on the built-in **g ai** or hand them to an external CLI — **Claude Code**, **OpenCode** or **Codex**. The selector sits at the right of the chat tabs; engines whose CLI is not installed are greyed out and clicking one opens the install guide. The same selector lives in the file-space **g ai** chat panel. The engine is locked once a session is persisted, so switching means starting a new session |
 | Live session entry | Sending the first message of a new session makes it show up in the list **immediately** with a "Generating..." badge, instead of waiting for the whole turn to finish; once the reply ends and the server persists the session, the entry is replaced by the real timestamp and message count |
 | Streaming chat | SSE-based real-time streaming with thinking process, content, tool calls, and tool results rendered inline |
-| Tool call display | Each tool invocation (run_command, read_file, edit_file, list_files, search_text, write_file) is shown as a collapsible card. The collapsed line carries a short truncated summary; expanding reveals the **full arguments** (no longer cut to a 200-character preview) together with the execution result |
+| Tool call display | Each tool invocation (run_command, read_file, read_image, edit_file, list_files, search_text, write_file) is shown as a collapsible card. The collapsed line carries a short truncated summary; expanding reveals the **full arguments** (no longer cut to a 200-character preview) together with the execution result |
 | Task plan | Multi-step work gets a visible plan: the agent calls the built-in `update_plan` tool to split the task into 3-8 verifiable steps before touching anything, then updates each step's status as it goes. Steps render as a checklist with completed / in-progress / pending states and a `2/5` progress header — in the terminal as a `✓ / ▶ / ○` list, in the Web panel as a card that **stays visible even when the tool group is collapsed** (collapsing hides other tool calls, never the current plan) |
 | Recent-projects awareness | Ask "which of my projects need a pull?" and the agent calls its built-in `list_projects` tool instead of scanning the disk: it returns exactly the list behind the GUI's **Recent projects** panel (recent directories plus any directory a task was created in, with branch / ahead / behind / uncommitted counts and task progress), so the agent's answer and the UI agree. Ahead/behind reads local refs, so the agent can pass `refresh=true` to run a `git fetch` pass first when the question is about pulling |
 | Session persistence | All conversations are saved to `~/.zen-gitsync/agent-sessions/` as JSON files; the CLI agent (`g ai`) writes to the same directory so Web and CLI sessions are unified |
@@ -564,6 +564,15 @@ Images: press `Alt+V` in the REPL to paste a clipboard image (screenshot), or at
 local file with `/image <path>`; images are sent as multimodal `image_url` parts with your
 next message (requires a vision-capable model). `/image` alone lists pending images,
 `/image clear` drops them.
+
+Alternatively just **give the agent a path** — paste a file path into an ordinary message
+("look at `d:\shots\err.png`"), or let it run into an image while exploring the repo, and it
+reads the file itself with the `read_image` tool. That tool result is a multimodal message
+(text + image part), so the model genuinely sees the picture. `read_file` refuses image
+extensions and points the model at `read_image` instead of handing back mojibake. One image
+at a time is kept in history — read a second one and the earlier one degrades to
+`[image omitted from history]`, since base64 images are re-sent every turn. Single-image
+cap: 4 MB (larger files: have the agent shrink them first).
 
 The terminal UI follows the Codex / Claude Code style: boxed input composer, animated
 waiting spinner, dim-italic streaming thinking, `⏺` tool blocks with smart argument
@@ -1152,7 +1161,7 @@ Activity Bar 中的机器人图标视图，可直接在浏览器中与内置 AI 
 | 引擎选择 | 新建会话可跑内置 **g ai**，也可交给外部 CLI —— **Claude Code** / **OpenCode** / **Codex**。选择器在对话 Tab 行右端；未安装的引擎会置灰，点一下直接开安装引导。文件空间的 **g ai** 对话面板头部有同一个选择器。会话一旦落盘引擎就锁定，要换请新建会话 |
 | 会话实时入列 | 新会话发出第一条消息后，左侧列表**立刻**出现这一条（带「正在生成中…」标记），不用等整轮回答跑完；回答结束、服务端落盘后自动替换成真实的时间与条数 |
 | 流式对话 | 基于 SSE 的实时流式输出，包含思考过程、正文内容、工具调用和工具结果的内联渲染 |
-| 工具调用展示 | 每次工具调用（run_command、read_file、edit_file、list_files、search_text、write_file）以可折叠卡片形式展示：收起时那一行是**截断过的摘要**（一眼看出它在干嘛），展开后是**完整参数**与执行结果 —— 参数不再被砍成 200 字，「正在跑」和刷新后重放看到的是同一份原文 |
+| 工具调用展示 | 每次工具调用（run_command、read_file、read_image、edit_file、list_files、search_text、write_file）以可折叠卡片形式展示：收起时那一行是**截断过的摘要**（一眼看出它在干嘛），展开后是**完整参数**与执行结果 —— 参数不再被砍成 200 字，「正在跑」和刷新后重放看到的是同一份原文 |
 | 任务计划 | 多步任务有一份看得见的计划：智能体在动手之前先调内置的 `update_plan` 工具，把任务拆成 3-8 个可核对的步骤，随后逐步更新状态。步骤以清单渲染，区分完成 / 进行中 / 待办三态，标题右侧带 `2/5` 进度 —— 终端里是 `✓ / ▶ / ○` 列表，Web 面板里是一张卡片，且**工具组折叠时仍然常驻**（折叠只藏别的工具调用，绝不藏当前计划） |
 | 最近项目感知 | 问「我哪些项目需要 pull」时，智能体调用内置的 `list_projects` 工具，而不是自己去扫盘：返回的就是 GUI「最近项目」面板那份清单（最近目录 + 建过任务的目录，带分支 / 领先 / 落后 / 未提交数与任务进度），回答与界面对得上。领先/落后读的是本地引用，因此问到"要不要拉"时它可以带 `refresh=true` 先联网 fetch 一轮再答 |
 | 会话持久化 | 所有对话保存为 JSON 文件到 `~/.zen-gitsync/agent-sessions/`；CLI 智能体（`g ai`）写入同一目录，Web 端与 CLI 端会话统一管理 |
@@ -1263,6 +1272,13 @@ $ g ai --model=2                # 使用第 2 个已配置的模型（序号或�
 图片：在 REPL 中按 `Alt+V` 粘贴剪贴板图片（截图），或用 `/image <路径>` 附加本地图片；
 图片以多模态 `image_url` 部件随下一条消息发送（需视觉模型）。单独 `/image` 查看待发送图片，
 `/image clear` 清除。
+
+也可以**直接给它一个路径** —— 把图片路径写进普通消息（「看下 `d:\shots\err.png`」），
+或者它在翻仓库时自己遇到图，它会用 `read_image` 工具去读。这条工具结果是多模态消息
+（文本 + 图片部件），模型是真的看得见那张图。`read_file` 遇到图片扩展名会直接拒掉并把模型
+推给 `read_image`，而不是回一堆乱码。历史里一次只留一张图 —— 再读第二张，早的那张会降级成
+`[图片已从历史中省略]`（base64 图片每轮都要重发，不控制会把上下文顶穿）。单张上限 4 MB，
+更大的让它先压缩。
 
 终端 UI 对标 Codex / Claude Code 风格：盒式输入框、等待 spinner、灰斜体流式思考、
 `⏺` 工具块 + 智能参数摘要、轻量 Markdown 渲染（加粗、行内代码、标题、代码块）。

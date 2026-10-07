@@ -185,8 +185,17 @@ export function convertSessionToMessages(session: AgentSession | null): ChatMess
           const toolCallId = cur.tool_call_id || cur.name || ''
           const tc = toolCalls.find(t => t.id === toolCallId)
           if (tc) {
-            let toolResult = cur.content
-            if (typeof toolResult !== 'string') toolResult = '(non-text result)'
+            // read_image 的 tool 消息是多模态数组(文本 + image_url)。历史里只还原
+            // 文本部分 —— 图片本体已经在会话记录里,但对话流的气泡不适合再塞一张
+            // base64 大图,而且用户当时是看着模型回答的,不需要回看原图。
+            let toolResult: string
+            if (typeof cur.content === 'string') toolResult = cur.content
+            else if (Array.isArray(cur.content)) {
+              toolResult = cur.content
+                .filter(p => p?.type === 'text')
+                .map(p => p.text || '')
+                .join('\n') || '(non-text result)'
+            } else toolResult = '(non-text result)'
             if (toolResult.length > MAX_LOG_DISPLAY) {
               toolResult = `…（前文已截断）\n${toolResult.slice(-MAX_LOG_DISPLAY)}`
             }

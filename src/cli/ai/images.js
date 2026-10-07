@@ -185,6 +185,19 @@ export async function readClipboardImage() {
   }
 }
 
+// 支持的图片扩展名(供报错文案 / 工具描述复用,不在两处各列一遍)
+export const SUPPORTED_IMAGE_EXTS = Object.keys(MIME_BY_EXT).join(' / ')
+
+/**
+ * 该路径的扩展名是不是本模块支持的图片格式。
+ * 只看扩展名、不碰磁盘 —— 调用方用它做"要不要走图片分支"的第一道判断
+ * (tools.js 的 read_file / read_image 都用它),真正能不能读由 checkImageFile 定。
+ */
+export function isImagePath(filePath) {
+  if (!filePath || typeof filePath !== 'string') return false
+  return Boolean(MIME_BY_EXT[path.extname(filePath).toLowerCase()])
+}
+
 /**
  * 校验本地图片文件,返回 {path, bytes};不存在/不是支持的格式返回 null
  */
@@ -210,4 +223,4 @@ export async function imageToDataUrl(filePath) {
   return `data:${mime};base64,${buf.toString('base64')}`
 }
 
-export default { readClipboardImage, checkImageFile, imageToDataUrl, formatBytes }
+export default { readClipboardImage, checkImageFile, imageToDataUrl, isImagePath, formatBytes }
