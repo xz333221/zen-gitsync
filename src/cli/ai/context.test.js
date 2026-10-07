@@ -8,7 +8,7 @@
 //      (2026-10-07 主 Agent 控制台 1132 次调用死循环的事故回归,见 context.js 文件头)
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { prepareRequestMessages, sanitizeMessages, stripStaleImages, resolveRequestBudget } from './context.js'
+import { prepareRequestMessages, sanitizeMessages, stripStaleImages, resolveRequestBudget, measureContextUsage, estimateTokens } from './context.js'
 
 const call = n => ({ id: `call${n}`, type: 'function', function: { name: 'read_file', arguments: '{}' } })
 
@@ -268,14 +268,44 @@ test('条数上限不再提前撞满字符预算（2026-10-07 回归）', () => 
     messages.push({ role: 'tool', tool_call_id: `call${i}`, content: 'x'.repeat(2700) })
   }
   const request = prepareRequestMessages(messages, { locale: 'zh-CN' })
-  // 自己按文本长度算（与 buildRequestMessages 里的 size() 同口径），
-  // 刻意不依赖 measureContextUsage —— 那个函数是「占用可视化」那批改动才加的，
-  // 预算这一组提交里还没有它。
-  const used = request.reduce((n, m) => {
-    const c = typeof m.content === 'string' ? m.content : ''
-    return n + c.length + JSON.stringify(m.tool_calls || []).length
-  }, 0)
-  assert.ok(used / DEFAULT_BUDGET.maxChars > 0.9,
-    `字符预算应当基本耗尽（实测只用到 ${(used / DEFAULT_BUDGET.maxChars * 100).toFixed(1)}%），条数不该提前卡住`)
+  // 用 measureContextUsage 量，与 UI 看到的是同一个口径 ——
+  // 断言"条数不该提前卡住"这件事本身就是在验这套测量算得对不对。
+  const usage = measureContextUsage(request, {
+    maxChars: DEFAULT_BUDGET.maxChars, maxMessages: DEFAULT_BUDGET.maxMessages,
+  })
+  assert.ok(usage.charRatio > 0.9,
+    `字符预算应当基本耗尽（实测只用到 ${(usage.charRatio * 100).toFixed(1)}%），条数不该提前卡住`)
   assert.ok(request.length < DEFAULT_BUDGET.maxMessages, `条数也不该撞顶：${request.length}`)
+})
+
+test('measureContextUsage:只量请求副本,不含图片,并算出被裁掉多少', () => {
+  const transcript = [
+    { role: 'system', content: 'r'.repeat(1000) },
+    { role: 'user', content: 'goal' },
+    { role: 'assistant', content: 'a'.repeat(500) },
+    { role: 'user', content: [
+      { type: 'text', text: '看图' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,' + 'A'.repeat(50000) } },
+    ] },
+  ]
+  const request = transcript.slice(0, 3)
+  const usage = measureContextUsage(request, { maxChars: 400000, maxMessages: 400, transcript })
+  assert.equal(usage.messages, 3)
+  assert.equal(usage.images, 0, '副本里没有图')
+  // 图片 base64 不该计入字符预算（否则一张截图就把进度条顶满）
+  assert.ok(usage.chars < 5000, `实际 ${usage.chars} —— 图片 base64 似乎被算进去了`)
+  assert.equal(usage.transcriptMessages, 4)
+  assert.equal(usage.droppedMessages, 1)
+  assert.ok(usage.estTokens > 0 && usage.estTokens < usage.chars, '估算 token 应落在 0 与字符数之间')
+  assert.equal(usage.charRatio, usage.chars / 400000)
+})
+
+test('estimateTokens:中文一字一 token,ascii 按 3.5 字符一 token', () => {
+  assert.equal(estimateTokens('中'.repeat(500)), 500)
+  assert.equal(estimateTokens('a'.repeat(3500)), 1000)
+  assert.equal(estimateTokens(''), 0)
+  assert.equal(estimateTokens(null), 0)
+  // 混合：中英各一半应落在两者之间（100 中文 + 350 ascii ≈ 100 + 100 = 200）
+  const mixed = estimateTokens('中'.repeat(100) + 'a'.repeat(350))
+  assert.ok(mixed > 100 && mixed <= 200, `实际 ${mixed}`)
 })

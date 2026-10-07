@@ -250,6 +250,79 @@ export function prepareRequestMessages(messages, {
   return sanitizeMessages(copy)
 }
 
+// ── 上下文占用测量（给 UI 显示"这次请求占了多少"）─────────────────────
+//
+// 为什么单独一个函数而不是让调用方自己算：
+//   · token 数没有真值 —— 只有 provider 返回的 usage 才是权威，而它在**响应回来之后**
+//     才有。一轮工具循环里要在**请求发出去之前**就知道这次会带多少过去，只能估。
+//   · 估法必须一处。CLI（turn.js）与 Web（agentChat.js）各估一次必然漂移 —— 这仓库
+//     已经被"同一口径写两遍"坑过（提示词四处、路径归一三处，失效方式是不报错、
+//     两个入口表现不一样）。所以只有这一份。
+//
+// 换算系数从本机真实会话实测来（2026-10-07，ag-muxglt4p：525 万字符 ≈ 204 万 token）：
+// 中文字 86 万、ascii 407 万 → 中文按 1 字/token、ascii 按 3.5 字符/token 加权后
+// 整体落在 2.57 字符/token 附近。这个精度只够画一根进度条，不足以算钱；
+// 真要精确用量请看 provider 的 usage（CLI 的 /stats 有，Web 侧还没接）。
+const CJK_RE = /[㐀-鿿豈-﫿　-〿＀-￯]/g
+const ASCII_TOKEN_CHARS = 3.5
+const CJK_TOKEN_PER_CHAR = 1
+
+export function estimateTokens(text) {
+  const s = typeof text === 'string' ? text : ''
+  if (!s) return 0
+  const cjk = (s.match(CJK_RE) || []).length
+  const ascii = (s.match(/[ -~]/g) || []).length
+  const rest = s.length - cjk - ascii
+  return Math.ceil(cjk * CJK_TOKEN_PER_CHAR + ascii / ASCII_TOKEN_CHARS + rest / 2)
+}
+
+// 与 buildRequestMessages 里的 size() 同一口径：只算文本，不算图片 base64。
+const messageTextSize = m => textOf(m).length + JSON.stringify(m.tool_calls || []).length
+
+/**
+ * 量一次请求的实际占用。给 UI 画进度条用，不参与任何裁剪决策。
+ *
+ * @param {Array} requestMessages 已经过 prepareRequestMessages 的**请求副本**
+ * @param {object} opts
+ * @param {number} opts.maxChars      当前预算的字符上限（画条的分母）
+ * @param {number} opts.maxMessages   当前预算的条数上限
+ * @param {Array}  [opts.transcript]  磁盘上的完整会话，算"被裁掉了多少"用
+ * @returns {{
+ *   chars: number, messages: number, images: number, estTokens: number,
+ *   maxChars: number, maxMessages: number,
+ *   charRatio: number, messageRatio: number,
+ *   transcriptMessages: number, transcriptChars: number, droppedMessages: number
+ * }}
+ */
+export function measureContextUsage(requestMessages, { maxChars = REQUEST_DEFAULT_MAX_CHARS, maxMessages = REQUEST_DEFAULT_MAX_MESSAGES, transcript = null } = {}) {
+  const messages = Array.isArray(requestMessages) ? requestMessages : []
+  let chars = 0
+  let images = 0
+  let text = ''
+  for (const m of messages) {
+    chars += messageTextSize(m)
+    text += textOf(m)
+    if (Array.isArray(m?.content)) images += m.content.filter(p => p?.type === 'image_url').length
+  }
+  const transcriptChars = Array.isArray(transcript)
+    ? transcript.reduce((n, m) => n + messageTextSize(m), 0)
+    : 0
+  return {
+    chars,
+    messages: messages.length,
+    images,
+    estTokens: estimateTokens(text),
+    maxChars,
+    maxMessages,
+    // 比率按 0~1 给，UI 拿它画宽度就行，不必再除一遍
+    charRatio: maxChars > 0 ? Math.min(chars / maxChars, 1) : 0,
+    messageRatio: maxMessages > 0 ? Math.min(messages.length / maxMessages, 1) : 0,
+    transcriptMessages: Array.isArray(transcript) ? transcript.length : messages.length,
+    transcriptChars,
+    droppedMessages: Array.isArray(transcript) ? Math.max(transcript.length - messages.length, 0) : 0,
+  }
+}
+
 // Only load explicitly named project instruction files, with bounded local redirects.
 export async function loadProjectInstructions(cwd) {
   const visited = new Set(), sections = []

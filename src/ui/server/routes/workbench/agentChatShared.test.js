@@ -35,9 +35,15 @@ const model = { model: 'test', name: 'test', baseURL: 'https://example.invalid/v
 const call = n => ({ id: `call${n}`, type: 'function', function: { name: 'read_file', arguments: '{}' } })
 const okStream = () => sse([event({ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] }), 'data: [DONE]\n\n'])
 const withSystem = () => [{ role: 'system', content: 'rules' }, { role: 'user', content: 'hi' }]
+// 200 组 × 6000 字符（clip 后）≈ 240 万字符，远超默认预算。
+//
+// 为什么是 200 而不是历史上的 60:默认预算 2026-10-07 从 80k 提到 400k，
+// 60 组（120 条 × 6000 ≈ 360k）正好卡在新预算底下，**裁剪根本不触发**，
+// 下面那些"请求副本未收窄 / 摘录成梗概"的断言会变成假绿。测试数据的量必须
+// 跟着预算走 —— 改默认值而不动数据量，等于把回归测试改成了空转。
 const longSession = () => {
   const messages = [{ role: 'system', content: 'rules' }, { role: 'user', content: 'original goal' }]
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 200; i++) {
     messages.push({ role: 'assistant', tool_calls: [call(i)] })
     messages.push({ role: 'tool', tool_call_id: `call${i}`, content: 'data'.repeat(4000) })
   }
@@ -69,7 +75,7 @@ const newSession = (sessionId, messages) => ({ sessionId, messages, cwd: process
 // ── 上下文口径 ────────────────────────────────────────────
 
 test('请求体与 context.js 的输出逐字段相同（有界 + 摘录）', async () => {
-  const { prepareRequestMessages } = await import('../../../../cli/ai/context.js')
+  const { prepareRequestMessages, resolveRequestBudget } = await import('../../../../cli/ai/context.js')
   const messages = longSession()
   // 传副本进去:runAgentTurn 会往 session.messages 追加消息,原数组要留作期望值的输入
   const session = newSession('ag-sandbox-test', structuredClone(messages))
@@ -77,7 +83,9 @@ test('请求体与 context.js 的输出逐字段相同（有界 + 摘录）', as
   const { sent } = await runWeb({ session, userMessage: 'next', respond: okStream })
 
   assert.ok(sent, '必须发出过一次请求')
-  assert.ok(sent.messages.length <= 40, `请求副本未收窄: ${sent.messages.length} 条`)
+  // 上限写死成 40 就会在默认值变更那天变成假绿 —— 直接引用解析结果
+  assert.ok(sent.messages.length <= resolveRequestBudget(undefined).maxMessages,
+    `请求副本未收窄: ${sent.messages.length} 条`)
   assert.equal(sent.messages[0].role, 'system')
   assert.match(sent.messages[1].content, /^\[Earlier conversation excerpts/)
   assert.ok(sent.messages.some(m => m.content === 'original goal'), '原始目标必须保留')
@@ -90,10 +98,12 @@ test('请求体与 context.js 的输出逐字段相同（有界 + 摘录）', as
 
 test('会话记录不再被原地裁剪（磁盘口径与 CLI 一致）', async () => {
   const session = newSession('ag-sandbox-keep', longSession())
+  const toolCountBefore = session.messages.filter(m => m.role === 'tool').length
 
   await runWeb({ session, userMessage: 'next', respond: okStream })
 
-  assert.equal(session.messages.filter(m => m.role === 'tool').length, 60,
+  // 比"运行前后"而不是写死组数 —— longSession 的组数一改这条就假绿
+  assert.equal(session.messages.filter(m => m.role === 'tool').length, toolCountBefore,
     '旧消息必须留在会话记录里(裁剪只作用于请求副本)')
   assert.equal(session.messages[1].content, 'original goal')
   assert.equal(session.messages[2].tool_calls[0].id, 'call0')
@@ -105,6 +115,58 @@ test('短会话不做任何额外处理,也不塞摘录消息', async () => {
   const { sent } = await runWeb({ session, userMessage: 'hello', respond: okStream })
 
   assert.deepEqual(sent.messages.map(m => m.content), ['rules', 'hi', 'hello'])
+})
+
+// ── 上下文占用下发（2026-10-07）────────────────────────────────
+// UI 的占用条全靠这个事件。断它 = 进度条永远停在 0%，而界面不会报任何错。
+
+test('每次请求前发一条 context 事件,用量与请求副本一致', async () => {
+  const { resolveRequestBudget } = await import('../../../../cli/ai/context.js')
+  const session = newSession('ag-sandbox-ctx', withSystem())
+
+  const { events, sent } = await runWeb({ session, userMessage: 'hello', respond: okStream })
+
+  const ctx = events.filter(e => e.type === 'context')
+  assert.ok(ctx.length >= 1, '必须至少发一条 context 事件')
+  const usage = ctx[0].usage
+  const budget = resolveRequestBudget(undefined)
+  // 分母必须跟实际裁剪用的是同一份，否则进度条会说谎
+  assert.equal(usage.maxChars, budget.maxChars)
+  assert.equal(usage.maxMessages, budget.maxMessages)
+  assert.equal(usage.messages, sent.messages.length, 'usage 里的条数要与真实发出去的请求一致')
+  assert.ok(usage.chars > 0 && usage.estTokens > 0)
+  assert.ok(usage.charRatio > 0 && usage.charRatio <= 1)
+  assert.equal(usage.droppedMessages, 0, '短会话不该有裁剪')
+})
+
+test('provider 返回 usage 时补一条带真实输入 token 的 context', async () => {
+  const session = newSession('ag-sandbox-ctx-usage', withSystem())
+  const withUsage = () => sse([
+    event({ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] }),
+    event({ usage: { prompt_tokens: 4321, completion_tokens: 10, total_tokens: 4331 } }),
+    'data: [DONE]\n\n',
+  ])
+
+  const { events } = await runWeb({ session, userMessage: 'hello', respond: withUsage })
+
+  const withActual = events.filter(e => e.type === 'context' && typeof e.usage.actualInputTokens === 'number')
+  assert.ok(withActual.length >= 1, '必须有一条带上真实 input token')
+  assert.equal(withActual[0].usage.actualInputTokens, 4321)
+})
+
+test('被裁剪的长会话会报出 droppedMessages（UI 靠它解释"为什么模型忘了"）', async () => {
+  const { resolveRequestBudget } = await import('../../../../cli/ai/context.js')
+  const session = newSession('ag-sandbox-ctx-drop', longSession())
+  const toolCount = session.messages.filter(m => m.role === 'tool').length
+
+  const { events } = await runWeb({ session, userMessage: 'next', respond: okStream })
+
+  const usage = events.find(e => e.type === 'context').usage
+  assert.ok(usage.droppedMessages > 0, '长会话必须报出被裁掉的条数')
+  // longSession = system + 首 user + N×(assistant + tool)，再加 runAgentTurn 追加的本轮 user
+  assert.equal(usage.transcriptMessages, toolCount * 2 + 3,
+    'transcriptMessages 是磁盘上的完整条数（含本轮 user）')
+  assert.ok(usage.messages < usage.transcriptMessages, '带入的必须少于磁盘上的，否则说明没裁')
 })
 
 // ── 传输口径 ──────────────────────────────────────────────

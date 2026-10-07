@@ -275,6 +275,33 @@ function mimeFromDataUrl(u: string): string {
 // ── 单个会话的运行时状态 ─────────────────────────────────
 // 每个会话各持一份：后台流写自己的 run，切换会话只改 currentSessionId 指向，
 // 不再打断正在跑的流，也不会把增量写进别的会话。
+
+/**
+ * 上下文占用（服务端 measureContextUsage 的形状，见 cli/ai/context.js）。
+ *
+ * `estTokens` 是**估算** —— 请求发出去之前算的（provider 的真实 usage 还没回来）。
+ * `actualInputTokens` 是 provider 报回来的真实输入 token，响应到达后才有。
+ * UI 优先用真的，没有才退回估算。
+ *
+ * 为什么要有 `droppedMessages` / `transcriptMessages`：这两个数一起才说得清
+ * "为什么会失忆"——磁盘上存着 1766 条，这次请求只带了 39 条，剩下的不是丢了，
+ * 是按预算被摘成了梗概。少了它们，进度条满格 100% 反而会让人以为全带上了。
+ */
+export interface AgentContextUsage {
+  chars: number
+  messages: number
+  images: number
+  estTokens: number
+  maxChars: number
+  maxMessages: number
+  charRatio: number
+  messageRatio: number
+  transcriptMessages: number
+  transcriptChars: number
+  droppedMessages: number
+  actualInputTokens?: number | null
+}
+
 interface SessionRun {
   key: string
   sessionId: string | null
@@ -285,6 +312,8 @@ interface SessionRun {
   nonce: number
   pendingQuestion: PendingAgentQuestion | null
   answeringQuestion: boolean
+  /** 本会话最近一次请求的上下文占用；还没发过消息时为 null */
+  contextUsage: AgentContextUsage | null
 }
 
 // ── composable ───────────────────────────────────────────
@@ -334,7 +363,8 @@ export function useAgentChat() {
       abortController: null,
       nonce: 0,
       pendingQuestion: null,
-      answeringQuestion: false
+      answeringQuestion: false,
+      contextUsage: null
     }
   }
 
@@ -355,6 +385,42 @@ export function useAgentChat() {
   )
   const messages = computed<ChatMessage[]>(() => activeRun.value?.messages ?? [])
   const isStreaming = computed(() => activeRun.value?.isStreaming ?? false)
+  // 上下文占用：随会话走（切换会话时进度条跟着切，不留在上一个会话的数字上）
+  const contextUsage = computed<AgentContextUsage | null>(() => activeRun.value?.contextUsage ?? null)
+
+  /**
+   * 喂给组件库 `ChatInput.contextUsage` 的形状。
+   *
+   * 库刻意**不替你算占用率**（见 zen-ai-chat-ui 的 `ContextUsage` 类型注释）——
+   * 怎么算取决于业务口径，写死在库里等于逼每个宿主绕开它。所以这一步是
+   * 「把自家字段翻译成库的通用形状」，一个字段对一个字段，没有计算。
+   *
+   * `ratio` 取字符与条数占用的**较大者**：两条是独立闸门，任一撞满都���开始裁剪。
+   * 只看字符会漏掉「字符还很空但条数已满」——那正是旧默认值 80k/40 条的形态。
+   *
+   * 显示用字符（`unit: ''`）而不是 token：预算是按字符定义的，
+   * token 只是估算。真实 token 在 hover 的 `detail` 里，不占主视觉。
+   */
+  const inputContextUsage = computed(() => {
+    const u = contextUsage.value
+    if (!u) return null
+    return {
+      ratio: Math.min(Math.max(u.charRatio, u.messageRatio), 1),
+      current: u.chars,
+      total: u.maxChars,
+      unit: '',
+      suffix: '上下文已使用',
+      detail: [
+        `${u.messages} / ${u.maxMessages} 条消息`,
+        typeof u.actualInputTokens === 'number' && u.actualInputTokens > 0
+          ? `实测 ${u.actualInputTokens.toLocaleString()} token`
+          : `估算 ${Math.round(u.estTokens).toLocaleString()} token`,
+        u.droppedMessages > 0
+          ? `会话共 ${u.transcriptMessages} 条，本次只带入 ${u.messages} 条（其余已摘成梗概）`
+          : '',
+      ].filter(Boolean).join('\n'),
+    }
+  })
 
   // 当前会话用的引擎。已有会话取它自己落盘的那个；没有会话（或还没落盘的新会话）
   // 取用户选的默认值 —— 这样"新建会话用 g ai，切到 claude 后再新建就是 claude"。
@@ -743,6 +809,13 @@ export function useAgentChat() {
           try { evt = JSON.parse(payload) } catch { continue }
 
           switch (evt.type) {
+            // 上下文占用：每次请求发出前服务端都会发一条（工具循环里每轮都发，
+            // 因为上下文在持续增长）。响应回来后可能补一条带 actualInputTokens 的 ——
+            // 那是 provider 报的真实输入 token，比估算准，UI 优先显示它。
+            case 'context':
+              if (evt.usage) run.contextUsage = { ...(run.contextUsage || {}), ...evt.usage }
+              break
+
             case 'meta':
               if (evt.sessionId) {
                 const realId = String(evt.sessionId)
@@ -1003,6 +1076,10 @@ export function useAgentChat() {
     pendingQuestion,
     answeringQuestion,
     isSessionGenerating,
+    // 上下文占用：当前会话最近一次请求的实测/估算值（服务端 measureContextUsage 的形状）
+    contextUsage,
+    // 组件库 ChatInput 的 `contextUsage` prop 形状（库不替你算，这里做翻译）
+    inputContextUsage,
     // 引擎选择：currentEngine 是"这次会用的"，isEngineLocked 决定选择器是否置灰
     currentEngine,
     pendingEngine,

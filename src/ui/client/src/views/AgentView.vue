@@ -78,7 +78,8 @@ const {
   pendingEngine,
   isEngineLocked,
   pickEngine,
-  stop
+  stop,
+  inputContextUsage
 } = useAgentChat()
 
 // ── 引擎选择 ──────────────────────────────────────────────
@@ -344,6 +345,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
                 :disabled="isStreaming"
                 :generating="isStreaming"
                 :upload-config="{ accept: AGENT_UPLOAD_ACCEPT }"
+                :context-usage="inputContextUsage"
                 :placeholder="isStreaming ? $t('@AGENT:正在生成中...') : $t('@AGENT:输入消息，Enter 发送')"
                 :question="pendingQuestion"
                 :question-submitting="answeringQuestion"
@@ -424,6 +426,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   margin-left: auto;
   margin-bottom: 7px;
 }
+
 
 .agent-tabs {
   display: flex;

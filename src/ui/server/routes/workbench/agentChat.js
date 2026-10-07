@@ -42,7 +42,7 @@ import { logger } from './shared.js';
 
 // 从 CLI 侧导入工具定义、执行器与 LLM 传输层（同一 monorepo，路径可达）
 import { TOOL_DEFINITIONS, executeTool, normalizePlanSteps, summarizePlan, splitToolOutput, toolMessageContent } from '../../../../cli/ai/tools.js';
-import { prepareRequestMessages } from '../../../../cli/ai/context.js';
+import { prepareRequestMessages, measureContextUsage, resolveRequestBudget } from '../../../../cli/ai/context.js';
 import { streamChatOnce } from '../../../../cli/ai/transport.js';
 import { checkDangerousCommand } from '../../../../cli/ai/safety.js';
 import { guardCommand } from '../../../../cli/ai/platformGuard.js';
@@ -350,16 +350,28 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
 
   const maxIterations = await resolveMaxToolIterations();
 
+  // 预算缺省时在**这里**解析一次，与 prepareRequestMessages 的派生口径一致
+  // （不能让它自己兜默认：那样 measureContextUsage 拿到的分母会和实际裁剪用的分母
+  //   可能不同，UI 上的进度条就会说谎）。
+  const budget = requestBudget || resolveRequestBudget();
+
   for (let iter = 0; iter < maxIterations; iter++) {
     // 每轮都从完整会话记录重新构建一次请求副本:条数/字符双预算 → 被丢掉的旧消息
     // 摘录成一条梗概 → 旧图片降级 → provider 兼容消毒。
     // 只作用于副本,session.messages 保持完整(与 CLI 的磁盘口径一致)。
-    // 预算来自 requestBudget(全局配置 aiMaxRequestChars 的解析结果);缺省时走
-    // prepareRequestMessages 的默认值(80,000 字符 / 40 条,与历史行为一致)。
-    const messages = prepareRequestMessages(session.messages, { locale, ...(requestBudget || {}) });
+    // 预算来自 requestBudget(全局配置 aiMaxRequestChars 的解析结果)。
+    const messages = prepareRequestMessages(session.messages, { locale, ...budget });
     // 请求级上下文：工作区状态快照 + 常用目录状态 + 当前打开的文档 + 本轮附件路径
     // （只改副本，不落 session.messages，下一轮不重复累积）
     injectRequestContext(messages, { cwd, openFilePath, attachments, locale, workspaceBlock, dirStatusBlock });
+
+    // 上下文占用：在**请求发出去之前**量一次，发给 UI 画进度条。
+    // 为什么必须在发之前：provider 的真实 usage（input_tokens）要等响应回来才有，
+    //   而用户想知道的是"这次会带多少过去"—— 那只能在发之前量。
+    // 为什么每轮都发：工具循环里上下文是**持续增长**的，只发一次的话
+    //   用户看到的永远是第一轮那个数字，直到对话结束才发现早就满了。
+    const usage = measureContextUsage(messages, { ...budget, transcript: session.messages });
+    send({ type: 'context', usage });
 
     let result;
     try {
@@ -383,6 +395,17 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
     }
 
     const { content, toolCalls } = result;
+
+    // provider 报回来的**真实** token 用量，比 measureContextUsage 的估算准。
+    // 回填进同一条 context 事件的两个字段（estimated / actual），UI 优先显示真实值 ——
+    // 估算只用于"请求发出去之前"那段时间（以及 provider 不返回 usage 的场合）。
+    //
+    // 为什么以前没记：CLI 侧有 /stats（src/cli/ai/telemetry.js），Web 侧漏了，
+    // 于是 28 个会话文件里 lastTurnStats / sessionStats 全是 null。
+    // 这里补上的是**本轮的**真实输入 token；会话累计要等落盘，由路由层负责。
+    if (result.usage) {
+      send({ type: 'context', usage: { ...usage, actualInputTokens: result.usage.inputTokens ?? null } });
+    }
 
     // 推理内容必须原样带回历史。DeepSeek 系 thinking 模式下带 tool_calls 的 assistant
     // 消息一旦缺 reasoning_content，下一轮回传就被上游 400 拒掉:

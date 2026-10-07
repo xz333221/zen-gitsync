@@ -108,6 +108,7 @@ const {
   sendMessage,
   answerQuestion,
   stop,
+  inputContextUsage,
 } = useAgentChat()
 
 const displayEngine = computed(() => (isEngineLocked.value ? currentEngine.value : pendingEngine.value))
@@ -293,6 +294,7 @@ onMounted(() => {
           :generating="isStreaming"
           :placeholder="placeholder || (isStreaming ? $t('@AGENT:正在生成中...') : $t('@AGENT:输入消息，Enter 发送'))"
           :upload-config="{ accept: AGENT_UPLOAD_ACCEPT }"
+          :context-usage="inputContextUsage"
           @send="onSend"
           @stop="stop"
         />
