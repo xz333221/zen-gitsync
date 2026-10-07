@@ -632,11 +632,13 @@ onBeforeUnmount(stopChatPin)
  * 左侧任务条目"是否执行中"的统一判断。父组件传给 WorkbenchSidebar。
  * 一条任务 = 一次会话：查 jobs（subId = ${task.id}__simple 或 __rN 后缀），
  * 取最新一条 job，pending/running 都算在跑。
+ *
+ * 判定本身在 useWorkbenchExecution 里（排队续聊也要用同一个口径，不能各算一遍），
+ * 这里只是把 Task 拆成 id 转发过去。
  */
 function isTaskRunning(t: Task): boolean {
   if (!t) return false
-  const job = simpleJobFor(t)
-  return !!job && (job.status === 'running' || job.status === 'pending')
+  return isTaskRunningById(t.id)
 }
 
 /** 这条任务跑过没有 —— 决定执行按钮叫「执行任务」还是「重新执行任务」 */
@@ -954,7 +956,11 @@ const {
 // ── 执行层（run/cancel/continue/clear 等核心交互逻辑） ──
 const {
   runTask, onContinueSendFromChat,
-  cancelJob, clearExecutionForSelectedTask
+  cancelJob, clearExecutionForSelectedTask,
+  // 重命名：本文件里已有一个按 Task 判定的 isTaskRunning（见下方 640 行附近），
+  // 那边改成委托给这一份，全仓只留一个"这条任务在不在跑"的口径
+  isTaskRunning: isTaskRunningById,
+  queuedChatsOf, removeQueuedChat, flushNextQueued
 } = useWorkbenchExecution(
   jobs, tasks, selectedTask,
   {
@@ -987,6 +993,12 @@ function executorLabel(id: TaskExecutorId): string {
 const lastSimpleJob = computed(() => simpleAllJobsFor(selectedTask.value).slice(-1)[0])
 const simpleAssistantLabel = computed(() => taskExecutorName(lastSimpleJob.value?.agent))
 const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.value?.agent))
+
+// 排队续聊：任务在跑时输入框照样能用，发出去的内容先排队（见 useWorkbenchExecution）。
+// 「在不在跑」不在这儿另算一遍 —— 直接用上面那个 isTaskRunning / selectedTaskRunning。
+const selectedTaskQueue = computed(() =>
+  selectedTask.value ? queuedChatsOf(selectedTask.value.id) : []
+)
 </script>
 
 <template>
@@ -1360,14 +1372,54 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
                       :show-input="false"
                     />
                   </div>
-                  <!-- 终态控件 -->
-                  <div
-                    v-if="simpleJobFor(selectedTask) && ['done','error','cancelled'].includes(simpleJobState(simpleJobFor(selectedTask)))"
-                    class="wb-simple-chat__footer"
-                  >
+                  <!-- 输入区：**任务在跑的时候也常驻**。
+                       - 空闲：发送 = 立刻续接一轮
+                       - 执行中：发送 = 排队，等这一轮 job 进终态自动接上（见 useWorkbenchExecution）
+                       停止按钮不在这里 —— 它一直在上方「提示词」那一行的右侧。 -->
+                  <div class="wb-simple-chat__footer">
+                    <div v-if="selectedTaskQueue.length" class="wb-chat-queue">
+                      <div class="wb-chat-queue__head">
+                        <span class="wb-chat-queue__label">{{ $t('@WORKBENCH:排队中') }}</span>
+                        <span class="wb-chat-queue__count">{{ selectedTaskQueue.length }}</span>
+                        <span class="wb-chat-queue__hint">
+                          {{ selectedTaskRunning
+                            ? $t('@WORKBENCH:等这一轮跑完自动发送')
+                            : $t('@WORKBENCH:当前没有在跑的轮次') }}
+                        </span>
+                      </div>
+                      <div
+                        v-for="(item, qi) in selectedTaskQueue"
+                        :key="item.id"
+                        class="wb-chat-queue__item"
+                      >
+                        <span class="wb-chat-queue__index">{{ qi + 1 }}</span>
+                        <span class="wb-chat-queue__text" :title="item.text">{{ item.text }}</span>
+                        <span v-if="item.files.length" class="wb-chat-queue__atts">
+                          <span aria-hidden="true">📎</span>
+                          {{ item.files.map(f => f.file.name).join('、') }}
+                        </span>
+                        <!-- 队首 + 没在跑 = 上一笔发失败了（正常情况终态一到就自动发了），
+                             给个手动重试；其余情况点它没意义，所以只在队首出现 -->
+                        <button
+                          v-if="qi === 0 && !selectedTaskRunning"
+                          type="button"
+                          class="wb-chat-queue__btn"
+                          @click="flushNextQueued(selectedTask.id)"
+                        >{{ $t('@WORKBENCH:立即发送') }}</button>
+                        <button
+                          type="button"
+                          class="wb-chat-queue__btn is-remove"
+                          :title="$t('@WORKBENCH:移出队列')"
+                          :aria-label="$t('@WORKBENCH:移出队列')"
+                          @click="removeQueuedChat(selectedTask.id, item.id)"
+                        >✕</button>
+                      </div>
+                    </div>
                     <ChatInput
                       :key="'input-' + selectedTask.id"
-                      :placeholder="$t('@WORKBENCH:输入后续问题继续对话…(Ctrl+Enter 发送)')"
+                      :placeholder="selectedTaskRunning
+                        ? $t('@WORKBENCH:执行中，发送后会排队，等这一轮跑完自动接上…')
+                        : $t('@WORKBENCH:输入后续问题继续对话…(Ctrl+Enter 发送)')"
                       :upload-config="{
                         enabled: true,
                         accept: ALLOWED_EXT_HINT,
@@ -2712,6 +2764,98 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   background: var(--bg-code);
 }
 .wb-simple-chat__input { width: 100%; }
+
+/* 排队续聊条：任务在跑时发出去的内容先落这儿，等这一轮 job 进终态自动接上。
+   用 --role-pending-* 这套语义色，跟看板「待处理」列是同一个视觉口径 ——
+   「排队中」本来就是 pending。 */
+.wb-chat-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--role-pending-edge);
+  border-radius: var(--radius-md);
+  background: var(--role-pending-surface);
+}
+.wb-chat-queue__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  color: var(--role-pending-ink);
+}
+.wb-chat-queue__label { font-weight: 600; }
+.wb-chat-queue__count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--role-pending-wash);
+  font-weight: 600;
+  text-align: center;
+}
+.wb-chat-queue__hint { color: var(--text-secondary); }
+.wb-chat-queue__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-size-sm);
+}
+.wb-chat-queue__index {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--role-pending-wash);
+  color: var(--role-pending-ink);
+  font-size: var(--font-size-xs);
+  line-height: 16px;
+  text-align: center;
+}
+.wb-chat-queue__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+.wb-chat-queue__atts {
+  flex-shrink: 0;
+  max-width: 36%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+.wb-chat-queue__btn {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1px solid var(--role-pending-edge);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--role-pending-ink);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: background var(--transition-fast) var(--ease-custom),
+              border-color var(--transition-fast) var(--ease-custom);
+}
+.wb-chat-queue__btn:hover {
+  background: var(--role-pending-wash);
+  border-color: var(--role-pending-ink);
+}
+.wb-chat-queue__btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
+.wb-chat-queue__btn.is-remove {
+  padding: 2px 6px;
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+.wb-chat-queue__btn.is-remove:hover {
+  border-color: var(--border-card-hover);
+  background: transparent;
+  color: var(--text-primary);
+}
 
 .wb-form-item {
   display: flex;
