@@ -272,12 +272,27 @@ function formatTimestamp(timestamp: string): string {
 }
 
 // Format execution time
+// 和 CLI 的 termui.formatDuration 保持同一套量级:超过 60 分钟换成小时、超过 24 小时换成天,
+// 否则长命令会显示成 "39497.00s" 这种没人有概念的数字。
 function formatExecutionTime(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '—';
   if (ms < 1000) {
-    return `${ms}ms`;
-  } else {
-    return `${(ms / 1000).toFixed(2)}s`;
+    return `${Math.round(ms)}ms`;
   }
+  const totalSec = ms / 1000;
+  if (totalSec < 60) {
+    return `${totalSec.toFixed(2)}s`;
+  }
+  const seconds = Math.round(totalSec);
+  const totalMin = Math.floor(seconds / 60);
+  if (totalMin < 60) {
+    return `${totalMin}m${seconds % 60}s`;
+  }
+  const totalHour = Math.floor(totalMin / 60);
+  if (totalHour < 24) {
+    return `${totalHour}h${totalMin % 60}m`;
+  }
+  return `${Math.floor(totalHour / 24)}d${totalHour % 24}h`;
 }
 
 // Toggle expansion of a command result

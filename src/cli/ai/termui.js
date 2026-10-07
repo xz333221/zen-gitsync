@@ -605,9 +605,15 @@ export function createAssistantWriter({
 
 /**
  * 格式化耗时(毫秒 → 人类可读)。
- *   < 1s  → "123ms"
- *   < 60s → "1.2s"
- *   ≥ 60s → "2m30s"
+ *   < 1s   → "123ms"
+ *   < 60s  → "1.2s"
+ *   < 60m  → "2m30s"
+ *   < 24h  → "10h58m"
+ *   ≥ 24h  → "2d3h"
+ *
+ * 分钟以上不再往下带秒:一条挂了半小时的命令显示 "31m12s" 尚可,显示
+ * "658m17s" 就没人有概念了(那是 10 小时 58 分)。所以一过 60 分钟就换
+ * 成小时,一过 24 小时就换成天,只保留两个量级。
  * @param {number} ms
  * @returns {string}
  */
@@ -615,10 +621,18 @@ export function formatDuration(ms) {
   if (!Number.isFinite(ms) || ms < 0) return ''
   if (ms < 1000) return `${Math.round(ms)}ms`
   const s = ms / 1000
-  if (s < 60) return `${s.toFixed(1)}s`
-  const m = Math.floor(s / 60)
-  const rem = Math.round(s % 60)
-  return `${m}m${rem}s`
+  if (s < 60) {
+    // 59.97s 这种四舍五入后就是 60 的,不留成 "60.0s",往下走进位成 1m0s
+    const oneDecimal = Math.round(s * 10) / 10
+    if (oneDecimal < 60) return `${oneDecimal.toFixed(1)}s`
+  }
+  // 先取整到秒再拆分量级,避免 m/s 拼接时出现 "59m60s"
+  const totalSec = Math.round(s)
+  const totalMin = Math.floor(totalSec / 60)
+  if (totalMin < 60) return `${totalMin}m${totalSec % 60}s`
+  const totalHour = Math.floor(totalMin / 60)
+  if (totalHour < 24) return `${totalHour}h${totalMin % 60}m`
+  return `${Math.floor(totalHour / 24)}d${totalHour % 24}h`
 }
 
 export function renderTurnSummary(stats, { locale = 'zh-CN', session, width = Math.min(100, termWidth() - 4) } = {}) {

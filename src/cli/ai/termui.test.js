@@ -362,13 +362,30 @@ test('formatDuration: 毫秒级显示 ms', () => {
 test('formatDuration: 秒级显示一位小数', () => {
   assert.equal(formatDuration(1000), '1.0s')
   assert.equal(formatDuration(1500), '1.5s')
-  assert.equal(formatDuration(59999), '60.0s')
+  assert.equal(formatDuration(59900), '59.9s')
 })
 
 test('formatDuration: 分钟级显示 m+s', () => {
   assert.equal(formatDuration(60000), '1m0s')
   assert.equal(formatDuration(125000), '2m5s')
-  assert.equal(formatDuration(3600000), '60m0s')
+  assert.equal(formatDuration(3599000), '59m59s')
+  // 59.999s 四舍五入到 60,不进位成 "60.0s"
+  assert.equal(formatDuration(59999), '1m0s')
+})
+
+test('formatDuration: 小时级显示 h+m(不再堆分钟)', () => {
+  assert.equal(formatDuration(3600000), '1h0m')
+  assert.equal(formatDuration(3600000 + 30 * 60000), '1h30m')
+  assert.equal(formatDuration(16320000), '4h32m')
+  // 658m17s 这种就该显示成 10h58m
+  assert.equal(formatDuration(658 * 60000 + 17000), '10h58m')
+  assert.equal(formatDuration(23 * 3600000 + 59 * 60000), '23h59m')
+})
+
+test('formatDuration: 天级显示 d+h', () => {
+  assert.equal(formatDuration(24 * 3600000), '1d0h')
+  assert.equal(formatDuration(26 * 3600000 + 2 * 60000), '1d2h')
+  assert.equal(formatDuration(50 * 3600000), '2d2h')
 })
 
 test('formatDuration: 无效输入返回空串', () => {
