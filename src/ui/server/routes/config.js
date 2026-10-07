@@ -22,6 +22,9 @@ import { CONFIG_FILE } from '../../../paths.js';
 // AI 请求的地址/请求头统一走这里：OpenCode 网关要求自报 User-Agent 并带
 // x-opencode-session，否则直接 4xx（见 src/utils/aiEndpoint.js 顶部说明）
 import { buildAiChatRequest } from '../../../utils/aiEndpoint.js';
+// 请求预算的解析公式住在 cli/ai/context.js —— 前端拿"解析后的三参数"做超长输入
+// 预警时，服务端下发同一份解析结果，不在前端重算（口径只有一处）。
+import { resolveRequestBudget } from '../../../cli/ai/context.js';
 
 // 跳过的产物/资源/lock 文件(用 stat 一行带过,不打 patch)
 const SKIP_FILE_PATTERNS = [
@@ -346,6 +349,11 @@ export function registerConfigRoutes({
           await configManager.saveConfig(config)
         }
       
+        // 解析后的请求预算（超长输入预警的数据源）：与 CLI/Web 实际裁剪用的是
+        // 同一个公式（resolveRequestBudget），前端只读结果、不重算。
+        // 刻意放在上面所有 saveConfig 之后 —— 这个字段是**派生值**，不许跟着
+        // saveConfig 的 ...projectConfig 泄漏进项目级配置。
+        config.aiRequestBudget = resolveRequestBudget(config.aiMaxRequestChars)
         res.json(config)
       } catch (error) {
         const configPath = CONFIG_FILE
@@ -1081,22 +1089,46 @@ export function registerConfigRoutes({
     }
   })
 
-  // 保存 AI 智能体运行时设置（aiMaxToolIterations 是全局配置，存配置文件顶层，跨项目共享）
+  // 保存 AI 智能体运行时设置（两个键都是全局配置，存配置文件顶层，跨项目共享）：
+  //   · aiMaxToolIterations —— 单轮最大工具调用次数
+  //   · aiMaxRequestChars   —— 单轮请求的上下文预算（字符；2026-10-07 事故后开放可调，
+  //     它决定"一条粘贴最多能装多少、工具结果会不会被挤掉"，见 cli/ai/context.js）
+  // 两个键各自可选：没传的那个不动（旧客户端只传一个键时不许把它顺带清掉）。
   app.post('/api/config/save-ai-settings', express.json(), async (req, res) => {
     try {
-      const { aiMaxToolIterations } = req.body || {}
-      // 越界值在这里夹取到 [MIN, MAX]，而不是拒绝 —— 与 loadConfig 的规范化保持同一套语义
-      const normalized = configManager.normalizeAiMaxToolIterations(aiMaxToolIterations)
-      if (normalized === null) {
-        return res.status(400).json({
-          success: false,
-          error: `aiMaxToolIterations 非法: ${aiMaxToolIterations}`
-        })
+      const body = req.body || {}
+      const updates = {}
+      if (body.aiMaxToolIterations !== undefined) {
+        // 越界值在这里夹取到 [MIN, MAX]，而不是拒绝 —— 与 loadConfig 的规范化保持同一套语义
+        const normalized = configManager.normalizeAiMaxToolIterations(body.aiMaxToolIterations)
+        if (normalized === null) {
+          return res.status(400).json({
+            success: false,
+            error: `aiMaxToolIterations 非法: ${body.aiMaxToolIterations}`
+          })
+        }
+        updates.aiMaxToolIterations = normalized
+      }
+      if (body.aiMaxRequestChars !== undefined) {
+        const normalized = configManager.normalizeAiRequestChars(body.aiMaxRequestChars)
+        if (normalized === null) {
+          return res.status(400).json({
+            success: false,
+            error: `aiMaxRequestChars 非法: ${body.aiMaxRequestChars}`
+          })
+        }
+        updates.aiMaxRequestChars = normalized
+      }
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ success: false, error: '缺少可保存的参数' })
       }
       const rawConfig = await configManager.readRawConfigFile()
-      rawConfig.aiMaxToolIterations = normalized
+      Object.assign(rawConfig, updates)
       await configManager.writeRawConfigFile(rawConfig)
-      res.json({ success: true, aiMaxToolIterations: normalized })
+      // 预算按**最终落盘值**解析（含本次夹取）回给前端 —— 前端拿它做超长输入预警，
+      // 不在前端重算公式（口径只有 resolveRequestBudget 一处）
+      const finalChars = updates.aiMaxRequestChars ?? configManager.normalizeAiRequestChars(rawConfig.aiMaxRequestChars)
+      res.json({ success: true, ...updates, aiRequestBudget: resolveRequestBudget(finalChars) })
     } catch (error) {
       logger.error('[save-ai-settings] failed:', error)
       res.status(500).json({ success: false, error: error.message })

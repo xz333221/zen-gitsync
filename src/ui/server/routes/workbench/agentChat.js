@@ -305,9 +305,12 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 //     （别的入口不注入 = 那个入口没有派发能力，工具会回一句可照做的 unavailable）
 //   - getContextBlock: ({locale}) => Promise<string>  工作区状态快照的摘要块
 //     (由 agentRoutes 注入,实现在 routes/aiContext/:七个板块的摘要 + 落盘文件路径)
+//   - requestBudget: { maxChars, maxMessages, maxUserChars }  每轮请求的上下文预算
+//        （解析自全局配置 aiMaxRequestChars，见 cli/ai/context.js 的 resolveRequestBudget）。
+//        不传时 prepareRequestMessages 走默认值，行为与改造前一致。
 //
 // 返回: { aborted: boolean }
-export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, dispatchTask, getContextBlock }) {
+export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, dispatchTask, getContextBlock, requestBudget = null }) {
   const ctx = { cwd, locale, onChild, askUser, listProjects, dispatchTask };
 
   // 确保 session.messages 存在
@@ -351,7 +354,9 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
     // 每轮都从完整会话记录重新构建一次请求副本:条数/字符双预算 → 被丢掉的旧消息
     // 摘录成一条梗概 → 旧图片降级 → provider 兼容消毒。
     // 只作用于副本,session.messages 保持完整(与 CLI 的磁盘口径一致)。
-    const messages = prepareRequestMessages(session.messages, { locale });
+    // 预算来自 requestBudget(全局配置 aiMaxRequestChars 的解析结果);缺省时走
+    // prepareRequestMessages 的默认值(80,000 字符 / 40 条,与历史行为一致)。
+    const messages = prepareRequestMessages(session.messages, { locale, ...(requestBudget || {}) });
     // 请求级上下文：工作区状态快照 + 常用目录状态 + 当前打开的文档 + 本轮附件路径
     // （只改副本，不落 session.messages，下一轮不重复累积）
     injectRequestContext(messages, { cwd, openFilePath, attachments, locale, workspaceBlock, dirStatusBlock });

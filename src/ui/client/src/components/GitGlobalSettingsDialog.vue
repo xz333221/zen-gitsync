@@ -501,6 +501,23 @@
                 </span>
               </div>
             </div>
+            <div class="setting-row">
+              <label class="setting-label">{{ $t('@42BB9:单轮请求上下文上限') }}</label>
+              <div class="project-toggle">
+                <el-input-number
+                  v-model="aiMaxRequestCharsInput"
+                  :min="20000"
+                  :max="1000000"
+                  :step="10000"
+                  :disabled="savingAiSettings"
+                  class="ai-iterations-input"
+                  @change="handleAiMaxRequestCharsChange"
+                />
+                <span class="setting-hint-block ai-iterations-hint">
+                  {{ $t('@42BB9:每次请求最多带进模型的字符数（默认 80,000，约合 4-8 万 token）。调大后能一次贴入更长的材料，代价是每轮请求更大更慢；单条超长消息超出部分会被首尾保留地省略') }}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -897,6 +914,7 @@ const editingModelId = ref<string | null | undefined>(undefined) // undefined=�
 
 // AI 智能体运行时（全局设置，立即持久化，与模型列表一样不走"保存"按钮）
 const aiMaxToolIterationsInput = ref(1000)
+const aiMaxRequestCharsInput = ref(80000)
 const savingAiSettings = ref(false)
 
 async function handleAiMaxToolIterationsChange(value: number | undefined) {
@@ -913,6 +931,26 @@ async function handleAiMaxToolIterationsChange(value: number | undefined) {
     const ok = await configStore.saveAiSettings({ aiMaxToolIterations: next })
     // 后端会把越界值夹取到合法区间，成功后以 store 回写后的值为准，避免输入框与磁盘不一致
     aiMaxToolIterationsInput.value = configStore.aiMaxToolIterations
+    if (ok) ElMessage.success($t('@42BB9:已保存'))
+  } finally {
+    savingAiSettings.value = false
+  }
+}
+
+// 单轮请求上下文上限（字符）。越界夹取到 [20,000, 1,000,000] 由后端负责，
+// 前端只发意图、以回执为准 —— 与工具调用上限同一套交互。
+async function handleAiMaxRequestCharsChange(value: number | undefined) {
+  const next = Number(value)
+  if (!Number.isFinite(next) || next <= 0) {
+    aiMaxRequestCharsInput.value = configStore.aiMaxRequestChars
+    return
+  }
+  if (next === configStore.aiMaxRequestChars) return
+
+  savingAiSettings.value = true
+  try {
+    const ok = await configStore.saveAiSettings({ aiMaxRequestChars: next })
+    aiMaxRequestCharsInput.value = configStore.aiMaxRequestChars
     if (ok) ElMessage.success($t('@42BB9:已保存'))
   } finally {
     savingAiSettings.value = false
@@ -1085,6 +1123,7 @@ watch(() => props.modelValue, async (val) => {
     void loadExplorerMenuStatus()
     aiModels.value = [...configStore.models]
     aiMaxToolIterationsInput.value = configStore.aiMaxToolIterations
+    aiMaxRequestCharsInput.value = configStore.aiMaxRequestChars
     editingModelId.value = undefined
     // 加载编辑器设置
     tempEditorAutoSave.value = configStore.ui.editorAutoSave

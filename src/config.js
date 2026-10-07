@@ -19,6 +19,9 @@ import { execSync } from 'child_process';
 import { CONFIG_FILE } from './paths.js';
 import { migrateDataDir } from './dataDirMigration.js';
 import { atomicWriteText } from './fsAtomic.js';
+// 请求预算的口径（默认值 / 规范化 / 解析公式）住在 cli/ai/context.js —— 那里是
+// "每轮请求怎么裁剪"的唯一实现，config.js 只负责把它接到配置项上，不复制公式。
+import { normalizeAiRequestChars, REQUEST_DEFAULT_MAX_CHARS } from './cli/ai/context.js';
 import {
   ensureSplitStore,
   readSplitProjects,
@@ -175,6 +178,11 @@ const defaultConfig = {
   // 依然会被顶掉,而顶掉后重发消息要重新把上下文喂一遍,远比多跑几轮贵。
   // 想调小/调大改这个值即可(GUI: 设置 → AI 模型配置)。
   aiMaxToolIterations: 1000,
+  // AI 智能体单轮请求的上下文预算(字符,全局配置,CLI `g ai` 与 Web 智能体共用)。
+  // 默认 80,000 是历史行为;2026-10-07 主 Agent 控制台死循环事故后放开可调
+  // (11 万字符的粘贴曾把它打爆、挤掉全部工具结果)。越界值夹取到
+  // [20,000, 1,000,000]。解析公式与"单条 user 消息上限"见 cli/ai/context.js。
+  aiMaxRequestChars: REQUEST_DEFAULT_MAX_CHARS,
   // 工作台任务执行器（claude | opencode | codex）。全局配置，跨项目共享。
   // 决定「执行任务 / 执行子任务 / 从此处开始 / 简单任务续聊」这条链路
   // 默认 spawn 哪个本地 CLI；执行入口可以按次覆盖（见 workbench 执行路由）。
@@ -519,6 +527,8 @@ async function loadConfig() {
       ...raw,
       aiMaxToolIterations: normalizeAiMaxToolIterations(raw.aiMaxToolIterations)
         ?? defaultConfig.aiMaxToolIterations,
+      aiMaxRequestChars: normalizeAiRequestChars(raw.aiMaxRequestChars)
+        ?? defaultConfig.aiMaxRequestChars,
       taskExecutor: normalizeTaskExecutor(raw.taskExecutor) ?? defaultConfig.taskExecutor,
       ...resolveNotifySwitches(raw)
     };
@@ -538,6 +548,8 @@ async function loadConfig() {
     // 同 models：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
     aiMaxToolIterations: normalizeAiMaxToolIterations(raw?.aiMaxToolIterations)
       ?? defaultConfig.aiMaxToolIterations,
+    aiMaxRequestChars: normalizeAiRequestChars(raw?.aiMaxRequestChars)
+      ?? defaultConfig.aiMaxRequestChars,
     taskExecutor: normalizeTaskExecutor(raw?.taskExecutor) ?? defaultConfig.taskExecutor,
     // 同 taskExecutor：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
     ...resolveNotifySwitches(raw)
@@ -592,7 +604,7 @@ async function saveConfig(config) {
   // 解构出来，否则它会跟着 ...projectConfig 被写进**项目配置**里 —— 全局设置漏进
   // 项目级是这一族键最容易踩的坑。解构出来本身不写回顶层（它已不再被任何地方读取）。
   const {
-    theme, locale, models, ui, aiMaxToolIterations, taskExecutor,
+    theme, locale, models, ui, aiMaxToolIterations, aiMaxRequestChars, taskExecutor,
     notifyOnTaskDone: legacyNotifyOnTaskDone,
     notifyPageOnTaskDone, notifyBrowserOnTaskDone, notifySoundOnTaskDone,
     ...projectConfig
@@ -616,6 +628,11 @@ async function saveConfig(config) {
   const normalizedIterations = normalizeAiMaxToolIterations(aiMaxToolIterations);
   if (normalizedIterations !== null) {
     raw.aiMaxToolIterations = normalizedIterations;
+  }
+  // 请求上下文预算同属全局设置：同一套夹取语义
+  const normalizedRequestChars = normalizeAiRequestChars(aiMaxRequestChars);
+  if (normalizedRequestChars !== null) {
+    raw.aiMaxRequestChars = normalizedRequestChars;
   }
   // 任务执行器同属全局设置：白名单外的值不落盘
   const normalizedExecutor = normalizeTaskExecutor(taskExecutor);
@@ -827,6 +844,8 @@ export default {
   deleteProjectConfig: deleteProjectConfigAndInvalidate,
   // AI 智能体单轮工具调用上限的规范化/区间(GUI 保存前也要用,见 /api/config/save-ai-settings)
   normalizeAiMaxToolIterations,
+  // 请求上下文预算的规范化/区间(同一路由保存时用;公式本体在 cli/ai/context.js)
+  normalizeAiRequestChars,
   AI_MAX_TOOL_ITERATIONS_MIN,
   AI_MAX_TOOL_ITERATIONS_MAX,
   // 工作台任务执行器规范化(GUI 保存前也要用,见 /api/config/save-general-settings)

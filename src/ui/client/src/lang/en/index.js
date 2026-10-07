@@ -977,6 +977,8 @@ export default {
   '@42BB9:智能体运行时': 'Agent Runtime',
   '@42BB9:单轮最大工具调用次数': 'Max tool calls per turn',
   '@42BB9:一条消息内智能体最多连续调用多少次工具。达到上限本轮会被强制结束，需要再发一条消息才能继续': 'How many tool calls the agent may make in a row for a single message. Once the limit is hit the turn ends and you must send another message to continue',
+  '@42BB9:单轮请求上下文上限': 'Per-request context limit',
+  '@42BB9:每次请求最多带进模型的字符数（默认 80,000，约合 4-8 万 token）。调大后能一次贴入更长的材料，代价是每轮请求更大更慢；单条超长消息超出部分会被首尾保留地省略': 'Max characters sent to the model per request (default 80,000, roughly 40k-80k tokens). Larger values let you paste longer material at the cost of bigger, slower requests; a single oversized message is shortened head-and-tail, not dropped',
   '@42BB9:已保存': 'Saved',
   '@42BB9:添加模型': 'Add Model',
   '@42BB9:编辑模型': 'Edit Model',
@@ -2577,6 +2579,7 @@ export default {
   '@WORKBENCH:派发执行器': 'Dispatch executor',
   '@WORKBENCH:它派出去的任务由这个执行器跑（与执行按钮的临时切换共用）': 'Tasks it dispatches run with this executor (shared with the run button toggle)',
   '@WORKBENCH:当前引擎「{name}」只能对话，不能派发任务 —— 切到内置 g ai 才能派活': 'Engine "{name}" can only chat, not dispatch tasks — switch to the built-in g ai to dispatch',
+  '@WORKBENCH:消息较长（{n} 字符），超出部分会被省略后进入上下文 —— 大材料建议存成文件，在消息里给出文件路径': 'Long message ({n} characters): everything beyond the per-message limit is omitted before entering context — for large material, save it to a file and reference the path instead',
   '@WORKBENCH:任务会落到看板，跑完有完成提示': 'Tasks land on the board and notify you when they finish',
   // @WORKBENCH: file end (append: orchestrator console dispatches via g ai)
 

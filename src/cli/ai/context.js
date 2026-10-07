@@ -5,6 +5,59 @@ const textOf = m => typeof m?.content === 'string' ? m.content : (m?.content || 
 const imagePartsOf = content => Array.isArray(content) ? content.filter(p => p?.type === 'image_url') : []
 const clip = (text, limit) => text.length <= limit ? text : text.slice(0, Math.floor(limit / 2)) + '\n[… earlier output omitted …]\n' + text.slice(-Math.floor(limit / 2))
 
+// ── 请求预算 ──────────────────────────────────────────────────────────────
+// 每轮请求的两把尺子：条数 + 字符。默认值与历史行为一致（40 条 / 80,000 字符）。
+//
+// 为什么要可配：模型窗口差异极大（8k 到 1M），一刀切 80k 会让大窗口模型吃不满、
+// 却又要为小窗口兜底。全局配置 aiMaxRequestChars（设置 → AI 模型配置 → 智能体运行时）
+// 由用户按自己模型的窗口来调，越界值夹取到 [20,000, 1,000,000]。
+//
+// 2026-10-07 事故复盘（主 Agent 控制台单轮 1132 次工具调用死循环）：用户把 11 万字符的
+// 任务导出粘进对话，**单条 user 消息自己就超过整个预算**；裁剪算法无条件保留最后一条
+// user 消息 → 保留集开局就超预算 → 从最近往前补工具消息组时逐条被拒 → 模型看不到自己
+// 刚读到的任何内容，只能一遍遍重读同一个文件。修复分两层：
+//   ① 单条 user 消息像 tool 消息一样截断（maxUserChars，首尾保留）—— 任何一条消息
+//      都挤不掉别人；
+//   ② 预算可调大 —— 模型窗口装得下的用户，不必再被 80k 卡住。
+export const AI_REQUEST_CHARS_MIN = 20000
+export const AI_REQUEST_CHARS_MAX = 1000000
+// 默认预算（字符）。config.js 的 defaultConfig.aiMaxRequestChars 引用它，保证一处定义。
+export const REQUEST_DEFAULT_MAX_CHARS = 80000
+export const REQUEST_DEFAULT_MAX_MESSAGES = 40
+
+/**
+ * 规范化单条请求的字符预算。与 normalizeAiMaxToolIterations 同一套语义：
+ * 越界夹取（手改成天文数字的意图是"想更大"，夹到上限比悄悄回落默认更贴近意图），
+ * 完全无法解析（undefined / 'abc'）才返回 null，交给调用方取默认值。
+ */
+export function normalizeAiRequestChars(value) {
+  if (value === undefined || value === null || value === '') return null
+  const n = Number(value)
+  if (!Number.isFinite(n)) return null
+  const int = Math.floor(n)
+  if (int < AI_REQUEST_CHARS_MIN) return AI_REQUEST_CHARS_MIN
+  if (int > AI_REQUEST_CHARS_MAX) return AI_REQUEST_CHARS_MAX
+  return int
+}
+
+/**
+ * 由配置值解析出三个预算参数（字符上限 / 消息条数上限 / 单条 user 截断线）。
+ * 非法/缺省一律回落默认（80,000 字符）。
+ *
+ * 条数与单条线都随字符预算**等比缩放** —— 用户只调一个数，三个数不许各自漂移：
+ *   · maxMessages = 字符预算 / 2000，下限保持默认 40 条（默认预算下逐个等于历史值 40）；
+ *   · maxUserChars —— 单条 user 消息的上限，默认约 24,000 字符（≈1.2 万 token 中文）。
+ *     它决定了"一条超长粘贴最多能吃掉多少预算"：被截断时首尾都保留（见 clip），
+ *     指令通常在开头、最新的追问在结尾，两边都不丢；中间省略处带明确标记。
+ *     上限还绑了 maxChars - 12000，保证单条消息永远挤不掉"最近发生了什么"。
+ */
+export function resolveRequestBudget(configuredMaxChars) {
+  const maxChars = normalizeAiRequestChars(configuredMaxChars) ?? REQUEST_DEFAULT_MAX_CHARS
+  const maxMessages = Math.min(Math.max(Math.round(maxChars / 2000), REQUEST_DEFAULT_MAX_MESSAGES), 400)
+  const maxUserChars = Math.min(Math.max(Math.floor(maxChars * 0.3), 8000), 500000, maxChars - 12000)
+  return { maxChars, maxMessages, maxUserChars }
+}
+
 // A saved turn may have been interrupted between tools. Mark missing results,
 // never replay a possibly completed write/command automatically on resume.
 export function repairToolHistory(messages) {
@@ -29,16 +82,32 @@ export function repairToolHistory(messages) {
 
 // Build a bounded request copy. The complete transcript on disk is never trimmed.
 // Budgets are characters/messages, not purported token counts.
-export function buildRequestMessages(messages, { maxMessages = 40, maxChars = 80000 } = {}) {
+export function buildRequestMessages(messages, {
+  maxMessages = REQUEST_DEFAULT_MAX_MESSAGES,
+  maxChars = REQUEST_DEFAULT_MAX_CHARS,
+  maxUserChars = resolveRequestBudget(maxChars).maxUserChars,
+} = {}) {
   // tool 消息的正文按 6000 字符截断,但**图片部件必须原样留着**。这里以前是
   // `content: clip(textOf(m), 6000)` 直接覆盖 —— 那会把 read_image 刚附上的图
   // 悄悄删掉,而模型仍然收到"已读取图片 xxx.png"的文本,于是理直气壮地编内容。
   // (有单测钉住这条:tool 消息里的图必须活到请求体。)
+  //
+  // user 消息同理、但上限不同（maxUserChars，默认 24,000）：单条超长粘贴不许
+  // 挤掉全部工具结果 —— 2026-10-07 的 1132 次调用死循环就是"11 万字符的 user
+  // 消息独占保留集"造成的（复盘见文件头的请求预算一节）。多模态消息同样只裁
+  // 文本、图原样保留。
   const copy = repairToolHistory(messages).map(m => {
-    if (m.role !== 'tool') return { ...m }
-    const images = imagePartsOf(m.content)
-    const text = clip(textOf(m), 6000)
-    return { ...m, content: images.length ? [{ type: 'text', text }, ...images] : text }
+    if (m.role === 'tool') {
+      const images = imagePartsOf(m.content)
+      const text = clip(textOf(m), 6000)
+      return { ...m, content: images.length ? [{ type: 'text', text }, ...images] : text }
+    }
+    if (m.role === 'user') {
+      const images = imagePartsOf(m.content)
+      const text = clip(textOf(m), maxUserChars)
+      return { ...m, content: images.length ? [{ type: 'text', text }, ...images] : text }
+    }
+    return { ...m }
   })
   // size 只算文本:图片是 base64,一张截图就上百万字符。若把它计进预算,第一轮
   // 就会因为"超预算"把刚读进来的那张图所在的消息组整组丢掉 —— 越需要看图越丢图。
@@ -146,8 +215,13 @@ export function collapseTextParts(messages) {
 // panel (`agentChat.js`) must both call this instead of assembling their own copy —
 // that is the only thing keeping the two from drifting apart again.
 // Returns a fresh array; the caller's transcript is never modified.
-export function prepareRequestMessages(messages, { locale, maxMessages = 40, maxChars = 80000 } = {}) {
-  const copy = buildRequestMessages(messages, { maxMessages, maxChars })
+export function prepareRequestMessages(messages, {
+  locale,
+  maxMessages = REQUEST_DEFAULT_MAX_MESSAGES,
+  maxChars = REQUEST_DEFAULT_MAX_CHARS,
+  maxUserChars = resolveRequestBudget(maxChars).maxUserChars,
+} = {}) {
+  const copy = buildRequestMessages(messages, { maxMessages, maxChars, maxUserChars })
   stripStaleImages(copy, locale)
   collapseTextParts(copy)
   return sanitizeMessages(copy)

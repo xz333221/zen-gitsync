@@ -34,6 +34,9 @@ import { createDispatcher } from './dispatchInstruction.js';
 import { createWorkspaceSnapshotter } from '../aiContext/wiring.js';
 import { normalizeItems, filterToRecentDirs, buildDirStatusBlock } from '../recentDirectoriesAiSummary.js';
 import { nowIso, logger } from './shared.js';
+// 请求预算的解析公式与 CLI `g ai` 共用同一份（cli/ai/context.js），Web 侧只管把
+// 配置值喂进去、把结果传给 agentChat —— 2026-10-07 起每轮请求的字符预算可配。
+import { resolveRequestBudget } from '../../../../cli/ai/context.js';
 
 const { genSessionId, autoTitle, read: readSession, write: writeSession, delete: deleteSession, listMeta: listSessionsMeta, enforceRetention, rename: renameSession } = agentSessionStore;
 
@@ -457,12 +460,16 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
       // 明明能跑，却先被一道无关的校验拦住。
       const useExternal = isExternalEngine(session.engine);
       let model = null;
+      let requestBudget = null;
       if (!useExternal) {
         try {
           if (!configManager) throw new Error('configManager 不可用');
           const rawConfig = await configManager.readRawConfigFile();
           const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
           model = models.find(m => m.isDefault) || models[0];
+          // 请求预算：全局配置 aiMaxRequestChars（缺省/越界由 resolveRequestBudget
+          // 兜底夹取），与 CLI `g ai`、设置页保存回执共用同一份解析 —— 别在这里另算。
+          requestBudget = resolveRequestBudget(rawConfig.aiMaxRequestChars);
         } catch (err) {
           send({ type: 'error', error: '读取 AI 配置失败: ' + err.message });
           finished = true;
@@ -588,7 +595,10 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
           }),
           dispatchTask,
           listProjects,
-          getContextBlock
+          getContextBlock,
+          // 每轮请求的上下文预算（解析结果）。agentChat 拿它调 prepareRequestMessages，
+          // 与 CLI turn.js 同一条口径。
+          requestBudget
         });
       }
 

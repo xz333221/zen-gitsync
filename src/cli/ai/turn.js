@@ -77,7 +77,9 @@ export async function runAgentTurn(state, userText, t, images = [], dependencies
       try {
         // 统一入口(与 Web 智能体面板共用):有界化 + 旧图片降级 + 消毒,只作用于请求副本,
         // 磁盘上的完整会话记录不受影响。
-        const messages = prepareRequestMessages(state.messages, { locale: state.locale })
+        // 预算来自 state.requestBudget(agent.js 按全局配置 aiMaxRequestChars 解析);
+        // 缺失时 prepareRequestMessages 各自兜底默认值,老调用方不用改。
+        const messages = prepareRequestMessages(state.messages, { locale: state.locale, ...(state.requestBudget || {}) })
         result = await chat({ model: state.model, messages, signal: state.abortController?.signal,
           sessionId: state.sessionId, extraTools: extensions?.tools,
           onToken: token => {

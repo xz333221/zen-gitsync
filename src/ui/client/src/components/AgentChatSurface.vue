@@ -40,12 +40,14 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import { $t } from '@/lang/static'
 import { ChatContainer, ChatInput, ConversationList } from 'zen-ai-chat-ui'
 // 组件库样式必须由每个消费方自己引（原因见 EditorAgentPanel 里那段注释：
 // Vite 按各自异步 chunk 注入，工作台这条 chunk 不一定加载过 style.css）
 import 'zen-ai-chat-ui/style.css'
 import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
+import { useConfigStore } from '@/stores/configStore'
 import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import { useNarrowPane } from '@/composables/useNarrowPane'
@@ -80,6 +82,8 @@ const props = defineProps<{
  */
 const { active: executor } = useTaskExecutorSelection()
 
+// 请求预算（后端解析好的快照，见 configStore.aiRequestBudget）—— 超长输入预警用。
+const configStore = useConfigStore()
 const { theme } = useThemeObserver()
 const chatTheme = computed<'light' | 'dark'>(() => (theme.value === 'dark' ? 'dark' : 'light'))
 
@@ -142,6 +146,14 @@ function scrollToBottom(smooth = true) {
 }
 
 async function onSend(payload: { text: string; files: any[] }) {
+  // 超长输入预警：单条消息超过请求预算里的"单条上限"时，服务端会把它**首尾保留地
+  // 截断**再进入上下文（2026-10-07 主 Agent 死循环事故的修复，见 cli/ai/context.js）。
+  // 阈值读后端解析好的快照（configStore.aiRequestBudget），前端不重算公式 ——
+  // 只说破后果：中段内容模型看不到，大材料请存成文件给路径。
+  const limit = configStore.aiRequestBudget?.maxUserChars || 0
+  if (limit > 0 && payload.text.length > limit) {
+    ElMessage.warning($t('@WORKBENCH:消息较长（{n} 字符），超出部分会被省略后进入上下文 —— 大材料建议存成文件，在消息里给出文件路径', { n: payload.text.length.toLocaleString() }))
+  }
   await sendMessage(payload.text, payload.files, {
     allowDispatch: props.allowDispatch === true,
     dispatchExecutor: executor.value,
