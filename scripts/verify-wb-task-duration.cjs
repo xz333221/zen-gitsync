@@ -19,6 +19,11 @@
  *     且时间格不换行（fixed 布局下换行会把行高顶高，整张表参差）
  *   F 悬停提示给出起止两个绝对时刻（"几点到几点"，排查"那段时间跑过什么"要用）
  *   G 页面无 console / page 错误
+ *   H 「任务执行」弹窗顶部细栏给的也是这两个值，且与卡片**逐字一致**（弹窗浮在卡片之上，
+ *     两串字会同时出现在屏幕上）；贴在细栏右端、紧挨「任务执行」（空白在它之前）；
+ *     正在跑 → 实时「已运行 x」（不是 0、不是旧用时）；
+ *     从没跑过 → 只有时间、没有占位；窗口收窄 → 细栏不换行/不增高/不溢出，
+ *     让位的是这一块，左边四项（返回 / 项目名 / 执行于 / 任务执行）宽度全程不变（±1px 取整）
  *   D/F1–F3 是前置事实而不是 UI 契约：F1 fixture 与运行中后端口径无漂移（否则后面的断言
  *   验的不是同一块板子）、F2/F3 服务端时长口径（反证注入到真正拍板的那一层）。
  *
@@ -74,22 +79,34 @@ function uiLanguage() {
 }
 
 /**
- * 毫秒 → 与页面同形的文案。镜像前端 utils/relativeTime.ts 的 formatDurationMs
- * （本仓惯例：改文案换 key，所以这里的字面量对得上 zh/en 词表）。
- * 别在这里再加一档或改分隔符 —— D1 那条断言就是拿它当基准的。
+ * 毫秒 → 时长正文（`1 小时 12 分` / `3 分 20 秒` / `8 秒`），**不含**「用时 / 已运行」前缀。
+ * 镜像前端 utils/relativeTime.ts 的 formatDurationMs（本仓惯例：改文案换 key，
+ * 所以这里的字面量对得上 zh/en 词表）。别在这里再加一档或改分隔符 ——
+ * D1 那条断言就是拿它当基准的。
  */
-function expectDuration(ms, lang) {
+function durationBody(ms, lang) {
   if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return ''
   const totalSec = Math.floor(ms / 1000)
   const h = Math.floor(totalSec / 3600)
   const m = Math.floor((totalSec % 3600) / 60)
   const s = totalSec % 60
-  const body = h > 0
+  return h > 0
     ? (lang === 'en' ? `${h} h ${m} min` : `${h} 小时 ${m} 分`)
     : m > 0
       ? (lang === 'en' ? `${m} min ${s} s` : `${m} 分 ${s} 秒`)
       : (lang === 'en' ? `${s} s` : `${s} 秒`)
-  return lang === 'en' ? `took ${body}` : `用时 ${body}`
+}
+
+/** 毫秒 → 卡片上那行「用时 x」 */
+function expectDuration(ms, lang) {
+  const body = durationBody(ms, lang)
+  return body ? (lang === 'en' ? `took ${body}` : `用时 ${body}`) : ''
+}
+
+/** 毫秒 → 「已运行 x」（前端 taskLiveText 的口径；弹窗细栏在任务正在跑时给的就是它） */
+function expectLive(ms, lang) {
+  const body = durationBody(ms, lang)
+  return body ? (lang === 'en' ? `Running for ${body}` : `已运行 ${body}`) : ''
 }
 
 /**
@@ -232,6 +249,22 @@ async function main() {
         body: JSON.stringify({ success: true, projects: live.projects, tasks, currentProjectPath: live.currentProjectPath }),
       })
     })
+    // 编辑器弹窗读的是另一个接口（/api/workbench/tasks，Task 形态）。把同一批任务也给它一份：
+    // H 组要点开合成卡片，没有这一条的话弹窗里 selectedTask 查不到、右侧是空态占位
+    // —— 细栏虽然照样渲染，但那是"任务不存在"的状态，拿它验的就不是真实路径了。
+    await page.route('**/api/workbench/tasks*', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          tasks: tasks.map(t => ({
+            id: t.id, title: t.title, desc: t.desc, projectPath: t.projectPath,
+            status: t.column, attachments: [], createdAt: t.createdAt, updatedAt: t.updatedAt,
+          })),
+        }),
+      })
+    })
 
     await page.goto(BASE, { waitUntil: 'domcontentloaded' })
     await page.waitForSelector('.activity-bar', { timeout: 20000 })
@@ -274,6 +307,67 @@ async function main() {
         liveText: liveEl ? norm(liveEl.textContent) : '',
       }
     }, title)
+
+    /**
+     * 读「任务执行」弹窗顶部细栏（H 组）。
+     * 一次读完三个东西：两个值本身、它们的宽度（让位是谁让的）、以及细栏自己的几何
+     * （换行没有 / 溢出没有）—— 布局断言必须量几何，数节点是量不出"被挤了"的。
+     */
+    const readBar = () => page.evaluate(() => {
+      const norm = (s) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim()
+      const bar = document.querySelector('.wb-editor-bar')
+      if (!bar) return { found: false }
+      const time = bar.querySelector('.wb-editor-bar__time')
+      const ago = bar.querySelector('.wb-editor-bar__ago')
+      const spent = bar.querySelector('.wb-editor-bar__spent')
+      const w = (el) => (el ? Math.round(el.getBoundingClientRect().width) : null)
+      const r = bar.getBoundingClientRect()
+      const hint = bar.querySelector('.wb-editor-bar__hint')
+      const proj = bar.querySelector('.wb-editor-bar__project')
+      const back = bar.querySelector('.wb-back-btn')
+      return {
+        found: true,
+        text: time ? norm(time.textContent) : null,
+        ago: ago ? norm(ago.textContent) : null,
+        agoTitle: ago ? ago.getAttribute('title') : null,
+        spent: spent ? norm(spent.textContent) : null,
+        timeW: w(time),
+        // 被裁掉多少（>0 = 尾巴被省略号吃了，窄容器下这就是"让位中"）
+        timeClipped: time ? time.scrollWidth - time.clientWidth : null,
+        // 左边四项各自的宽度：收窄时它们一个字节都不该变
+        backW: w(back),
+        // 返回按钮的**行数**：宽度没变、字却折成两行，是最典型的那种"被挤变形"
+        // （不折行那条 CSS 见 WorkbenchView 的 .wb-back-btn）
+        backLines: back ? Math.round(back.getBoundingClientRect().height / parseFloat(getComputedStyle(back).lineHeight || '16')) : null,
+        projW: w(proj),
+        repoW: w(bar.querySelector('.wb-editor-bar__repo')),
+        hintW: w(hint),
+        // 右端对齐的两把尺子：它与「任务执行」之间的空隙（应 = flex gap 8px），
+        // 以及它左边那段空白（auto margin 该落在它前面，不该落在它后面）
+        gapToHint: (time && hint) ? Math.round(hint.getBoundingClientRect().left - time.getBoundingClientRect().right) : null,
+        freeBefore: (time && proj) ? Math.round(time.getBoundingClientRect().left - proj.getBoundingClientRect().right) : null,
+        barH: Math.round(r.height),
+        barClientW: bar.clientWidth,
+        barScrollW: bar.scrollWidth,
+        flexWrap: getComputedStyle(bar).flexWrap,
+      }
+    })
+
+    /**
+     * 点卡片开编辑器（弹窗是浮层，底下的看板还在 DOM 里，卡片照样读得到）。
+     * 点的是**标题**而不是卡片正中：卡片右下的操作组 hover 才浮出，点正中时鼠标一过去
+     * 它就可能盖住落点（短卡片尤其明显），点标题这一下永远只在"打开任务"这条路径上。
+     */
+    const openCard = async (id) => {
+      await page.locator(`.kb-card[data-task-id="${id}"] .kb-card__title`).first().click()
+      await page.locator('.wb-editor-bar').first().waitFor({ state: 'visible', timeout: 15000 })
+      await sleep(500)
+    }
+    const backToBoard = async () => {
+      await page.locator('.wb-back-btn').first().click()
+      await page.locator('.wb-editor-bar').first().waitFor({ state: 'hidden', timeout: 15000 })
+      await sleep(300)
+    }
 
     // ── A 真实已完成卡片：用时在那儿，且首行没被它挤变形 ───────────────
     const card = await readCard(target.title)
@@ -343,6 +437,100 @@ async function main() {
       listRow.found && norm(listRow.dur) === card.spent, `${norm(listRow.dur)} ≠ ${card.spent}`)
     check('E2 时间格不换行（换行会把这一行顶高，整张表参差不齐）',
       listRow.whiteSpace === 'nowrap' && listRow.lines === 1, `${listRow.whiteSpace} / ${listRow.lines} 行`)
+
+    // ── H 弹窗顶部细栏：与卡片是**同一对值**（2026-10-07 加） ───────────
+    // 「任务执行」弹窗是浮在卡片之上的：细栏里那两串字和底下的卡片会**同时**出现在屏幕上，
+    // 所以两处必须是同一份事实，而不是"各算一遍、恰好算得一样"。细栏读的就是看板轮询下来的
+    // 同一条 BoardTask（WorkbenchBoard 的 'board-tasks'），下面 H1/H2 直接拿此刻卡片上的
+    // 字符串逐字比对 —— 弹窗开着时卡片仍在 DOM 里，两边读到的是同一瞬间的值。
+    //
+    // 三个分支各验一条：跑过（用时）/ 正在跑（已运行 x，随轮询长，不是 0）/ 从没跑过（只有时间）。
+    await page.locator('.kb__view-btn', { hasText: /看板视图|Board/ }).first().click()
+    await page.waitForSelector('.kb-card', { timeout: 10000 })
+    await sleep(500)
+
+    await openCard(target.id)
+    const bar = await readBar()
+    const cardBoth = await readCard(target.title)
+    check('H0 弹窗细栏在那（测试目标本身）', bar.found && cardBoth.found, JSON.stringify({ bar: bar.text, card: cardBoth.rowTime }))
+    check('H1 细栏的相对时间与卡片右上角逐字一致（同一瞬间读的两边）',
+      !!bar.ago && bar.ago === cardBoth.rowTime, `${bar.ago} ≠ ${cardBoth.rowTime}`)
+    check('H2 细栏的「用时 x」与卡片那行逐字一致（也就与服务端 lastDurationMs 一致）',
+      !!bar.spent && bar.spent === cardBoth.spent && bar.spent === wantSpent, `${bar.spent} ≠ ${cardBoth.spent} ≠ ${wantSpent}`)
+    check('H3 两个值之间有一枚分隔符（不是两串字粘在一起）',
+      norm(String(bar.text).replace(/·/g, ' ')) === norm(`${bar.ago} ${bar.spent}`), bar.text)
+    check('H4 相对时间带完整悬停提示（起止两个绝对时刻，沿用卡片的 cardTimeTitle 口径）',
+      (norm(bar.agoTitle).match(/\d{1,2}:\d{2}:\d{2}/g) || []).length >= 2, norm(bar.agoTitle))
+    check('H4b 这一块贴在细栏最右端、紧挨「任务执行」（空白在它之前，不是在它之后）',
+      bar.gapToHint !== null && Math.abs(bar.gapToHint - 8) <= 1 && bar.freeBefore > 200,
+      `与「任务执行」间距 ${bar.gapToHint}px（flex gap 8）· 左侧空白 ${bar.freeBefore}px`)
+    await page.screenshot({ path: path.resolve(__dirname, '../tmp-verify-wb-editor-bar.png') })
+    // 再单独拍一条细栏本身：整页图里它只有 34px 高，看不清那两串字
+    await page.locator('.wb-editor-bar').first().screenshot({ path: path.resolve(__dirname, '../tmp-verify-wb-editor-bar-crop.png') })
+    log('截图:', path.resolve(__dirname, '../tmp-verify-wb-editor-bar.png'), '+ tmp-verify-wb-editor-bar-crop.png')
+
+    // 正在跑：细栏给的是「已运行 x」（实时值），不是 0、也不是上一轮留下的用时
+    await backToBoard()
+    await openCard(synthRunning.id)
+    const runBar = await readBar()
+    const wantLive = expectLive(synthRunning.live.elapsedMs, lang)
+    check('H5 正在跑的任务：细栏显示实时「已运行 x」而不是 0 / 旧用时',
+      runBar.spent === wantLive, `${runBar.spent} ≠ ${wantLive}`)
+    check('H5b 它这时也没有同时挂着「用时」（同一个数不该出现两次，更不该出现两个）',
+      !/用时|took/.test(String(runBar.text)), runBar.text)
+
+    // 从没跑过：只显示时间，整段用时不存在（不写「用时 —」这类占位）
+    await backToBoard()
+    await openCard(synthVirgin.id)
+    const virginBar = await readBar()
+    check('H6 从没跑过的任务：细栏只有时间，没有用时那一截、也没有占位符',
+      !!virginBar.ago && virginBar.spent === null && virginBar.text === virginBar.ago,
+      `${virginBar.text}（ago=${virginBar.ago} spent=${virginBar.spent}）`)
+
+    // 收窄：细栏不换行、不增高、不溢出；让位顺序是「时间 · 用时」先收，
+    // 左边四项（返回 / 项目名 / 执行于 / 任务执行）一个字节都不动。
+    //
+    // 用 synth-dur 而不是真实那条：它的 projectPath 是别的项目，细栏里会多出一枚
+    // 「执行于 xxx」胶囊 —— 没有它，档位最窄时也挤不到什么，H10 就变成空跑。
+    // 断言全部量几何（宽度 / 高度 / scrollWidth），"看起来没崩"不算。
+    await backToBoard()
+    await openCard(synthDur.id)
+    const widths = []
+    for (const w of [1600, 1024, 900, 780, 640, 560, 480, 420]) {
+      await page.setViewportSize({ width: w, height: 1000 })
+      await sleep(400)
+      widths.push({ w, ...(await readBar()) })
+    }
+    const wide = widths[0]
+    const narrow = widths[widths.length - 1]
+    /**
+     * 宽度相等判定带 ±1px 容差：flex-shrink 是**按比例**分摊缺口的，不是"先把这一项收完
+     * 再说下一项"。时间块拿了 100 的因子、左边那几项是 1 —— 理论上仍会漏给它们零点几像素，
+     * 四舍五入成整数后可能差 1px。差 1px 不算"被挤压"（那几个字一个都没动），
+     * 差好几 px 才说明让位顺序反了。
+     */
+    const near = (a, b) => (a === null || b === null) ? a === b : Math.abs(a - b) <= 1
+    await page.screenshot({ path: path.resolve(__dirname, '../tmp-verify-wb-editor-bar-narrow.png') })
+    log('截图（最窄）:', path.resolve(__dirname, '../tmp-verify-wb-editor-bar-narrow.png'))
+    check('H7 一路收窄：细栏不换行、不增高（flex-wrap: nowrap，高度恒 34px）',
+      widths.every(b => b.flexWrap === 'nowrap' && b.barH === 34),
+      widths.map(b => `${b.w}:${b.barH}px/${b.flexWrap}`).join(' '))
+    check('H8 一路收窄：细栏不溢出（内容是让位掉的，不是被顶出去）',
+      widths.every(b => b.barScrollW <= b.barClientW + 1),
+      widths.map(b => `${b.w}:${b.barScrollW}/${b.barClientW}`).join(' '))
+    check('H9 左侧四项宽度全程不变（返回 / 项目名 / 执行于 / 任务执行）',
+      wide.repoW !== null &&
+      widths.every(b => near(b.backW, wide.backW) && near(b.projW, wide.projW) && near(b.repoW, wide.repoW) && near(b.hintW, wide.hintW)),
+      widths.map(b => `${b.w}:back${b.backW}/proj${b.projW}/repo${b.repoW}/hint${b.hintW}`).join(' '))
+    check('H9b 「返回看板」全程一行（宽度没变、字却折成两行也算被挤变形）',
+      widths.every(b => b.backLines === 1),
+      widths.map(b => `${b.w}:${b.backLines}行`).join(' '))
+    const squeezed = widths.filter(b => b.timeClipped > 0)
+    check('H10 让位的是「时间 · 用时」那一块：受压档位下左边四项都没动，收缩全落在它身上',
+      squeezed.length > 0 && squeezed.every(b =>
+        near(b.backW, wide.backW) && near(b.projW, wide.projW) && near(b.repoW, wide.repoW) && near(b.hintW, wide.hintW)),
+      `受压档位 ${squeezed.map(b => `${b.w}px`).join('/') || '（一个都没有 —— 夹具太松，这条等于空跑）'}；` +
+      `timeW ${wide.timeW} → ${narrow.timeW}（最窄档裁掉 ${narrow.timeClipped}px）`)
 
     check('G1 页面无 console / page 错误', consoleErrors.length === 0 && pageErrors.length === 0,
       [...consoleErrors, ...pageErrors].slice(0, 3).join(' | '))

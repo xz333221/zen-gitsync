@@ -59,10 +59,11 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { Search } from '@element-plus/icons-vue'
 import TaskExecutorIcon from '@/components/TaskExecutorIcon.vue'
-import type { BoardImage, BoardTask, BoardTaskLive, TaskColumn } from '@/types/workbench'
+import type { BoardImage, BoardTask, TaskColumn } from '@/types/workbench'
 import { taskExecutorName, type TaskExecutorId } from '@/utils/taskExecutor'
 import { projectTagStyle } from '@/utils/projectTag'
-import { formatDurationMs, relativeTimeFromIso, clockFromIso } from '@/utils/relativeTime'
+import { formatDurationMs, relativeTimeFromIso } from '@/utils/relativeTime'
+import { taskDoneAt, taskDurationBody, taskLiveText, taskSpentText, taskTimeIso, taskTimeTitle } from '@/utils/taskTime'
 import { reportSilentMs } from '@/utils/progressReport'
 
 const props = defineProps<{
@@ -196,7 +197,8 @@ onMounted(() => {
  *
  * 排序键刻意和卡片上显示的时间是同一个值（见 cardTime）——
  * 拿 A 排、显示 B 的话，用户看到的会是一列时间乱跳的卡片，看着就像没排过。
- * 回退链：手动完成标记 → 最近一条 job 的结束时间 → updatedAt → createdAt。
+ * 回退链：手动完成标记 → 最近一条 job 的结束时间 → updatedAt → createdAt
+ * （实现与理由在 utils/taskTime.ts 的 taskDoneAt —— 与卡片、弹窗细栏同一份）。
  * 手动标记排在最前：手动收掉的任务往往**没有**"跑完的时刻"（最近一条 job 可能是
  * 三天前那次报错），拿它当完成时间，用户刚点完完成、卡片上写着「3 天前」，
  * 排序也会把它沉到底下 —— 而他刚做的那件事本该在最上面。
@@ -204,7 +206,7 @@ onMounted(() => {
  * （例如完成任务后执行记录被清空），它们的完成时刻只能退到最后一次被改动的时刻。
  */
 function doneAt(t: BoardTask): string {
-  return String(t.manualDoneAt || t.lastJobEndedAt || t.updatedAt || t.createdAt || '')
+  return taskDoneAt(t)
 }
 
 function byDoneAtDesc(a: BoardTask, b: BoardTask): number {
@@ -212,48 +214,29 @@ function byDoneAtDesc(a: BoardTask, b: BoardTask): number {
   return doneAt(b).localeCompare(doneAt(a))
 }
 
-/**
- * 一条任务"最近发生了什么"的时间 —— 看板卡片（cardTime）与列表视图的时间列**共用这一个**。
+/* ── 「时间 / 用时」三件套：口径本身在 utils/taskTime.ts ──────────────────
  *
- * 已完成的给完成时刻（doneAt），其余给最后变动时刻。列表视图单独再写一遍
- * `updatedAt || createdAt` 的话，同一条任务在两个视图里会显示两个时间；
- * 更糟的是拿显示不出来的那个键去排序（列表视图 2026-09-30 之前就是），
- * 用户会看到一列看不出先后的时间 —— 看着就像没排过。
+ * 卡片要的「什么时候的事」+「跑了多久」，与「任务执行」弹窗顶部细栏要的是**同一对值**，
+ * 两处各写一套必然分叉（同一条任务在弹窗里写"刚刚"、卡片上写"2 分钟前"，
+ * 而弹窗正盖在卡片上面，用户一眼就能同时看到两串字）。
+ * 所以判据与文案都收口到 utils/taskTime，这里只保留看板自己的取用方式：
+ *   · cardTime     —— 卡片右上角/列表时间列的相对时间（再过 relativeTimeFromIso）
+ *   · cardDuration —— 时长**正文**（`7 分 16 秒`，无前缀）：模板拿它判"这行有没有内容"，
+ *                     整句文案走 taskSpentText（同一条正文 + 同一个 key）
+ *   · cardTimeTitle—— 时长那处的悬停提示（几点起 → 几点止）
+ * 为什么这些值取"完成时刻"而不是 updatedAt、为什么正在跑不给用时、为什么推不出就空着，
+ * 理由都跟着实现写在 utils/taskTime.ts 里。
  */
 function cardTime(t: BoardTask): string {
-  return t.column === 'done' ? doneAt(t) : (t.updatedAt || t.createdAt || '')
+  return taskTimeIso(t)
 }
 
-/**
- * 卡片上那行「用时 x」；不适用时是空串（模板据此整行不渲染）。
- *
- * **只在没有 job 在跑时给值**：正在跑的那个时长每 5s 都在长，已经写在活动区第一行的
- * 「已运行 x」里（live.elapsedMs）。两处各给一份、一个会长一个不长的数字，
- * 用户会以为其中一个坏了 —— 所以判据是「这张卡片有没有活动区」，不是「哪一列」。
- *
- * 服务端给不出（lastDurationMs 为 null：从没执行过 / 老记录缺 startedAt 或 endedAt）
- * 就空着。用时是给人判断"这条是不是特别磨"的参考，宁可没有也不要一个假的 0。
- */
 function cardDuration(t: BoardTask): string {
-  if (t.live) return ''
-  return formatDurationMs(t.lastDurationMs)
+  return taskDurationBody(t)
 }
 
-/**
- * 用时那一行的悬停提示：把「用时」背后的两个绝对时刻摊开（几点起、几点止）。
- *
- * 相对时间（"3 小时前"）+ 用时（"12 分"）已经能回答"跑了多久"，但答不了"是哪一段"——
- * 排查某段时间里到底跑过什么时，得能指着绝对时刻。两者都取不到就退回空提示，
- * 不拼一个"无"/"-"出来占位。
- */
 function cardTimeTitle(t: BoardTask): string {
-  const dur = cardDuration(t)
-  if (!dur) return ''
-  const from = clockFromIso(t.lastJobStartedAt)
-  const to = clockFromIso(t.lastJobEndedAt)
-  // 只有起止都拿得到才给区间；缺一头的话那串时刻对不上号，反而误导
-  if (!from || !to) return dur
-  return `${dur} · ${from} → ${to}`
+  return taskTimeTitle(t)
 }
 
 /**
@@ -335,8 +318,10 @@ function cardAgent(t: BoardTask): string {
  * 执行器图标不进这个字符串：它要渲染成图标而不是字符（拼进来只会得到一串会被
  * text-overflow 截断的文本），由模板摆在整行最前，这里只管文本口径。
  */
-function liveSummary(live: BoardTaskLive): string {
-  const elapsed = $t('@WORKBENCH:已运行 {elapsed}', { elapsed: formatDurationMs(live.elapsedMs) })
+function liveSummary(t: BoardTask): string {
+  const live = t.live
+  if (!live) return ''
+  const elapsed = taskLiveText(t)
   const text = live.lastLine || live.lastThought || live.lastTool
   return text ? `${elapsed} · ${text}` : elapsed
 }
@@ -567,7 +552,7 @@ function coverTitle(img: BoardImage): string {
               同理它也没去挤活动区那行"已运行 x · 工具 n 次"。
             -->
             <p v-if="cardDuration(t)" class="kb-card__spent" :title="cardTimeTitle(t)">
-              {{ $t('@WORKBENCH:用时 {d}', { d: cardDuration(t) }) }}
+              {{ taskSpentText(t) }}
             </p>
 
             <!--
@@ -609,7 +594,7 @@ function coverTitle(img: BoardImage): string {
                 >
                   <TaskExecutorIcon :executor="cardAgent(t) as TaskExecutorId" class="kb-card__live-agent-icon" />
                 </span>
-                <span>{{ $t('@WORKBENCH:已运行 {elapsed}', { elapsed: formatDurationMs(t.live.elapsedMs) }) }}</span>
+                <span>{{ taskLiveText(t) }}</span>
                 <!-- 次数看总数，鼠标停上去看分布：119 次里 118 次都是 Bash，
                      和"改了三处代码"是完全不同的两件事 -->
                 <span v-if="t.live.toolCallCount" :title="t.live.toolMix || ''">
@@ -843,7 +828,7 @@ function coverTitle(img: BoardImage): string {
                     <TaskExecutorIcon :executor="cardAgent(t) as TaskExecutorId" class="kb-table__agent-icon" />
                   </span>
                 </template>
-                {{ liveSummary(t.live) }}
+                {{ liveSummary(t) }}
                 <span v-if="reportSilentMs(t.live.silentMs) !== null" class="kb-table__live-silent">
                   {{ $t('@WORKBENCH:静默 {elapsed}', { elapsed: formatDurationMs(reportSilentMs(t.live.silentMs)) }) }}
                 </span>
@@ -868,7 +853,7 @@ function coverTitle(img: BoardImage): string {
                    会让人以为是两份数据 -->
               <span class="kb-table__time" :title="cardTimeTitle(t)">
                 <template v-if="cardDuration(t)">
-                  <span class="kb-table__dur">{{ $t('@WORKBENCH:用时 {d}', { d: cardDuration(t) }) }}</span>
+                  <span class="kb-table__dur">{{ taskSpentText(t) }}</span>
                   <span class="kb-table__time-sep" aria-hidden="true">·</span>
                 </template>
                 <!-- 「AI 判定完成」在列表视图里也得有：同一批任务的两种画法，

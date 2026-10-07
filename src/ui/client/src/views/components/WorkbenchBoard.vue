@@ -57,12 +57,28 @@ const props = defineProps<{
 const emit = defineEmits<{
   /** 请求上层切到任务编辑器的某个任务（只由弹窗里的「打开编辑器」显式触发） */
   'open-task': [payload: { taskId: string; projectPath: string }]
+  /**
+   * 看板任务快照往上透一份（每次轮询拿到新数组就发一次）。
+   *
+   * 为什么让 L2 的编辑器也读这一份：卡片上的相对时间与「用时 x」就是按它渲染的，
+   * 弹窗顶部细栏要显示**同一对值**（弹窗正盖在卡片上面，两串字会同时出现在屏幕上，
+   * 差一个字都会被看出来）。编辑器自己再拉一次 /api/workbench/projects 会多一条 5s 轮询，
+   * 两个快照还可能差几秒；拿本地 jobs 重算 column / lastDurationMs 更糟 ——
+   * 那等于把后端 projectRegistry 的口径在前端再实现一遍，两处必然慢慢分叉。
+   * 递上去的是同一个数组对象，两处显示的字因此逐字一致。
+   */
+  'board-tasks': [tasks: BoardTask[]]
 }>()
 
 const {
   projects, boardTasks, currentProjectPath, loading,
   loadProjects, removeProject,
 } = useWorkbenchProjects()
+
+// 看板任务一变就往上递（immediate 让上层在首帧就拿到当前那份，而不是等到下一次轮询）。
+// 监听的是 ref 本身：loadProjects 每次都整体换一个新数组，所以只会在这里触发一次，
+// 不会因为某个字段被就地改写而漏发。
+watch(boardTasks, (list) => emit('board-tasks', list), { immediate: true })
 const {
   active, activity, running, dispatching, togglingSchedule,
   maxInstructionChars,

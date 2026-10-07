@@ -37,7 +37,9 @@ const configStore = useConfigStore()
 const toolsStore = useToolsStore()
 import ExecutionLogManager from '@components/ExecutionLogManager.vue'
 import { canonicalProjectPath } from '@/utils/path'
-import type { Task } from '@/types/workbench'
+import { relativeTimeFromIso } from '@/utils/relativeTime'
+import { taskDurationText, taskTimeIso, taskTimeTitle } from '@/utils/taskTime'
+import type { BoardTask, Task } from '@/types/workbench'
 import { useWorkbenchAttachments, ALLOWED_EXT_HINT, MAX_ATTACHMENT_BYTES } from '@/composables/useWorkbenchAttachments'
 import { useWorkbenchSimpleConversation } from '@/composables/useWorkbenchSimpleConversation'
 import { buildTaskExecutionText } from '@/utils/taskExecutionExport'
@@ -228,6 +230,38 @@ const logsDialogVisible = ref(false)
 
 const selectedTaskId = ref<string | null>(null)
 const selectedTask = computed<Task | null>(() => tasks.value.find(t => t.id === selectedTaskId.value) || null)
+
+/**
+ * 看板任务快照：WorkbenchBoard 每轮轮询拿到的那一份，原样透传上来（见那边的 'board-tasks'）。
+ *
+ * 顶部细栏要显示的相对时间与「用时 x」，就是卡片上那两个值 —— 所以直接读**同一个对象**，
+ * 而不是在编辑器这边拿 selectedTask + jobs 重算一遍：重算等于把后端 projectRegistry 的
+ * column / lastDurationMs 口径在前端再实现一次，两处稍微一改就会分叉，而弹窗正盖在
+ * 卡片上面，差一个字都看得见。取哪个时间戳、什么才算"跑过"，口径收口在 utils/taskTime.ts。
+ *
+ * 看板数据没到 / 里面还没有这条任务（刚建、轮询还没轮到）时为 null，细栏两段一起不渲染 ——
+ * 宁可不显示，也不给一个自己推出来的数。
+ */
+const boardTasks = ref<BoardTask[]>([])
+const selectedBoardTask = computed<BoardTask | null>(
+  () => boardTasks.value.find(t => t.id === selectedTaskId.value) || null
+)
+
+/** 细栏右端的相对时间（与卡片右上角同一口径、同一个值） */
+const barTimeText = computed(() =>
+  selectedBoardTask.value ? relativeTimeFromIso(taskTimeIso(selectedBoardTask.value)) : ''
+)
+/**
+ * 细栏右端的时长：跑过 →「用时 x」；**正在跑 →「已运行 x」**（那个数每 5s 随看板轮询一起长，
+ * 不是 0，也不是上一轮留下的旧值）；从没跑过 / 缺时间戳 → 空串（不写"用时 —"占位）。
+ */
+const barDurationText = computed(() =>
+  selectedBoardTask.value ? taskDurationText(selectedBoardTask.value) : ''
+)
+/** 相对时间那一段的悬停提示：起止两个绝对时刻（与卡片那行「用时」的 title 同一份实现） */
+const barTimeTitle = computed(() =>
+  selectedBoardTask.value ? taskTimeTitle(selectedBoardTask.value) : ''
+)
 
 /**
  * 打开的任务可能属于别的项目 —— L1 看板是跨项目的，L2 编辑器却只有一个"当前目录"。
@@ -948,7 +982,11 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 <template>
   <div class="workbench">
     <!-- L1：多项目编排台 —— **常驻底图**，不再与编辑器互斥 -->
-    <WorkbenchBoard :opened-task-id="boardOpenedTaskId" @open-task="openTaskFromBoard" />
+    <WorkbenchBoard
+      :opened-task-id="boardOpenedTaskId"
+      @open-task="openTaskFromBoard"
+      @board-tasks="boardTasks = $event"
+    />
 
     <!-- L2：单任务编辑器 —— 大弹窗浮在看板之上，关掉即回到原位，全程无跳转 -->
     <CommonDialog
@@ -979,6 +1017,24 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
         class="wb-editor-bar__repo"
         :title="foreignRepo.path"
       >{{ $t('@WORKBENCH:执行于 {name}', { name: foreignRepo.name }) }}</span>
+      <!--
+        当前任务的时间 / 用时 —— 与看板卡片右上角的相对时间、卡片那行「用时 x」同一口径
+        （值直接取自看板轮询下来的同一条 BoardTask，所以是逐字一致，不是"两边写法对齐"）。
+
+        三个分支：跑过 →「用时 7 分 16 秒」；正在跑 →「已运行 3 分 20 秒」（随轮询长）；
+        从没跑过 / 缺时间戳 → 整段不渲染，不写「用时 —」这类占位。
+
+        摆在右端、紧挨「任务执行」标：它是"这条任务怎么样"的补充说明，不该挤进左边那四个
+        "我在哪 / 打开的是谁"的信息。窄容器下这一块**先让位**（flex-shrink 远大于其余项，
+        一路收到 0），「返回看板 / 项目名 / 执行于 xxx」的宽度全程不变
+        （±1px 是 flex 按比例分摊缺口的取整，见样式那段）。
+        悬停提示只挂在相对时间上：绝对值区间解释的是"什么时候"，用时本身不用再解释。
+      -->
+      <span v-if="barTimeText || barDurationText" class="wb-editor-bar__time">
+        <span v-if="barTimeText" class="wb-editor-bar__ago" :title="barTimeTitle">{{ barTimeText }}</span>
+        <span v-if="barTimeText && barDurationText" class="wb-editor-bar__sep" aria-hidden="true">·</span>
+        <span v-if="barDurationText" class="wb-editor-bar__spent">{{ barDurationText }}</span>
+      </span>
       <span class="wb-editor-bar__hint">{{ $t('@WORKBENCH:任务执行') }}</span>
     </div>
     <div class="workbench__editor-row">
@@ -1376,6 +1432,12 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: color var(--transition-fast) var(--ease-custom);
+  /* 图标 + 四个字是一个整体，折行就散了。这里不是"随手加一句"：细栏的横向空间一旦
+     紧到边缘，「返回看板」的盒子会被分掉零点几像素（flex 按比例分摊缺口，见
+     .wb-editor-bar__time 那段），而它的文字宽度正好压在盒子宽度上 —— 差一点点就从
+     一行翻成两行（实测 420px 视口：盒子仍是 77px 宽，高度却从 22 变 44，字压在栏外）。
+     nowrap 之后标签不再会折，让位全部落到右边那一块（它的宽度本来就是第一个让的）。 */
+  white-space: nowrap;
 }
 .wb-back-btn:hover { color: var(--color-primary); }
 .wb-back-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
@@ -1395,6 +1457,35 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   color: var(--text-meta);
   flex-shrink: 0;
 }
+/* ── 细栏右端的「相对时间 · 用时」：与看板卡片同一口径 ─────────────────────
+   margin-left: auto 与 .wb-editor-bar__hint 上的那枚分工：**在场的那一个**去吃中间那段
+   空白。不这么分的话，空白会被 hint 独占，这一块就贴死在项目名后面（左半栏），
+   而它要的是"靠右、紧挨「任务执行」"。下面那条相邻选择器管的就是这个先后：
+   时间块在 → 它吃空白；不在（任务没有任何时间戳）→ hint 照旧自己吃（现状不变）。
+   注意 auto margin 只在有富余空间时生效，挤的时候自动变 0，不影响下面的让位行为。
+
+   flex-shrink 给 100：窄容器里它必须**第一个**让位。左边四项是"我在哪 / 打开的是谁"
+   （返回看板、项目名、执行于 xxx、这栏叫什么），被挤变形就说不清上下文了；
+   而时间与用时在底下的卡片上本来就看得到同一份，这里挤没了不丢信息。
+   min-width: 0 是关键：少了它 flex 项收不到内容宽度以下，"优先让位"就是假的 ——
+   字会被硬裁而不是收窄，容器还会跟着溢出（细栏不换行、不增高，溢出只能往外顶）。 */
+.wb-editor-bar__time {
+  margin-left: auto;
+  flex-shrink: 100;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+  color: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+}
+/* 与卡片那行同一档语义：用时是"要读的"，相对时间是"背景" */
+.wb-editor-bar__spent { color: var(--text-secondary); }
+/* 两个事实之间的分隔符：比两边的字轻一档，只为断句，不抢读 */
+.wb-editor-bar__sep { margin: 0 5px; opacity: .55; }
+/* 时间块在场时由它去吃那段空白（见上），紧挨着的这枚标就不必再要一份 */
+.wb-editor-bar__time + .wb-editor-bar__hint { margin-left: 0; }
 /* 任务属于别的项目时补一句实话：执行目录不是上面这个当前目录（后端按 task.projectPath 落目录） */
 .wb-editor-bar__repo {
   flex-shrink: 0;
