@@ -978,7 +978,7 @@ export default {
   '@42BB9:单轮最大工具调用次数': 'Max tool calls per turn',
   '@42BB9:一条消息内智能体最多连续调用多少次工具。达到上限本轮会被强制结束，需要再发一条消息才能继续': 'How many tool calls the agent may make in a row for a single message. Once the limit is hit the turn ends and you must send another message to continue',
   '@42BB9:单轮请求上下文上限': 'Per-request context limit',
-  '@42BB9:每次请求最多带进模型的字符数（默认 80,000，约合 4-8 万 token）。调大后能一次贴入更长的材料，代价是每轮请求更大更慢；单条超长消息超出部分会被首尾保留地省略': 'Max characters sent to the model per request (default 80,000, roughly 40k-80k tokens). Larger values let you paste longer material at the cost of bigger, slower requests; a single oversized message is shortened head-and-tail, not dropped',
+  '@42BB9:每次请求最多带进模型的字符数（默认 400,000，约合 15 万 token）。调大后能一次贴入更长的材料，代价是每轮请求更大更慢；单条超长消息超出部分会被首尾保留地省略': 'Max characters sent to the model per request (default 400,000, roughly 150k tokens). Larger values let you paste longer material at the cost of bigger, slower requests; a single oversized message is shortened head-and-tail, not dropped',
   '@42BB9:已保存': 'Saved',
   '@42BB9:添加模型': 'Add Model',
   '@42BB9:编辑模型': 'Edit Model',

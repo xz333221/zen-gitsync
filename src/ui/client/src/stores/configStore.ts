@@ -207,8 +207,8 @@ export const useConfigStore = defineStore('config', () => {
   // 默认值必须与 src/config.js 的 aiMaxToolIterations 一致，配置读取前的首屏也靠它兜底。
   const aiMaxToolIterations = ref(1000)
   // AI 智能体单轮请求的上下文预算（字符；全局配置，CLI `g ai` 与 Web 智能体共用）。
-  // 默认值必须与 src/config.js 的 aiMaxRequestChars 一致（80,000），首屏兜底。
-  const aiMaxRequestChars = ref(80000)
+  // 默认值必须与 src/config.js 的 aiMaxRequestChars 一致（400,000），首屏兜底。
+  const aiMaxRequestChars = ref(400000)
   // 后端解析后的请求预算（GET /api/config/getConfig 的派生字段 + 保存回执，见
   // routes/config.js）。超长输入预警读它 —— 解析公式只在后端一处（resolveRequestBudget），
   // 前端绝不重算，避免"界面按旧线报警、服务端按新线截断"的口径分叉。

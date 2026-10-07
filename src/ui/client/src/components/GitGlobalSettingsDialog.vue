@@ -514,7 +514,7 @@
                   @change="handleAiMaxRequestCharsChange"
                 />
                 <span class="setting-hint-block ai-iterations-hint">
-                  {{ $t('@42BB9:每次请求最多带进模型的字符数（默认 80,000，约合 4-8 万 token）。调大后能一次贴入更长的材料，代价是每轮请求更大更慢；单条超长消息超出部分会被首尾保留地省略') }}
+                  {{ $t('@42BB9:每次请求最多带进模型的字符数（默认 400,000，约合 15 万 token）。调大后能一次贴入更长的材料，代价是每轮请求更大更慢；单条超长消息超出部分会被首尾保留地省略') }}
                 </span>
               </div>
             </div>
@@ -914,7 +914,9 @@ const editingModelId = ref<string | null | undefined>(undefined) // undefined=�
 
 // AI 智能体运行时（全局设置，立即持久化，与模型列表一样不走"保存"按钮）
 const aiMaxToolIterationsInput = ref(1000)
-const aiMaxRequestCharsInput = ref(80000)
+// 首屏兜底值，必须与 src/cli/ai/context.js 的 REQUEST_DEFAULT_MAX_CHARS 一致（400,000）——
+// 配置到达前先把输入框填上这个数，避免闪现 80000 再跳变。
+const aiMaxRequestCharsInput = ref(400000)
 const savingAiSettings = ref(false)
 
 async function handleAiMaxToolIterationsChange(value: number | undefined) {

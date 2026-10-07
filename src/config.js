@@ -179,9 +179,12 @@ const defaultConfig = {
   // 想调小/调大改这个值即可(GUI: 设置 → AI 模型配置)。
   aiMaxToolIterations: 1000,
   // AI 智能体单轮请求的上下文预算(字符,全局配置,CLI `g ai` 与 Web 智能体共用)。
-  // 默认 80,000 是历史行为;2026-10-07 主 Agent 控制台死循环事故后放开可调
-  // (11 万字符的粘贴曾把它打爆、挤掉全部工具结果)。越界值夹取到
-  // [20,000, 1,000,000]。解析公式与"单条 user 消息上限"见 cli/ai/context.js。
+  // 2026-10-07 两次调整:80,000 → 400,000。80k 只等于 31k token(实测换比 2.57 字符/token),
+  // 而当日旗舰窗口全是 1M 一档(GPT-6.1 Sol 1,050,000 / Claude Opus 5.5 1,000,000
+  // / Gemini 3.5 Flash 1,000,000 / DeepSeek V4 1,000,000 / Qwen3.8 Max 1,000,000),
+  // 旧默认只占 3%。400k ≈ 156k token,仍在 OpenAI 的 272k 长上下文计价线之下
+  // (>272k 输入按整请求 2x 输入 + 1.5x 输出),要更大请自行往上调。
+  // 越界值夹取到 [20,000, 1,000,000]。解析公式与"单条 user 消息上限"见 cli/ai/context.js。
   aiMaxRequestChars: REQUEST_DEFAULT_MAX_CHARS,
   // 工作台任务执行器（claude | opencode | codex）。全局配置，跨项目共享。
   // 决定「执行任务 / 执行子任务 / 从此处开始 / 简单任务续聊」这条链路

@@ -12,22 +12,30 @@ import { prepareRequestMessages, sanitizeMessages, stripStaleImages, resolveRequ
 
 const call = n => ({ id: `call${n}`, type: 'function', function: { name: 'read_file', arguments: '{}' } })
 
-// 60 轮工具调用,每轮结果 16000 字符(会被 clip 到 6000)—— 远超任何预算
+// 200 轮工具调用,每轮结果 16000 字符(会被 clip 到 6000)—— 必须**远超**默认预算。
+//
+// 为什么是 200 而不是历史上的 60:默认预算 2026-10-07 从 80k 提到 400k,60 组
+// (120 条 × 6000 字符 ≈ 360k)正好卡在新预算底下,裁剪根本不触发,那些"被丢弃的
+// 消息要摘录成梗概""条数要有上限"的断言会**假绿**。测试数据的量必须跟着预算走,
+// 否则改完默认值等于把回归测试改成了空转。
 const longTranscript = () => {
   const messages = [{ role: 'system', content: 'rules' }, { role: 'user', content: 'original goal' }]
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 200; i++) {
     messages.push({ role: 'assistant', tool_calls: [call(i)] })
     messages.push({ role: 'tool', tool_call_id: `call${i}`, content: 'data'.repeat(4000) })
   }
   return messages
 }
 
+// 默认预算解析一次,断言直接引用它 —— 写死数字就会在改默认值的那天全部变成假绿。
+const DEFAULT_BUDGET = resolveRequestBudget(undefined)
+
 test('请求副本有界,原始目标不丢,且会话记录一个字节都没被改', () => {
   const messages = longTranscript()
   const before = structuredClone(messages)
   const request = prepareRequestMessages(messages, { locale: 'zh-CN' })
-  assert.ok(request.length <= 40, `期望 <= 40 条,实际 ${request.length}`)
-  assert.ok(JSON.stringify(request).length < 90000)
+  assert.ok(request.length <= DEFAULT_BUDGET.maxMessages, `期望 <= ${DEFAULT_BUDGET.maxMessages} 条,实际 ${request.length}`)
+  assert.ok(JSON.stringify(request).length < DEFAULT_BUDGET.maxChars * 1.1)
   assert.ok(request.some(m => m.content === 'original goal'), '首条 user(原始目标)必须保留')
   assert.deepEqual(messages, before, '会话记录不得被请求副本改写')
 })
@@ -212,20 +220,21 @@ test('单条超长 user 消息被首尾保留地截断,工具结果不再被全�
   const request = prepareRequestMessages(messages, { locale: 'zh-CN' })
   const user = request.find(m => typeof m.content === 'string' && m.content.includes('HEAD指令'))
   assert.ok(user, '被截断的 user 消息本体必须还在')
-  assert.ok(user.content.length <= 24000 + 40, `单条 user 应截到默认线 ~24000,实际 ${user.content.length}`)
+  assert.ok(user.content.length <= DEFAULT_BUDGET.maxUserChars + 40,
+    `单条 user 应截到默认线 ${DEFAULT_BUDGET.maxUserChars},实际 ${user.content.length}`)
   assert.match(user.content, /^HEAD指令/, '开头（指令）要保留')
   assert.match(user.content, /TAIL追问$/, '结尾（最新追问）要保留')
   assert.match(user.content, /earlier output omitted/, '中间省略处要有明确标记')
   const tools = request.filter(m => m.role === 'tool').length
   assert.ok(tools >= 3, `巨消息之后工具结果必须还有存活位,实际只剩 ${tools} 条`)
-  assert.ok(JSON.stringify(request).length < 90000, '整包仍在默认预算的量级内')
+  assert.ok(JSON.stringify(request).length < DEFAULT_BUDGET.maxChars * 1.1, '整包仍在默认预算的量级内')
 })
 
 test('多模态 user 消息截断时图仍然留着(图不参与字符预算)', () => {
   const messages = [
     { role: 'system', content: 'rules' },
     { role: 'user', content: [
-      { type: 'text', text: 'y'.repeat(30000) },
+      { type: 'text', text: 'y'.repeat(DEFAULT_BUDGET.maxUserChars + 20000) },
       { type: 'image_url', image_url: { url: 'data:image/png;base64,USERKEEP' } },
     ] },
     { role: 'assistant', content: 'ok' },
@@ -233,26 +242,40 @@ test('多模态 user 消息截断时图仍然留着(图不参与字符预算)', 
   const request = prepareRequestMessages(messages, { locale: 'zh-CN' })
   const user = request.find(m => Array.isArray(m.content) && m.content.some(p => p.type === 'image_url'))
   assert.ok(user, '最新一条带图 user 消息必须还活着')
-  assert.ok(user.content[0].text.length < 30000, '正文该截还是得截')
+  assert.ok(user.content[0].text.length <= DEFAULT_BUDGET.maxUserChars + 40, '正文该截还是得截')
   assert.match(user.content[1].image_url.url, /USERKEEP/, '图不许被截断逻辑碰掉')
 })
 
 test('resolveRequestBudget:默认口径与等比缩放,越界夹取/无法解析回落', () => {
-  assert.deepEqual(resolveRequestBudget(undefined), { maxChars: 80000, maxMessages: 40, maxUserChars: 24000 })
-  const big = resolveRequestBudget(400000)
-  assert.equal(big.maxChars, 400000)
-  assert.equal(big.maxMessages, 200, '条数随字符预算等比放大')
-  assert.equal(big.maxUserChars, 120000, '单条线随字符预算等比放大')
+  assert.deepEqual(DEFAULT_BUDGET, { maxChars: 400000, maxMessages: 400, maxUserChars: 120000 })
+  // 越界夹取：手改成天文数字的意图是"想更大"，夹到上限而不是回落默认
   assert.equal(resolveRequestBudget(1).maxChars, 20000, '越界值夹取到下限而不是回落默认')
-  assert.equal(resolveRequestBudget(99999999).maxChars, 1000000, '越界值夹取到上限')
-  assert.equal(resolveRequestBudget('abc').maxChars, 80000, '无法解析才回落默认')
+  const top = resolveRequestBudget(99999999)
+  assert.equal(top.maxChars, 1000000, '越界值夹取到上限')
+  assert.equal(top.maxMessages, 600, '条数上限独立于字符上限（分母 1000 后 1000k→1000 条，夹到 600）')
+  assert.equal(resolveRequestBudget('abc').maxChars, 400000, '无法解析才回落默认')
 })
 
-test('调大预算后,超长 user 消息按新的单条线截断', () => {
-  const huge = 'x'.repeat(500000)
-  const messages = [{ role: 'system', content: 'rules' }, { role: 'user', content: huge }]
-  const request = prepareRequestMessages(messages, { locale: 'zh-CN', ...resolveRequestBudget(400000) })
-  const user = request.find(m => m.role === 'user')
-  assert.ok(user.content.length <= 120000 + 40, `应按 400k 预算的单条线(120000)截断,实际 ${user.content.length}`)
-  assert.ok(user.content.length > 100000, '并且确实用上了调大的预算,不是还按旧线截')
+test('条数上限不再提前撞满字符预算（2026-10-07 回归）', () => {
+  // 旧公式 /2000 让 80k 预算只填到 72% 就被 40 条卡住，实测只覆盖 2.1% 的工具调用轮。
+  // 现在分母 /1000：实测每条消息约 2,700 字符，字符预算应当先耗尽，条数只在极端情况下生效。
+  const messages = [
+    { role: 'system', content: 'rules' },
+    { role: 'user', content: 'goal' },
+  ]
+  for (let i = 0; i < 300; i++) {
+    messages.push({ role: 'assistant', tool_calls: [call(i)] })
+    messages.push({ role: 'tool', tool_call_id: `call${i}`, content: 'x'.repeat(2700) })
+  }
+  const request = prepareRequestMessages(messages, { locale: 'zh-CN' })
+  // 自己按文本长度算（与 buildRequestMessages 里的 size() 同口径），
+  // 刻意不依赖 measureContextUsage —— 那个函数是「占用可视化」那批改动才加的，
+  // 预算这一组提交里还没有它。
+  const used = request.reduce((n, m) => {
+    const c = typeof m.content === 'string' ? m.content : ''
+    return n + c.length + JSON.stringify(m.tool_calls || []).length
+  }, 0)
+  assert.ok(used / DEFAULT_BUDGET.maxChars > 0.9,
+    `字符预算应当基本耗尽（实测只用到 ${(used / DEFAULT_BUDGET.maxChars * 100).toFixed(1)}%），条数不该提前卡住`)
+  assert.ok(request.length < DEFAULT_BUDGET.maxMessages, `条数也不该撞顶：${request.length}`)
 })

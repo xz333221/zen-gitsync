@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { streamChatOnce } from './transport.js'
 import { normalizeUsage, addUsage } from './telemetry.js'
 import { runAgentTurn } from './turn.js'
-import { buildRequestMessages, repairToolHistory } from './context.js'
+import { buildRequestMessages, repairToolHistory, resolveRequestBudget } from './context.js'
 import { createAssistantWriter, stripAnsi } from './termui.js'
 
 const model = { model: 'test', baseURL: 'https://example.invalid/v1', apiKey: 'test' }
@@ -191,12 +191,15 @@ test('failed turns retain the user request and report partial usage honestly', a
 })
 
 test('long tool turns have bounded request history without losing original goals or mutating the transcript', () => {
+  // 200 组 × 6000 字符（clip 后）≈ 240 万字符，远超默认预算 —— 数据量必须跟着
+  // 默认预算走：60 组在 400k 预算下压根不触发裁剪，断言会假绿（见 context.test.js 同名注释）。
   const messages = [{ role: 'system', content: 'rules' }, { role: 'user', content: 'original goal' }]
-  for (let i = 0; i < 60; i++) messages.push({ role: 'assistant', tool_calls: [call(i)] }, { role: 'tool', tool_call_id: `call${i}`, content: 'data'.repeat(4000) })
+  for (let i = 0; i < 200; i++) messages.push({ role: 'assistant', tool_calls: [call(i)] }, { role: 'tool', tool_call_id: `call${i}`, content: 'data'.repeat(4000) })
   const before = structuredClone(messages)
+  const budget = resolveRequestBudget(undefined)
   const compact = buildRequestMessages(messages)
-  assert.ok(compact.length <= 40)
-  assert.ok(JSON.stringify(compact).length < 90000)
+  assert.ok(compact.length <= budget.maxMessages, `期望 <= ${budget.maxMessages} 条,实际 ${compact.length}`)
+  assert.ok(JSON.stringify(compact).length < budget.maxChars * 1.1)
   assert.ok(compact.some(m => m.content === 'original goal'))
   assert.deepEqual(messages, before)
   for (let i = 0; i < compact.length; i++) {

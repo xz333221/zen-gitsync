@@ -22,7 +22,17 @@ const clip = (text, limit) => text.length <= limit ? text : text.slice(0, Math.f
 export const AI_REQUEST_CHARS_MIN = 20000
 export const AI_REQUEST_CHARS_MAX = 1000000
 // 默认预算（字符）。config.js 的 defaultConfig.aiMaxRequestChars 引用它，保证一处定义。
-export const REQUEST_DEFAULT_MAX_CHARS = 80000
+//
+// 2026-10-07 第二次调整：80,000 → 400,000（同日）。理由是拿本机一场真实会话回放出来的：
+//   · 字符↔token 实测 1 token ≈ 2.57 字符（该会话 525 万字符 ≈ 204 万 token，
+//     中文字 86 万 / ascii 407 万），所以旧默认只等于 **31k token**。
+//   · 当代旗舰窗口已经全是 1M 一档（GPT-6.1 Sol 1,050,000 / Claude Opus 5.5 1,000,000
+//     / Gemini 3.5 Flash 1,000,000 / DeepSeek V4 1,000,000 / Qwen3.8 Max 1,000,000），
+//     31k 只占 **3%** —— 一半以上的模型窗口是空着的。
+//   · 400,000 字符 ≈ 156k token，**仍在 OpenAI 的 272k 长上下文计价线之下**
+//     （GPT-6/6.1/5.6 家族对 >272k 输入按整请求 2x 输入 + 1.5x 输出计价），
+//     所以这一档"装得下又不触发涨价"。真要更大请往上调，但那是拿钱换窗口。
+export const REQUEST_DEFAULT_MAX_CHARS = 400000
 export const REQUEST_DEFAULT_MAX_MESSAGES = 40
 
 /**
@@ -42,18 +52,24 @@ export function normalizeAiRequestChars(value) {
 
 /**
  * 由配置值解析出三个预算参数（字符上限 / 消息条数上限 / 单条 user 截断线）。
- * 非法/缺省一律回落默认（80,000 字符）。
+ * 非法/缺省一律回落默认（400,000 字符）。
  *
  * 条数与单条线都随字符预算**等比缩放** —— 用户只调一个数，三个数不许各自漂移：
- *   · maxMessages = 字符预算 / 2000，下限保持默认 40 条（默认预算下逐个等于历史值 40）；
- *   · maxUserChars —— 单条 user 消息的上限，默认约 24,000 字符（≈1.2 万 token 中文）。
+ *   · maxMessages = 字符预算 / 1000，下限保持默认 40 条、上限 600 条。
+ *     **分母为什么是 1000 而不是原来的 2000**：条数上限存在的意义是"别让请求
+ *     长到 provider 拒收"，而字符预算才是真正的闸门。实测（525 组工具调用的真实
+ *     会话）每条消息约 2,700 字符，所以 /1000 意味着条数只在字符预算用满之前
+ *     就先撞顶的极端情况下才生效；/2000 会让它在预算只用到一半时就卡住 ——
+ *     旧默认 80k 就是这么把 40 条变成真瓶颈的（实测只填到 57,638/80,000 字符，
+ *     仅覆盖整场会话的 2.1% 工具调用轮）。改大字符预算而不动这个分母，等于白改。
+ *   · maxUserChars —— 单条 user 消息的上限，默认 120,000 字符（≈47k token 中文）。
  *     它决定了"一条超长粘贴最多能吃掉多少预算"：被截断时首尾都保留（见 clip），
  *     指令通常在开头、最新的追问在结尾，两边都不丢；中间省略处带明确标记。
  *     上限还绑了 maxChars - 12000，保证单条消息永远挤不掉"最近发生了什么"。
  */
 export function resolveRequestBudget(configuredMaxChars) {
   const maxChars = normalizeAiRequestChars(configuredMaxChars) ?? REQUEST_DEFAULT_MAX_CHARS
-  const maxMessages = Math.min(Math.max(Math.round(maxChars / 2000), REQUEST_DEFAULT_MAX_MESSAGES), 400)
+  const maxMessages = Math.min(Math.max(Math.round(maxChars / 1000), REQUEST_DEFAULT_MAX_MESSAGES), 600)
   const maxUserChars = Math.min(Math.max(Math.floor(maxChars * 0.3), 8000), 500000, maxChars - 12000)
   return { maxChars, maxMessages, maxUserChars }
 }
@@ -83,7 +99,7 @@ export function repairToolHistory(messages) {
 // Build a bounded request copy. The complete transcript on disk is never trimmed.
 // Budgets are characters/messages, not purported token counts.
 export function buildRequestMessages(messages, {
-  maxMessages = REQUEST_DEFAULT_MAX_MESSAGES,
+  maxMessages = resolveRequestBudget(REQUEST_DEFAULT_MAX_CHARS).maxMessages,
   maxChars = REQUEST_DEFAULT_MAX_CHARS,
   maxUserChars = resolveRequestBudget(maxChars).maxUserChars,
 } = {}) {
@@ -215,10 +231,17 @@ export function collapseTextParts(messages) {
 // panel (`agentChat.js`) must both call this instead of assembling their own copy —
 // that is the only thing keeping the two from drifting apart again.
 // Returns a fresh array; the caller's transcript is never modified.
+//
+// ⚠️ maxMessages / maxUserChars **从 maxChars 派生**，不各自带常量默认值。
+// 带独立默认值会造出一个病态组合：调用方只传 maxChars（或什么都不传）时拿到
+// 「40 条 / 400k 字符」—— 字符预算永远用不完，条数提前卡死，实测只用到 72% 的字符、
+// 覆盖 2.1% 的工具调用轮。那正是 2026-10-07 之前默认值的真实形态，别再让它回来。
+// （REQUEST_DEFAULT_MAX_MESSAGES 只作为 resolveRequestBudget 里的**下限**存在，
+//   不是本函数的默认值。）
 export function prepareRequestMessages(messages, {
   locale,
-  maxMessages = REQUEST_DEFAULT_MAX_MESSAGES,
   maxChars = REQUEST_DEFAULT_MAX_CHARS,
+  maxMessages = resolveRequestBudget(maxChars).maxMessages,
   maxUserChars = resolveRequestBudget(maxChars).maxUserChars,
 } = {}) {
   const copy = buildRequestMessages(messages, { maxMessages, maxChars, maxUserChars })
