@@ -502,19 +502,19 @@
               </div>
             </div>
             <div class="setting-row">
-              <label class="setting-label">{{ $t('@42BB9:单轮请求上下文上限') }}</label>
+              <label class="setting-label">{{ $t('@CTX:单次请求 token 上限') }}</label>
               <div class="project-toggle">
                 <el-input-number
-                  v-model="aiMaxRequestCharsInput"
+                  v-model="aiMaxRequestTokensInput"
                   :min="20000"
                   :max="1000000"
-                  :step="10000"
+                  :step="50000"
                   :disabled="savingAiSettings"
                   class="ai-iterations-input"
                   @change="handleAiMaxRequestCharsChange"
                 />
                 <span class="setting-hint-block ai-iterations-hint">
-                  {{ $t('@42BB9:每次请求最多带进模型的字符数（默认 400,000，约合 15 万 token）。调大后能一次贴入更长的材料，代价是每轮请求更大更慢；单条超长消息超出部分会被首尾保留地省略') }}
+                  {{ $t('@CTX:单次请求最多带进模型的 token 数。模型窗口是 1M，这里留 20% 给模型输出与推理，所以默认 800,000。调大后能一次贴入更长的材料，代价是每轮请求更大更慢；单条超长消息超出部分会被首尾保留地省略') }}
                 </span>
               </div>
             </div>
@@ -914,9 +914,9 @@ const editingModelId = ref<string | null | undefined>(undefined) // undefined=�
 
 // AI 智能体运行时（全局设置，立即持久化，与模型列表一样不走"保存"按钮）
 const aiMaxToolIterationsInput = ref(1000)
-// 首屏兜底值，必须与 src/cli/ai/context.js 的 REQUEST_DEFAULT_MAX_CHARS 一致（400,000）——
-// 配置到达前先把输入框填上这个数，避免闪现 80000 再跳变。
-const aiMaxRequestCharsInput = ref(400000)
+// 首屏兜底值，必须与 src/cli/ai/context.js 的 REQUEST_DEFAULT_MAX_TOKENS 一致（800,000）——
+// 配置到达前先把输入框填上这个数，避免闪现 0 再跳变。
+const aiMaxRequestTokensInput = ref(800000)
 const savingAiSettings = ref(false)
 
 async function handleAiMaxToolIterationsChange(value: number | undefined) {
@@ -944,15 +944,15 @@ async function handleAiMaxToolIterationsChange(value: number | undefined) {
 async function handleAiMaxRequestCharsChange(value: number | undefined) {
   const next = Number(value)
   if (!Number.isFinite(next) || next <= 0) {
-    aiMaxRequestCharsInput.value = configStore.aiMaxRequestChars
+    aiMaxRequestTokensInput.value = configStore.aiMaxRequestTokens
     return
   }
-  if (next === configStore.aiMaxRequestChars) return
+  if (next === configStore.aiMaxRequestTokens) return
 
   savingAiSettings.value = true
   try {
-    const ok = await configStore.saveAiSettings({ aiMaxRequestChars: next })
-    aiMaxRequestCharsInput.value = configStore.aiMaxRequestChars
+    const ok = await configStore.saveAiSettings({ aiMaxRequestTokens: next })
+    aiMaxRequestTokensInput.value = configStore.aiMaxRequestTokens
     if (ok) ElMessage.success($t('@42BB9:已保存'))
   } finally {
     savingAiSettings.value = false
@@ -1125,7 +1125,7 @@ watch(() => props.modelValue, async (val) => {
     void loadExplorerMenuStatus()
     aiModels.value = [...configStore.models]
     aiMaxToolIterationsInput.value = configStore.aiMaxToolIterations
-    aiMaxRequestCharsInput.value = configStore.aiMaxRequestChars
+    aiMaxRequestTokensInput.value = configStore.aiMaxRequestTokens
     editingModelId.value = undefined
     // 加载编辑器设置
     tempEditorAutoSave.value = configStore.ui.editorAutoSave

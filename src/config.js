@@ -21,7 +21,7 @@ import { migrateDataDir } from './dataDirMigration.js';
 import { atomicWriteText } from './fsAtomic.js';
 // 请求预算的口径（默认值 / 规范化 / 解析公式）住在 cli/ai/context.js —— 那里是
 // "每轮请求怎么裁剪"的唯一实现，config.js 只负责把它接到配置项上，不复制公式。
-import { normalizeAiRequestChars, REQUEST_DEFAULT_MAX_CHARS } from './cli/ai/context.js';
+import { normalizeAiRequestTokens, migrateLegacyCharsToTokens, REQUEST_DEFAULT_MAX_TOKENS } from './cli/ai/context.js';
 import {
   ensureSplitStore,
   readSplitProjects,
@@ -89,6 +89,28 @@ export function normalizeTaskExecutor(value) {
   if (typeof value !== 'string') return null;
   const v = value.trim().toLowerCase();
   return TASK_EXECUTORS.includes(v) ? v : null;
+}
+
+/**
+ * 解析请求上下文预算的 token 值（2026-10-07 字符口径 → token 口径）。
+ *
+ * 新字段 `aiMaxRequestTokens` 优先；读不到才从**旧字段** `aiMaxRequestChars`
+ * 迁移。为什么必须迁移而不是直接回落默认：用户磁盘上的 config.json 已经存着
+ * 旧值（本机是 80,000 字符），改字段名后它读不到 → 静默变成 1,000,000 token，
+ * 等于把用户的设置清了一轮。迁移是有损的（估算换算），但只发生一次，
+ * 且落在用户原意附近。
+ *
+ * ⚠️ 旧字段**故意不清除**：清了就等于给不出迁移（用户下次读配置时新字段还没写，
+ * 旧值已经没了）。代价是"删掉 aiMaxRequestTokens 想回默认"的人会拿到迁移值
+ * 而不是默认值 —— 这是**一次性**的错位（保存一次全局设置就会把新字段写上），
+ * 比静默清空用户设置好得多。
+ */
+function resolveRequestTokens(raw) {
+  const direct = normalizeAiRequestTokens(raw?.aiMaxRequestTokens);
+  if (direct !== null) return direct;
+  const migrated = migrateLegacyCharsToTokens(raw?.aiMaxRequestChars);
+  if (migrated !== null) return normalizeAiRequestTokens(migrated);
+  return defaultConfig.aiMaxRequestTokens;
 }
 
 /**
@@ -178,14 +200,19 @@ const defaultConfig = {
   // 依然会被顶掉,而顶掉后重发消息要重新把上下文喂一遍,远比多跑几轮贵。
   // 想调小/调大改这个值即可(GUI: 设置 → AI 模型配置)。
   aiMaxToolIterations: 1000,
-  // AI 智能体单轮请求的上下文预算(字符,全局配置,CLI `g ai` 与 Web 智能体共用)。
-  // 2026-10-07 两次调整:80,000 → 400,000。80k 只等于 31k token(实测换比 2.57 字符/token),
-  // 而当日旗舰窗口全是 1M 一档(GPT-6.1 Sol 1,050,000 / Claude Opus 5.5 1,000,000
-  // / Gemini 3.5 Flash 1,000,000 / DeepSeek V4 1,000,000 / Qwen3.8 Max 1,000,000),
-  // 旧默认只占 3%。400k ≈ 156k token,仍在 OpenAI 的 272k 长上下文计价线之下
-  // (>272k 输入按整请求 2x 输入 + 1.5x 输出),要更大请自行往上调。
-  // 越界值夹取到 [20,000, 1,000,000]。解析公式与"单条 user 消息上限"见 cli/ai/context.js。
-  aiMaxRequestChars: REQUEST_DEFAULT_MAX_CHARS,
+  // AI 智能体单轮请求的上下文预算（**token**，全局配置，CLI `g ai` 与 Web 智能体共用）。
+  //
+  // 2026-10-07 一天内调了三次：80,000 字符 → 400,000 字符 → 1,000,000 token。
+  // 最终定在 token 口径 + 1M 的理由（详见 cli/ai/context.js 的预算一节）：
+  //   · 用户的模型都是 1M 档 —— MiniMax-M3 官方写"up to 1M tokens"，
+  //     DeepSeek V4 Flash 官方 API 文档 CONTEXT LENGTH 1M 且默认就是 1M；
+  //   · provider 只认 token，用字符当闸门在纯中文内容上会超窗口；
+  //   · 成本不是障碍：DeepSeek V4 Flash 输入 ¥1/1M token，**缓存命中只 ¥0.02/1M**
+  //     （50 倍差价），而工具循环每轮重发的前缀完全相同，缓存命中率极高。
+  //
+  // 越界值夹取到 [20,000, 1,000,000]。解析公式见 cli/ai/context.js 的 resolveRequestBudget。
+  // 旧字段 aiMaxRequestChars（字符口径）由 resolveRequestTokens 迁移读取。
+  aiMaxRequestTokens: REQUEST_DEFAULT_MAX_TOKENS,
   // 工作台任务执行器（claude | opencode | codex）。全局配置，跨项目共享。
   // 决定「执行任务 / 执行子任务 / 从此处开始 / 简单任务续聊」这条链路
   // 默认 spawn 哪个本地 CLI；执行入口可以按次覆盖（见 workbench 执行路由）。
@@ -530,8 +557,7 @@ async function loadConfig() {
       ...raw,
       aiMaxToolIterations: normalizeAiMaxToolIterations(raw.aiMaxToolIterations)
         ?? defaultConfig.aiMaxToolIterations,
-      aiMaxRequestChars: normalizeAiRequestChars(raw.aiMaxRequestChars)
-        ?? defaultConfig.aiMaxRequestChars,
+      aiMaxRequestTokens: resolveRequestTokens(raw),
       taskExecutor: normalizeTaskExecutor(raw.taskExecutor) ?? defaultConfig.taskExecutor,
       ...resolveNotifySwitches(raw)
     };
@@ -551,8 +577,7 @@ async function loadConfig() {
     // 同 models：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
     aiMaxToolIterations: normalizeAiMaxToolIterations(raw?.aiMaxToolIterations)
       ?? defaultConfig.aiMaxToolIterations,
-    aiMaxRequestChars: normalizeAiRequestChars(raw?.aiMaxRequestChars)
-      ?? defaultConfig.aiMaxRequestChars,
+    aiMaxRequestTokens: resolveRequestTokens(raw),
     taskExecutor: normalizeTaskExecutor(raw?.taskExecutor) ?? defaultConfig.taskExecutor,
     // 同 taskExecutor：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
     ...resolveNotifySwitches(raw)
@@ -607,7 +632,7 @@ async function saveConfig(config) {
   // 解构出来，否则它会跟着 ...projectConfig 被写进**项目配置**里 —— 全局设置漏进
   // 项目级是这一族键最容易踩的坑。解构出来本身不写回顶层（它已不再被任何地方读取）。
   const {
-    theme, locale, models, ui, aiMaxToolIterations, aiMaxRequestChars, taskExecutor,
+    theme, locale, models, ui, aiMaxToolIterations, aiMaxRequestTokens, taskExecutor,
     notifyOnTaskDone: legacyNotifyOnTaskDone,
     notifyPageOnTaskDone, notifyBrowserOnTaskDone, notifySoundOnTaskDone,
     ...projectConfig
@@ -633,9 +658,9 @@ async function saveConfig(config) {
     raw.aiMaxToolIterations = normalizedIterations;
   }
   // 请求上下文预算同属全局设置：同一套夹取语义
-  const normalizedRequestChars = normalizeAiRequestChars(aiMaxRequestChars);
-  if (normalizedRequestChars !== null) {
-    raw.aiMaxRequestChars = normalizedRequestChars;
+  const normalizedTokens = normalizeAiRequestTokens(aiMaxRequestTokens);
+  if (normalizedTokens !== null) {
+    raw.aiMaxRequestTokens = normalizedTokens;
   }
   // 任务执行器同属全局设置：白名单外的值不落盘
   const normalizedExecutor = normalizeTaskExecutor(taskExecutor);
@@ -848,7 +873,8 @@ export default {
   // AI 智能体单轮工具调用上限的规范化/区间(GUI 保存前也要用,见 /api/config/save-ai-settings)
   normalizeAiMaxToolIterations,
   // 请求上下文预算的规范化/区间(同一路由保存时用;公式本体在 cli/ai/context.js)
-  normalizeAiRequestChars,
+  normalizeAiRequestTokens,
+  migrateLegacyCharsToTokens,
   AI_MAX_TOOL_ITERATIONS_MIN,
   AI_MAX_TOOL_ITERATIONS_MAX,
   // 工作台任务执行器规范化(GUI 保存前也要用,见 /api/config/save-general-settings)
@@ -869,6 +895,12 @@ export {
   invalidateCurrentProjectKey,
   invalidateRawConfigCache,
   normalizeAiMaxToolIterations,
+  // 请求上下文预算的规范化（2026-10-07 字符口径 → token 口径）。
+  // 命名导出与 configManager 上的方法并存：路由层两种都要用 ——
+  // save-ai-settings 走 configManager.*，而 context.js 之外的地方按需import。
+  normalizeAiRequestTokens,
+  migrateLegacyCharsToTokens,
+  REQUEST_DEFAULT_MAX_TOKENS,
   AI_MAX_TOOL_ITERATIONS_MIN,
   AI_MAX_TOOL_ITERATIONS_MAX,
 };

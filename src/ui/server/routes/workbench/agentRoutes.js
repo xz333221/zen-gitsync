@@ -467,9 +467,9 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
           const rawConfig = await configManager.readRawConfigFile();
           const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
           model = models.find(m => m.isDefault) || models[0];
-          // 请求预算：全局配置 aiMaxRequestChars（缺省/越界由 resolveRequestBudget
+          // 请求预算：全局配置 aiMaxRequestTokens（缺省/越界由 resolveRequestBudget
           // 兜底夹取），与 CLI `g ai`、设置页保存回执共用同一份解析 —— 别在这里另算。
-          requestBudget = resolveRequestBudget(rawConfig.aiMaxRequestChars);
+          requestBudget = resolveRequestBudget(rawConfig.aiMaxRequestTokens);
         } catch (err) {
           send({ type: 'error', error: '读取 AI 配置失败: ' + err.message });
           finished = true;

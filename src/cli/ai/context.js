@@ -5,6 +5,48 @@ const textOf = m => typeof m?.content === 'string' ? m.content : (m?.content || 
 const imagePartsOf = content => Array.isArray(content) ? content.filter(p => p?.type === 'image_url') : []
 const clip = (text, limit) => text.length <= limit ? text : text.slice(0, Math.floor(limit / 2)) + '\n[… earlier output omitted …]\n' + text.slice(-Math.floor(limit / 2))
 
+// ── token 估算（必须定义在裁剪算法之前）────────────────────────────
+//
+// 为什么不放在文件后面的「占用测量」那节：buildRequestMessages 的预算累加现在
+// 直接用本函数，而 const 箭头函数**不会**被hoist —— 放在后面会在真跑起来时撞
+// TDZ（ReferenceError），报错信息还不指向原因，很难一眼看出。
+//
+// 为什么必须按 token 而不是字符：预算是"别让请求被 provider 拒收"，而 provider
+// 只认 token。用字符当闸门，纯中文内容（1 字 = 1 token）会多出 1.5 倍 ——
+// 实测本机那条 525轮会话是 2.37 字符/token（大量 ascii），但同一段代码换成中文
+// 注释就掉到 1.6，纯中文正文更低。改 token 口径后这个偏差不再影响闸门。
+//
+// 系数从真实负载校准（2026-10-07，ag-muxglt4p：525 万字符 ≈ 228 万 token）：
+// 中文 1 字/token、ascii 3.5 字符/token，其他 2 字符/token。
+// 只用于**估算** —— provider 报的真实 usage 才是权威（见 measureContextUsage）。
+const CJK_RE = /[㐀-鿿豈-﫿　-〿＀-￯]/g
+const ASCII_RE = /[ -~]/g
+const ASCII_TOKEN_CHARS = 3.5
+const CJK_TOKEN_PER_CHAR = 1
+const OTHER_TOKEN_CHARS = 2
+
+/** 估算一段文本的 token 数。空/非字符串一律 0。 */
+export function estimateTokens(text) {
+  const s = typeof text === 'string' ? text : ''
+  if (!s) return 0
+  const cjk = (s.match(CJK_RE) || []).length
+  const ascii = (s.match(ASCII_RE) || []).length
+  const rest = s.length - cjk - ascii
+  return Math.ceil(cjk * CJK_TOKEN_PER_CHAR + ascii / ASCII_TOKEN_CHARS + rest / OTHER_TOKEN_CHARS)
+}
+
+/**
+ * token 上限 → 字符上限（**保守**换算，给按字符切的地方用）。
+ *
+ * 为什么要有这个：单条消息的截断（clip）拿到的必须还是"字符数"，而预算闸门
+ * 已经是 token 了。两者之间需要一个换算，而它**只能偏小** —— 宁可少留一点内容，
+ * 也不能让实际 token 超过用户设的上限。所以用 1.5 字符/token（而不是实测的 2.37）：
+ * 中文最坏情况（1 字 1 token）仍留 1.5 倍余量；纯 ascii 时只用掉 62% 预算，
+ * 属于安全侧的浪费。
+ */
+const TOKEN_TO_CHARS_CONSERVATIVE = 1.5
+export const tokenToChars = tokens => Math.max(Math.floor(tokens * TOKEN_TO_CHARS_CONSERVATIVE), 1000)
+
 // ── 请求预算 ──────────────────────────────────────────────────────────────
 // 每轮请求的两把尺子：条数 + 字符。默认值与历史行为一致（40 条 / 80,000 字符）。
 //
@@ -19,59 +61,102 @@ const clip = (text, limit) => text.length <= limit ? text : text.slice(0, Math.f
 //   ① 单条 user 消息像 tool 消息一样截断（maxUserChars，首尾保留）—— 任何一条消息
 //      都挤不掉别人；
 //   ② 预算可调大 —— 模型窗口装得下的用户，不必再被 80k 卡住。
-export const AI_REQUEST_CHARS_MIN = 20000
-export const AI_REQUEST_CHARS_MAX = 1000000
-// 默认预算（字符）。config.js 的 defaultConfig.aiMaxRequestChars 引用它，保证一处定义。
+export const AI_REQUEST_TOKENS_MIN = 20000
+export const AI_REQUEST_TOKENS_MAX = 1000000
+// 默认预算（token）。config.js 的 defaultConfig.aiMaxRequestTokens 引用它，保证一处定义。
 //
-// 2026-10-07 第二次调整：80,000 → 400,000（同日）。理由是拿本机一场真实会话回放出来的：
-//   · 字符↔token 实测 1 token ≈ 2.57 字符（该会话 525 万字符 ≈ 204 万 token，
-//     中文字 86 万 / ascii 407 万），所以旧默认只等于 **31k token**。
-//   · 当代旗舰窗口已经全是 1M 一档（GPT-6.1 Sol 1,050,000 / Claude Opus 5.5 1,000,000
-//     / Gemini 3.5 Flash 1,000,000 / DeepSeek V4 1,000,000 / Qwen3.8 Max 1,000,000），
-//     31k 只占 **3%** —— 一半以上的模型窗口是空着的。
-//   · 400,000 字符 ≈ 156k token，**仍在 OpenAI 的 272k 长上下文计价线之下**
-//     （GPT-6/6.1/5.6 家族对 >272k 输入按整请求 2x 输入 + 1.5x 输出计价），
-//     所以这一档"装得下又不触发涨价"。真要更大请往上调，但那是拿钱换窗口。
-export const REQUEST_DEFAULT_MAX_CHARS = 400000
+// 2026-10-07 第三次调整：字符口径 → token 口径，同日把默认从 80k 字符一路放到
+// 1,000,000 token。三个理由：
+//
+//   ① **单位对齐**。用户的模型都是 1M 档（已核对官方文档）：
+//      · MiniMax-M3 —— 官方页面写"up to 1M tokens context window"
+//      · DeepSeek V4 Flash —— 官方 API 文档 CONTEXT LENGTH 1M，且**默认就是 1M**
+//      界面里写"字符"逼着用户心算「400k 字符 ≈ 多少 token」，这本身就是 bug 源。
+//
+//   ② **字符口径在中文场景会超窗口**。provider 只认 token；纯中文 1 字 = 1 token，
+//      而实测那条 525轮会话是 2.37 字符/token（大量 ascii）。同一段代码换成中文
+//      注释就掉到 1.6，纯中文正文更低 —— 按字符设闸门 = 按最坏情况少留、
+//      按最好情况超窗口。改成 token 累加后这个偏差彻底消失。
+//
+//   ③ **成本不是障碍**（这条推翻了我自己上一轮的建议）。DeepSeek V4 Flash 输入
+//      ¥1/1M token，但**缓存命中只¥0.02/1M**（50 倍差价），而工具循环每轮都重发
+//      **完全相同的前缀**，缓存命中率极高。1M token 每轮实际只花 ¥0.02。
+//      （OpenAI 那套 >272k 整请求 2x 的规则只对 GPT-6/6.1/5.6 家族成立。）
+// 默认给 **800,000 token 而不是顶格的 1,000,000** —— 这是刻意的。
+// 模型标称的 1M 是"输入 + 输出 + reasoning 共享"的天花板：gai 每一轮都要留出
+// 位置给模型的回复（DeepSeek V4 Flash / MiniMax M3 的 max output 都是 128K~384K
+// 量级），而 thinking 模式的 reasoning token **同样占窗口**。顶格 1M 意味着
+// 历史一满，请求就因为"输出放不下"被 provider 拒掉 —— 表现为莫名其妙的 400。
+// 留 20% 余量（约 20 万 token）足够正常回复 + 长推理。
+export const REQUEST_DEFAULT_MAX_TOKENS = 800000
 export const REQUEST_DEFAULT_MAX_MESSAGES = 40
 
 /**
- * 规范化单条请求的字符预算。与 normalizeAiMaxToolIterations 同一套语义：
+ * 规范化 token 预算。与 normalizeAiMaxToolIterations 同一套语义：
  * 越界夹取（手改成天文数字的意图是"想更大"，夹到上限比悄悄回落默认更贴近意图），
  * 完全无法解析（undefined / 'abc'）才返回 null，交给调用方取默认值。
  */
-export function normalizeAiRequestChars(value) {
+export function normalizeAiRequestTokens(value) {
   if (value === undefined || value === null || value === '') return null
   const n = Number(value)
   if (!Number.isFinite(n)) return null
   const int = Math.floor(n)
-  if (int < AI_REQUEST_CHARS_MIN) return AI_REQUEST_CHARS_MIN
-  if (int > AI_REQUEST_CHARS_MAX) return AI_REQUEST_CHARS_MAX
+  if (int < AI_REQUEST_TOKENS_MIN) return AI_REQUEST_TOKENS_MIN
+  if (int > AI_REQUEST_TOKENS_MAX) return AI_REQUEST_TOKENS_MAX
   return int
 }
 
 /**
- * 由配置值解析出三个预算参数（字符上限 / 消息条数上限 / 单条 user 截断线）。
- * 非法/缺省一律回落默认（400,000 字符）。
+ * 旧配置项 `aiMaxRequestChars`（字符）→ 新口径的 token 值。
  *
- * 条数与单条线都随字符预算**等比缩放** —— 用户只调一个数，三个数不许各自漂移：
- *   · maxMessages = 字符预算 / 1000，下限保持默认 40 条、上限 600 条。
- *     **分母为什么是 1000 而不是原来的 2000**：条数上限存在的意义是"别让请求
- *     长到 provider 拒收"，而字符预算才是真正的闸门。实测（525 组工具调用的真实
- *     会话）每条消息约 2,700 字符，所以 /1000 意味着条数只在字符预算用满之前
- *     就先撞顶的极端情况下才生效；/2000 会让它在预算只用到一半时就卡住 ——
- *     旧默认 80k 就是这么把 40 条变成真瓶颈的（实测只填到 57,638/80,000 字符，
- *     仅覆盖整场会话的 2.1% 工具调用轮）。改大字符预算而不动这个分母，等于白改。
- *   · maxUserChars —— 单条 user 消息的上限，默认 120,000 字符（≈47k token 中文）。
- *     它决定了"一条超长粘贴最多能吃掉多少预算"：被截断时首尾都保留（见 clip），
- *     指令通常在开头、最新的追问在结尾，两边都不丢；中间省略处带明确标记。
- *     上限还绑了 maxChars - 12000，保证单条消息永远挤不掉"最近发生了什么"。
+ * 为什么需要迁移而不是直接回落默认：用户**已经存在**的 config.json 里存着旧值
+ * （本机就是 80,000），改字段名后它读不到 → 静默回落 1M，等于把用户的设置清了。
+ * 按实测换比 2.37 字符/token 折算，80,000 字符 ≈ 34k token。
+ *
+ * 注意这是**有损**的（估算换算），但只影响一次迁移，且落在用户原意附近。
+ * 反向（旧 token 值 → 字符）不做：那会让 config.js 里出现两个方向的换算，
+ * 早晚有一处忘了更新。
  */
-export function resolveRequestBudget(configuredMaxChars) {
-  const maxChars = normalizeAiRequestChars(configuredMaxChars) ?? REQUEST_DEFAULT_MAX_CHARS
-  const maxMessages = Math.min(Math.max(Math.round(maxChars / 1000), REQUEST_DEFAULT_MAX_MESSAGES), 600)
-  const maxUserChars = Math.min(Math.max(Math.floor(maxChars * 0.3), 8000), 500000, maxChars - 12000)
-  return { maxChars, maxMessages, maxUserChars }
+export function migrateLegacyCharsToTokens(charsValue) {
+  const chars = Number(charsValue)
+  if (!Number.isFinite(chars) || chars <= 0) return null
+  // 用实测换比（525 轮工具调用负载）而非理论值，那是这类会话的典型形态
+  return Math.round(chars / 2.37)
+}
+
+/**
+ * 由配置值解析出四个预算参数。
+ * 非法/缺省一律回落默认（1,000,000 token）。
+ *
+ * 三者都随 token 预算**等比缩放** —— 用户只调一个数，其余不许各自漂移：
+ *   · maxChars —— **给按字符切的地方用**（单条 user / tool 消息的截断线），
+ *     由 token 预算保守换算而来（见 tokenToChars）。
+ *   · maxMessages —— 条数上限 = token 预算 / 400，下限 40、上限 4000。
+ *     **分母 400 是实测各形态 token 跨度后定的**：单条消息的 token 数随内容形态
+ *     差 21 倍（实测 2026-10-07，同一把尺子量出来的）：
+ *       · 短 tool_calls（path 只有几十字符）→118 token
+ *       · ascii 工具结果 4,000 字符 → 1,143 token（clip 后 6,000 → 1,715）
+ *       · 中文 2,000 字 → 2,000 token
+ *       · 中文注释 + ascii 代码混合 → 2,572 token
+ *     条数上限的作用是"别让请求长到 provider 拒收"，**token 闸门才是真闸门**。
+ *     分母取最省的常见形态（400，略高于 118 那档，留出余量），意味着任何形态下
+ *     都是 token 先耗尽。反面教材（都是这轮实测踩到的）：
+ *       分母 2500 → 1M 档只给 400 条，纯 ascii 场景 400×584 = 23 万（23%）
+ *       分母 1200 → 833 条 × 584 = 49 万（49%）
+ *       分母 700  → 1429 条 × 584 = 83.5 万（83.5%）
+ *     也就是分母每放大一档，就多浪费一截预算 —— 而这个浪费**用户看不到**，
+ *     只会表现为"上限设了 1M 但条数远远没到就停了"。
+ *     上限 4000兜底极端轻内容：118 token × 4000 = 47 万（这时是条数先到顶，
+ *     但那种消息本身就这么小，撑不满 1M 不是缺陷）。
+ *   · maxUserChars —— 单条 user 消息的截断线，上限绑 maxChars - 12000，
+ *     保证单条消息永远挤不掉"最近发生了什么"。
+ */
+export function resolveRequestBudget(configuredMaxTokens) {
+  const maxTokens = normalizeAiRequestTokens(configuredMaxTokens) ?? REQUEST_DEFAULT_MAX_TOKENS
+  const maxChars = tokenToChars(maxTokens)
+  const maxMessages = Math.min(Math.max(Math.round(maxTokens / 400), REQUEST_DEFAULT_MAX_MESSAGES), 4000)
+  const maxUserChars = Math.min(Math.max(Math.floor(maxTokens * 0.3), 8000), 500000, maxChars - 12000)
+  return { maxTokens, maxChars, maxMessages, maxUserChars }
 }
 
 // A saved turn may have been interrupted between tools. Mark missing results,
@@ -98,11 +183,8 @@ export function repairToolHistory(messages) {
 
 // Build a bounded request copy. The complete transcript on disk is never trimmed.
 // Budgets are characters/messages, not purported token counts.
-export function buildRequestMessages(messages, {
-  maxMessages = resolveRequestBudget(REQUEST_DEFAULT_MAX_CHARS).maxMessages,
-  maxChars = REQUEST_DEFAULT_MAX_CHARS,
-  maxUserChars = resolveRequestBudget(maxChars).maxUserChars,
-} = {}) {
+export function buildRequestMessages(messages, budget = {}) {
+  const { maxTokens, maxChars, maxMessages, maxUserChars } = { ...resolveRequestBudget(), ...budget }
   // tool 消息的正文按 6000 字符截断,但**图片部件必须原样留着**。这里以前是
   // `content: clip(textOf(m), 6000)` 直接覆盖 —— 那会把 read_image 刚附上的图
   // 悄悄删掉,而模型仍然收到"已读取图片 xxx.png"的文本,于是理直气壮地编内容。
@@ -125,18 +207,20 @@ export function buildRequestMessages(messages, {
     }
     return { ...m }
   })
-  // size 只算文本:图片是 base64,一张截图就上百万字符。若把它计进预算,第一轮
-  // 就会因为"超预算"把刚读进来的那张图所在的消息组整组丢掉 —— 越需要看图越丢图。
-  // 图片总量另有约束:stripStaleImages 只留最新一张,详见那里的注释。
-  const size = m => textOf(m).length + JSON.stringify(m.tool_calls || []).length
-  if (copy.length <= maxMessages && copy.reduce((n, m) => n + size(m), 0) <= maxChars) return copy
+  // 预算闸门按 **token** 累加（不是字符）。provider 只认 token，用字符设闸门
+  // 在纯中文内容上会超窗口 —— 纯中文 1 字 = 1 token，而实测那条 525 轮会话
+  // 是 2.37 字符/token。estimateTokens 的精度对闸门足够（宁可略保守）。
+  // 图片**不计入**：base64 一张截图就上百万字符，计进预算会把刚读进来的那张图
+  // 所在消息组整组丢掉 —— 越需要看图越丢图。图片总量另有约束
+  // （stripStaleImages 只留最新一张，详见那里的注释）。
+  if (copy.length <= maxMessages && copy.reduce((n, m) => n + messageTokens(m), 0) <= maxTokens) return copy
   const keep = new Set()
   if (copy[0]?.role === 'system') keep.add(0)
   const firstUser = copy.findIndex(m => m.role === 'user')
   const lastUser = copy.findLastIndex(m => m.role === 'user')
   if (firstUser >= 0) keep.add(firstUser)
   if (lastUser >= 0) keep.add(lastUser)
-  let chars = [...keep].reduce((n, i) => n + size(copy[i]), 0)
+  let used = [...keep].reduce((n, i) => n + messageTokens(copy[i]), 0)
   const groups = []
   for (let i = 0; i < copy.length; i++) {
     const group = [i]
@@ -145,9 +229,10 @@ export function buildRequestMessages(messages, {
   }
   for (const group of groups.reverse()) {
     const fresh = group.filter(i => !keep.has(i))
-    const cost = fresh.reduce((n, i) => n + size(copy[i]), 0)
-    if (keep.size + fresh.length > maxMessages - 1 || chars + cost > maxChars - 6000) continue
-    fresh.forEach(i => keep.add(i)); chars += cost
+    const cost = fresh.reduce((n, i) => n + messageTokens(copy[i]), 0)
+    // 留 5% 余量：估算有误差，贴着上限装满容易在 provider 侧撞到 400
+    if (keep.size + fresh.length > maxMessages - 1 || used + cost > maxTokens * 0.95) continue
+    fresh.forEach(i => keep.add(i)); used += cost
   }
   const omitted = copy.filter((_, i) => !keep.has(i))
   const excerpts = omitted.map(m => {
@@ -238,13 +323,9 @@ export function collapseTextParts(messages) {
 // 覆盖 2.1% 的工具调用轮。那正是 2026-10-07 之前默认值的真实形态，别再让它回来。
 // （REQUEST_DEFAULT_MAX_MESSAGES 只作为 resolveRequestBudget 里的**下限**存在，
 //   不是本函数的默认值。）
-export function prepareRequestMessages(messages, {
-  locale,
-  maxChars = REQUEST_DEFAULT_MAX_CHARS,
-  maxMessages = resolveRequestBudget(maxChars).maxMessages,
-  maxUserChars = resolveRequestBudget(maxChars).maxUserChars,
-} = {}) {
-  const copy = buildRequestMessages(messages, { maxMessages, maxChars, maxUserChars })
+export function prepareRequestMessages(messages, budget = {}) {
+  const { locale } = budget
+  const copy = buildRequestMessages(messages, budget)
   stripStaleImages(copy, locale)
   collapseTextParts(copy)
   return sanitizeMessages(copy)
@@ -259,49 +340,46 @@ export function prepareRequestMessages(messages, {
 //     已经被"同一口径写两遍"坑过（提示词四处、路径归一三处，失效方式是不报错、
 //     两个入口表现不一样）。所以只有这一份。
 //
-// 换算系数从本机真实会话实测来（2026-10-07，ag-muxglt4p：525 万字符 ≈ 204 万 token）：
-// 中文字 86 万、ascii 407 万 → 中文按 1 字/token、ascii 按 3.5 字符/token 加权后
-// 整体落在 2.57 字符/token 附近。这个精度只够画一根进度条，不足以算钱；
-// 真要精确用量请看 provider 的 usage（CLI 的 /stats 有，Web 侧还没接）。
-const CJK_RE = /[㐀-鿿豈-﫿　-〿＀-￯]/g
-const ASCII_TOKEN_CHARS = 3.5
-const CJK_TOKEN_PER_CHAR = 1
+// 这一节的估算函数已提到文件头部（裁剪算法要用，且 const 不会 hoist）。
+// 为什么只留一份：CLI（turn.js）与 Web（agentChat.js）各估一次必然漂移 —— 这仓库
+// 已经被"同一口径写两遍"坑过（提示词四处、路径归一三处，失效方式是不报错、
+// 两个入口表现不一样）。精度只够画进度条/当闸门，不足以算钱；真要精确用量
+// 请看 provider 报的 usage（CLI 的 /stats 有，Web 侧见 agentChat.js 的 context 事件）。
 
-export function estimateTokens(text) {
-  const s = typeof text === 'string' ? text : ''
-  if (!s) return 0
-  const cjk = (s.match(CJK_RE) || []).length
-  const ascii = (s.match(/[ -~]/g) || []).length
-  const rest = s.length - cjk - ascii
-  return Math.ceil(cjk * CJK_TOKEN_PER_CHAR + ascii / ASCII_TOKEN_CHARS + rest / 2)
-}
-
-// 与 buildRequestMessages 里的 size() 同一口径：只算文本，不算图片 base64。
+// 与 buildRequestMessages 里的 size() 同一口径：只算文本，不算图片 base64
+// （图片是 base64，一张截图就上百万字符，计进预算会把进度条顶满）。
 const messageTextSize = m => textOf(m).length + JSON.stringify(m.tool_calls || []).length
+/** 消息的 token 估算：正文 + tool_calls 参数的序列化长度。图片不算。 */
+const messageTokens = m => estimateTokens(textOf(m)) + estimateTokens(JSON.stringify(m.tool_calls || []))
 
 /**
- * 量一次请求的实际占用。给 UI 画进度条用，不参与任何裁剪决策。
+ * 量一次请求的实际占用。给 UI 画圆环/进度条用，不参与任何裁剪决策。
+ *
+ * 主口径是 **token**（与裁剪算法同一个闸门），`chars` 只作附带信息。
+ * 之前主口径是字符，那是错的：用户看到"80,000 字符"根本不知道等于多少 token，
+ * 而模型窗口是按 token 计的。
  *
  * @param {Array} requestMessages 已经过 prepareRequestMessages 的**请求副本**
  * @param {object} opts
- * @param {number} opts.maxChars      当前预算的字符上限（画条的分母）
+ * @param {number} opts.maxTokens     当前预算的 token 上限（画环的分母）
  * @param {number} opts.maxMessages   当前预算的条数上限
+ * @param {number} [opts.maxChars]    当前预算的字符换算值（原样带回，供 UI 附带显示）
  * @param {Array}  [opts.transcript]  磁盘上的完整会话，算"被裁掉了多少"用
  * @returns {{
- *   chars: number, messages: number, images: number, estTokens: number,
- *   maxChars: number, maxMessages: number,
- *   charRatio: number, messageRatio: number,
+ *   chars: number, tokens: number, estTokens: number, messages: number, images: number,
+ *   maxTokens: number, maxMessages: number, maxChars: number | null,
+ *   tokenRatio: number, messageRatio: number,
  *   transcriptMessages: number, transcriptChars: number, droppedMessages: number
  * }}
  */
-export function measureContextUsage(requestMessages, { maxChars = REQUEST_DEFAULT_MAX_CHARS, maxMessages = REQUEST_DEFAULT_MAX_MESSAGES, transcript = null } = {}) {
+export function measureContextUsage(requestMessages, { maxTokens = REQUEST_DEFAULT_MAX_TOKENS, maxMessages = REQUEST_DEFAULT_MAX_MESSAGES, maxChars = null, transcript = null } = {}) {
   const messages = Array.isArray(requestMessages) ? requestMessages : []
   let chars = 0
   let images = 0
-  let text = ''
+  let tokens = 0
   for (const m of messages) {
     chars += messageTextSize(m)
-    text += textOf(m)
+    tokens += messageTokens(m)
     if (Array.isArray(m?.content)) images += m.content.filter(p => p?.type === 'image_url').length
   }
   const transcriptChars = Array.isArray(transcript)
@@ -309,13 +387,17 @@ export function measureContextUsage(requestMessages, { maxChars = REQUEST_DEFAUL
     : 0
   return {
     chars,
+    tokens,
     messages: messages.length,
     images,
-    estTokens: estimateTokens(text),
-    maxChars,
+    estTokens: tokens,
+    maxTokens,
     maxMessages,
-    // 比率按 0~1 给，UI 拿它画宽度就行，不必再除一遍
-    charRatio: maxChars > 0 ? Math.min(chars / maxChars, 1) : 0,
+    // maxChars 原样带回（调用方传的是 resolveRequestBudget 的结果，里面有它）。
+    // 不重算 —— 调用方那份是按自己的预算解析出来的，重算会与实际裁剪用的不一致。
+    maxChars,
+    // 比率按 0~1 给，UI 拿它画进度/弧长就行，不必再除一遍
+    tokenRatio: maxTokens > 0 ? Math.min(tokens / maxTokens, 1) : 0,
     messageRatio: maxMessages > 0 ? Math.min(messages.length / maxMessages, 1) : 0,
     transcriptMessages: Array.isArray(transcript) ? transcript.length : messages.length,
     transcriptChars,

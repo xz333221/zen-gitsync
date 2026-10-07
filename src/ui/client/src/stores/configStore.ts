@@ -206,13 +206,13 @@ export const useConfigStore = defineStore('config', () => {
   // AI 智能体单轮最大工具调用次数（全局配置，CLI `g ai` 与 Web 智能体共用）
   // 默认值必须与 src/config.js 的 aiMaxToolIterations 一致，配置读取前的首屏也靠它兜底。
   const aiMaxToolIterations = ref(1000)
-  // AI 智能体单轮请求的上下文预算（字符；全局配置，CLI `g ai` 与 Web 智能体共用）。
-  // 默认值必须与 src/config.js 的 aiMaxRequestChars 一致（400,000），首屏兜底。
-  const aiMaxRequestChars = ref(400000)
+  // AI 智能体单轮请求的上下文预算（**token**；全局配置，CLI `g ai` 与 Web 智能体共用）。
+  // 默认值必须与 src/config.js 的 aiMaxRequestTokens 一致（800,000），首屏兜底。
+  const aiMaxRequestTokens = ref(800000)
   // 后端解析后的请求预算（GET /api/config/getConfig 的派生字段 + 保存回执，见
   // routes/config.js）。超长输入预警读它 —— 解析公式只在后端一处（resolveRequestBudget），
   // 前端绝不重算，避免"界面按旧线报警、服务端按新线截断"的口径分叉。
-  const aiRequestBudget = ref<{ maxChars: number; maxMessages: number; maxUserChars: number } | null>(null)
+  const aiRequestBudget = ref<{ maxTokens: number; maxChars: number; maxMessages: number; maxUserChars: number } | null>(null)
   // 工作台任务执行器**默认值**（全局配置）：claude | opencode | codex。
   // 只在「设置 → 通用设置 → 任务执行器」里改。执行入口旁的临时切换记在 ui.lastTaskExecutor，
   // 两者分开存 —— 前者是"配好的默认"，后者是"上次用的"，互相覆盖就没有各自的意义了。
@@ -519,11 +519,12 @@ export const useConfigStore = defineStore('config', () => {
         aiMaxToolIterations.value = Math.floor(Number(configData.aiMaxToolIterations))
       }
       // 请求上下文预算：原始值 + 后端解析后的三参数（getConfig 的派生字段）
-      if (Number.isFinite(Number(configData.aiMaxRequestChars)) && Number(configData.aiMaxRequestChars) > 0) {
-        aiMaxRequestChars.value = Math.floor(Number(configData.aiMaxRequestChars))
+      if (Number.isFinite(Number(configData.aiMaxRequestTokens)) && Number(configData.aiMaxRequestTokens) > 0) {
+        aiMaxRequestTokens.value = Math.floor(Number(configData.aiMaxRequestTokens))
       }
       if (Number.isFinite(Number(configData?.aiRequestBudget?.maxUserChars)) && Number(configData.aiRequestBudget.maxUserChars) > 0) {
         aiRequestBudget.value = {
+          maxTokens: Math.floor(Number(configData.aiRequestBudget.maxTokens) || 0),
           maxChars: Math.floor(Number(configData.aiRequestBudget.maxChars) || 0),
           maxMessages: Math.floor(Number(configData.aiRequestBudget.maxMessages) || 0),
           maxUserChars: Math.floor(Number(configData.aiRequestBudget.maxUserChars)),
@@ -1565,14 +1566,14 @@ export const useConfigStore = defineStore('config', () => {
 
   // 保存 AI 智能体运行时设置（单轮最大工具调用次数 / 单轮请求上下文预算）。
   // 两个键各自可选：只传要改的那个，另一个不动（后端同样"没传的不动"）。
-  async function saveAiSettings(settings: { aiMaxToolIterations?: number; aiMaxRequestChars?: number }): Promise<boolean> {
+  async function saveAiSettings(settings: { aiMaxToolIterations?: number; aiMaxRequestTokens?: number }): Promise<boolean> {
     try {
       const response = await fetch('/api/config/save-ai-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...(settings.aiMaxToolIterations !== undefined ? { aiMaxToolIterations: settings.aiMaxToolIterations } : {}),
-          ...(settings.aiMaxRequestChars !== undefined ? { aiMaxRequestChars: settings.aiMaxRequestChars } : {}),
+          ...(settings.aiMaxRequestTokens !== undefined ? { aiMaxRequestTokens: settings.aiMaxRequestTokens } : {}),
         })
       })
       const result = await response.json()
@@ -1581,8 +1582,8 @@ export const useConfigStore = defineStore('config', () => {
         if (result.aiMaxToolIterations !== undefined) {
           aiMaxToolIterations.value = Number(result.aiMaxToolIterations) || settings.aiMaxToolIterations || aiMaxToolIterations.value
         }
-        if (result.aiMaxRequestChars !== undefined) {
-          aiMaxRequestChars.value = Number(result.aiMaxRequestChars) || settings.aiMaxRequestChars || aiMaxRequestChars.value
+        if (result.aiMaxRequestTokens !== undefined) {
+          aiMaxRequestTokens.value = Number(result.aiMaxRequestTokens) || settings.aiMaxRequestTokens || aiMaxRequestTokens.value
         }
         // 后端按**最终落盘值**解析的预算：照单收下并立刻生效（超长输入预警用）
         if (result.aiRequestBudget && Number(result.aiRequestBudget.maxUserChars) > 0) {
@@ -1676,7 +1677,7 @@ export const useConfigStore = defineStore('config', () => {
     // 状态
     models,
     aiMaxToolIterations,
-    aiMaxRequestChars,
+    aiMaxRequestTokens,
     aiRequestBudget,
     taskExecutor,
     resolvedTaskExecutor,

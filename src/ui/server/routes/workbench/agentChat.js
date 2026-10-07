@@ -356,16 +356,16 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
   const budget = requestBudget || resolveRequestBudget();
 
   for (let iter = 0; iter < maxIterations; iter++) {
-    // 每轮都从完整会话记录重新构建一次请求副本:条数/字符双预算 → 被丢掉的旧消息
+    // 每轮都从完整会话记录重新构建一次请求副本:条数/token 双预算 → 被丢掉的旧消息
     // 摘录成一条梗概 → 旧图片降级 → provider 兼容消毒。
     // 只作用于副本,session.messages 保持完整(与 CLI 的磁盘口径一致)。
-    // 预算来自 requestBudget(全局配置 aiMaxRequestChars 的解析结果)。
+    // 预算来自 requestBudget(全局配置 aiMaxRequestTokens 的解析结果)。
     const messages = prepareRequestMessages(session.messages, { locale, ...budget });
     // 请求级上下文：工作区状态快照 + 常用目录状态 + 当前打开的文档 + 本轮附件路径
     // （只改副本，不落 session.messages，下一轮不重复累积）
     injectRequestContext(messages, { cwd, openFilePath, attachments, locale, workspaceBlock, dirStatusBlock });
 
-    // 上下文占用：在**请求发出去之前**量一次，发给 UI 画进度条。
+    // 上下文占用：在**请求发出去之前**量一次，发给 UI 画圆环。
     // 为什么必须在发之前：provider 的真实 usage（input_tokens）要等响应回来才有，
     //   而用户想知道的是"这次会带多少过去"—— 那只能在发之前量。
     // 为什么每轮都发：工具循环里上下文是**持续增长**的，只发一次的话

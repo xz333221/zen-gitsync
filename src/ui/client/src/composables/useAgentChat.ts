@@ -288,13 +288,18 @@ function mimeFromDataUrl(u: string): string {
  * 是按预算被摘成了梗概。少了它们，进度条满格 100% 反而会让人以为全带上了。
  */
 export interface AgentContextUsage {
+  /** 请求副本的字符数（附带信息，闸门与显示主口径都是 token） */
   chars: number
+  /** 请求副本的 token 估算 —— 主口径 */
+  tokens: number
   messages: number
   images: number
   estTokens: number
+  maxTokens: number
   maxChars: number
   maxMessages: number
-  charRatio: number
+  /** token 占用比0~1（UI 画环用） */
+  tokenRatio: number
   messageRatio: number
   transcriptMessages: number
   transcriptChars: number
@@ -405,10 +410,10 @@ export function useAgentChat() {
     const u = contextUsage.value
     if (!u) return null
     return {
-      ratio: Math.min(Math.max(u.charRatio, u.messageRatio), 1),
-      current: u.chars,
-      total: u.maxChars,
-      unit: '',
+      ratio: Math.min(Math.max(u.tokenRatio, u.messageRatio), 1),
+      current: u.tokens,
+      total: u.maxTokens,
+      unit: 'K',
       suffix: '上下文已使用',
       detail: [
         `${u.messages} / ${u.maxMessages} 条消息`,

@@ -788,10 +788,10 @@ export async function runAiAgent(argv = []) {
     // 单轮工具调用上限:来自全局配置 aiMaxToolIterations(loadConfig 已规范化),
     // 读不到时由 runAgentTurn 兜底为 200
     maxToolIterations: cfg.aiMaxToolIterations,
-    // 单轮请求的上下文预算(字符上限/条数上限/单条 user 截断线)。解析公式与
-    // 默认值都在 context.js 的 resolveRequestBudget —— CLI 与 Web 共用同一份,
-    // 别在这里另算一套。turn.js 每轮把它透传给 prepareRequestMessages。
-    requestBudget: resolveRequestBudget(cfg.aiMaxRequestChars),
+    // 单轮请求的上下文预算(token 上限/字符换算/条数上限/单条 user 截断线)。
+    // 解析公式与默认值都在 context.js 的 resolveRequestBudget —— CLI 与 Web 共用
+    // 同一份,别在这里另算一套。turn.js 每轮把它透传给 prepareRequestMessages。
+    requestBudget: resolveRequestBudget(cfg.aiMaxRequestTokens),
     currentChild: null,
     abortController: null,
     cancelRequested: false,

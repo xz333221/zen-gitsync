@@ -35,15 +35,20 @@ const model = { model: 'test', name: 'test', baseURL: 'https://example.invalid/v
 const call = n => ({ id: `call${n}`, type: 'function', function: { name: 'read_file', arguments: '{}' } })
 const okStream = () => sse([event({ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] }), 'data: [DONE]\n\n'])
 const withSystem = () => [{ role: 'system', content: 'rules' }, { role: 'user', content: 'hi' }]
-// 200 组 × 6000 字符（clip 后）≈ 240 万字符，远超默认预算。
+// 工具调用长会话。**组数按当前默认预算反算**，不写死——
+// 默认预算 2026-10-07 一天内改了三次（80k 字符 → 400k 字符 → 1M token），
+// 每次写死的组数都会在某次改完后变成"不够触发裁剪"，让下面那些
+// 「请求副本未收窄 / 会报出 droppedMessages」的断言**假绿**。
 //
-// 为什么是 200 而不是历史上的 60:默认预算 2026-10-07 从 80k 提到 400k，
-// 60 组（120 条 × 6000 ≈ 360k）正好卡在新预算底下，**裁剪根本不触发**，
-// 下面那些"请求副本未收窄 / 摘录成梗概"的断言会变成假绿。测试数据的量必须
-// 跟着预算走 —— 改默认值而不动数据量，等于把回归测试改成了空转。
+// 实测：`'data'.repeat(4000)` = 4,000 纯 ascii ≈ 1,143 token（clip 的 6,000
+// 上限用不上）；assistant 那条 tool_calls 极短；两条一组 ≈ 1,200 token。
+// 1M 预算需 ≈850 组才填满 → 给 1,500 组留足余量。
+//
+// ⚠️ 判据：**条数上限 × 单组token 必须明显大于 token 预算**。
+const LONG_SESSION_GROUPS = 1500
 const longSession = () => {
   const messages = [{ role: 'system', content: 'rules' }, { role: 'user', content: 'original goal' }]
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < LONG_SESSION_GROUPS; i++) {
     messages.push({ role: 'assistant', tool_calls: [call(i)] })
     messages.push({ role: 'tool', tool_call_id: `call${i}`, content: 'data'.repeat(4000) })
   }
@@ -131,11 +136,13 @@ test('每次请求前发一条 context 事件,用量与请求副本一致', asyn
   const usage = ctx[0].usage
   const budget = resolveRequestBudget(undefined)
   // 分母必须跟实际裁剪用的是同一份，否则进度条会说谎
+  // 主口径是 **token**（maxChars 只是给按字符切的地方用的保守换算值，不是闸门）
+  assert.equal(usage.maxTokens, budget.maxTokens)
   assert.equal(usage.maxChars, budget.maxChars)
   assert.equal(usage.maxMessages, budget.maxMessages)
   assert.equal(usage.messages, sent.messages.length, 'usage 里的条数要与真实发出去的请求一致')
   assert.ok(usage.chars > 0 && usage.estTokens > 0)
-  assert.ok(usage.charRatio > 0 && usage.charRatio <= 1)
+  assert.ok(usage.tokenRatio > 0 && usage.tokenRatio <= 1)
   assert.equal(usage.droppedMessages, 0, '短会话不该有裁剪')
 })
 

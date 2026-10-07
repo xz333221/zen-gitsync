@@ -353,7 +353,7 @@ export function registerConfigRoutes({
         // 同一个公式（resolveRequestBudget），前端只读结果、不重算。
         // 刻意放在上面所有 saveConfig 之后 —— 这个字段是**派生值**，不许跟着
         // saveConfig 的 ...projectConfig 泄漏进项目级配置。
-        config.aiRequestBudget = resolveRequestBudget(config.aiMaxRequestChars)
+        config.aiRequestBudget = resolveRequestBudget(config.aiMaxRequestTokens)
         res.json(config)
       } catch (error) {
         const configPath = CONFIG_FILE
@@ -1091,8 +1091,10 @@ export function registerConfigRoutes({
 
   // 保存 AI 智能体运行时设置（两个键都是全局配置，存配置文件顶层，跨项目共享）：
   //   · aiMaxToolIterations —— 单轮最大工具调用次数
-  //   · aiMaxRequestChars   —— 单轮请求的上下文预算（字符；2026-10-07 事故后开放可调，
-  //     它决定"一条粘贴最多能装多少、工具结果会不会被挤掉"，见 cli/ai/context.js）
+  //   · aiMaxRequestTokens  —— 单轮请求的上下文预算（**token**；2026-10-07 从字符口径
+  //     改过来，它决定"一条粘贴最多能装多少、工具结果会不会被挤掉"，见 cli/ai/context.js）
+  //     旧字段 aiMaxRequestChars 仍接受：config.js 的 resolveRequestTokens 会迁移，
+  //     但**新字段一旦写入就以它为准**，所以这里两个键都存、互不覆盖。
   // 两个键各自可选：没传的那个不动（旧客户端只传一个键时不许把它顺带清掉）。
   app.post('/api/config/save-ai-settings', express.json(), async (req, res) => {
     try {
@@ -1109,15 +1111,18 @@ export function registerConfigRoutes({
         }
         updates.aiMaxToolIterations = normalized
       }
-      if (body.aiMaxRequestChars !== undefined) {
-        const normalized = configManager.normalizeAiRequestChars(body.aiMaxRequestChars)
+      // 新字段优先；老客户端仍发旧字段也接（迁移期），但同一请求里两个都传时
+      // **只认新的** —— 否则老字段会覆盖掉用户刚设的新值。
+      const incomingTokens = body.aiMaxRequestTokens ?? body.aiMaxRequestChars
+      if (incomingTokens !== undefined) {
+        const normalized = configManager.normalizeAiRequestTokens(incomingTokens)
         if (normalized === null) {
           return res.status(400).json({
             success: false,
-            error: `aiMaxRequestChars 非法: ${body.aiMaxRequestChars}`
+            error: `aiMaxRequestTokens 非法: ${incomingTokens}`
           })
         }
-        updates.aiMaxRequestChars = normalized
+        updates.aiMaxRequestTokens = normalized
       }
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ success: false, error: '缺少可保存的参数' })
@@ -1127,8 +1132,10 @@ export function registerConfigRoutes({
       await configManager.writeRawConfigFile(rawConfig)
       // 预算按**最终落盘值**解析（含本次夹取）回给前端 —— 前端拿它做超长输入预警，
       // 不在前端重算公式（口径只有 resolveRequestBudget 一处）
-      const finalChars = updates.aiMaxRequestChars ?? configManager.normalizeAiRequestChars(rawConfig.aiMaxRequestChars)
-      res.json({ success: true, ...updates, aiRequestBudget: resolveRequestBudget(finalChars) })
+      const finalTokens = updates.aiMaxRequestTokens
+        ?? configManager.normalizeAiRequestTokens(rawConfig.aiMaxRequestTokens)
+        ?? configManager.normalizeAiRequestTokens(rawConfig.aiMaxRequestChars)
+      res.json({ success: true, ...updates, aiRequestBudget: resolveRequestBudget(finalTokens) })
     } catch (error) {
       logger.error('[save-ai-settings] failed:', error)
       res.status(500).json({ success: false, error: error.message })
