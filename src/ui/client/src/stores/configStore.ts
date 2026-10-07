@@ -1588,6 +1588,7 @@ export const useConfigStore = defineStore('config', () => {
         // 后端按**最终落盘值**解析的预算：照单收下并立刻生效（超长输入预警用）
         if (result.aiRequestBudget && Number(result.aiRequestBudget.maxUserChars) > 0) {
           aiRequestBudget.value = {
+            maxTokens: Math.floor(Number(result.aiRequestBudget.maxTokens) || 0),
             maxChars: Math.floor(Number(result.aiRequestBudget.maxChars) || 0),
             maxMessages: Math.floor(Number(result.aiRequestBudget.maxMessages) || 0),
             maxUserChars: Math.floor(Number(result.aiRequestBudget.maxUserChars)),
