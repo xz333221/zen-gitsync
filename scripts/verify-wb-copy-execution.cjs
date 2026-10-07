@@ -16,6 +16,10 @@
  *   E 反向自证：同一批 job 的**原始** `job.prompt` 里**确实**含这些块、且以环境块开头
  *     —— 少了这条，D2 在"数据里根本没注入块"时也会绿（空测试）
  *   F 复制成功后按钮自身给出反馈（加 is-flash + 图标切成 ✓）
+ *   I 范围下拉：主按钮右侧箭标展开菜单，含「精简」「全量」两项；选「全量」进剪贴板的
+ *     文本仍是同一份对话流、且在有 thinking/工具调用时**比精简长**（精简确实瘦身了）。
+ *     注意：**主按钮直接点 = 精简（brief）**，B/C/D/F 验的就是这条默认路径；
+ *     brief 同样含用户提示词段落与模型返回，所以 C/D 的断言语义不变。
  *   H 反向：没有任何执行内容的任务不能把**空串**写进剪贴板，要弹提示
  *     （本机没有"从没跑过"的任务时明说跳过，不伪装成通过 —— 造假任务会污染用户数据）
  *   G 无 console error / pageerror
@@ -50,6 +54,11 @@ const pageErrors = []
 const INJECT_MARKERS = ['[运行环境', '## 跨会话记忆库', '本任务包含 ', '续接 #']
 /** 导出文本的结构锚点 */
 const STRUCT_MARKERS = ['### 用户提示词', '### 模型返回']
+/**
+ * 导出文本**自身**的结构字面量。用户/模型可能把它们当正文复述（本机实测有任务把整份导出格式
+ * 原文粘进 prompt），这类任务的 D1/D4 计数会偏大 —— 挑样本时避开，见下面 `collides`。
+ */
+const SELF_STRUCT_LITERALS = ['### 用户提示词', '## 第 ']
 
 /**
  * 从导出文本里抠出每一轮的「用户提示词」段落。
@@ -85,11 +94,26 @@ async function main() {
     console.error('[verify] 本机找不到"带注入块的历史 job"，无法验证（先跑一条任务再来）')
     process.exit(2)
   }
+  // 挑样本前先剔除**把导出结构当正文复述过**的任务：本机实测有任务把整份导出格式原文粘进
+  // prompt（含 `### 用户提示词` / `## 第 ` 字样），这种数据下 D1/D4 会数出多出来的"节"而假失败。
+  // 结构计数只对"干净"的任务有意义；50 条里通常只有个把条命中。
+  const allJobs = jobsRes.jobs || []
+  const collides = (taskId) => allJobs.some(j => j.taskId === taskId
+    && SELF_STRUCT_LITERALS.some(m => (j.prompt || '').includes(m) || (j.output || '').includes(m)))
+  const clean = injected.filter(j => !collides(j.taskId))
+  const pool = clean.length ? clean : injected
+  if (!clean.length) {
+    log(`注意：${injected.length} 个候选任务全都复述过导出结构字面量，只能退回其中之一 —— D1/D4 计数可能偏大`)
+  }
   // 挑最短的那条：结构化最干净（长的多半是用户自己粘了一堆东西进来）
-  injected.sort((a, b) => a.prompt.length - b.prompt.length)
-  const sample = injected[0]
+  pool.sort((a, b) => a.prompt.length - b.prompt.length)
+  const sample = pool[0]
   const task = taskById.get(sample.taskId)
-  const taskJobs = (jobsRes.jobs || []).filter(j => j.taskId === task.id && typeof j.prompt === 'string' && j.prompt)
+  const taskJobs = allJobs.filter(j => j.taskId === task.id && typeof j.prompt === 'string' && j.prompt)
+  // 精简 vs 全量是否真的会不一样：取决于这批 job 里有没有 thinking / 工具调用。
+  // 都没有时两者同长，I 组就明说跳过，不拿"长度相等"当失败（假失败比漏测更糟）。
+  const anyThinking = taskJobs.some(j => typeof j.thinking === 'string' && j.thinking.trim())
+  const anyTools = taskJobs.some(j => Array.isArray(j.toolCalls) && j.toolCalls.length > 0)
   // "从没跑过"的任务：任务列表里有，但一条 simple job 都没有。H 那一组要用
   const ranTaskIds = new Set((jobsRes.jobs || [])
     .filter(j => typeof j.subId === 'string' && j.subId.includes('__simple'))
@@ -186,6 +210,41 @@ async function main() {
           ({ cls: el.className, text: el.innerText }))
         check('F 复制后按钮给出反馈（is-flash + ✓）',
           flashed.cls.includes('is-flash') && flashed.text.includes('✓'), JSON.stringify(flashed.text.trim()))
+
+        // ── I 范围下拉：主按钮默认精简，菜单里那一项才是全量 ────────────────
+        // 上面 B/C/D/F 验的都是**主按钮**（默认 brief）：brief 同样含用户提示词段落与模型返回，
+        // 所以那几条断言在新默认下语义不变。
+        const caret = page.locator('.wb-copy-exec__caret').first()
+        check('I0 有范围下拉箭头', await caret.count() > 0)
+        if (await caret.count()) {
+          await page.evaluate((s) => navigator.clipboard.writeText(s), SENTINEL)
+          await caret.click()
+          await sleep(500)
+          const briefItem = page.locator('.el-dropdown-menu__item', { hasText: '精简' })
+          const fullItem = page.locator('.el-dropdown-menu__item', { hasText: '全量' })
+          check('I1 菜单里有「精简」「全量」两项',
+            await briefItem.count() > 0 && await fullItem.count() > 0)
+
+          if (await fullItem.count()) {
+            await fullItem.first().click()
+            await sleep(600)
+            const rawFull = await page.evaluate(() => navigator.clipboard.readText())
+            const fullText = rawFull.replace(/\r\n/g, '\n')
+            check('I2 选「全量」真的写进剪贴板', rawFull !== SENTINEL && fullText.length > 0, `${fullText.length} 字符`)
+            check('I2b 全量文本仍是同一份对话流（标题 + 第 1 轮）',
+              fullText.startsWith(`# ${task.title}`) && fullText.includes('## 第 1 轮'))
+            // 正向断言只查"该有的分节在不在"（util 保证写出来）；不用反向断言
+            // "精简里没有工具调用" —— 那条会被模型正文里复述同名字样误伤。
+            if (anyThinking || anyTools) {
+              if (anyTools) check('I3 全量含「### 工具调用」分节', /^### 工具调用$/m.test(fullText))
+              if (anyThinking) check('I4 全量含「### Claude 思考」分节', /^### Claude 思考$/m.test(fullText))
+              check('I5 全量比精简更长（精简确实瘦身了）',
+                fullText.length > text.length, `精简 ${text.length} → 全量 ${fullText.length}`)
+            } else {
+              log('跳过 I3-I5（样本 job 里没有 thinking / 工具调用，精简与全量同长）')
+            }
+          }
+        }
 
         await fs.promises.mkdir(SHOT_DIR, { recursive: true })
         const shot = path.join(SHOT_DIR, 'wb-copy-execution.png')

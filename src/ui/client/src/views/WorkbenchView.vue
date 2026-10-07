@@ -42,7 +42,7 @@ import { taskDurationText, taskTimeIso, taskTimeTitle } from '@/utils/taskTime'
 import type { BoardTask, Task } from '@/types/workbench'
 import { useWorkbenchAttachments, ALLOWED_EXT_HINT, MAX_ATTACHMENT_BYTES } from '@/composables/useWorkbenchAttachments'
 import { useWorkbenchSimpleConversation } from '@/composables/useWorkbenchSimpleConversation'
-import { buildTaskExecutionText } from '@/utils/taskExecutionExport'
+import { buildTaskExecutionText, type TaskExecutionScope } from '@/utils/taskExecutionExport'
 import { useWorkbenchExecution } from '@/composables/useWorkbenchExecution'
 import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection'
 import { TASK_EXECUTOR_OPTIONS, taskExecutorName, type TaskExecutorId } from '@/utils/taskExecutor'
@@ -512,6 +512,11 @@ const { simpleConversationMessages, simpleAllJobsFor, simpleJobFor, simpleJobSta
 // 那一段文本 —— 所以走 utils/taskExecutionExport.ts 从 job 数据现拼，而不是读 DOM /
 // window.getSelection()：对话区是 v-for 渲染的，用户在中间划一段再点复制的话，
 // "复制了半截"比"复制了全部"更难发现。
+//
+// 两种范围（下拉菜单）：
+//   - 精简（brief）：提示词 + 模型回复 —— 按钮**直接点**就是这个，因为它才是常用形态，
+//     思考和工具调用是体积大头（一轮续聊实测几万字符），粘给另一个 AI 时大多是噪音。
+//   - 全量（full）：提示词 / 思考 / 工具调用 / 模型回复，走菜单里那一项。
 const copyExecFlashId = ref<string | null>(null)
 
 /**
@@ -524,12 +529,12 @@ function taskRepoName(t: Task | null): string {
   return currentProject.value.name || ''
 }
 
-async function copyTaskExecution(t: Task | null) {
+async function copyTaskExecution(t: Task | null, scope: TaskExecutionScope = 'brief') {
   if (!t) return
   const text = buildTaskExecutionText(simpleAllJobsFor(t), {
     title: t.title,
     projectName: taskRepoName(t)
-  })
+  }, { scope })
   // 空串 = 这条任务一轮有内容的执行都没有（新建后还没跑过 / 执行内容被清空过）
   if (!text) {
     ElMessage.warning($t('@WORKBENCH:暂无执行内容可复制'))
@@ -545,6 +550,11 @@ async function copyTaskExecution(t: Task | null) {
   window.setTimeout(() => {
     if (copyExecFlashId.value === t.id) copyExecFlashId.value = null
   }, 1500)
+}
+
+/** 下拉菜单选了某个范围（命令值就是 `TaskExecutionScope`） */
+function onCopyExecCommand(cmd: string | number | object) {
+  copyTaskExecution(selectedTask.value, cmd === 'full' ? 'full' : 'brief')
 }
 
 // ── 打开任务时把对话流钉到最底部 ─────────────────────────────────────────────
@@ -1174,19 +1184,38 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
               rel="noopener noreferrer"
             >{{ $t('@WORKBENCH:查看安装指引') }}</a>
           </div>
-          <!-- 一键复制执行内容：非破坏性动作，排在最前；「清空执行」这种危险动作留在后面 -->
-          <button
-            type="button"
-            class="wb-logs-inline-btn wb-logs-inline-btn--copy"
-            :class="{ 'is-flash': copyExecFlashId === selectedTask.id }"
-            :title="$t('@WORKBENCH:复制本任务的全部执行对话（提示词 / 思考 / 工具调用 / 模型返回）')"
-            :aria-label="$t('@WORKBENCH:复制执行内容')"
-            @click="copyTaskExecution(selectedTask)"
-          >
-            <el-icon class="wb-logs-inline-btn__icon" v-if="copyExecFlashId !== selectedTask.id"><CopyDocument /></el-icon>
-            <el-icon class="wb-logs-inline-btn__icon" v-else>✓</el-icon>
-            <span>{{ $t('@WORKBENCH:复制执行内容') }}</span>
-          </button>
+          <!-- 一键复制执行内容：非破坏性动作，排在最前；「清空执行」这种危险动作留在后面。
+               主按钮直接点 = 精简范围（提示词 + 模型回复）；右边的箭标展开菜单选「全量」 -->
+          <div class="wb-copy-exec">
+            <button
+              type="button"
+              class="wb-logs-inline-btn wb-logs-inline-btn--copy wb-copy-exec__main"
+              :class="{ 'is-flash': copyExecFlashId === selectedTask.id }"
+              :title="$t('@WORKBENCH:复制本任务的对话流（默认精简：仅提示词 + 模型回复）')"
+              :aria-label="$t('@WORKBENCH:复制执行内容')"
+              @click="copyTaskExecution(selectedTask, 'brief')"
+            >
+              <el-icon class="wb-logs-inline-btn__icon" v-if="copyExecFlashId !== selectedTask.id"><CopyDocument /></el-icon>
+              <el-icon class="wb-logs-inline-btn__icon" v-else>✓</el-icon>
+              <span>{{ $t('@WORKBENCH:复制执行内容') }}</span>
+            </button>
+            <el-dropdown trigger="click" placement="bottom-end" @command="onCopyExecCommand">
+              <button
+                type="button"
+                class="wb-logs-inline-btn wb-copy-exec__caret"
+                :title="$t('@WORKBENCH:选择复制范围')"
+                :aria-label="$t('@WORKBENCH:选择复制范围')"
+              >
+                <el-icon class="wb-logs-inline-btn__icon"><ArrowDown /></el-icon>
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="brief">{{ $t('@WORKBENCH:精简：提示词 + 模型回复') }}</el-dropdown-item>
+                  <el-dropdown-item command="full">{{ $t('@WORKBENCH:全量：提示词 / 思考 / 工具调用 / 模型回复') }}</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
           <button
             type="button"
             class="wb-logs-inline-btn wb-logs-inline-btn--danger"
@@ -2313,6 +2342,26 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   outline-offset: 1px;
 }
 .wb-logs-inline-btn__icon { font-size: var(--font-size-base); }
+
+/* 「复制执行内容」= 主按钮 + 范围下拉，拼成一个按钮组：
+   主按钮直接点走默认范围（精简）；只有点右箭头才展开菜单去拿「全量」。
+   主按钮保持 .wb-logs-inline-btn--copy（探针按这个 class 找它）。 */
+.wb-copy-exec {
+  display: inline-flex;
+  align-items: stretch;
+  flex-shrink: 0;
+}
+.wb-copy-exec .el-dropdown { display: inline-flex; }
+.wb-copy-exec__main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.wb-copy-exec__caret {
+  padding: 0 6px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: -1px; /* 两条 1px 边框重合，别在拼缝处显出 2px 的粗边 */
+}
 
 /* 「执行日志」弹窗的 max-height / body 滚动限制已放在文件末尾的非 scoped <style> 块里，
    这里不再重复。原因：el-dialog 用 teleport 渲染到 body 下，scoped 选择器（包括 :deep()）

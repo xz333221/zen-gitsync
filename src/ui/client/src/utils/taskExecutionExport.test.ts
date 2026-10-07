@@ -197,4 +197,34 @@ describe('buildTaskExecutionText', () => {
     expect(text).toContain('### 出错')
     expect(text).toContain('turn.failed: rate limited')
   })
+
+  test('brief 范围：去掉思考与工具调用，只留提示词 + 模型回复', () => {
+    const jobs = [job({
+      prompt: '改一下',
+      thinking: '先看看现有实现',
+      output: '改好了',
+      toolCalls: [{ id: 'a', name: 'Bash', argsPreview: 'ls -la', result: 'a.js', status: 'done' }],
+    })]
+    const full = buildTaskExecutionText(jobs, { title: 'T', now: NOW })
+    const brief = buildTaskExecutionText(jobs, { title: 'T', now: NOW }, { scope: 'brief' })
+
+    // 默认（full）仍然带思考 / 工具调用 —— 老行为不能被 brief 顺手改掉
+    expect(full).toContain('### Claude 思考')
+    expect(full).toContain('### 工具调用')
+
+    expect(brief).toContain('### 用户提示词')
+    expect(brief).toContain('### 模型返回')
+    expect(brief).not.toContain('### Claude 思考')
+    expect(brief).not.toContain('### 工具调用')
+    expect(brief.length).toBeLessThan(full.length)
+  })
+
+  test('brief 范围下「出错」仍保留（否则只失败没正文的一轮会整轮消失）', () => {
+    const brief = buildTaskExecutionText([
+      job({ status: 'error', prompt: '', output: '', thinking: '', agentError: 'turn.failed: rate limited' }),
+    ], { title: 'T', now: NOW }, { scope: 'brief' })
+
+    expect(brief).toContain('### 出错')
+    expect(brief).toContain('turn.failed: rate limited')
+  })
 })

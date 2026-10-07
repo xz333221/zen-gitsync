@@ -31,6 +31,11 @@
 // 输出成 Markdown 而不是纯流水账：复制出去多半是贴进另一个 AI 或文档，
 // `### 用户提示词` 这类行在**纯文本**下仍然一眼能读，渲染出来又是正常的小标题。
 //
+// 两种范围（`scope`）：
+//   - `full`：提示词 / 思考 / 工具调用 / 模型返回 / 出错，全都要。
+//   - `brief`：只留提示词 + 模型返回（+ 出错）。思考与工具结果是体积大头，粘给另一个 AI
+//     时基本都是噪音；出错刻意保留，否则"只失败没正文"的那一轮会整轮消失。
+//
 // 与执行日志详情里的「复制全部」的区别：那里导出的是**单条 job 的原文**
 // （`job.prompt` 原样，含注入块）；这里导出的是**整条任务的对话流**。
 
@@ -57,6 +62,14 @@ export interface TaskExecutionExportMeta {
   projectName?: string
   /** 导出时刻。测试注入用，默认取当前时间 */
   now?: Date
+}
+
+/** 导出范围：`full` 含思考 / 工具调用；`brief` 只留提示词 + 模型回复（+ 出错） */
+export type TaskExecutionScope = 'brief' | 'full'
+
+export interface TaskExecutionExportOptions {
+  /** 默认 `full`（与旧行为一致） */
+  scope?: TaskExecutionScope
 }
 
 /** 压成单行并限长：工具调用摘要进的是 `` ` `` 包里，换行会把行内代码块截断 */
@@ -97,10 +110,16 @@ function toolCallLines(calls: ToolCall[]): string {
 /**
  * 把一条任务的所有轮次拼成一份可粘贴的 Markdown。
  *
+ * @param options.scope `full`（默认）含思考 / 工具调用；`brief` 只留提示词 + 模型回复（+ 出错）。
  * @returns 纯文本；**一条有内容的轮次都没有时返回空串**（调用方据此提示"暂无执行内容"）。
  */
-export function buildTaskExecutionText(jobs: Job[], meta: TaskExecutionExportMeta = {}): string {
+export function buildTaskExecutionText(
+  jobs: Job[],
+  meta: TaskExecutionExportMeta = {},
+  options: TaskExecutionExportOptions = {}
+): string {
   const list = Array.isArray(jobs) ? jobs.filter(Boolean) : []
+  const brief = options.scope === 'brief'
   const rounds: string[] = []
 
   list.forEach((j, i) => {
@@ -109,17 +128,21 @@ export function buildTaskExecutionText(jobs: Job[], meta: TaskExecutionExportMet
     const prompt = userFacingPrompt(j.prompt)
     if (prompt) parts.push(section($t('@WORKBENCH:用户提示词'), prompt))
 
-    const thinking = (j.thinking || '').trim()
-    if (thinking) parts.push(section($t('@WORKBENCH:Claude 思考'), thinking))
+    // brief：思考与工具调用整段不带（它们是体积大头，粘给另一个 AI 时基本是噪音）
+    if (!brief) {
+      const thinking = (j.thinking || '').trim()
+      if (thinking) parts.push(section($t('@WORKBENCH:Claude 思考'), thinking))
 
-    const calls = toolCallLines(buildJobToolCalls(j))
-    if (calls) parts.push(section($t('@WORKBENCH:工具调用'), calls))
+      const calls = toolCallLines(buildJobToolCalls(j))
+      if (calls) parts.push(section($t('@WORKBENCH:工具调用'), calls))
+    }
 
     const output = (j.output || '').trim()
     if (output) parts.push(section($t('@WORKBENCH:模型返回'), output))
 
     // 出错信息单列一节：进程退出码为 0 但协议层 failed 的情况（codex / opencode 常见）
-    // 只有 agentError 能说明问题，藏在正文里会被当成模型的普通输出
+    // 只有 agentError 能说明问题，藏在正文里会被当成模型的普通输出。
+    // brief 下也保留：一轮只失败没正文时若不写，这一轮会**整轮消失**，复制出来像是没跑过。
     const err = (j.error || j.agentError || '').trim()
     if (err) parts.push(section($t('@WORKBENCH:出错'), err))
 

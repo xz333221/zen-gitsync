@@ -2593,7 +2593,10 @@ export default {
   '@WORKBENCH:项目：{name}': 'Project: {name}',
   '@WORKBENCH:导出时间：{time}': 'Exported at {time}',
   '@WORKBENCH:复制执行内容': 'Copy execution content',
-  '@WORKBENCH:复制本任务的全部执行对话（提示词 / 思考 / 工具调用 / 模型返回）': 'Copy the full execution conversation of this task (prompt / thinking / tool calls / model output)',
+  '@WORKBENCH:复制本任务的对话流（默认精简：仅提示词 + 模型回复）': "Copy this task's conversation (default: brief — prompt + model output only)",
+  '@WORKBENCH:选择复制范围': 'Choose copy scope',
+  '@WORKBENCH:精简：提示词 + 模型回复': 'Brief: prompt + model output',
+  '@WORKBENCH:全量：提示词 / 思考 / 工具调用 / 模型回复': 'Full: prompt / thinking / tool calls / model output',
   '@WORKBENCH:已复制执行内容': 'Execution content copied',
   '@WORKBENCH:暂无执行内容可复制': 'Nothing to copy — this task has no execution content yet',
   // @WORKBENCH: file end (append: one-click copy of execution content)
