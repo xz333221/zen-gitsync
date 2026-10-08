@@ -188,7 +188,7 @@
   },
   "homepage": "https://github.com/xz333221/zen-gitsync#readme",
   "dependencies": {
-    "ai-model-form": "^0.3.1",
+    "ai-model-form": "^0.3.2",
     "boxen": "^8.0.1",
     "chalk": "^5.4.1",
     "cli-table3": "^0.6.5",

@@ -33,6 +33,10 @@
 //    要**明确报错**（提示换模型），而不是把 OpenAI body 打到 Anthropic 路由上等一个
 //    看不懂的 4xx。
 //
+//    目前有两家网关是这个形态：OpenCode Go（三族）与 Command Code（两族，
+//    claude-* 只能走 /messages）。两者的客户端身份要求不同——Command Code 只认
+//    Bearer，不需要额外的会话头。
+//
 // 参考实现：ai-model-form 包的 server/middleware.js（同一套判断，那边只做连通性测试）。
 // ─────────────────────────────────────────────────────────────
 
@@ -54,6 +58,9 @@ export const AI_USER_AGENT = `zen-gitsync/${PKG_VERSION}`
 
 /** OpenCode 网关的 Go 订阅入口（ai-model-form 里叫 OPENCODE_GO_URL） */
 export const OPENCODE_GO_URL = 'https://opencode.ai/zen/go/v1'
+
+/** Command Code 的 Provider API 入口（ai-model-form 里同名常量） */
+export const COMMAND_CODE_URL = 'https://api.commandcode.ai/provider/v1'
 
 /**
  * OpenCode Go 上走 Anthropic /messages 协议的模型（鉴权是 x-api-key，不是 Bearer）。
@@ -106,6 +113,38 @@ export function openCodeGoFamily(modelId) {
   if (OPENCODE_GO_MESSAGES_MODELS.has(id)) return 'messages'
   if (OPENCODE_GO_RESPONSES_MODELS.has(id)) return 'responses'
   return 'chat'
+}
+
+/**
+ * 是否为 Command Code 网关（commandcode.ai 及其子域）。
+ * 与 isOpenCodeGateway 同样只看主机名后缀，防止 evil-commandcode.ai.attacker.com
+ * 这类伪装域名被当成官方入口。
+ * @param {string} baseURL
+ * @returns {boolean}
+ */
+export function isCommandCodeGateway(baseURL) {
+  try {
+    const host = new URL(normalizeBaseURL(baseURL)).hostname
+    return /(^|\.)commandcode\.ai$/i.test(host)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 判断模型在 Command Code 上走哪种协议族。
+ *
+ * 这里按 `claude-*` 前缀判断而不是维护一张模型清单：官方 /models 的
+ * supported_endpoints 字段里「不支持 /chat/completions」的恰好就是全部 claude-*
+ * （2026-10-08 核对：11 个，两边完全吻合）。网关侧对 Claude 系是硬约束——
+ * 打到 /chat/completions 会直接回 400「must be called via /provider/v1/messages」。
+ *
+ * @param {string} modelId
+ * @returns {'chat'|'messages'}
+ */
+export function commandCodeFamily(modelId) {
+  const id = String(modelId || '').trim()
+  return /^claude-/i.test(id) ? 'messages' : 'chat'
 }
 
 let _processSessionId = null
@@ -168,6 +207,15 @@ export function buildAiChatRequest({ baseURL, model, apiKey, sessionId, extraHea
         '（如 deepseek-v4.1-flash、glm-5.3、kimi-k3）。'
       )
     }
+  }
+
+  if (isCommandCodeGateway(base) && commandCodeFamily(model) !== 'chat') {
+    throw new Error(
+      `模型「${model}」在 Command Code 网关上只能走 Anthropic 的 /messages 协议，` +
+      '本工具的 AI 调用只实现了 OpenAI 兼容的 /chat/completions。请在设置里换一个' +
+      '走 chat/completions 的模型（如 moonshotai/Kimi-K3、zai-org/GLM-5.3、' +
+      'Qwen/Qwen3.8-Max、deepseek/deepseek-v4-flash）。'
+    )
   }
 
   return {

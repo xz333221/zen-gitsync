@@ -18,15 +18,19 @@
 // 所以用测试把三件事钉死：
 //   1) 只对 OpenCode 网关加 x-opencode-session，别的 provider 不加（避免污染第三方请求）
 //   2) 请求头里必须有自己的客户端名字（User-Agent 不能是 node-fetch/undici）
-//   3) OpenCode 网关上非 chat 协议族的模型要**明确报错**，不能把 OpenAI body 打错路由
+//   3) OpenCode / Command Code 网关上非 chat 协议族的模型要**明确报错**，不能把 OpenAI
+//      body 打错路由（两家网关的协议族识别与伪装域名都要各自钉死）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   AI_USER_AGENT,
+  COMMAND_CODE_URL,
   OPENCODE_GO_URL,
   buildAiApiRequest,
   buildAiChatRequest,
+  commandCodeFamily,
   describeAiHttpError,
+  isCommandCodeGateway,
   isOpenCodeGateway,
   normalizeBaseURL,
   openCodeGoFamily,
@@ -34,6 +38,7 @@ import {
 } from './aiEndpoint.js'
 
 const GO = 'https://opencode.ai/zen/go/v1'
+const CC = 'https://api.commandcode.ai/provider/v1'
 
 // ========== normalizeBaseURL ==========
 
@@ -71,6 +76,32 @@ test('openCodeGoFamily: 三种协议族与默认 chat', () => {
   // 未知/新增模型一律按 chat：网关以后加 chat 模型不需要同步改代码
   assert.equal(openCodeGoFamily('brand-new-model'), 'chat')
   assert.equal(openCodeGoFamily(''), 'chat')
+})
+
+// ========== isCommandCodeGateway ==========
+
+test('isCommandCodeGateway: 识别 commandcode.ai 及其子域', () => {
+  assert.equal(isCommandCodeGateway(CC), true)
+  assert.equal(isCommandCodeGateway('https://api.commandcode.ai/provider/v1/'), true)
+  assert.equal(isCommandCodeGateway('https://commandcode.ai/api'), true)
+  assert.equal(isCommandCodeGateway('https://api.deepseek.com/v1'), false)
+  // 伪装域名不能被当成官方入口
+  assert.equal(isCommandCodeGateway('https://evil-commandcode.ai.attacker.com/v1'), false)
+  assert.equal(isCommandCodeGateway('not-a-url'), false)
+  assert.equal(isCommandCodeGateway(''), false)
+})
+
+// ========== commandCodeFamily ==========
+
+test('commandCodeFamily: claude-* 走 messages，其余默认 chat', () => {
+  assert.equal(commandCodeFamily('claude-sonnet-5'), 'messages')
+  assert.equal(commandCodeFamily('claude-opus-5-5'), 'messages')
+  // 大小写/空格容错
+  assert.equal(commandCodeFamily(' Claude-Haiku-5-5 '), 'messages')
+  assert.equal(commandCodeFamily('moonshotai/Kimi-K3'), 'chat')
+  assert.equal(commandCodeFamily('deepseek/deepseek-v4-flash'), 'chat')
+  assert.equal(commandCodeFamily('inclusionai/ling-3.1-flash:free'), 'chat')
+  assert.equal(commandCodeFamily(''), 'chat')
 })
 
 // ========== buildAiChatRequest ==========
@@ -126,6 +157,25 @@ test('buildAiChatRequest: OpenCode Go 上非 chat 协议族的模型直接给可
   assert.throws(
     () => buildAiChatRequest({ baseURL: GO, model: 'grok-4.6', apiKey: 'k' }),
     /grok-4\.6.*\/responses/
+  )
+})
+
+test('buildAiChatRequest: Command Code + chat 模型拼 url，且不该带 opencode 会话头', () => {
+  const { url, headers } = buildAiChatRequest({
+    baseURL: CC,
+    model: 'moonshotai/Kimi-K3',
+    apiKey: 'user_abc',
+  })
+  assert.equal(url, `${COMMAND_CODE_URL}/chat/completions`)
+  assert.equal(headers['Authorization'], 'Bearer user_abc')
+  // Command Code 只认 Bearer，别误判成 OpenCode 网关往上加会话头
+  assert.ok(!('x-opencode-session' in headers), 'Command Code 不需要 x-opencode-session')
+})
+
+test('buildAiChatRequest: Command Code 上 claude-* 只能走 /messages，直接给可读报错', () => {
+  assert.throws(
+    () => buildAiChatRequest({ baseURL: CC, model: 'claude-sonnet-5', apiKey: 'k' }),
+    /claude-sonnet-5.*Anthropic.*\/messages.*换一个/
   )
 })
 

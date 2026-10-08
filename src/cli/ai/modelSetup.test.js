@@ -208,14 +208,40 @@ test('testModelConnection: 200 成功', async () => {
   assert.equal(result.status, 200)
 })
 
-test('testModelConnection: 400 也视为成功(连接通的)', async () => {
+test('testModelConnection: 400 且错误码与模型无关 → 仍视为成功(连接通的)', async () => {
   const result = await testModelConnection({
     baseURL: 'https://api.deepseek.com/v1',
     model: 'deepseek-chat',
-    fetchFn: mockFetch({ status: 400, ok: false }),
+    // 只是探活参数被拒（max_tokens 太小），模型和 Key 都是好的
+    fetchFn: mockFetch({
+      status: 400,
+      ok: false,
+      body: { error: { message: "Invalid 'max_tokens': integer below minimum value.", type: 'invalid_request_error' } },
+    }),
   })
   assert.equal(result.ok, true)
   assert.equal(result.status, 400)
+})
+
+test('testModelConnection: 400 且错误码是模型不可用 → 报失败，不能显示 OK', async () => {
+  const result = await testModelConnection({
+    baseURL: 'https://api.commandcode.ai/provider/v1',
+    model: 'not-a-real-model-xyz',
+    fetchFn: mockFetch({
+      status: 400,
+      ok: false,
+      body: {
+        error: {
+          message: 'Model "not-a-real-model-xyz" is not supported on this endpoint.',
+          type: 'invalid_request_error',
+          code: 'unsupported_model',
+        },
+      },
+    }),
+  })
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 400)
+  assert.match(result.message, /不可用.*not-a-real-model-xyz/)
 })
 
 test('testModelConnection: 401 API Key 无效', async () => {

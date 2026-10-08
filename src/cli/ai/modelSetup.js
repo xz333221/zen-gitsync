@@ -60,6 +60,7 @@ export const PROVIDERS = [
   { id: 'together',   label: 'Together AI',         url: 'https://api.together.xyz/v1' },
   { id: 'openrouter', label: 'OpenRouter',          url: 'https://openrouter.ai/api/v1' },
   { id: 'opencode',   label: 'OpenCode Go',         url: 'https://opencode.ai/zen/go/v1' },
+  { id: 'commandcode', label: 'Command Code',       url: 'https://api.commandcode.ai/provider/v1' },
   { id: 'agnes',      label: 'Agnes AI',            url: 'https://apihub.agnes-ai.com/v1' },
   { id: 'ollama',     label: 'Ollama (本地)',        url: 'http://localhost:11434/v1' },
 ]
@@ -155,6 +156,29 @@ export const BUILTIN_MODELS = {
     'qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-max', 'qwen3.7-plus',
     'qwen3.6-plus', 'qwen3.5-plus',
     'union-alpha',
+  ],
+  // Command Code — Provider API,同一 base URL 下两族协议:claude-* 只能走
+  // Anthropic 的 /messages(网关侧硬约束,打到 /chat/completions 会直接回 400),
+  // 其余走 OpenAI 兼容的 /chat/completions。协议识别在 src/utils/aiEndpoint.js。
+  // 更新: 2026-10-08,与 ai-model-form 同步。
+  'https://api.commandcode.ai/provider/v1': [
+    // ——— OpenAI 兼容 /chat/completions ———
+    'gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4',
+    'deepseek/deepseek-v4-pro', 'deepseek/deepseek-v4-flash', 'deepseek/deepseek-v4.1-flash',
+    'moonshotai/Kimi-K3', 'moonshotai/Kimi-K2.7-Code', 'moonshotai/Kimi-K2.6',
+    'zai-org/GLM-5.3', 'zai-org/GLM-5.2', 'z-ai/glm-5.3-flash',
+    'MiniMaxAI/MiniMax-M3', 'MiniMaxAI/MiniMax-M2.7',
+    'xiaomi/mimo-v2.6-pro', 'xiaomi/mimo-v2.5',
+    'Qwen/Qwen3.8-Max', 'Qwen/Qwen3.8-Flash', 'Qwen/Qwen3.7-Max',
+    'google/gemini-3.8-flash', 'google/gemini-3.5-flash',
+    'xai/grok-4.7', 'xai/grok-4.6',
+    'meta/muse-spark-1.3', 'tencent/hy3-paid', 'mistral/mistral-large-4',
+    'nvidia/nemotron-3-ultra-550b-a55b',
+    'inclusionai/ling-3.1-flash:free', 'poolside/laguna-s-2.1-free',
+    // ——— Anthropic /messages(本仓库的 AI 调用不支持,选中会收到可读报错) ———
+    'claude-sonnet-5-5', 'claude-sonnet-5', 'claude-sonnet-4-6',
+    'claude-opus-5-5', 'claude-opus-5', 'claude-opus-4-8',
+    'claude-haiku-5-5', 'claude-haiku-4-5-20251001',
   ],
 }
 
@@ -346,11 +370,33 @@ export async function fetchModelsFromApi({ baseURL, apiKey, timeoutMs = 5000, fe
 }
 
 /**
+ * 读响应体里的错误码与错误信息（读失败就当没有）。
+ *
+ * 只为区分 400 的两种含义而存在：OpenAI 兼容各家在 400 里既可能报「探活参数被拒」
+ * （模型和 Key 都是好的），也可能报「模型不可用」。只看状态码分不出来，得看错误码。
+ *
+ * @param {Response} res
+ * @returns {Promise<{ code: string, message: string }>}
+ */
+async function readErrorBody(res) {
+  try {
+    const data = await res.json()
+    const err = data?.error || data || {}
+    return {
+      code: typeof err.code === 'string' ? err.code : '',
+      message: typeof err.message === 'string' ? err.message : '',
+    }
+  } catch {
+    return { code: '', message: '' }
+  }
+}
+
+/**
  * 测试模型连接(OpenAI 兼容 /chat/completions)。
  *
  * 逻辑与 ai-model-form 包 server/middleware.js 的 POST /ai-model/test 一致:
  *   - 发送一条 max_tokens=1 的 "hi" 消息
- *   - 200 或 400 视为成功(400 可能是参数细节问题但连接是通的)
+ *   - 200 视为成功;400 要看错误码:探活参数被拒算成功,模型不可用/走错协议族算失败
  *   - 401 = API Key 无效, 404 = 模型不存在
  *
  * @param {object} opts
@@ -383,8 +429,23 @@ export async function testModelConnection({ baseURL, model, apiKey, timeoutMs = 
       body,
       signal: controller.signal,
     })
-    if (res.ok || res.status === 400) {
+    if (res.ok) {
       return { ok: true, message: 'OK', status: res.status }
+    }
+    // 400 有两种含义：多数推理模型（o 系 / Gemini）会因 max_tokens 太小回 400，
+    // 那说明连得通、Key 也对；但「模型名打错 / 走错协议族」同样是 400，
+    // 那种必须报失败，否则打错模型名也会显示 OK。靠错误码区分。
+    if (res.status === 400) {
+      const err = await readErrorBody(res)
+      const blob = `${err.code} ${err.message}`
+      if (/unsupported_model|must be called via|is not supported on this endpoint/i.test(blob)) {
+        return {
+          ok: false,
+          message: `模型 "${model}" 在该接口不可用 (400)${err.message ? '：' + err.message : ''}`,
+          status: 400,
+        }
+      }
+      return { ok: true, message: 'OK', status: 400 }
     }
     if (res.status === 401) {
       return { ok: false, message: 'API Key 无效或未授权 (401)', status: 401 }
