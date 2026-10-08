@@ -63,6 +63,7 @@ import {
 } from '@/utils/agentConversations'
 import AgentEngineSelector from '@/components/AgentEngineSelector.vue'
 import TaskExecutorPicker from '@/components/TaskExecutorPicker.vue'
+import CopySessionButton from '@/components/CopySessionButton.vue'
 
 const props = defineProps<{
   /** 头部标题（各入口自己决定叫"主 Agent 对话"还是别的） */
@@ -138,6 +139,11 @@ const conversationLabels = agentConversationLabels()
 const questionLabels = agentQuestionLabels()
 // 排队条带文案（与智能体页 / 文件空间面板共用同一份映射，见 utils/agentConversations）
 const queueLabels = agentQueueLabels()
+
+/** 当前会话在列表里的标题（复制会话时当标题用；列表还没刷新时回落空串，导出会走「无标题」） */
+const currentSessionTitle = computed(
+  () => conversationItems.value.find(i => i.id === currentSessionId.value)?.title || ''
+)
 
 // ── 版面：够宽就左列表右对话，不够宽折成两页 ──────────────────
 // 量的是这块面自己的宽度（工作台右栏能拖到 260–900，还会被视口比例再卡一道），
@@ -230,6 +236,14 @@ onMounted(() => {
         :engine="displayEngine"
         :locked="isEngineLocked"
         @select="onEngineSelect"
+      />
+      <!-- 复制整条会话：只有对话页才有"当前这条会话"可复制（列表页连引擎选择器都不摆） -->
+      <CopySessionButton
+        v-if="!narrow || page === 'chat'"
+        class="acs__copy"
+        :messages="messages"
+        :title="currentSessionTitle"
+        :engine="agentEngineName(displayEngine)"
       />
       <!-- 会话列表按钮：只有"列表是独立一页"时才需要它（宽屏列表就在旁边） -->
       <button

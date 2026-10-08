@@ -449,6 +449,7 @@ A dedicated view (robot icon in the activity bar) for chatting with the built-in
 | Per-turn tool limit | A single message may trigger up to N tool calls in a row (default **200**, range 1–2000). Configurable in **Settings → AI models → Agent Runtime**; hitting the limit ends the turn and asks you to send another message. The same setting drives the CLI agent |
 | Preset questions | Quick-start buttons on the welcome screen for common tasks (view project structure, analyze code quality, write tests, check git status, start the project) |
 | Stop generation | A floating stop button appears during streaming; aborts the LLM request and any running child processes |
+| Copy conversation | A copy button at the right of the chat tabs puts **the whole session** — both sides, every turn, not just whatever is on screen — on the clipboard as Markdown: a `# <session title>` header carrying export time / engine / message count, then one `## Me` / `## g ai` section per message. Clicking the button itself copies the **brief** scope (message text only); the caret beside it offers **full**, which adds each turn's thinking and tool calls (tool results go into fenced blocks whose fence grows to survive backticks inside them). It is assembled from the message data rather than scraped from the DOM, so what you get never depends on what happens to be selected, and system messages — the system prompt plus the context blocks injected per turn — stay behind, so what you copy is what the bubbles show. A session with nothing in it answers with a "nothing to copy" toast instead of putting an empty string on the clipboard. The same button sits in the file-space **g ai** panel and in the workbench's main Agent console |
 | Theme sync | The chat area follows the GUI's current theme (light / dark / auto) |
 
 ---
@@ -1178,6 +1179,7 @@ Activity Bar 中的机器人图标视图，可直接在浏览器中与内置 AI 
 | 单轮工具调用上限 | 一条消息内智能体最多连续调用多少次工具（默认 **200**，可调范围 1–2000）。在 **设置 → AI 模型配置 → 智能体运行时** 中修改；达到上限本轮会被强制结束并提示再发一条消息继续。CLI 智能体共用同一项设置 |
 | 预设问题 | 开场界面提供快捷按钮（查看项目结构、分析代码质量、写测试、Git 状态检查、帮我启动项目）|
 | 停止生成 | 流式输出期间出现浮动停止按钮；中止 LLM 请求及正在运行的子进程 |
+| 复制会话 | 对话 Tab 行右端有一枚复制按钮，把**整条会话**（双方每一轮，不只是屏幕上那一段）以 Markdown 放进剪贴板：抬头是 `# <会话标题>` 加一行导出时间 / 引擎 / 条数，正文按 `## 我` / `## g ai` 一条一节。直接点主按钮复制的是**精简**范围（只有对话正文）；右边的小箭头展开菜单可选**全量**，多出每一轮的思考与工具调用（工具结果放在围栏代码块里，围栏长度按内容里的反引号自动加长，粘出去不会被截断）。内容是从消息数据现拼的、不是从 DOM 里抠的，复制到什么与当前选中了哪段文字无关；system 消息（系统提示词与按轮注入的上下文块）整条不参与，复制出来的就是你看到的那段对话。一条内容都没有的会话回答「暂无会话内容可复制」，而不是把空串写进剪贴板。同一枚按钮也在文件空间的 **g ai** 面板与工作台主 Agent 控制台头部 |
 | 主题同步 | 对话区域跟随 GUI 当前主题（浅色 / 深色 / 自动）|
 
 ---

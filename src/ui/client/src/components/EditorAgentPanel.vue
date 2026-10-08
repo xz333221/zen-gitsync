@@ -42,6 +42,14 @@
         :locked="isEngineLocked"
         @select="onEngineSelect"
       />
+      <!-- 复制整条会话：只有对话页才有"当前这条会话"可复制（列表页连引擎选择器都不摆） -->
+      <CopySessionButton
+        v-if="!narrow || page === 'chat'"
+        class="agent-panel-copy"
+        :messages="messages"
+        :title="currentSessionTitle"
+        :engine="agentEngineName(displayEngine)"
+      />
       <!-- 会话列表按钮：只有"列表是独立一页"时才需要它（宽屏列表就在旁边） -->
       <button
         v-if="narrow && page === 'chat'"
@@ -178,7 +186,7 @@ import 'zen-ai-chat-ui/style.css'
 import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import { useNarrowPane } from '@/composables/useNarrowPane'
-import type { AgentEngineId } from '@/utils/agentEngine'
+import { agentEngineName, type AgentEngineId } from '@/utils/agentEngine'
 import {
   buildConversationItems,
   agentConversationLabels,
@@ -189,6 +197,7 @@ import {
   MESSAGE_RAIL_CONFIG,
 } from '@/utils/agentConversations'
 import AgentEngineSelector from '@/components/AgentEngineSelector.vue'
+import CopySessionButton from '@/components/CopySessionButton.vue'
 
 const props = defineProps<{
   /** 当前打开的文档路径（绝对或相对都行，服务端会归一化到项目根目录） */
@@ -249,6 +258,11 @@ const conversationLabels = agentConversationLabels()
 const questionLabels = agentQuestionLabels()
 // 排队条带文案（与智能体页 / 主 Agent 控制台共用同一份映射）
 const queueLabels = agentQueueLabels()
+
+/** 当前会话在列表里的标题（复制会话时当标题用；列表还没刷新时回落空串，导出会走「无标题」） */
+const currentSessionTitle = computed(
+  () => conversationItems.value.find(i => i.id === currentSessionId.value)?.title || ''
+)
 
 const chatRef = ref<InstanceType<typeof ChatContainer> | null>(null)
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null)

@@ -31,10 +31,11 @@ import 'zen-ai-chat-ui/style.css'
 import { useConfigStore } from '@/stores/configStore'
 import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
 import { buildConversationItems, agentConversationLabels, agentQuestionLabels, agentQueueLabels, AGENT_ASSISTANT_NAME, AGENT_ASSISTANT_AVATAR, MESSAGE_RAIL_CONFIG } from '@/utils/agentConversations'
-import type { AgentEngineId } from '@/utils/agentEngine'
+import { agentEngineName, type AgentEngineId } from '@/utils/agentEngine'
 import { useNarrowPane } from '@/composables/useNarrowPane'
 import MarketplacePanel from '@/components/MarketplacePanel.vue'
 import AgentEngineSelector from '@/components/AgentEngineSelector.vue'
+import CopySessionButton from '@/components/CopySessionButton.vue'
 
 const configStore = useConfigStore()
 
@@ -285,6 +286,15 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
           :locked="isEngineLocked"
           @select="handleEngineSelect"
         />
+
+        <!-- 复制整条会话（默认精简范围，小箭头可选全量）——与工作台的「复制执行内容」同一套口径 -->
+        <CopySessionButton
+          v-if="activeTab === 'chat'"
+          class="agent-copy"
+          :messages="messages"
+          :title="currentSessionTitle"
+          :engine="agentEngineName(displayEngine)"
+        />
       </nav>
 
       <div class="agent-tab-body">
@@ -437,6 +447,13 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
    （按钮自身样式收口在 AgentEngineSelector，这里只管它在 Tab 行里的位置） */
 .agent-engine {
   margin-left: auto;
+  margin-bottom: 7px;
+}
+
+/* 复制会话：紧跟在引擎选择器右边（margin-left:auto 在它身上，所以这两个一起被推到 Tab 行右端）。
+   7px 是让它与 Tab 的文字中线平齐 —— Tab 自己有 9px 下内边距。 */
+.agent-copy {
+  margin-left: 2px;
   margin-bottom: 7px;
 }
 
