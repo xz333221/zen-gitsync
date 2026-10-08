@@ -21,6 +21,9 @@ const agent = vi.hoisted(() => ({
   loadSession: null as any,
   newSession: null as any,
   sendMessage: null as any,
+  // 排队（2026-10-07）：条带上的移除 / 立即发送要真的转到 composable 上
+  removeQueuedMessage: null as any,
+  flushQueued: null as any,
   // 引擎选择：面板头部那个执行器下拉（与「智能体」视图同一个 AgentEngineSelector）
   currentEngine: null as any,
   pendingEngine: null as any,
@@ -53,6 +56,8 @@ vi.mock('@/composables/useAgentChat', async () => {
   agent.loadSession = vi.fn().mockResolvedValue(undefined)
   agent.newSession = vi.fn()
   agent.sendMessage = vi.fn().mockResolvedValue(undefined)
+  agent.removeQueuedMessage = vi.fn()
+  agent.flushQueued = vi.fn()
   agent.currentEngine = ref('gai')
   agent.pendingEngine = ref('gai')
   agent.isEngineLocked = ref(false)
@@ -82,6 +87,10 @@ vi.mock('@/composables/useAgentChat', async () => {
       sendMessage: agent.sendMessage,
       answerQuestion: vi.fn(),
       stop: vi.fn(),
+      queuedMessages: ref([]),
+      queuePaused: ref(false),
+      removeQueuedMessage: agent.removeQueuedMessage,
+      flushQueued: agent.flushQueued,
     }),
   }
 })
@@ -98,9 +107,11 @@ vi.mock('zen-ai-chat-ui', () => ({
   },
   // 常驻的那条输入框。它的根节点就是库里的 .acu-input-wrap，
   // "当前文档"卡片要作为锚点插进这里。
+  // 排队那几个 prop 也要声明：桩不声明就只当普通 attribute 落下去，
+  // props() 读不到，「传没传」这条断言会变成永远 undefined 的假绿。
   ChatInput: {
     name: 'ChatInput',
-    props: ['placeholder', 'disabled', 'generating', 'uploadConfig'],
+    props: ['placeholder', 'disabled', 'generating', 'uploadConfig', 'allowQueue', 'queued', 'queuePaused', 'queueLabels'],
     template: '<div class="acu-input-wrap"><textarea class="acu-input-textarea" /></div>',
   },
   ConversationList: {
@@ -260,14 +271,20 @@ describe('EditorAgentPanel 常驻输入框', () => {
     expect(w.findComponent({ name: 'ChatInput' }).vm.$).toBe(afterMount)
   })
 
-  it('输入框归 ChatInput：placeholder / 禁用 / 生成中都传给它，不再传 ChatContainer', async () => {
+  it('输入框归 ChatInput：placeholder / 排队 props 都传给它，不再传 ChatContainer', async () => {
     const w = mountPanel(false)
     await nextTick()
 
     const input = w.findComponent({ name: 'ChatInput' })
     expect(input.props('placeholder')).toBe('@AGENT:输入消息，Enter 发送')
-    expect(input.props('disabled')).toBe(false)
     expect(input.props('generating')).toBe(false)
+    // 2026-10-07 起：生成中**不再**把输入框 disable 掉 —— 打不了字就谈不上排队
+    expect(input.props('disabled')).toBeUndefined()
+    // 排队三件套都在这一层：放行发送 / 条带数据 / 条带文案
+    expect(input.props('allowQueue')).toBe(true)
+    expect(input.props('queued')).toEqual([])
+    expect(input.props('queuePaused')).toBe(false)
+    expect(input.props('queueLabels')?.title).toBe('@AGENT:排队中')
 
     const chat = w.findComponent({ name: 'ChatContainer' })
     expect(chat.props('showInput')).toBe(false)
@@ -275,6 +292,19 @@ describe('EditorAgentPanel 常驻输入框', () => {
     expect(chat.props('placeholder')).toBeUndefined()
     expect(chat.props('disabled')).toBeUndefined()
     expect(chat.props('generating')).toBeUndefined()
+  })
+
+  it('条带上的「移除 / 立即发送」照旧转给 useAgentChat', async () => {
+    const w = mountPanel(false)
+    await nextTick()
+
+    const input = w.findComponent({ name: 'ChatInput' })
+    input.vm.$emit('unqueue', 'q1')
+    input.vm.$emit('flush-queued')
+    await nextTick()
+
+    expect(agent.removeQueuedMessage).toHaveBeenCalledWith('q1')
+    expect(agent.flushQueued).toHaveBeenCalledTimes(1)
   })
 
   it('库里那条输入框得待在 .acu-root 里（盒模型重置的范围）', async () => {

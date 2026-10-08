@@ -118,13 +118,18 @@
       >
         <ChatInput
           ref="inputRef"
-          :disabled="isStreaming"
           :generating="isStreaming"
-          :placeholder="isStreaming ? $t('@AGENT:正在生成中...') : $t('@AGENT:输入消息，Enter 发送')"
+          :allow-queue="true"
+          :queued="queuedMessages"
+          :queue-paused="queuePaused"
+          :queue-labels="queueLabels"
+          :placeholder="isStreaming ? $t('@AGENT:生成中，发送后会排队，等本轮跑完自动接上…') : $t('@AGENT:输入消息，Enter 发送')"
           :upload-config="{ accept: AGENT_UPLOAD_ACCEPT }"
           :context-usage="inputContextUsage"
           @send="onSend"
           @stop="stop"
+          @unqueue="removeQueuedMessage"
+          @flush-queued="flushQueued"
         />
 
         <!--
@@ -177,6 +182,7 @@ import {
   buildConversationItems,
   agentConversationLabels,
   agentQuestionLabels,
+  agentQueueLabels,
   AGENT_ASSISTANT_NAME,
   AGENT_ASSISTANT_AVATAR,
 } from '@/utils/agentConversations'
@@ -219,6 +225,10 @@ const {
   answerQuestion,
   stop,
   inputContextUsage,
+  queuedMessages,
+  queuePaused,
+  removeQueuedMessage,
+  flushQueued,
 } = useAgentChat()
 
 // ── 引擎：与「智能体」视图同一口径 ────────────────────────────
@@ -235,6 +245,8 @@ function onEngineSelect(id: AgentEngineId) {
 const conversationItems = computed(() => buildConversationItems(sessions.value, isSessionGenerating))
 const conversationLabels = agentConversationLabels()
 const questionLabels = agentQuestionLabels()
+// 排队条带文案（与智能体页 / 主 Agent 控制台共用同一份映射）
+const queueLabels = agentQueueLabels()
 
 const chatRef = ref<InstanceType<typeof ChatContainer> | null>(null)
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null)
@@ -517,6 +529,15 @@ onBeforeUnmount(() => {
   grid-area: composer;
   padding: var(--acu-space-3) var(--acu-space-4) var(--acu-space-4);
   background: linear-gradient(to top, var(--acu-bg) 70%, transparent);
+}
+
+/* 排队条带换成本项目「待处理」档的语义色 —— 与任务对话里那条 .wb-chat-queue 同一副面孔。
+   库给 --acu-queue-* 四个变量就是留给宿主做这件事的，所以这里只映射颜色，不碰它的 class。 */
+.agent-panel-composer :deep(.acu-input-queue) {
+  --acu-queue-edge: var(--role-pending-edge);
+  --acu-queue-surface: var(--role-pending-surface);
+  --acu-queue-ink: var(--role-pending-ink);
+  --acu-queue-wash: var(--role-pending-wash);
 }
 
 /* ChatContainer 根节点（.acu-chat）吃满剩余空间 */

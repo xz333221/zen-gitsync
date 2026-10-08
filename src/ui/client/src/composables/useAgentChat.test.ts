@@ -705,3 +705,223 @@ describe('convertSessionToMessages 合并一次 AI 回合', () => {
     expect(call?.result).not.toContain('base64')
   })
 })
+
+// ── 生成中排队（2026-10-07） ──────────────────────────────────────────
+// 口径（与产品确认过）：
+//   · 生成中发送 = 入队，不打断当前这一轮、也不多发请求
+//   · **只有本轮正常跑完**才自动接棒；被停止 / 本轮报错 → 队列暂停在原处
+//     （内容一条不丢，条带上的「立即发送」手动续）
+//   · 队列跟着会话走：后台会话的接棒不抢当前视图
+describe('useAgentChat 生成中排队', () => {
+  let chatStreams: SseStream[]
+  let chatBodies: Record<string, any>[]
+
+  beforeEach(() => {
+    chatStreams = []
+    chatBodies = []
+    notice.calls = []
+    setActivePinia(createPinia())
+    const store = useConfigStore()
+    store.setCurrentDirectory('C:/proj')
+    vi.stubGlobal('FileReader', FakeFileReader)
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.startsWith('/api/agent/sessions?')) {
+        return json({ success: true, sessions: [sessionMeta('A', '会话 A'), sessionMeta('B', '会话 B')] })
+      }
+      if (url === '/api/agent/sessions/A') {
+        return json({ success: true, session: { ...sessionMeta('A', '会话 A'), version: 1, messages: [] } })
+      }
+      if (url === '/api/agent/sessions/B') {
+        return json({ success: true, session: { ...sessionMeta('B', '会话 B'), version: 1, messages: [] } })
+      }
+      if (url === '/api/agent/chat') {
+        chatBodies.push(JSON.parse(String(init?.body || '{}')))
+        const s = makeSseStream()
+        chatStreams.push(s)
+        return new Response(s.stream as unknown as BodyInit, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' }
+        })
+      }
+      return json({ success: true })
+    }))
+  })
+
+  /** 起一轮并推到真正在流式的状态（meta + 首个 content 分片） */
+  async function startTurn(chat: ReturnType<typeof useAgentChat>, text: string) {
+    const promise = chat.sendMessage(text)
+    await flush()
+    const stream = chatStreams[chatStreams.length - 1]
+    stream.send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    stream.send({ type: 'content', delta: '正在处理' })
+    await flush()
+    return { promise, stream }
+  }
+
+  /** 让某一轮的流正常收尾 */
+  async function finishTurn(turn: { promise: Promise<unknown>; stream: SseStream }, content = '答完了') {
+    turn.stream.send({ type: 'done', content })
+    turn.stream.close()
+    await turn.promise
+    await flush()
+  }
+
+  test('生成中发送进队列不发请求；本轮正常跑完后按顺序自动接棒', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const t1 = await startTurn(chat, '第一轮')
+    expect(chat.isStreaming.value).toBe(true)
+
+    // 空消息不排队（和空闲时同一口径：没内容就什么都不做）
+    await chat.sendMessage('   ')
+
+    await chat.sendMessage('排队一')
+    await chat.sendMessage('排队二')
+    await flush()
+
+    // 一条请求都没多发；两条都在队列里，形状是给组件库条带用的那份
+    expect(chatStreams).toHaveLength(1)
+    expect(chat.queuedMessages.value.map((q) => q.text)).toEqual(['排队一', '排队二'])
+    expect(chat.queuePaused.value).toBe(false)
+
+    // 第一轮正常跑完 → 自动接上「排队一」
+    await finishTurn(t1)
+    expect(chatStreams).toHaveLength(2)
+    expect(chatBodies[1].userMessage).toBe('排队一')
+    expect(chat.queuedMessages.value.map((q) => q.text)).toEqual(['排队二'])
+    expect(chat.isStreaming.value).toBe(true)
+
+    // 第二轮跑完 → 再接下「排队二」，队列排空
+    await finishTurn({ promise: Promise.resolve(), stream: chatStreams[1] })
+    expect(chatStreams).toHaveLength(3)
+    expect(chatBodies[2].userMessage).toBe('排队二')
+    expect(chat.queuedMessages.value).toHaveLength(0)
+
+    await finishTurn({ promise: Promise.resolve(), stream: chatStreams[2] })
+    expect(chatStreams).toHaveLength(3)
+    expect(chat.isStreaming.value).toBe(false)
+  })
+
+  test('停止：队列暂停在原处不自动发，「立即发送」手动续并恢复自动接棒', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const t1 = await startTurn(chat, '第一轮')
+    await chat.sendMessage('排队一')
+    await chat.sendMessage('排队二')
+
+    chat.stop()
+    t1.stream.error(new DOMException('aborted', 'AbortError'))
+    await t1.promise
+    await flush()
+
+    // 停止 = 队列暂停：一条都没发出去，两条内容都还在
+    expect(chat.queuePaused.value).toBe(true)
+    expect(chatStreams).toHaveLength(1)
+    expect(chat.queuedMessages.value.map((q) => q.text)).toEqual(['排队一', '排队二'])
+
+    // 「立即发送」：解除暂停 + 发队首；剩下的等这一轮跑完自动接
+    chat.flushQueued()
+    await flush()
+    expect(chatStreams).toHaveLength(2)
+    expect(chatBodies[1].userMessage).toBe('排队一')
+    expect(chat.queuePaused.value).toBe(false)
+    expect(chat.queuedMessages.value.map((q) => q.text)).toEqual(['排队二'])
+
+    await finishTurn({ promise: Promise.resolve(), stream: chatStreams[1] })
+    expect(chatStreams).toHaveLength(3)
+    expect(chatBodies[2].userMessage).toBe('排队二')
+    expect(chat.queuedMessages.value).toHaveLength(0)
+  })
+
+  test('本轮报错：同样只暂停，不自动往下发', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const t1 = await startTurn(chat, '第一轮')
+    await chat.sendMessage('排队一')
+
+    t1.stream.send({ type: 'error', error: '网关炸了' })
+    t1.stream.close()
+    await t1.promise
+    await flush()
+
+    expect(chat.queuePaused.value).toBe(true)
+    expect(chatStreams).toHaveLength(1)
+    expect(chat.queuedMessages.value.map((q) => q.text)).toEqual(['排队一'])
+  })
+
+  test('移除队列项；清空后暂停标记复位', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const t1 = await startTurn(chat, '第一轮')
+    await chat.sendMessage('甲')
+    await chat.sendMessage('乙')
+    chat.stop()
+    t1.stream.error(new DOMException('aborted', 'AbortError'))
+    await t1.promise
+    await flush()
+    expect(chat.queuePaused.value).toBe(true)
+
+    chat.removeQueuedMessage(chat.queuedMessages.value[0].id)
+    expect(chat.queuedMessages.value.map((q) => q.text)).toEqual(['乙'])
+    expect(chat.queuePaused.value).toBe(true)
+
+    chat.removeQueuedMessage(chat.queuedMessages.value[0].id)
+    expect(chat.queuedMessages.value).toHaveLength(0)
+    expect(chat.queuePaused.value).toBe(false)
+    expect(chatStreams).toHaveLength(1)
+  })
+
+  test('后台接棒不抢当前视图：切到别的会话，队列仍在原会话里发出去', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const t1 = await startTurn(chat, '第一轮')
+    await chat.sendMessage('排队一')
+    expect(chat.queuedMessages.value).toHaveLength(1)
+
+    // 切到 B：队列是会话的，不是"当前页的"
+    await chat.loadSession('B')
+    expect(chat.currentSessionId.value).toBe('B')
+    expect(chat.queuedMessages.value).toHaveLength(0)
+
+    await finishTurn(t1)
+    // A 在后台接棒发了下一轮，但当前会话必须还停在 B（没被抢走）；
+    // 而且这一轮必须真的落回 A —— 只按"当前会话"找 run 的话，用户切走后
+    // 排队那条会发进 B（首版就是这么错的，所以会话 id 也要断言）
+    expect(chatStreams).toHaveLength(2)
+    expect(chatBodies[1].userMessage).toBe('排队一')
+    expect(chatBodies[1].sessionId).toBe('A')
+    expect(chat.currentSessionId.value).toBe('B')
+    expect(chat.isSessionGenerating('A')).toBe(true)
+    expect(chat.isSessionGenerating('B')).toBe(false)
+  })
+
+  test('排队带着的附件在真正发出去那一刻才随请求走', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const t1 = await startTurn(chat, '第一轮')
+    const file = new File(['x'], 'note.txt', { type: 'text/plain' })
+    await chat.sendMessage('带附件排队', [{ file, id: 'f1' }])
+
+    // 条带里只给"文件名"这一件渲染要用的信息
+    expect(chat.queuedMessages.value[0].attachmentNames).toEqual(['note.txt'])
+    expect(chatStreams).toHaveLength(1)
+
+    await finishTurn(t1)
+    expect(chatStreams).toHaveLength(2)
+    expect(chatBodies[1].userMessage).toBe('带附件排队')
+    expect(chatBodies[1].attachments?.[0]?.name).toBe('note.txt')
+  })
+})

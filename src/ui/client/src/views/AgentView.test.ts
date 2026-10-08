@@ -18,6 +18,9 @@ const agent = vi.hoisted(() => ({
   loadSession: null as any,
   newSession: null as any,
   loadSessions: null as any,
+  // 排队：条带上的移除 / 立即发送要真的转到 composable 上
+  removeQueuedMessage: null as any,
+  flushQueued: null as any,
   // 引擎选择：整块提到 hoisted 里，用例才能单独拨（默认 g ai / 未锁定）
   currentEngine: null as any,
   pendingEngine: null as any,
@@ -43,6 +46,8 @@ vi.mock('@/composables/useAgentChat', async () => {
   agent.loadSession = vi.fn().mockResolvedValue(undefined)
   agent.newSession = vi.fn()
   agent.loadSessions = vi.fn().mockResolvedValue(undefined)
+  agent.removeQueuedMessage = vi.fn()
+  agent.flushQueued = vi.fn()
   agent.currentEngine = ref('gai')
   agent.pendingEngine = ref('gai')
   agent.isEngineLocked = ref(false)
@@ -73,14 +78,21 @@ vi.mock('@/composables/useAgentChat', async () => {
       sendMessage: vi.fn(),
       answerQuestion: vi.fn(),
       stop: vi.fn(),
+      inputContextUsage: ref(null),
+      queuedMessages: ref([]),
+      queuePaused: ref(false),
+      removeQueuedMessage: agent.removeQueuedMessage,
+      flushQueued: agent.flushQueued,
     }),
   }
 })
 
 // 组件库与广场都只关心"在不在"，给个能查的壳就够
+// （排队的几个 prop 要声明出来 —— 桩不声明就只当普通 attribute 落下去，props() 读不到）
 vi.mock('zen-ai-chat-ui', () => ({
   ChatContainer: {
     name: 'ChatContainer',
+    props: ['messages', 'generating', 'disabled', 'allowQueue', 'queued', 'queuePaused', 'queueLabels', 'placeholder', 'theme', 'showInput'],
     template: '<div class="stub-chat" />',
     methods: { scrollToBottom() {} },
   },
@@ -283,5 +295,37 @@ describe('AgentView 引擎选择器', () => {
     await w.find('.agent-tab:nth-child(2)').trigger('click')
     await nextTick()
     expect(w.find('.agent-engine').exists()).toBe(false)
+  })
+})
+
+describe('AgentView 生成中排队（接线）', () => {
+  // 判定「什么时候入队 / 接棒 / 暂停」在 composables/useAgentChat.test.ts；
+  // 「条带长什么样」在库里（playground 探针）。这里只守一件事：
+  // 这几个 prop / 事件真的接到了库的 ChatContainer 上，别哪天接线掉了还没人发现。
+  it('排队 props 传给库的 ChatContainer，生成中不再 disable 输入框', async () => {
+    const w = mountView()
+    await setNarrow(false)
+    await nextTick()
+
+    const chat = w.findComponent({ name: 'ChatContainer' })
+    expect(chat.props('allowQueue')).toBe(true)
+    expect(chat.props('queued')).toEqual([])
+    expect(chat.props('queuePaused')).toBe(false)
+    // 关键：生成中不再把输入框整个禁掉 —— 能打字才是排队的前提
+    expect(chat.props('disabled')).toBeUndefined()
+  })
+
+  it('条带上的「移除 / 立即发送」转发给 useAgentChat（用真库接线那份形状）', async () => {
+    const w = mountView()
+    await setNarrow(false)
+    await nextTick()
+
+    const chat = w.findComponent({ name: 'ChatContainer' })
+    chat.vm.$emit('unqueue', 'q1')
+    chat.vm.$emit('flush-queued')
+    await nextTick()
+
+    expect(agent.removeQueuedMessage).toHaveBeenCalledWith('q1')
+    expect(agent.flushQueued).toHaveBeenCalledTimes(1)
   })
 })

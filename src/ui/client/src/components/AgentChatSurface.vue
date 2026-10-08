@@ -56,6 +56,7 @@ import {
   buildConversationItems,
   agentConversationLabels,
   agentQuestionLabels,
+  agentQueueLabels,
   AGENT_ASSISTANT_NAME,
   AGENT_ASSISTANT_AVATAR,
 } from '@/utils/agentConversations'
@@ -109,6 +110,10 @@ const {
   answerQuestion,
   stop,
   inputContextUsage,
+  queuedMessages,
+  queuePaused,
+  removeQueuedMessage,
+  flushQueued,
 } = useAgentChat()
 
 const displayEngine = computed(() => (isEngineLocked.value ? currentEngine.value : pendingEngine.value))
@@ -130,6 +135,8 @@ const engineCantDispatch = computed(() => props.allowDispatch !== false && displ
 const conversationItems = computed(() => buildConversationItems(sessions.value, isSessionGenerating))
 const conversationLabels = agentConversationLabels()
 const questionLabels = agentQuestionLabels()
+// 排队条带文案（与智能体页 / 文件空间面板共用同一份映射，见 utils/agentConversations）
+const queueLabels = agentQueueLabels()
 
 // ── 版面：够宽就左列表右对话，不够宽折成两页 ──────────────────
 // 量的是这块面自己的宽度（工作台右栏能拖到 260–900，还会被视口比例再卡一道），
@@ -290,13 +297,18 @@ onMounted(() => {
         :data-theme="chatTheme"
       >
         <ChatInput
-          :disabled="isStreaming"
           :generating="isStreaming"
-          :placeholder="placeholder || (isStreaming ? $t('@AGENT:正在生成中...') : $t('@AGENT:输入消息，Enter 发送'))"
+          :allow-queue="true"
+          :queued="queuedMessages"
+          :queue-paused="queuePaused"
+          :queue-labels="queueLabels"
+          :placeholder="placeholder || (isStreaming ? $t('@AGENT:生成中，发送后会排队，等本轮跑完自动接上…') : $t('@AGENT:输入消息，Enter 发送'))"
           :upload-config="{ accept: AGENT_UPLOAD_ACCEPT }"
           :context-usage="inputContextUsage"
           @send="onSend"
           @stop="stop"
+          @unqueue="removeQueuedMessage"
+          @flush-queued="flushQueued"
         />
       </div>
     </div>
@@ -409,6 +421,14 @@ onMounted(() => {
   grid-area: composer;
   padding: var(--acu-space-3) var(--acu-space-4) var(--acu-space-4);
   background: linear-gradient(to top, var(--acu-bg) 70%, transparent);
+}
+/* 排队条带换成本项目「待处理」档的语义色 —— 与任务对话里那条 .wb-chat-queue 同一副面孔。
+   库给 --acu-queue-* 四个变量就是留给宿主做这件事的，所以这里只映射颜色，不碰它的 class。 */
+.acs__composer :deep(.acu-input-queue) {
+  --acu-queue-edge: var(--role-pending-edge);
+  --acu-queue-surface: var(--role-pending-surface);
+  --acu-queue-ink: var(--role-pending-ink);
+  --acu-queue-wash: var(--role-pending-wash);
 }
 /* ChatContainer 根节点（.acu-chat）吃满剩余空间 */
 .acs__chat > :deep(.acu-chat) {

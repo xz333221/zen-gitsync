@@ -81,11 +81,30 @@ export const AGENT_ASSISTANT_NAME = 'g ai'
  */
 export const AGENT_ASSISTANT_AVATAR = gAiAvatar
 
+
 /** 提问面板文案（走 app 的 i18n） */
 export function agentQuestionLabels() {
   return {
     title: $t('@AGENT:等待你的回答'),
     placeholder: $t('@AGENT:输入回答'),
     submit: $t('@AGENT:提交回答'),
+  }
+}
+
+/**
+ * 排队条带文案（走 app 的 i18n）。
+ *
+ * 与上面两份同一套路：四个 g ai 入口（智能体页 / 主 Agent 控制台 / 文件空间面板 /
+ * 常用目录弹窗）共用这一份 —— 同一件事在四个地方显示成四种说法，比文案本身不好更要命。
+ * 库的默认值是中文，这里逐字段覆盖成当前的界面语言。
+ */
+export function agentQueueLabels() {
+  return {
+    title: $t('@AGENT:排队中'),
+    hint: $t('@AGENT:本轮结束后依次发送'),
+    pausedHint: $t('@AGENT:已暂停，点「立即发送」继续'),
+    send: $t('@AGENT:加入队列'),
+    flush: $t('@AGENT:立即发送'),
+    remove: $t('@AGENT:移出队列'),
   }
 }

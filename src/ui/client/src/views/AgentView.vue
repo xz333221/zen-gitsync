@@ -30,7 +30,7 @@ import { ChatContainer, ConversationList } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { useConfigStore } from '@/stores/configStore'
 import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
-import { buildConversationItems, agentConversationLabels, agentQuestionLabels, AGENT_ASSISTANT_NAME, AGENT_ASSISTANT_AVATAR } from '@/utils/agentConversations'
+import { buildConversationItems, agentConversationLabels, agentQuestionLabels, agentQueueLabels, AGENT_ASSISTANT_NAME, AGENT_ASSISTANT_AVATAR } from '@/utils/agentConversations'
 import type { AgentEngineId } from '@/utils/agentEngine'
 import { useNarrowPane } from '@/composables/useNarrowPane'
 import MarketplacePanel from '@/components/MarketplacePanel.vue'
@@ -79,7 +79,11 @@ const {
   isEngineLocked,
   pickEngine,
   stop,
-  inputContextUsage
+  inputContextUsage,
+  queuedMessages,
+  queuePaused,
+  removeQueuedMessage,
+  flushQueued
 } = useAgentChat()
 
 // ── 引擎选择 ──────────────────────────────────────────────
@@ -124,7 +128,7 @@ const welcomeAvatarStyle = { '--welcome-avatar': `url("${AGENT_ASSISTANT_AVATAR}
 const presetQuestions = computed(() => [
   { id: 'p1', label: $t('@AGENT:查看项目结构'), prompt: $t('@AGENT:prompt_p1') },
   { id: 'p2', label: $t('@AGENT:分析代码质量'), prompt: $t('@AGENT:prompt_p2') },
-  { id: 'p3', label: $t('@AGENT:帮我写测试'), prompt: $t('@AGENT:prompt_p3') },
+  { id: 'p3', label: $t('@AGENT:帮我提交代码'), prompt: $t('@AGENT:prompt_p3') },
   { id: 'p4', label: $t('@AGENT:Git 状态检查'), prompt: $t('@AGENT:prompt_p4') },
   { id: 'p5', label: $t('@AGENT:帮我启动项目'), prompt: $t('@AGENT:prompt_p5') }
 ])
@@ -148,6 +152,9 @@ const questionLabels = agentQuestionLabels()
 
 // ── ChatContainer ref ────────────────────────────────────
 const chatContainerRef = ref<InstanceType<typeof ChatContainer> | null>(null)
+
+// ── 排队条带文案（与主 Agent 控制台 / 文件空间面板共用同一份映射） ──
+const queueLabels = agentQueueLabels()
 
 function scrollToBottom(smooth = true) {
   chatContainerRef.value?.scrollToBottom(smooth)
@@ -342,11 +349,14 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
                 :assistant-name="AGENT_ASSISTANT_NAME"
                 :assistant-avatar="AGENT_ASSISTANT_AVATAR"
                 :theme="chatTheme"
-                :disabled="isStreaming"
                 :generating="isStreaming"
+                :allow-queue="true"
+                :queued="queuedMessages"
+                :queue-paused="queuePaused"
+                :queue-labels="queueLabels"
                 :upload-config="{ accept: AGENT_UPLOAD_ACCEPT }"
                 :context-usage="inputContextUsage"
-                :placeholder="isStreaming ? $t('@AGENT:正在生成中...') : $t('@AGENT:输入消息，Enter 发送')"
+                :placeholder="isStreaming ? $t('@AGENT:生成中，发送后会排队，等本轮跑完自动接上…') : $t('@AGENT:输入消息，Enter 发送')"
                 :question="pendingQuestion"
                 :question-submitting="answeringQuestion"
                 :question-labels="questionLabels"
@@ -354,6 +364,8 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
                 @send="onSend"
                 @select="onSelectPreset"
                 @stop="stop"
+                @unqueue="removeQueuedMessage"
+                @flush-queued="flushQueued"
                 @answer="answerQuestion"
               >
               </ChatContainer>
@@ -572,6 +584,15 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
    它的背景是透明的，叠上去会在图标后面露出一个灰圈。 */
 .agent-chat-host :deep(.acu-avatar--left) {
   background: transparent;
+}
+
+/* 排队条带换成本项目「待处理」档的语义色 —— 与任务对话里那条 .wb-chat-queue 同一副面孔。
+   库给 --acu-queue-* 四个变量就是留给宿主做这件事的，所以这里只映射颜色，不碰它的 class。 */
+.agent-chat-host :deep(.acu-input-queue) {
+  --acu-queue-edge: var(--role-pending-edge);
+  --acu-queue-surface: var(--role-pending-surface);
+  --acu-queue-ink: var(--role-pending-ink);
+  --acu-queue-wash: var(--role-pending-wash);
 }
 
 /* ── 欢迎区大图标：换成 g ai 标识 ────────────────────────────────

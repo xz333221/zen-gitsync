@@ -40,7 +40,7 @@ import type { PresetQuestion } from 'zen-ai-chat-ui'
 import { $t } from '@/lang/static'
 import { useAgentChat } from '@/composables/useAgentChat'
 import { useThemeObserver } from '@/composables/useThemeObserver'
-import { AGENT_ASSISTANT_NAME, agentQuestionLabels } from '@/utils/agentConversations'
+import { AGENT_ASSISTANT_NAME, agentQuestionLabels, agentQueueLabels } from '@/utils/agentConversations'
 
 const props = defineProps<{
   /** 这批目录的状态(与发给 /api/recent_directories/summary 的是同一份,原样转发给服务端) */
@@ -64,9 +64,14 @@ const {
   answerQuestion,
   newSession,
   stop,
+  queuedMessages,
+  queuePaused,
+  removeQueuedMessage,
+  flushQueued,
 } = useAgentChat()
 
 const questionLabels = agentQuestionLabels()
+const queueLabels = agentQueueLabels()
 
 /**
  * 开场白里的建议问题。这块地方没有输入提示词可抄,用户第一次看到多半不知道该问什么 ——
@@ -167,12 +172,15 @@ onBeforeUnmount(() => {
       :messages="messages"
       :assistant-name="AGENT_ASSISTANT_NAME"
       :theme="chatTheme"
-      :disabled="isStreaming"
       :generating="isStreaming"
+      :allow-queue="true"
+      :queued="queuedMessages"
+      :queue-paused="queuePaused"
+      :queue-labels="queueLabels"
       :show-avatar="false"
       :upload-config="{ enabled: false }"
       :placeholder="isStreaming
-        ? $t('@13D1C:g ai 正在回答...')
+        ? $t('@13D1C:g ai 正在回答…发送会先排队，等本轮跑完自动接上')
         : $t('@13D1C:追问 g ai：这批项目该怎么处理？')"
       :welcome-title="$t('@13D1C:可以接着问 g ai')"
       :welcome-description="$t('@13D1C:它已经拿到了这批目录的 Git 状态，可以直接问该先处理哪个、某个项目落后了什么。')"
@@ -184,6 +192,8 @@ onBeforeUnmount(() => {
       @send="onSend"
       @select="onSelectPreset"
       @stop="stop"
+      @unqueue="removeQueuedMessage"
+      @flush-queued="flushQueued"
       @answer="answerQuestion"
     />
   </div>

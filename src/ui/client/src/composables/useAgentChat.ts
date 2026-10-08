@@ -5,9 +5,11 @@
 //   2. SSE 流式聊天（thinking / content / tool_call / tool_result / done / error）
 //   3. 后端 OpenAI 格式消息 → zen-ai-chat-ui ChatMessage 格式转换
 //   4. 取消正在进行的请求
+//   5. 生成中排队：发送先入队，本轮正常跑完自动接下一条；被停止 / 报错则暂停等人续
+//      （队列按会话各持一份，UI 在库的输入框条带里，见 queuedMessages / flushQueued）
 
 import { computed, reactive, ref } from 'vue'
-import type { ChatMessage, ToolCall, ChatAttachment, SelectedFile } from 'zen-ai-chat-ui'
+import type { ChatMessage, ToolCall, ChatAttachment, SelectedFile, QueuedMessage } from 'zen-ai-chat-ui'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { uid } from 'zen-ai-chat-ui'
 import { extractThinkSegments } from 'zen-ai-chat-ui'
@@ -64,6 +66,55 @@ export interface PendingAgentQuestion {
   allowFreeText: boolean
   /** 多选：勾选后提交；单选点选项即提交 */
   multiple: boolean
+}
+
+/**
+ * sendMessage 的第三个参数：这一轮的**请求级**上下文（都不落会话历史）。
+ *
+ * 队列里存的就是这份快照 —— 排队时界面上选着的引擎 / 打开的文件 / 派发开关，
+ * 到真正发出去那一刻可能已经变了，重算一遍等于把用户的意图改掉。
+ */
+export interface AgentSendOptions {
+  /** 文件空间对话：当前打开的文档路径（请求副本的 system 注入） */
+  openFilePath?: string
+  /** 引擎覆盖：只在新建会话时生效（已有会话由服务端按落盘引擎接管） */
+  engine?: AgentEngineId
+  /** 常用目录对话：那批目录的 Git 状态 */
+  dirStatus?: unknown[]
+  /** 常用目录对话：界面上那段自动解读 */
+  dirSummary?: string
+  /** 主 Agent 控制台：这一轮是否允许调用 dispatch_task 派发任务 */
+  allowDispatch?: boolean
+  /** 派发用的执行器 */
+  dispatchExecutor?: string
+  /** 派发时是否附上编排台的预设提示词 */
+  dispatchUseDefaultPrompt?: boolean
+  /**
+   * 内部标记：本次发送要落到哪个会话（默认 = 当前会话）。
+   * 队列接棒时必须带上它：用户可能已经切到别的会话，而排队那条是**原会话**的事 ——
+   * 不指定的话 sendMessage 会按"当前会话"去找 run，把消息发进别人家的会话。
+   */
+  targetKey?: string
+  /**
+   * 内部标记：队列接棒发起的后台轮次。
+   * 与用户手发的那一轮有两处不同 —— 落到指定会话（targetKey）、不抢当前视图
+   * （用户可能正在看别的会话）。**不进请求体**，服务端看不到它。
+   */
+  background?: boolean
+}
+
+/**
+ * 排队中的一条消息：本轮还在跑时用户发的，等这一轮完了再发。
+ *
+ * 附件存 **File 本体**、请求参数存**发送那一刻的快照**：排队时先转 dataURL /
+ * 先落盘的话，用户把这条从队列里删掉就会留下一份孤儿；快照则是为了防止
+ * 「排队时选着 A 引擎，轮到它时已经切成 B 引擎」这种悄悄改意图的事。
+ */
+export interface QueuedAgentMessage {
+  id: string
+  text: string
+  files: SelectedFile[]
+  options: AgentSendOptions
 }
 
 // 后端 session 完整数据
@@ -319,6 +370,13 @@ interface SessionRun {
   answeringQuestion: boolean
   /** 本会话最近一次请求的上下文占用；还没发过消息时为 null */
   contextUsage: AgentContextUsage | null
+  /** 排队中的消息：生成中发出的先落在这儿，等本轮结束依次发 */
+  queue: QueuedAgentMessage[]
+  /**
+   * 队列暂停：用户按了「停止」或本轮报错 → 内容原样留着但**不自动发**，
+   * 条带上出现「立即发送」等用户拍板（只由它解除）。
+   */
+  queuePaused: boolean
 }
 
 // ── composable ───────────────────────────────────────────
@@ -369,7 +427,9 @@ export function useAgentChat() {
       nonce: 0,
       pendingQuestion: null,
       answeringQuestion: false,
-      contextUsage: null
+      contextUsage: null,
+      queue: [],
+      queuePaused: false
     }
   }
 
@@ -446,6 +506,59 @@ export function useAgentChat() {
   )
   const pendingQuestion = computed<PendingAgentQuestion | null>(() => activeRun.value?.pendingQuestion ?? null)
   const answeringQuestion = computed(() => activeRun.value?.answeringQuestion ?? false)
+
+  // ── 排队（生成中继续发） ─────────────────────────────────
+  // 队列本体按会话各持一份（见 SessionRun.queue），这里只把当前会话那份翻给 UI。
+  const queuePaused = computed(() => activeRun.value?.queuePaused ?? false)
+
+  /**
+   * 喂给组件库 `ChatInput.queued` 的形状。
+   *
+   * 与 `inputContextUsage` 同一个套路：**只翻译，不加逻辑** —— 附件在条带里只需要
+   * 文件名（队列本体里的 File 不外给），其余字段一一对应。翻译放这里而不是各个消费方
+   * 各写一遍，是为了四个入口（智能体页 / 主 Agent 控制台 / 文件空间面板 / 常用目录弹窗）
+   * 显示出来永远一致。
+   */
+  const queuedMessages = computed<QueuedMessage[]>(() =>
+    (activeRun.value?.queue ?? []).map(q => ({
+      id: q.id,
+      text: q.text,
+      attachmentNames: q.files.map(f => f.file.name)
+    }))
+  )
+
+  /** 从队里移除一条（条带上的 ✕）；队列清空顺带把暂停标记复位 */
+  function removeQueuedMessage(id: string) {
+    const run = activeRun.value
+    if (!run) return
+    const i = run.queue.findIndex(q => q.id === id)
+    if (i < 0) return
+    run.queue.splice(i, 1)
+    if (run.queue.length === 0) run.queuePaused = false
+  }
+
+  /**
+   * 队列接棒：把队首发出去（只在「没在跑」时动手）。
+   *
+   * 出队即发送 —— 发失败的那一条已经进了对话（能看见错误气泡与重试），不该再压回
+   * 队里；它后面那些则因为暂停标记停在原处（见 sendMessage 收尾处的判定）。
+   */
+  function flushNextQueued(run: SessionRun) {
+    if (run.isStreaming) return
+    const next = run.queue.shift()
+    if (!next) return
+    // targetKey 把消息送回它排队的那个会话（用户可能已经看着别的会话了）；
+    // background 则保证这一轮不把视图抢过去（见 AgentSendOptions 里两段的说明）
+    void sendMessage(next.text, next.files, { ...next.options, targetKey: run.key, background: true })
+  }
+
+  /** 用户点了条带上的「立即发送」（暂停态才有）：解除暂停并把队首发出去 */
+  function flushQueued() {
+    const run = activeRun.value
+    if (!run || run.isStreaming || run.queue.length === 0) return
+    run.queuePaused = false
+    flushNextQueued(run)
+  }
 
   // 供会话列表判断某个会话是否正在生成（含后台生成）
   function isSessionGenerating(sessionId: string): boolean {
@@ -645,13 +758,14 @@ export function useAgentChat() {
   // options.dirStatus / dirSummary：「常用目录」那批目录的 Git 状态与界面上那段自动解读，
   //   服务端只把它注进**本轮请求副本**的 system 提示（不落会话历史，见
   //   server/routes/workbench/agentChat.js 的 injectRequestContext）。
-  async function sendMessage(text: string, files: SelectedFile[] = [], options: { openFilePath?: string; engine?: AgentEngineId; dirStatus?: unknown[]; dirSummary?: string; allowDispatch?: boolean; dispatchExecutor?: string; dispatchUseDefaultPrompt?: boolean } = {}) {
+  async function sendMessage(text: string, files: SelectedFile[] = [], options: AgentSendOptions = {}) {
     // 图片 → 多模态 dataURL（模型直接"看"）；
     // 非图片 → 字节交给服务端落盘，模型拿到的是**绝对路径**，需要时自己 read。
     const imageFiles = files.filter(f => f?.file?.type?.startsWith('image/'))
     const otherFiles = files.filter(f => !f?.file?.type?.startsWith('image/'))
 
-    // 先按上限筛一遍：超限的当场告知，别让用户以为附件已经发出去了
+    // 先按上限筛一遍：超限的当场告知，别让用户以为附件已经发出去了。
+    // （排队那条路径也走这遍筛选 —— 入队时就给结论，出队时才说"附件被丢了"更莫名其妙）
     const attachable: SelectedFile[] = []
     let attachTotal = 0
     for (const f of otherFiles) {
@@ -669,11 +783,21 @@ export function useAgentChat() {
       )
     }
 
-    // 目标会话：已有会话用其 id；全新会话先用本地临时 key，等 meta 回来再迁移
-    const runKey = currentSessionId.value || `${LOCAL_KEY_PREFIX}${Date.now()}-${++localKeySeed}`
+    // 目标会话：已有会话用其 id；全新会话先用本地临时 key，等 meta 回来再迁移。
+    // `options.targetKey` 是队列接棒给的（见 AgentSendOptions.targetKey）——
+    // 那种时刻"当前会话"是用户眼睛正看着的那个，未必是这条消息该去的那个。
+    const runKey = options.targetKey || currentSessionId.value || `${LOCAL_KEY_PREFIX}${Date.now()}-${++localKeySeed}`
     const run = ensureRun(runKey)
     // 只在"当前激活会话"层面拦截重复发送，不影响其它会话后台继续
-    if ((!text.trim() && imageFiles.length === 0 && attachable.length === 0) || run.isStreaming) return
+    if (!text.trim() && imageFiles.length === 0 && attachable.length === 0) return
+
+    // 生成中：不打断这一轮，把这条原样排进队列 —— 本轮结束后由 flushNextQueued 发。
+    // 附件留 File 本体、参数留快照（见 QueuedAgentMessage 的注释）；这条不算"发出去"，
+    // 所以连 currentSessionId 都不用动（队列本来就是当前会话的）。
+    if (run.isStreaming) {
+      run.queue.push({ id: uid(), text, files: [...imageFiles, ...attachable], options })
+      return
+    }
 
     // 图片 File → base64 dataURL，随请求发给后端组装多模态 content
     const settled = await Promise.allSettled(imageFiles.map(f => fileToDataUrl(f.file)))
@@ -690,8 +814,10 @@ export function useAgentChat() {
       .map(r => (r.status === 'fulfilled' ? r.value : null))
       .filter((a): a is { name: string; dataUrl: string } => !!a && typeof a.dataUrl === 'string' && a.dataUrl.startsWith('data:'))
 
-    // 切到这条会话(新会话从 null 切到本地 key)，让乐观消息立刻可见
-    currentSessionId.value = run.key
+    // 切到这条会话(新会话从 null 切到本地 key)，让乐观消息立刻可见。
+    // 队列接棒的**后台轮次**不抢视图：用户可能正在别处看着别的会话，替他把屏幕
+    // 搬到一个不是他刚操作的地方，是最容易被当成 bug 的那类行为。
+    if (!options.background) currentSessionId.value = run.key
 
     run.nonce += 1
     const myNonce = run.nonce
@@ -1017,6 +1143,16 @@ export function useAgentChat() {
             alreadyToast: turnKind === 'error'
           })
         }
+        // 队列接棒：**只有这一轮正常跑完**才自动发下一条。
+        // 被用户停止 / 本轮报错 → 队列留在原处、置暂停标记：那种时刻用户要的是"别跑了"，
+        // 自动接上下一句正好违背它；内容一条不丢，条带上的「立即发送」随时能续。
+        if (run.queue.length > 0) {
+          if (stoppedByUser || assistantMsg.status === 'error') {
+            run.queuePaused = true
+          } else if (!awaitingAnswer) {
+            flushNextQueued(run)
+          }
+        }
       }
       // 清掉乐观徽章；成功路径的 loadSessions() 会拉到服务端真实数据，
       // 中止/出错路径靠这一步兜底，避免左栏一直显示"正在生成中..."
@@ -1085,6 +1221,11 @@ export function useAgentChat() {
     contextUsage,
     // 组件库 ChatInput 的 `contextUsage` prop 形状（库不替你算，这里做翻译）
     inputContextUsage,
+    // 排队：当前会话的队列（库 ChatInput 的 `queued` 形状）+ 暂停态 + 出队/移除/手动接续
+    queuedMessages,
+    queuePaused,
+    removeQueuedMessage,
+    flushQueued,
     // 引擎选择：currentEngine 是"这次会用的"，isEngineLocked 决定选择器是否置灰
     currentEngine,
     pendingEngine,
