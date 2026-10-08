@@ -12,17 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// MCP stdio 客户端的回归测试。
+// MCP 客户端(stdio + Streamable HTTP)的回归测试。
 //
 // 这里最值钱的一条是 buildSpawnSpec 的转义用例 —— Windows 上
 // `spawn(cmd, args, { shell: true })` 会把含空格的参数拆碎(实测 C:\a b\proj
 // 会变成 "C:a" + "bproj"),而直接 spawn .cmd 又会被 Node 拒绝(EINVAL)。
 // 项目路径带空格是常态,这两条任一回归都会让"装了 MCP 但连不上"变成玄学问题。
+//
+// HTTP 那半边的重点在:响应可能是 JSON 也可能是 SSE、流可能一直挂着不关、
+// session 头要回传 —— 任一条错都表现为"远程 MCP 连不上"。
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import { spawn } from 'node:child_process';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -33,7 +37,7 @@ process.env.HOME = sandboxHome;
 delete process.env.HOMEDRIVE;
 delete process.env.HOMEPATH;
 
-const { buildSpawnSpec, loadMcpServers, McpManager } = await import('./mcp.js');
+const { buildSpawnSpec, loadMcpServers, McpManager, serverTransport } = await import('./mcp.js');
 const { AI_MCP_FILE } = await import('../../paths.js');
 
 const IS_WIN = process.platform === 'win32';
@@ -281,6 +285,202 @@ test('McpManager: 没有配置任何 server 时是空管理器,不影响内置�
     assert.deepEqual(manager.toolDefinitions, []);
     assert.equal(manager.describe({ locale: 'zh-CN' }), '', '没有连接成功任何 server 时不应往提示词里塞标题');
     assert.equal(await manager.call('mcp__x__y', {}), null);
+  } finally {
+    await manager.close();
+  }
+});
+
+// ── Streamable HTTP 往返 ──────────────────────────────────────
+
+test('serverTransport: 有 command 就是 stdio,只有 url 才是 http,都没有则两边都不是', () => {
+  assert.equal(serverTransport({ command: 'npx', args: ['-y', 'x'] }), 'stdio');
+  assert.equal(serverTransport({ type: 'http', url: 'https://example.com/mcp' }), 'http');
+  // 同时给了两者时以 command 为准 —— 本地子进程更可控,也是生态里的通行优先级
+  assert.equal(serverTransport({ command: 'npx', url: 'https://example.com/mcp' }), 'stdio');
+  assert.equal(serverTransport({ args: ['no-command-no-url'] }), null);
+  assert.equal(serverTransport({ url: 'ftp://example.com' }), null, '只认 http(s)');
+  assert.equal(serverTransport(null), null);
+});
+
+test('loadMcpServers: url 型(Streamable HTTP)条目不再被当成坏配置丢掉', async () => {
+  const project = await fs.mkdtemp(path.join(os.tmpdir(), 'zen-mcp-http-merge-'));
+  const file = path.join(project, '.zen-gitsync', 'ai', 'mcp.json');
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, JSON.stringify({
+    mcpServers: {
+      remote: { type: 'http', url: 'https://example.com/api/mcp', headers: { Authorization: 'Bearer t' } },
+      local: { command: 'npx', args: ['-y', 'whatever'] },
+      broken: { args: ['no-command-no-url'] },
+    },
+  }), 'utf8');
+
+  const { servers } = await loadMcpServers({ cwd: project });
+  assert.equal(servers.remote?.url, 'https://example.com/api/mcp');
+  assert.equal(servers.local?.command, 'npx');
+  assert.equal(servers.broken, undefined, '两边都没有的条目仍要被丢弃');
+});
+
+// 一个最小可用的远程 MCP server。按 method 回 JSON 或 SSE;可要求客户端回传 session 头。
+function startFakeHttpMcp({ sse = false, holdSse = false, session = 'sess-abc' } = {}) {
+  const state = { requests: [], session };
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', chunk => { body += chunk });
+    req.on('end', () => {
+      if (req.method === 'DELETE') {
+        state.requests.push({ method: 'DELETE', headers: req.headers });
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+      const message = JSON.parse(body || '{}');
+      state.requests.push({ method: message.method, headers: req.headers, message });
+
+      const reply = payload => {
+        const headers = { 'Content-Type': sse ? 'text/event-stream' : 'application/json' };
+        if (session && state.session && message.method === 'initialize') headers['Mcp-Session-Id'] = state.session;
+        res.writeHead(200, headers);
+        const text = JSON.stringify(payload);
+        if (!sse) { res.end(text); return }
+        res.write(`event: message\ndata: ${text}\n\n`);
+        // holdSse:故意不结束流 —— 服务端完全有权利把连接挂着继续推通知,
+        // 客户端必须在拿到目标帧时就收手,而不是等流结束
+        if (!holdSse) res.end();
+      };
+
+      if (message.method === 'initialize') {
+        reply({ jsonrpc: '2.0', id: message.id, result: { protocolVersion: '2025-03-26', capabilities: {}, serverInfo: { name: 'fake-http', version: '0' } } });
+      } else if (message.method === 'notifications/initialized') {
+        res.writeHead(202);
+        res.end();
+      } else if (message.method === 'tools/list') {
+        reply({ jsonrpc: '2.0', id: message.id, result: { tools: [
+          { name: 'echo', description: '回显输入', inputSchema: { type: 'object', properties: { text: { type: 'string' } } } },
+          { name: 'boom', description: '永远失败', inputSchema: { type: 'object' } },
+        ] } });
+      } else if (message.method === 'tools/call') {
+        if (message.params.name === 'boom') {
+          reply({ jsonrpc: '2.0', id: message.id, result: { isError: true, content: [{ type: 'text', text: '炸了' }] } });
+        } else {
+          reply({ jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: 'echo:' + (message.params.arguments?.text ?? '') }] } });
+        }
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+  });
+  return new Promise(resolve => {
+    server.listen(0, '127.0.0.1', () => {
+      resolve({
+        server,
+        state,
+        url: `http://127.0.0.1:${server.address().port}/mcp`,
+        stop: () => new Promise(done => {
+          server.closeAllConnections?.();
+          server.close(() => done());
+        }),
+      });
+    });
+  });
+}
+
+test('McpManager(http): 握手后挂成 mcp__<server>__<tool>,调用结果与 stdio 版同口径', async () => {
+  const fake = await startFakeHttpMcp();
+  const manager = await McpManager.create({
+    cwd: sandboxProject,
+    servers: { remote: { type: 'http', url: fake.url } },
+    onWarn: () => {},
+  });
+  try {
+    const status = manager.status();
+    assert.equal(status[0].error, null, `应连接成功,实际: ${status[0].error}`);
+    assert.equal(status[0].transport, 'http');
+    assert.equal(status[0].command, fake.url, '诊断里应回落到 url,而不是留个空 command');
+    assert.equal(manager.toolCount, 2);
+
+    const names = manager.toolDefinitions.map(tool => tool.function.name);
+    assert.ok(names.includes('mcp__remote__echo'), names.join(','));
+    assert.ok(names.includes('mcp__remote__boom'), names.join(','));
+
+    assert.equal(await manager.call('mcp__remote__echo', { text: '你好' }), 'echo:你好');
+    assert.match(await manager.call('mcp__remote__boom', {}), /^错误: 炸了/);
+    assert.equal(await manager.call('mcp__remote__nope', {}), null, '未知工具应回落到内置工具表');
+  } finally {
+    await manager.close();
+    await fake.stop();
+  }
+});
+
+test('McpManager(http): 自定义头透传、session 头回传、关闭时 DELETE 结束会话', async () => {
+  const fake = await startFakeHttpMcp();
+  const manager = await McpManager.create({
+    cwd: sandboxProject,
+    servers: { remote: { type: 'http', url: fake.url, headers: { Authorization: 'Bearer t0ken' } } },
+    onWarn: () => {},
+  });
+  try {
+    const init = fake.state.requests.find(item => item.method === 'initialize');
+    assert.equal(init.headers.authorization, 'Bearer t0ken', '配置里的 headers 必须原样发出去');
+    assert.match(init.headers.accept, /text\/event-stream/, 'Accept 必须同时声明 json 与 event-stream,否则会被判 406');
+
+    const list = fake.state.requests.find(item => item.method === 'tools/list');
+    assert.equal(list.headers['mcp-session-id'], 'sess-abc', 'initialize 给的 session 头要在后续请求回传');
+
+    await manager.call('mcp__remote__echo', { text: 'x' });
+    const call = fake.state.requests.find(item => item.method === 'tools/call');
+    assert.equal(call.headers['mcp-session-id'], 'sess-abc');
+
+    await manager.close();
+    const del = fake.state.requests.find(item => item.method === 'DELETE');
+    assert.ok(del, '关闭时应尽力 DELETE 结束会话');
+    assert.equal(del.headers['mcp-session-id'], 'sess-abc');
+  } finally {
+    await fake.stop();
+  }
+});
+
+test('McpManager(http): SSE 响应能取到结果,且服务端不关流也不会拖到超时', async () => {
+  const fake = await startFakeHttpMcp({ sse: true, holdSse: true });
+  const started = Date.now();
+  const manager = await McpManager.create({
+    cwd: sandboxProject,
+    servers: { remote: { type: 'http', url: fake.url } },
+    onWarn: () => {},
+  });
+  try {
+    assert.equal(manager.toolCount, 2, 'SSE 响应里的 tools/list 也要能解析出来');
+    assert.equal(await manager.call('mcp__remote__echo', { text: 'sse' }), 'echo:sse');
+    assert.ok(Date.now() - started < 5000, `拿到目标帧就该收手,不该等流结束,实际耗时 ${Date.now() - started}ms`);
+  } finally {
+    await manager.close();
+    await fake.stop();
+  }
+});
+
+test('McpManager(http): 远程连不上只记错误,不影响其他 server 与内置工具', async () => {
+  const dead = await startFakeHttpMcp();
+  const deadUrl = dead.url;
+  await dead.stop(); // 端口关掉,模拟服务端不在
+
+  const manager = await McpManager.create({
+    cwd: sandboxProject,
+    servers: {
+      down: { type: 'http', url: deadUrl },
+      other: { args: ['no-command-no-url'] }, // 无效条目,连传输都判不出来
+    },
+    onWarn: () => {},
+  });
+  try {
+    const status = manager.status();
+    const down = status.find(item => item.id === 'down');
+    assert.ok(down.error, '连不上必须有可读错误');
+    assert.match(down.error, /连接 "down" 失败/, `错误应指明是哪个 server,实际: ${down.error}`);
+    assert.match(down.error, /ECONNREFUSED|fetch failed/, `错误应带上底层原因,实际: ${down.error}`);
+    assert.equal(down.tools, 0);
+    assert.equal(manager.toolCount, 0);
+    assert.equal(await manager.call('mcp__down__echo', {}), null);
   } finally {
     await manager.close();
   }

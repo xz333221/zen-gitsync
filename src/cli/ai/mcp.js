@@ -12,19 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// g ai 的 MCP(Model Context Protocol)客户端 — stdio 传输实现。
+// g ai 的 MCP(Model Context Protocol)客户端 — 支持 stdio 与 Streamable HTTP 两种传输。
 //
 // 为什么自己实现而不是装 SDK:
-//   本包 dependencies 一直保持精简,而 stdio 这一层的协议面很小
-//   (newline-delimited JSON-RPC + initialize / tools/list / tools/call 三个方法),
-//   自己写≈200 行,换取零依赖 + 完全可控的超时与降级行为。
+//   本包 dependencies 一直保持精简,而这两种传输的协议面都很小
+//   (JSON-RPC + initialize / tools/list / tools/call 三个方法),自己写换取
+//   零依赖 + 完全可控的超时与降级行为。
 //
 // 配置来源(两级,项目级覆盖全局同名 server):
 //   1) ~/.zen-gitsync/ai/mcp.json                    「g ai 智能体」全局安装(对所有项目生效)
 //   2) <cwd>/.zen-gitsync/ai/mcp.json                项目级安装
 //   形状沿用生态通行的 mcpServers。项目级路径常量与广场安装端共用 src/paths.js 那一份;
 //   项目级**不再读** <cwd>/.mcp.json(那是 Claude Code 一系的约定路径,2026-09-30 迁出)。
-//   { "mcpServers": { "github": { "command": "npx", "args": ["-y", "@..."], "env": {} } } }
+//
+// 两种条目形状,按有没有 command 自动区分(同一条目同时有两者时以 command 为准):
+//   { "github": { "command": "npx", "args": ["-y", "@..."], "env": {} } }
+//   { "todo":   { "type": "http", "url": "https://.../api/mcp", "headers": { "Authorization": "Bearer ..." } } }
+//
+// HTTP 侧只说 Streamable HTTP(2025-03-26 起规范里的那套):
+//   POST JSON-RPC → 200 application/json 或 text/event-stream(取 id 匹配的那一帧);
+//   响应头里的 Mcp-Session-Id 会被记住并在后续请求回传;关闭时尽力 DELETE 结束会话。
+//   老式 "HTTP+SSE"(2024-11-05 的 GET /sse + POST endpoint)不在此列 —— 那种服务端
+//   自己也在陆续迁走,真需要时用 mcp-remote 桥成 stdio 更省事。
+//
+// ⚠️ HTTPS 的证书链:fetch 走 Node 内置根证书,不读 Windows/macOS 证书库。
+//   站点只发叶证书、中间证书没带全时,Node 会报 unable to verify the first certificate,
+//   而浏览器/curl 都正常。这里**不擅自关校验**(那是安全红线),只在报错里把可操作的做法写清楚。
 //
 // ⚠️ Windows 上 spawn 的两个坑(已实测,不要"优化"掉):
 //   1) 带空格的参数在 shell:true 下会被 cmd 拆碎 ——
@@ -45,6 +58,11 @@ const IS_WIN = process.platform === 'win32';
 
 // 工具名前缀。OpenAI function calling 允许 [A-Za-z0-9_-],用双下划线分段。
 export const MCP_TOOL_PREFIX = 'mcp__';
+
+// 握手时声明的协议版本。stdio 沿用旧值不动(现有 server 都是照这个档位对接的);
+// HTTP 侧必须报 Streamable HTTP 那一版,否则部分服务端会按老式 HTTP+SSE 处理。
+const STDIO_PROTOCOL_VERSION = '2024-11-05';
+const HTTP_PROTOCOL_VERSION = '2025-03-26';
 
 // 初始化握手超时。
 // ⚠️ 别按"握手只需要几百毫秒"来定这个值:command 是 npx -y 时,**首次**会现场下载
@@ -144,6 +162,9 @@ export function buildSpawnSpec(command, args, env) {
 /**
  * 读取一个 mcp.json 形状的配置文件,返回 mcpServers 对象。
  * 文件不存在 / 坏了都只当"没有配置",不抛错 —— 一个坏文件不该让 g ai 起不来。
+ *
+ * 保留条件:有 command(stdio)或有 http(s) 的 url(Streamable HTTP)。
+ * 两者都没有的条目直接丢掉 —— 免得后面按 undefined 去 spawn 炸得莫名其妙。
  */
 async function readServersFile(file) {
   const raw = await fs.readFile(file, 'utf8').catch(() => '');
@@ -155,7 +176,9 @@ async function readServersFile(file) {
     const out = {};
     for (const [id, cfg] of Object.entries(servers)) {
       if (!cfg || typeof cfg !== 'object') continue;
-      if (!cfg.command || typeof cfg.command !== 'string') continue;
+      const hasCommand = typeof cfg.command === 'string' && cfg.command.trim() !== '';
+      const hasUrl = typeof cfg.url === 'string' && /^https?:\/\//i.test(cfg.url.trim());
+      if (!hasCommand && !hasUrl) continue;
       out[id] = cfg;
     }
     return out;
@@ -187,9 +210,53 @@ export async function loadMcpServers({ cwd, globalFile = AI_MCP_FILE, projectFil
 // 单个 server 的连接
 // ──────────────────────────────────────────────
 
+/**
+ * 这个条目该走哪种传输:有 command 就是 stdio(优先级高于 url),
+ * 否则 url 是 http(s) 时走 Streamable HTTP。
+ *
+ * @param {object} config
+ * @returns {'stdio'|'http'|null} null = 两边都不像,调用方应跳过
+ */
+export function serverTransport(config) {
+  if (!config || typeof config !== 'object') return null;
+  if (typeof config.command === 'string' && config.command.trim() !== '') return 'stdio';
+  if (typeof config.url === 'string' && /^https?:\/\//i.test(config.url.trim())) return 'http';
+  return null;
+}
+
 // 工具名会被拼进 OpenAI 的 function name,必须收敛到安全字符集
 function sanitizeToolName(name) {
   return String(name || '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 48);
+}
+
+/**
+ * 两种传输共用的握手:initialize → notifications/initialized → tools/list。
+ * 请求/通知都通过参数注入,stdio 与 HTTP 各交各的实现。
+ *
+ * @param {{ id: string, protocolVersion: string,
+ *           request: (method: string, params: object, timeoutMs: number) => Promise<any>,
+ *           notify: (method: string, params: object) => any }} io
+ * @returns {Promise<Array<object>>} 归一化后的工具定义
+ */
+async function handshake({ id, protocolVersion, request, notify }) {
+  await request('initialize', {
+    protocolVersion,
+    capabilities: {},
+    clientInfo: { name: 'zen-gitsync-g-ai', version: '1.0.0' },
+  }, INIT_TIMEOUT_MS);
+  await notify('notifications/initialized', {});
+
+  const listed = await request('tools/list', {}, INIT_TIMEOUT_MS);
+  return (Array.isArray(listed?.tools) ? listed.tools : [])
+    .filter(tool => tool && typeof tool.name === 'string')
+    .map(tool => ({
+      serverId: id,
+      name: tool.name,
+      description: tool.description || '',
+      inputSchema: tool.inputSchema && typeof tool.inputSchema === 'object'
+        ? tool.inputSchema
+        : { type: 'object', properties: {} },
+    }));
 }
 
 class McpConnection {
@@ -214,6 +281,11 @@ class McpConnection {
 
   get safeId() {
     return sanitizeToolName(this.id);
+  }
+
+  /** 传输类型。诊断(/mcp)与 UI 展示用,连接本身不依赖它。 */
+  get transport() {
+    return 'stdio';
   }
 
   /**
@@ -246,24 +318,12 @@ class McpConnection {
       this.spawnFailed = spawnFailed;
       spawnFailed.catch(() => {});
 
-      await this.#request('initialize', {
-        protocolVersion: '2024-11-05',
-        capabilities: {},
-        clientInfo: { name: 'zen-gitsync-g-ai', version: '1.0.0' },
-      }, INIT_TIMEOUT_MS);
-      this.#notify('notifications/initialized', {});
-
-      const listed = await this.#request('tools/list', {}, INIT_TIMEOUT_MS);
-      this.tools = (Array.isArray(listed?.tools) ? listed.tools : [])
-        .filter(tool => tool && typeof tool.name === 'string')
-        .map(tool => ({
-          serverId: this.id,
-          name: tool.name,
-          description: tool.description || '',
-          inputSchema: tool.inputSchema && typeof tool.inputSchema === 'object'
-            ? tool.inputSchema
-            : { type: 'object', properties: {} },
-        }));
+      this.tools = await handshake({
+        id: this.id,
+        protocolVersion: STDIO_PROTOCOL_VERSION,
+        request: (method, params, timeoutMs) => this.#request(method, params, timeoutMs),
+        notify: (method, params) => this.#notify(method, params),
+      });
       return true;
     } catch (err) {
       this.error = err.message;
@@ -360,6 +420,237 @@ class McpConnection {
   }
 }
 
+// ──────────────────────────────────────────────
+// Streamable HTTP 传输
+// ──────────────────────────────────────────────
+
+// Node 内置根证书不认站点证书链时的错误码 —— 单独识别出来,好把"该怎么修"写进提示
+const TLS_ERROR_CODES = new Set([
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  'SELF_SIGNED_CERT_IN_CHAIN',
+  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'CERT_HAS_EXPIRED',
+  'ERR_TLS_CERT_ALTNAME_INVALID',
+]);
+
+function shortText(text, max) {
+  const clean = String(text ?? '').replace(/\s+/g, ' ').trim();
+  return clean.length > max ? `${clean.slice(0, max)}…` : clean;
+}
+
+/**
+ * 把 fetch 的失败翻译成用户能照着做的中文。
+ * 证书链那条是本项目实测踩过的坑:服务端只发叶证书时,浏览器和 curl 都正常,
+ * 唯独 Node 报 unable to verify the first certificate —— 只说 "fetch failed" 等于没说。
+ */
+function describeHttpError(err, id) {
+  const message = err?.message || String(err);
+  // 已经翻译过的(#send 里翻过一次)不要二次加工成"连接 x 失败: 连接 x 失败: ..."
+  if (message.startsWith(`连接 "${id}"`)) return message;
+
+  const cause = err?.cause;
+  const code = cause?.code || '';
+  if (TLS_ERROR_CODES.has(code)) {
+    return `连接 "${id}" 失败:服务器证书链不被 Node 内置根证书信任(${code})。`
+      + '可任选一种办法:① 启动 g ai 前设 NODE_EXTRA_CA_CERTS=<站点 CA 文件路径>;'
+      + '② Node ≥ 22.15 时用 NODE_OPTIONS=--use-system-ca 改走系统证书库;'
+      + '③ 让服务端补齐中间证书。';
+  }
+  if (message === 'fetch failed' && (code || cause?.message)) {
+    // 优先用错误码:undici 的 cause.message 往往还是那句 "fetch failed",没有信息量
+    const detail = code || cause.message;
+    return `连接 "${id}" 失败: ${message} (${detail})`;
+  }
+  return `连接 "${id}" 失败: ${message}`;
+}
+
+/** SSE 帧 → JSON-RPC 消息。只认 data: 行,event: / id: / 注释行一律忽略。 */
+function parseSseFrame(frame) {
+  const data = frame.split(/\r?\n/)
+    .filter(line => line.startsWith('data:'))
+    .map(line => line.slice(5).trimStart())
+    .join('\n');
+  if (!data.trim()) return null;
+  try { return JSON.parse(data) } catch { return null }
+}
+
+/**
+ * 一个远程 MCP 服务(Streamable HTTP)的连接。
+ * 对外接口与 stdio 版完全一致(start / tools / callTool / close / error),
+ * 上层 McpManager 不需要知道下面是怎么连的。
+ */
+export class HttpConnection {
+  /**
+   * @param {string} id - server 标识(配置里的键名)
+   * @param {object} config - { url, headers?, disabled? }
+   * @param {string} cwd - 只是保持与 stdio 版的构造签名一致(HTTP 没有子进程)
+   */
+  constructor(id, config, cwd) {
+    this.id = id;
+    this.config = config;
+    this.cwd = cwd || process.cwd();
+    this.tools = [];
+    this.error = null;
+    // 与 stdio 版同形状:那边把子进程 stderr 留在这里,HTTP 没有对应物
+    this.stderr = '';
+    this.closed = false;
+    this.sessionId = '';
+    this.nextId = 1;
+  }
+
+  get safeId() { return sanitizeToolName(this.id) }
+
+  get transport() { return 'http' }
+
+  get endpoint() { return String(this.config.url || '').trim() }
+
+  /**
+   * 握手(initialize → notifications/initialized → tools/list)。
+   * 失败写进 this.error 并返回 false,由 McpManager 汇总,不影响其他 server。
+   */
+  async start() {
+    try {
+      if (!/^https?:\/\//i.test(this.endpoint)) {
+        throw new Error(`url 不合法: ${this.endpoint || '(空)'}`);
+      }
+      this.tools = await handshake({
+        id: this.id,
+        protocolVersion: HTTP_PROTOCOL_VERSION,
+        request: (method, params, timeoutMs) => this.#request(method, params, timeoutMs),
+        // 通知失败不拖垮握手(与 stdio 版一个态度),只在后台记账
+        notify: (method, params) => { this.#notify(method, params).catch(() => {}) },
+      });
+      return true;
+    } catch (err) {
+      this.error = describeHttpError(err, this.id);
+      this.closed = true;
+      return false;
+    }
+  }
+
+  #headers() {
+    const headers = {
+      'Content-Type': 'application/json',
+      // 少写 text/event-stream 会被规范型实现判 406,这是 Streamable HTTP 的硬要求
+      'Accept': 'application/json, text/event-stream',
+    };
+    for (const [key, value] of Object.entries(this.config.headers || {})) {
+      if (!key || value === undefined || value === null) continue;
+      headers[key] = String(value);
+    }
+    if (this.sessionId) headers['Mcp-Session-Id'] = this.sessionId;
+    return headers;
+  }
+
+  /** 发一条 JSON-RPC,返回 result(通知类无响应体时是 null);失败抛已翻译过的 Error。 */
+  async #send(payload, timeoutMs) {
+    if (this.closed) throw new Error('MCP 连接已关闭');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      let response;
+      try {
+        response = await fetch(this.endpoint, {
+          method: 'POST',
+          headers: this.#headers(),
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+      } catch (err) {
+        const failure = err?.name === 'AbortError'
+          ? new Error(`请求超时(${Math.round(timeoutMs / 1000)}s)`)
+          : err;
+        throw new Error(describeHttpError(failure, this.id));
+      }
+
+      const sessionId = response.headers.get('mcp-session-id');
+      if (sessionId) this.sessionId = sessionId;
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status}${body ? `: ${shortText(body, 300)}` : ''}`);
+      }
+
+      const contentType = String(response.headers.get('content-type') || '');
+      if (contentType.includes('text/event-stream')) {
+        return await this.#readSseResult(response, payload.id);
+      }
+
+      const text = await response.text();
+      if (!text.trim()) return null; // 202 Accepted:通知类请求没有响应体
+      let message;
+      try { message = JSON.parse(text) } catch {
+        throw new Error(`响应不是合法 JSON: ${shortText(text, 200)}`);
+      }
+      if (message?.error) throw new Error(message.error.message || `MCP error ${message.error.code}`);
+      return message?.result ?? null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * 读 SSE 响应,取 id 匹配的那一帧。
+   *
+   * 用流式 reader 而不是 await response.text():服务端完全可以在返回响应后继续推通知、
+   * 把流一直挂着,等整条流读完就会一路挂到超时。拿到目标帧立刻 cancel。
+   */
+  async #readSseResult(response, wantedId) {
+    const reader = response.body?.getReader?.();
+    if (!reader) return null;
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let found = null;
+    try {
+      while (!found) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let index;
+        while ((index = buffer.search(/\r?\n\r?\n/)) >= 0) {
+          const frame = buffer.slice(0, index);
+          buffer = buffer.slice(index).replace(/^\r?\n\r?\n/, '');
+          const message = parseSseFrame(frame);
+          if (!message) continue;
+          // 服务器主动推的通知(没有 id)直接忽略
+          if (wantedId === undefined || message.id === wantedId) { found = message; break }
+        }
+      }
+    } finally {
+      reader.cancel().catch(() => {});
+    }
+    if (!found) return null;
+    if (found.error) throw new Error(found.error.message || `MCP error ${found.error.code}`);
+    return found.result ?? null;
+  }
+
+  #request(method, params, timeoutMs) {
+    const id = this.nextId++;
+    return this.#send({ jsonrpc: '2.0', id, method, params }, timeoutMs);
+  }
+
+  #notify(method, params) {
+    return this.#send({ jsonrpc: '2.0', method, params }, INIT_TIMEOUT_MS);
+  }
+
+  /** 调用一个工具。口径与 stdio 版一致:content 数组拍平成字符串回喂给模型。 */
+  async callTool(name, args) {
+    const result = await this.#request('tools/call', { name, arguments: args || {} }, CALL_TIMEOUT_MS);
+    return flattenToolResult(result);
+  }
+
+  async close() {
+    this.closed = true;
+    const url = this.endpoint;
+    if (!url || !this.sessionId) return;
+    // 规范里结束会话是 DELETE(带 session 头),不是所有服务端都实现 —— 尽力而为
+    try {
+      await fetch(url, { method: 'DELETE', headers: this.#headers(), signal: AbortSignal.timeout(5000) });
+    } catch { /* noop */ }
+  }
+}
+
 // MCP tools/call 返回 { content: [{type:'text',text} | {type:'image',...} | {type:'resource',...}], isError? }
 function flattenToolResult(result) {
   const parts = Array.isArray(result?.content) ? result.content : [];
@@ -420,7 +711,10 @@ export class McpManager {
     const enabled = Object.entries(resolved).filter(([, cfg]) => !cfg.disabled);
 
     const settled = await Promise.all(enabled.map(async ([id, cfg]) => {
-      const connection = new McpConnection(id, cfg, cwd || process.cwd());
+      // 有 command → 本地子进程;只有 url → 远程 Streamable HTTP(serverTransport 已判过一遍)
+      const connection = serverTransport(cfg) === 'http'
+        ? new HttpConnection(id, cfg, cwd || process.cwd())
+        : new McpConnection(id, cfg, cwd || process.cwd());
       const ok = await connection.start();
       if (!ok && onWarn) onWarn(`MCP "${id}" 连接失败: ${connection.error}`);
       return connection;
@@ -471,7 +765,9 @@ export class McpManager {
   status() {
     return this.connections.map(connection => ({
       id: connection.id,
-      command: connection.config.command,
+      transport: connection.transport,
+      // http 型没有 command,退回显示 url —— 渲染端只认这一个字段
+      command: connection.config.command || connection.config.url || '',
       tools: connection.tools.length,
       error: connection.error,
     }));
@@ -496,4 +792,4 @@ export class McpManager {
   }
 }
 
-export default { McpManager, loadMcpServers, buildSpawnSpec, MCP_TOOL_PREFIX };
+export default { McpManager, HttpConnection, loadMcpServers, buildSpawnSpec, serverTransport, MCP_TOOL_PREFIX };

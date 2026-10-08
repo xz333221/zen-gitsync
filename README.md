@@ -444,7 +444,7 @@ A dedicated view (robot icon in the activity bar) for chatting with the built-in
 | Task plan | Multi-step work gets a visible plan: the agent calls the built-in `update_plan` tool to split the task into 3-8 verifiable steps before touching anything, then updates each step's status as it goes. Steps render as a checklist with completed / in-progress / pending states and a `2/5` progress header — in the terminal as a `✓ / ▶ / ○` list, in the Web panel as a card that **stays visible even when the tool group is collapsed** (collapsing hides other tool calls, never the current plan) |
 | Recent-projects awareness | Ask "which of my projects need a pull?" and the agent calls its built-in `list_projects` tool instead of scanning the disk: it returns exactly the list behind the GUI's **Recent projects** panel (recent directories plus any directory a task was created in, with branch / ahead / behind / uncommitted counts and task progress), so the agent's answer and the UI agree. Ahead/behind reads local refs, so the agent can pass `refresh=true` to run a `git fetch` pass first when the question is about pulling |
 | Session persistence | All conversations are saved to `~/.zen-gitsync/agent-sessions/` as JSON files; the CLI agent (`g ai`) writes to the same directory so Web and CLI sessions are unified |
-| Skill / MCP plaza | The **Skill plaza** and **MCP plaza** tabs list skills and MCP servers from several sources, each with its description, weekly downloads / usage count and install state. Install one into the **current project** (`<project>/.zen-gitsync/ai/skills/<id>/SKILL.md` and `<project>/.zen-gitsync/ai/mcp.json`) or into the **`g ai` agent** (`~/.zen-gitsync/ai/`, applying to every project) — zen-gitsync's own directories, not another tool's. Entries already installed can be opened in the system file manager or uninstalled from the same row, and ones that still need environment variables are flagged. The installed list shows both the skill's own `name` and the on-disk id, since a repository often ships a skill whose `SKILL.md` calls itself something else. From a terminal, `g ai` lists what is installed with `/skills` (`/mcp` is an alias) |
+| Skill / MCP plaza | The **Skill plaza** and **MCP plaza** tabs list skills and MCP servers from several sources, each with its description, weekly downloads / usage count and install state. Install one into the **current project** (`<project>/.zen-gitsync/ai/skills/<id>/SKILL.md` and `<project>/.zen-gitsync/ai/mcp.json`) or into the **`g ai` agent** (`~/.zen-gitsync/ai/`, applying to every project) — zen-gitsync's own directories, not another tool's. Entries already installed can be opened in the system file manager or uninstalled from the same row, and ones that still need environment variables are flagged. The installed list shows both the skill's own `name` and the on-disk id, since a repository often ships a skill whose `SKILL.md` calls itself something else. From a terminal, `g ai` lists what is installed with `/skills` (`/mcp` is an alias). Entries land in one of two shapes: an npm package (`command: npx …`, i.e. stdio) or a remote endpoint (`type: http` + `url` + optional `headers`, which the agent's Streamable HTTP client talks to directly — no `mcp-remote` bridge in between) |
 | SSH-first cloning | When you ask it to clone a repo (or add a remote) it uses the SSH form — `git@github.com:owner/repo.git` / `git@gitee.com:owner/repo.git` — converting an `https://` URL first, so the clone never stalls on a Git Credential Manager username/password prompt; it falls back to https only when SSH genuinely fails (`Permission denied (publickey)` / host-key verification) and says which one it used. The same preference is injected into every workbench task, whose executor is an external CLI with a system prompt this app does not own |
 | Per-turn tool limit | A single message may trigger up to N tool calls in a row (default **200**, range 1–2000). Configurable in **Settings → AI models → Agent Runtime**; hitting the limit ends the turn and asks you to send another message. The same setting drives the CLI agent |
 | Preset questions | Quick-start buttons on the welcome screen for common tasks (view project structure, analyze code quality, write tests, check git status, start the project) |
@@ -540,6 +540,14 @@ line, and only the first line starts a turn.
 where they came from. Installation itself happens in the GUI's **Skill / MCP plaza** (Agent
 view): pick the current project or the `g ai` agent as the target, and the entry becomes usable
 from that side.
+
+`g ai` speaks both MCP transports: an entry with a `command` runs over **stdio** (a child
+process), one with only a `url` over **Streamable HTTP** (`"type": "http"`, plus `headers` for
+things like `Authorization`; `Mcp-Session-Id` is echoed back and the session is closed with
+`DELETE` on exit). HTTPS endpoints are verified against Node's bundled root CAs rather than the
+OS store, so a server that ships only its leaf certificate fails with
+`UNABLE_TO_VERIFY_LEAF_SIGNATURE` while browsers are perfectly happy — start the agent with
+`NODE_EXTRA_CA_CERTS=<ca file>`, or on Node ≥ 22.15 with `NODE_OPTIONS=--use-system-ca`.
 
 In-session commands: `/help`, `/model`, `/addmodel`, `/cd <path>`, `/image [path]`, `/think`, `/tools`, `/stats`, `/new`, `/resume`, `/skills` (`/mcp` is an alias), `/clear`, `/exit` (or `/quit`).
 
@@ -1165,7 +1173,7 @@ Activity Bar 中的机器人图标视图，可直接在浏览器中与内置 AI 
 | 任务计划 | 多步任务有一份看得见的计划：智能体在动手之前先调内置的 `update_plan` 工具，把任务拆成 3-8 个可核对的步骤，随后逐步更新状态。步骤以清单渲染，区分完成 / 进行中 / 待办三态，标题右侧带 `2/5` 进度 —— 终端里是 `✓ / ▶ / ○` 列表，Web 面板里是一张卡片，且**工具组折叠时仍然常驻**（折叠只藏别的工具调用，绝不藏当前计划） |
 | 最近项目感知 | 问「我哪些项目需要 pull」时，智能体调用内置的 `list_projects` 工具，而不是自己去扫盘：返回的就是 GUI「最近项目」面板那份清单（最近目录 + 建过任务的目录，带分支 / 领先 / 落后 / 未提交数与任务进度），回答与界面对得上。领先/落后读的是本地引用，因此问到"要不要拉"时它可以带 `refresh=true` 先联网 fetch 一轮再答 |
 | 会话持久化 | 所有对话保存为 JSON 文件到 `~/.zen-gitsync/agent-sessions/`；CLI 智能体（`g ai`）写入同一目录，Web 端与 CLI 端会话统一管理 |
-| Skill / MCP 广场 | **Skill 广场** 与 **MCP 广场** 两个 tab 列出多个来源的 Skill 与 MCP 服务，每项带说明、周下载 / 使用次数与安装状态。可安装到**当前项目**（`<项目>/.zen-gitsync/ai/skills/<id>/SKILL.md` 与 `<项目>/.zen-gitsync/ai/mcp.json`）或 **`g ai` 智能体**（`~/.zen-gitsync/ai/`，对所有项目生效）—— 两处都是 zen-gitsync 自己的目录，不借别家工具的。已安装的可在同一行「打开文件夹」定位到落盘位置，或直接卸载，还缺环境变量的会标出「还缺环境变量」。已安装清单同时显示 skill 自报的 `name` 和实际落盘的目录 id —— 仓库名和 `SKILL.md` 里自称的名字经常不是一个。终端侧 `g ai` 用 `/skills`（`/mcp` 为别名）查看已装清单 |
+| Skill / MCP 广场 | **Skill 广场** 与 **MCP 广场** 两个 tab 列出多个来源的 Skill 与 MCP 服务，每项带说明、周下载 / 使用次数与安装状态。可安装到**当前项目**（`<项目>/.zen-gitsync/ai/skills/<id>/SKILL.md` 与 `<项目>/.zen-gitsync/ai/mcp.json`）或 **`g ai` 智能体**（`~/.zen-gitsync/ai/`，对所有项目生效）—— 两处都是 zen-gitsync 自己的目录，不借别家工具的。已安装的可在同一行「打开文件夹」定位到落盘位置，或直接卸载，还缺环境变量的会标出「还缺环境变量」。已安装清单同时显示 skill 自报的 `name` 和实际落盘的目录 id —— 仓库名和 `SKILL.md` 里自称的名字经常不是一个。终端侧 `g ai` 用 `/skills`（`/mcp` 为别名）查看已装清单。装下来的条目就两类形状：npm 包（落成 `command: npx …`，走 stdio）与远程端点（落成 `type: http` + `url` + 可选 `headers`，由 g ai 的 Streamable HTTP 客户端直连，中间不再经 `mcp-remote` 桥接） |
 | 克隆优先 SSH | 让它克隆仓库（或加远端）时走 SSH 形式 —— `git@github.com:owner/repo.git` / `git@gitee.com:owner/repo.git`；拿到 `https://` 地址先换算，克隆不会停在 Git Credential Manager 的账号密码弹窗上。只有 SSH 真的不可用（`Permission denied (publickey)` / 主机密钥校验失败）才退回 https，并说明这次走的是哪条。同一条偏好也会注入到每个工作台任务的 prompt —— 那里执行器是外部 CLI，系统提示词不归本应用管，环境上下文块是唯一的注入口 |
 | 单轮工具调用上限 | 一条消息内智能体最多连续调用多少次工具（默认 **200**，可调范围 1–2000）。在 **设置 → AI 模型配置 → 智能体运行时** 中修改；达到上限本轮会被强制结束并提示再发一条消息继续。CLI 智能体共用同一项设置 |
 | 预设问题 | 开场界面提供快捷按钮（查看项目结构、分析代码质量、写测试、Git 状态检查、帮我启动项目）|
@@ -1251,6 +1259,12 @@ $ g ai --model=2                # 使用第 2 个已配置的模型（序号或�
 
 `/skills`（`/mcp` 为别名）列出智能体当前已安装的 Skill 与 MCP 服务及来源。安装本身在 GUI 的
 **Skill / MCP 广场**（智能体视图）里完成：选择安装到当前项目或 `g ai` 智能体，装好后对应一侧即可使用。
+
+`g ai` 两种 MCP 传输都支持：有 `command` 的走 **stdio**（起子进程），只有 `url` 的走
+**Streamable HTTP**（配置写 `"type": "http"`，鉴权放 `headers`，例如 `Authorization`；
+响应里的 `Mcp-Session-Id` 会回传，退出时 `DELETE` 结束会话）。HTTPS 端点按 **Node 内置根证书**
+校验、不读系统证书库 —— 站点只发叶证书时会报 `UNABLE_TO_VERIFY_LEAF_SIGNATURE`（浏览器却一切正常），
+启动前设 `NODE_EXTRA_CA_CERTS=<CA 文件>`，或 Node ≥ 22.15 时用 `NODE_OPTIONS=--use-system-ca` 即可。
 
 会话内命令：`/help`、`/model`、`/addmodel`、`/cd <路径>`、`/image [路径]`、`/think`、`/tools`、`/stats`、`/new`、`/resume`、`/skills`（`/mcp` 为别名）、`/clear`、`/exit`（或 `/quit`）。
 

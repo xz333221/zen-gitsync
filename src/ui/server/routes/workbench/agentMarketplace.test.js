@@ -249,22 +249,46 @@ test('install mcp: 非法包名被拒绝,且不写出配置文件', async () => 
   if (!before) assert.equal(await exists(PROJECT_MCP), false);
 });
 
-test('install mcp: 只有远程端点时用 mcp-remote 桥接,而不是报错或装出一个无效配置', async () => {
+test('install mcp: 只有远程端点时直接写 http 配置(url + headers),不再绕 mcp-remote', async () => {
   const { call } = harness();
   const { status } = await call('POST /api/agent/marketplace/install', {
     body: {
       type: 'mcp',
       target: 'global',
       cwd: sandboxProject,
-      item: { id: 'remote-only', name: 'Remote', remoteUrl: 'https://example.com/mcp', transport: 'remote' },
+      item: {
+        id: 'remote-only',
+        name: 'Remote',
+        remoteUrl: 'https://example.com/mcp',
+        transport: 'remote',
+        env: { Authorization: 'Bearer t0ken' },
+      },
     },
   });
   assert.equal(status, 200);
   const config = JSON.parse(await fs.readFile(AI_MCP_FILE, 'utf8'));
   const server = config.mcpServers['remote-only'];
-  assert.equal(server.command, 'npx');
-  assert.deepEqual(server.args, ['-y', 'mcp-remote', 'https://example.com/mcp']);
+  assert.equal(server.type, 'http');
+  assert.equal(server.url, 'https://example.com/mcp');
+  // 弹窗里填的键值对远程服务就是请求头(g ai 的 http 客户端只认 headers)
+  assert.equal(server.headers.Authorization, 'Bearer t0ken');
+  assert.equal(server.command, undefined, 'http 型不该再落 command,否则会被当成 stdio 去 spawn');
   assert.equal(server.transport, 'remote');
+});
+
+test('install mcp: 远程端点不是 http(s) 时拒绝,不写出半成品配置', async () => {
+  const { call } = harness();
+  const before = await exists(AI_MCP_FILE);
+  const { status } = await call('POST /api/agent/marketplace/install', {
+    body: {
+      type: 'mcp',
+      target: 'global',
+      cwd: sandboxProject,
+      item: { id: 'bad-remote', name: 'Bad', remoteUrl: 'ftp://example.com/mcp', transport: 'remote' },
+    },
+  });
+  assert.equal(status, 422);
+  if (!before) assert.equal(await exists(AI_MCP_FILE), false);
 });
 
 test('install mcp: 既没有包也没有远程端点时拒绝', async () => {

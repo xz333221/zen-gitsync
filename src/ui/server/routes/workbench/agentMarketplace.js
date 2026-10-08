@@ -704,7 +704,8 @@ async function installedMcpsIn(file, target) {
     name: clampText(server?.name || id, 80),
     description: clampText(server?.description || '', 400),
     package: server?.package || '',
-    command: server?.command || '',
+    // 手写的 url 型(http 传输)没有 command,退回显示 url —— 否则列表里这一项看起来是空的
+    command: server?.command || server?.url || '',
     args: Array.isArray(server?.args) ? server.args : [],
     envKeys: Object.keys(server?.env || {}),
     file,
@@ -878,11 +879,10 @@ async function installSkill({ item, target, cwd }) {
 async function installMcp({ item, target, cwd }) {
   const packageName = String(item.package || '').trim();
   const isStdio = !!packageName;
-  // 只有 remote 端点的 server:用 mcp-remote 桥接成 stdio,
-  // 否则 g ai 的 stdio 客户端根本连不上。这是生态里的通行做法。
-  const bridge = !isStdio && item.remoteUrl ? 'mcp-remote' : '';
+  const remoteUrl = String(item.remoteUrl || '').trim();
+  const isRemote = !isStdio && /^https?:\/\//i.test(remoteUrl);
 
-  if (!isStdio && !bridge) {
+  if (!isStdio && !isRemote) {
     throw new HttpError(422, '该 MCP 服务没有提供 npm 包或远程端点,暂时无法一键安装');
   }
   if (isStdio && !SAFE_PACKAGE.test(packageName)) throw new HttpError(400, 'MCP npm 包名不合法');
@@ -896,6 +896,54 @@ async function installMcp({ item, target, cwd }) {
     throw new HttpError(409, `该 MCP 服务已安装在${paths.label}`);
   }
 
+  // 安装时顺手收集的键值(弹窗里用户填的)。只收合法的标识符键,
+  // 值为空的键跳过 —— 留给用户以后手改配置文件,而不是写一个空值进去让 server 起不来。
+  const filled = {};
+  if (item.env && typeof item.env === 'object') {
+    for (const [key, value] of Object.entries(item.env)) {
+      if (!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(String(key))) continue;
+      const text = String(value ?? '').trim();
+      if (text) filled[key] = clampText(text, 2000);
+    }
+  }
+  // 还缺哪些必填键,记下来给 UI 提示"装好了但还差配置"
+  const missingKeys = (Array.isArray(item.envKeys) ? item.envKeys : []).filter(key => !filled[key]);
+  const name = item.name || id;
+  const description = clampText(item.description || '', 400);
+
+  // ── 远程端点:直接写 http 配置,g ai 自己的 Streamable HTTP 客户端直连 ──
+  //
+  // 早先这里是桥成 stdio(npx -y mcp-remote <url>)。桥本身没错,但**鉴权传不进去**:
+  // mcp-remote 认的是它自己的 --header 约定,不是我们收集的那组键值 ——
+  // 表现就是"装好了但用不了"。g ai 现已原生支持 Streamable HTTP,直接落 url + headers
+  // 更短、更可控,也少一层随包升级漂移的中间件。
+  if (isRemote) {
+    const headers = {};
+    if (item.headers && typeof item.headers === 'object') {
+      for (const [key, value] of Object.entries(item.headers)) {
+        if (!key || value === undefined || value === null) continue;
+        headers[String(key)] = clampText(String(value), 2000);
+      }
+    }
+    // 弹窗收集的键值对远程服务来说就是请求头(没有子进程,env 无处可落)
+    Object.assign(headers, filled);
+
+    config.mcpServers[id] = {
+      name,
+      description,
+      type: 'http',
+      url: remoteUrl,
+      headers,
+      transport: 'remote',
+      requiredEnv: missingKeys,
+    };
+    await fs.mkdir(path.dirname(paths.file), { recursive: true });
+    await fs.writeFile(paths.file, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+    return { id, type: 'mcp', name, target, file: paths.file, envKeys: missingKeys, warning: '' };
+  }
+
+  // ── npm 包:stdio ──
+  //
   // 项目级顺手 npm install 一次:把版本钉进 package.json,启动也更快。
   // 失败不阻断 —— npx 运行时仍会按需下载,只是慢一点。
   //
@@ -903,49 +951,36 @@ async function installMcp({ item, target, cwd }) {
   // 装到 ~/.zen-gitsync/ai/node_modules 里 npx 根本解析不到,等于白装一份;
   // npx 自己的缓存本来就是按用户全局共享的,首次启动下载一次即可。
   let installWarning = '';
-  const primary = isStdio ? packageName : bridge;
   if (target === 'project') {
     try {
-      await execFileAsync(npmBinary(), ['install', '--save-dev', primary], { cwd, timeout: NPM_TIMEOUT_MS, windowsHide: true });
+      await execFileAsync(npmBinary(), ['install', '--save-dev', packageName], { cwd, timeout: NPM_TIMEOUT_MS, windowsHide: true });
     } catch (err) {
       installWarning = `npm install 未成功(${clampText(err.message, 200)}),已写入配置,首次启动时会由 npx 按需下载`;
     }
   }
 
-  const args = isStdio
-    ? (Array.isArray(item.args) && item.args.length ? item.args : ['-y', packageName])
-    : ['-y', bridge, String(item.remoteUrl)];
+  const args = Array.isArray(item.args) && item.args.length ? item.args : ['-y', packageName];
   const replaceProject = value => String(value).replaceAll('${project}', cwd || process.cwd());
-
-  // 安装时顺手收集环境变量(弹窗里用户填的)。只收合法的标识符键,
-  // 值为空的键跳过 —— 留给用户以后手改配置文件,而不是写一个空值进去让 server 起不来。
-  const env = {};
-  if (item.env && typeof item.env === 'object') {
-    for (const [key, value] of Object.entries(item.env)) {
-      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(String(key))) continue;
-      const text = String(value ?? '').trim();
-      if (text) env[key] = clampText(text, 2000);
-    }
-  }
-  // 还缺哪些必填环境变量,记下来给 UI 提示"装好了但还差配置"
-  const missingEnv = (Array.isArray(item.envKeys) ? item.envKeys : []).filter(key => !env[key]);
+  // 环境变量名比请求头名严(不接受连字符),stdio 这条路再筛一遍
+  const stdioEnv = Object.fromEntries(
+    Object.entries(filled).filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key)),
+  );
 
   config.mcpServers[id] = {
-    name: item.name || id,
-    description: clampText(item.description || '', 400),
+    name,
+    description,
     command: 'npx',
     args: args.map(replaceProject),
-    env,
+    env: stdioEnv,
     // 记下来给 UI 提示"这个 server 需要哪些环境变量",也便于卸载时回溯
-    requiredEnv: missingEnv,
-    package: isStdio ? packageName : bridge,
-    ...(item.transport === 'remote' ? { transport: 'remote', remoteUrl: item.remoteUrl } : {}),
+    requiredEnv: missingKeys,
+    package: packageName,
   };
 
   await fs.mkdir(path.dirname(paths.file), { recursive: true });
   await fs.writeFile(paths.file, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
 
-  return { id, type: 'mcp', name: item.name || id, target, file: paths.file, envKeys: missingEnv, warning: installWarning };
+  return { id, type: 'mcp', name, target, file: paths.file, envKeys: missingKeys, warning: installWarning };
 }
 
 /**
