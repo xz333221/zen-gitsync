@@ -138,6 +138,7 @@ import 'zen-ai-chat-ui/style.css'
 import { avatarForExecutor } from '@/utils/agentAvatar'
 import { taskExecutorName } from '@/utils/taskExecutor'
 import { buildJobToolCalls } from '@/utils/jobToolCalls'
+import { buildJobReasoningTiming } from '@/utils/jobReasoningTiming'
 import { userFacingPrompt } from '@/utils/jobUserPrompt'
 import { resolveLocalImages } from '@/utils/localImageSrc'
 import { $t } from '@/lang/static'
@@ -311,6 +312,9 @@ const chatMessages = computed<ChatMessage[]>(() => {
     reasoningStatus: hasThinking
       ? (hasOutput ? 'done' : (status === 'streaming' ? 'streaming' : 'done'))
       : undefined,
+    // 思考段计时（job.thinkingStartedAt/EndedAt → 库认的毫秒时间戳），
+    // 折叠态的「思考 4.2s」靠它（与 WorkbenchView 的任务对话流同一份折算）
+    ...buildJobReasoningTiming(j),
     // 工具调用块（读文件 / 跑命令 / 改代码）。与 WorkbenchView 的任务对话流同一份映射，
     // 免得同一个 job 在两个视图里显示得不一样。
     toolCalls: hasToolCalls ? toolCalls : undefined,

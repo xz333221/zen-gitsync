@@ -578,6 +578,40 @@ export function createToolCallTracker(job, onUpdates) {
 }
 
 /**
+ * 思考文本的保底上限（尾部截断：模型偶尔会长时间闷头思考，尾巴才是最新的）。
+ * 与工具流水的截断同一口径，只是这里量级更大。
+ */
+export const MAX_THINKING = 100 * 1024 * 1024;
+
+/**
+ * 追加一段思考文本：截尾 + 记「思考段计时」。
+ *
+ * 计时口径与 zen-ai-chat-ui 的 ThinkingBlock 一致：**第一个分片记起点、之后每个
+ * 分片把终点往前推**（不是"思考状态转 done 为止"——那样会把"想完了但正文还没开始"
+ * 的空档也算进去）。这两个时间戳随 job 落盘（jobs.json）、随 live-jobs 跨实例可见，
+ * 前端折叠着也能显示「想了多久」；只在内存里算的话，刷新页面就没了。
+ *
+ * 导出仅为回归测试可见（taskRunner.thinking.test.js）：跑整条 runSingleSubtask
+ * 去断言这两个字段，代价是起一个假 CLI 进程，不划算。
+ *
+ * @param {object} job  执行记录（thinking / lastActivityAt 与两个计时字段都记在它身上）
+ * @param {string} text 本批新增的思考文本
+ * @param {string} [at] 时间戳（ISO）；默认取当前时刻，测试可注入
+ * @returns {string} 本次真正追加进 job.thinking 的增量（供批量推送用）
+ */
+export function appendThinkingToJob(job, text, at = nowIso()) {
+  if (!text) return '';
+  job.lastActivityAt = at;
+  if (!job.thinkingStartedAt) job.thinkingStartedAt = at;
+  job.thinkingEndedAt = at;
+  const prev = job.thinking || '';
+  job.thinking = (prev + text).slice(-MAX_THINKING);
+  // 顶到上限之后这里返回 ''（增量不再往前端推）—— 100MB 的思考文本没有真实场景，
+  // 真到那一步终态快照仍带全文尾巴，不值得为它把增量算法复杂化。
+  return job.thinking.slice(prev.length);
+}
+
+/**
  * claude stream-json 事件处理器。
  *   system/init    → session_id（--resume 续接用）
  *   assistant      → message.content 里的 text / thinking / tool_use 块
@@ -961,7 +995,12 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
     claudeSessionId: resumeSessionId,
     // 工具调用流水（{id,name,argsPreview,arguments,result,status,error}[]）。
     // 先给个空数组，前端拿到的 job:update 就有了稳定形态，不用到处判 undefined。
-    toolCalls: []
+    toolCalls: [],
+    // 思考段计时（第一个思考分片 → 最后一个分片，ISO 字符串）。
+    // 显式给 null 而不是不写：快照 / 落盘 / 跨实例的口径要一致，前端也不用判 undefined。
+    // 记法与语义见 appendThinkingToJob。
+    thinkingStartedAt: null,
+    thinkingEndedAt: null
   };
   jobs.set(jobId, job);
   publish('job:update', job);
@@ -998,7 +1037,7 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
     //   工具调用      → job.toolCalls（前端工具块 + 落盘归档）
     //   其他事件      → 忽略，避免噪声
     const MAX_OUTPUT = 100 * 1024 * 1024;
-    const MAX_THINKING = 100 * 1024 * 1024;
+    // 思考的截断上限是模块级的 MAX_THINKING（appendThinkingToJob 要用）
     job.output = '';
     job.thinking = '';
     const lineBuf = { stdout: '', stderr: '' };
@@ -1022,11 +1061,9 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
       }
     };
     const appendThinking = (text) => {
-      if (!text) return;
-      job.lastActivityAt = nowIso();
-      const prevLen = job.thinking.length;
-      job.thinking = (job.thinking + text).slice(-MAX_THINKING);
-      thinkingBatch += job.thinking.slice(prevLen);
+      // 追加 / 截断 / 思考段计时都在 appendThinkingToJob 里（导出给回归测试的那份），
+      // 这里只负责批量推送：一批 NDJSON 处理完统一 flush 一次
+      thinkingBatch += appendThinkingToJob(job, text);
     };
 
     // 工具调用：写进 job.toolCalls（随 job 落盘），并按批推 job:toolcalls 给前端。

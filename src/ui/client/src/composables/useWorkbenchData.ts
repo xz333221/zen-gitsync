@@ -20,8 +20,17 @@ export function useWorkbenchData() {
     if (evt === 'job:update') {
       const j: Job = payload
       const i = jobs.value.findIndex(x => x.id === j.id)
-      if (i >= 0) jobs.value[i] = j
-      else jobs.value.push(j)
+      if (i >= 0) {
+        // 整条快照替换，但**本地已经打过的思考计时点要保住**：
+        // 服务端只在起跑 / 终态推 job:update，起跑那条的两个字段还是 null
+        // （甚至老服务端根本没有这两个字段）—— 不保的话，运行中攒下的窗口
+        // 会被这条快照抹掉（表现：数字闪一下没了）。
+        // 服务端给了值就以服务端为准（终态那条就是），它才是跨实例一致的口径。
+        const prev = jobs.value[i]
+        if (!j.thinkingStartedAt && prev.thinkingStartedAt) j.thinkingStartedAt = prev.thinkingStartedAt
+        if (!j.thinkingEndedAt && prev.thinkingEndedAt) j.thinkingEndedAt = prev.thinkingEndedAt
+        jobs.value[i] = j
+      } else jobs.value.push(j)
       return
     }
     if (evt === 'job:thinking-delta' || evt === 'job:output-delta') {
@@ -30,8 +39,18 @@ export function useWorkbenchData() {
       if (!delta) return
       const i = jobs.value.findIndex(x => x.id === payload.id)
       if (i < 0) return
-      const cur = (jobs.value[i] as any)[field] || ''
-      ;(jobs.value[i] as any)[field] = cur + delta
+      const job = jobs.value[i]
+      const cur = (job as any)[field] || ''
+      ;(job as any)[field] = cur + delta
+      // 思考段计时：服务端只在起跑 / 终态推整条 job:update，运行中的这两个时间戳
+      // 得由增量自己打点 —— 否则折叠态的「思考 x 秒」要等这一轮跑完才出现。
+      // 口径与服务端一致（第一个分片记起点、之后每个分片把终点往前推）；终态那条
+      // job:update 是整条快照，会用服务端的值覆盖，最终数字以服务端为准。
+      if (evt === 'job:thinking-delta') {
+        const at = new Date().toISOString()
+        if (!job.thinkingStartedAt) job.thinkingStartedAt = at
+        job.thinkingEndedAt = at
+      }
       return
     }
     // 工具调用增量：服务端按批推「整条调用的最新快照」（不是补丁），

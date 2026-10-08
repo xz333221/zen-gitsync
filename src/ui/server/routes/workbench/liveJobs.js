@@ -91,6 +91,10 @@ export function projectJob(j) {
     // 最后一次产出的时刻。别的实例跑的任务，进度报告只能从这份文件上读它 ——
     // 不过白名单就会变成"本实例的报告说得出静默多久，跨实例的报告永远说不出来"。
     lastActivityAt: j.lastActivityAt || null,
+    // 思考段计时（第一个思考分片 → 最后一个分片）。前端折叠态显示「想了多久」靠它，
+    // 运行中的任务也要能看到 —— 不过白名单就变成"本实例看得见耗时、别的实例看不见"。
+    thinkingStartedAt: j.thinkingStartedAt || null,
+    thinkingEndedAt: j.thinkingEndedAt || null,
     endedAt: j.endedAt || null,
     exitCode: typeof j.exitCode === 'number' ? j.exitCode : null,
     error: j.error || null,

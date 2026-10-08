@@ -3,6 +3,7 @@ import type { Ref, ComputedRef } from 'vue'
 import type { ChatMessage, MessageStatus } from 'zen-ai-chat-ui'
 import type { Job, Task } from '@/types/workbench'
 import { buildJobToolCalls } from '@/utils/jobToolCalls'
+import { buildJobReasoningTiming } from '@/utils/jobReasoningTiming'
 import { userFacingPrompt } from '@/utils/jobUserPrompt'
 import { resolveLocalImages } from '@/utils/localImageSrc'
 
@@ -102,6 +103,9 @@ export function useWorkbenchSimpleConversation(jobs: Ref<Job[]>, selectedTask: C
         reasoningStatus: hasThinking
           ? (!isLast && hasOutput ? 'done' : (hasOutput ? 'done' : (status === 'streaming' ? 'streaming' : 'done')))
           : undefined,
+        // 思考段计时（job.thinkingStartedAt/EndedAt → 库认的毫秒时间戳），
+        // ThinkingBlock 靠它在标题右侧显示「思考 4.2s」（折叠着也看得见）
+        ...buildJobReasoningTiming(j),
         // 工具调用（读文件 / 跑命令 / 改代码）——没有它就只能看到"模型在思考"，
         // 看不出这一轮到底干了什么（2026-09-22）。
         toolCalls: hasToolCalls ? toolCalls : undefined,

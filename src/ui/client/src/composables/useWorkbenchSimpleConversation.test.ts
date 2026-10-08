@@ -185,6 +185,80 @@ describe('执行流的工具块真的画出来了', () => {
   })
 })
 
+describe('useWorkbenchSimpleConversation 的思考段计时', () => {
+  test('job 的计时字段 → ChatMessage 的 reasoningStartedAt / reasoningEndedAt', () => {
+    const messages = setup([
+      makeJob({
+        status: 'done',
+        thinking: '想过',
+        output: '做完了',
+        thinkingStartedAt: '2026-10-08T01:00:00.000Z',
+        thinkingEndedAt: '2026-10-08T01:00:04.200Z'
+      })
+    ]).value
+
+    const assistant = messages.find(m => m.role === 'assistant')!
+    expect(assistant.reasoningStartedAt).toBe(Date.parse('2026-10-08T01:00:00.000Z'))
+    expect(assistant.reasoningEndedAt).toBe(Date.parse('2026-10-08T01:00:04.200Z'))
+  })
+
+  test('老 job 没有计时字段 → 两个字段都不给（库那边不显示占位）', () => {
+    const assistant = setup([
+      makeJob({ status: 'done', thinking: '想过', output: '做完了' })
+    ]).value.find(m => m.role === 'assistant')!
+    expect(assistant.reasoningStartedAt).toBeUndefined()
+    expect(assistant.reasoningEndedAt).toBeUndefined()
+  })
+})
+
+describe('思考块的耗时真的画出来了', () => {
+  // 与「工具块真的画出来了」同一套路：只断言 messages 数组的话，
+  // 「组件库到底认不认这两个字段」没人管 —— 而它恰恰是"改完前端还是没数字"的落点。
+  const proto = Element.prototype as unknown as { scrollTo?: () => void }
+  if (!proto.scrollTo) proto.scrollTo = () => {}
+
+  test('折叠态标题右侧显示耗时数字', async () => {
+    const messages = setup([
+      makeJob({
+        status: 'done',
+        thinking: '想了一会',
+        output: '做完了',
+        thinkingStartedAt: '2026-10-08T01:00:00.000Z',
+        thinkingEndedAt: '2026-10-08T01:00:04.200Z'
+      })
+    ])
+
+    const wrapper = mount(ChatContainer, {
+      props: { messages: messages.value },
+      global: { mocks: { $t: (k: string) => k } }
+    })
+    await new Promise(r => setTimeout(r, 0))
+
+    const el = wrapper.find('.acu-thinking-duration')
+    expect(el.exists()).toBe(true)
+    // formatDuration（组件库）：<10s 保留一位小数
+    expect(el.text()).toBe('4.2s')
+    // 耗时在折叠态也看得见 —— 这正是这个数字的用处。
+    // v-show 的折叠一律断言 inline style（jsdom 的 getComputedStyle 会假绿）
+    const body = wrapper.find('.acu-thinking-body')
+    expect(body.exists()).toBe(true)
+    expect((body.element as HTMLElement).style.display).toBe('none')
+  })
+
+  test('拿不到计时的 job 一个数都不渲染（不是 0s / —）', async () => {
+    const messages = setup([makeJob({ status: 'done', thinking: '想了一会', output: '做完了' })])
+
+    const wrapper = mount(ChatContainer, {
+      props: { messages: messages.value },
+      global: { mocks: { $t: (k: string) => k } }
+    })
+    await new Promise(r => setTimeout(r, 0))
+
+    expect(wrapper.find('.acu-thinking').exists()).toBe(true)
+    expect(wrapper.find('.acu-thinking-duration').exists()).toBe(false)
+  })
+})
+
 describe('正文里嵌的本机图片真的画成了 <img>', () => {
   // 这条链路是三段拼起来的：模型在正文里写 `![](c:\…\a.png)` → 这里把它重写成
   // 后端端点 → 组件库的 markdown 渲染出 <img>。只断言第一步的话，"改完前端还是

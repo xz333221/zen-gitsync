@@ -87,6 +87,8 @@ const runningJob = (id, extra = {}) => ({
   prompt: 'p',
   output: 'out',
   thinking: 'think',
+  thinkingStartedAt: '2026-09-28T14:56:52.000Z',
+  thinkingEndedAt: '2026-09-28T14:56:58.500Z',
   toolCalls: [],
   claudeSessionId: null,
   // 不该被广播出去的内部字段（白名单投影必须剥掉）
@@ -112,9 +114,18 @@ test('projectJob:白名单投影剥掉 child 等不可序列化字段,保留前�
   assert.equal(rec.agent, 'claude');
   assert.equal(rec.claudeSessionId, null);
   assert.deepEqual(rec.toolCalls, []);
+  // 思考段计时必须过白名单:漏了它 = 本实例看得见「想了多久」、别的实例永远看不见
+  assert.equal(rec.thinkingStartedAt, '2026-09-28T14:56:52.000Z');
+  assert.equal(rec.thinkingEndedAt, '2026-09-28T14:56:58.500Z');
   assert.ok(!('child' in rec), 'child 必须先剥掉,否则 JSON.stringify 直接抛');
   // 投影结果要能真的序列化
   assert.doesNotThrow(() => JSON.stringify(rec));
+});
+
+test('projectJob:老 job 没有计时字段时归成 null(不是 undefined,前端不用判两种空)', () => {
+  const rec = projectJob(runningJob('j-old', { thinkingStartedAt: undefined, thinkingEndedAt: undefined }));
+  assert.equal(rec.thinkingStartedAt, null);
+  assert.equal(rec.thinkingEndedAt, null);
 });
 
 test('toLiveRecord:正文/思考截尾,工具流水只留最近若干条', () => {

@@ -122,3 +122,93 @@ describe('applyJobEvent: job:toolcalls', () => {
     expect(wb.jobs.value[0].toolCalls).toHaveLength(1)
   })
 })
+
+describe('applyJobEvent: job:thinking-delta 的思考段计时打点', () => {
+  // 服务端只在起跑 / 终态推整条 job:update，运行中的计时就得靠增量自己打点 ——
+  // 不打点的话，折叠态的「思考 x 秒」要等这一轮跑完才出现（思考刚结束时一片空白）。
+  beforeEach(() => createTestPinia())
+
+  test('第一个增量记起点，后续增量把终点往前推（起点不再移动）', () => {
+    vi.useFakeTimers()
+    try {
+      const wb = useWorkbenchData()
+      wb.jobs.value = [makeJob()] as never
+
+      vi.setSystemTime(new Date('2026-10-08T01:00:00.000Z'))
+      wb.applyJobEvent('job:thinking-delta', { id: 'j1', delta: '第一段' })
+      expect(wb.jobs.value[0].thinkingStartedAt).toBe('2026-10-08T01:00:00.000Z')
+      expect(wb.jobs.value[0].thinkingEndedAt).toBe('2026-10-08T01:00:00.000Z')
+
+      vi.setSystemTime(new Date('2026-10-08T01:00:03.000Z'))
+      wb.applyJobEvent('job:thinking-delta', { id: 'j1', delta: '第二段' })
+      expect(wb.jobs.value[0].thinkingStartedAt).toBe('2026-10-08T01:00:00.000Z')
+      expect(wb.jobs.value[0].thinkingEndedAt).toBe('2026-10-08T01:00:03.000Z')
+      expect(wb.jobs.value[0].thinking).toBe('第一段第二段')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('服务端已给过起点时不覆盖它，只把终点往前推', () => {
+    vi.useFakeTimers()
+    try {
+      const wb = useWorkbenchData()
+      wb.jobs.value = [makeJob({ thinkingStartedAt: '2026-10-08T00:59:00.000Z' })] as never
+
+      vi.setSystemTime(new Date('2026-10-08T01:00:03.000Z'))
+      wb.applyJobEvent('job:thinking-delta', { id: 'j1', delta: '想' })
+      expect(wb.jobs.value[0].thinkingStartedAt).toBe('2026-10-08T00:59:00.000Z')
+      expect(wb.jobs.value[0].thinkingEndedAt).toBe('2026-10-08T01:00:03.000Z')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('正文增量（job:output-delta）不打思考计时', () => {
+    const wb = useWorkbenchData()
+    wb.jobs.value = [makeJob()] as never
+
+    wb.applyJobEvent('job:output-delta', { id: 'j1', delta: '正文' })
+    expect(wb.jobs.value[0].output).toBe('正文')
+    expect(wb.jobs.value[0].thinkingStartedAt).toBeUndefined()
+    expect(wb.jobs.value[0].thinkingEndedAt).toBeUndefined()
+  })
+
+  test('job 不存在 / 空增量：静默跳过（不能抛，SSE 里什么脏数据都可能有）', () => {
+    const wb = useWorkbenchData()
+    wb.jobs.value = [makeJob()] as never
+
+    expect(() => wb.applyJobEvent('job:thinking-delta', { id: 'nope', delta: 'x' })).not.toThrow()
+    expect(() => wb.applyJobEvent('job:thinking-delta', { id: 'j1', delta: '' })).not.toThrow()
+    expect(wb.jobs.value[0].thinkingStartedAt).toBeUndefined()
+  })
+
+  test('job:update 整条快照替换时，服务端没给的计时点保住本地攒下的', () => {
+    const wb = useWorkbenchData()
+    wb.jobs.value = [makeJob({
+      thinkingStartedAt: '2026-10-08T01:00:00.000Z',
+      thinkingEndedAt: '2026-10-08T01:00:03.000Z'
+    })] as never
+
+    // 起跑 / 老服务端推来的快照没有这两个字段 —— 不保的话数字会闪一下没了
+    wb.applyJobEvent('job:update', makeJob({ status: 'done' }))
+    expect(wb.jobs.value[0].thinkingStartedAt).toBe('2026-10-08T01:00:00.000Z')
+    expect(wb.jobs.value[0].thinkingEndedAt).toBe('2026-10-08T01:00:03.000Z')
+  })
+
+  test('job:update 带服务端计时时以服务端为准（跨实例一致的口径）', () => {
+    const wb = useWorkbenchData()
+    wb.jobs.value = [makeJob({
+      thinkingStartedAt: '2026-10-08T01:00:00.000Z',
+      thinkingEndedAt: '2026-10-08T01:00:03.000Z'
+    })] as never
+
+    wb.applyJobEvent('job:update', makeJob({
+      status: 'done',
+      thinkingStartedAt: '2026-10-08T00:59:59.500Z',
+      thinkingEndedAt: '2026-10-08T01:00:04.000Z'
+    }))
+    expect(wb.jobs.value[0].thinkingStartedAt).toBe('2026-10-08T00:59:59.500Z')
+    expect(wb.jobs.value[0].thinkingEndedAt).toBe('2026-10-08T01:00:04.000Z')
+  })
+})

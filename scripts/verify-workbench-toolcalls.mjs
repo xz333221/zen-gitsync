@@ -7,6 +7,10 @@
 // 接线断了它看不见：事件名写错、白名单投影漏字段、flush 丢了最后一批，
 // 这三种"单测全绿但界面还是没有工具块"的故障全靠这份脚本兜。
 //
+// 同一批事件里顺带守着「思考段计时」（2026-10-08 加）：桩把思考拆成前后两段，
+// 断言快照 / 落盘 / SSE 三处都带着"第一个分片 → 最后一个分片"的窗口 —— 它同样
+// 要过 projectJob 的白名单，漏字段的故障形态与工具调用完全一样。
+//
 // 为什么要把 claude 桩掉（而不是真跑一轮）：
 //   1. 真跑一轮要花用户额度、耗时不可控，还可能在真实仓库里改文件；
 //   2. 桩成"原样吐一段带 tool_use 的流"才是可复现的 —— 真模型的工具调用次序、数量
@@ -46,9 +50,12 @@ await fs.writeFile(path.join(dataDir, 'config.json'), JSON.stringify({
   models: [],
 }, null, 2))
 
-// ── 桩 claude CLI:吐一段"思考 + 两次工具调用 + 正文"的 stream-json ──
+// ── 桩 claude CLI:吐一段"思考 + 两次工具调用 + 思考 + 正文"的 stream-json ──
 // 事件次序刻意做成真实链路的样子：tool_use 先到、tool_result 后到；
 // 第二个工具故意失败（is_error），用来钉「失败的调用也要显示、并带上错误文案」。
+// 思考刻意拆成**前后两段**（中间隔着工具调用）：计时口径是「第一个思考分片 →
+// 最后一个分片」，两段必须隔开才对「终点晚于起点」这条断言有意义 ——
+// 全挤在一条事件里的话，起点=终点，把口径写成"只记最后一段"也照样绿。
 const stubLines = [
   { type: 'system', subtype: 'init', session_id: 'ses-stub-toolcalls' },
   { type: 'assistant', message: { content: [
@@ -63,6 +70,9 @@ const stubLines = [
   ] } },
   { type: 'user', message: { role: 'user', content: [
     { type: 'tool_result', tool_use_id: 'toolu_b', is_error: true, content: 'File does not exist.' },
+  ] } },
+  { type: 'assistant', message: { content: [
+    { type: 'thinking', thinking: '读不到就先报给它。' },
   ] } },
   { type: 'assistant', message: { content: [
     { type: 'text', text: '目录里只有一个 a.js，读它失败了。' },
@@ -223,7 +233,20 @@ try {
   // ── 5. 原有能力没被挤掉：正文/思考/会话标识照旧 ──
   check(String(job.output || '').includes('目录里只有一个 a.js'), '正文应照常落 output')
   check(String(job.thinking || '').includes('先看看这个目录里有什么'), '思考应照常落 thinking')
+  check(String(job.thinking || '').includes('读不到就先报给它'), '第二段思考也要落 thinking')
   check(job.claudeSessionId === 'ses-stub-toolcalls', `会话标识应被捕获,实际 ${JSON.stringify(job.claudeSessionId)}`)
+
+  // ── 5.5 思考段计时：任务执行弹窗里折叠态的「思考 x 秒」靠它 ──
+  // 这条同时守着 projectJob 的白名单 —— 快照就是投影结果，字段漏在白名单外
+  // 这里立刻红（症状正是"本实例也看不到耗时"）。
+  const rStart = Date.parse(String(job.thinkingStartedAt || ''))
+  const rEnd = Date.parse(String(job.thinkingEndedAt || ''))
+  check(Number.isFinite(rStart), `快照应带 thinkingStartedAt,实际 ${JSON.stringify(job.thinkingStartedAt)}`)
+  check(Number.isFinite(rEnd), `快照应带 thinkingEndedAt,实际 ${JSON.stringify(job.thinkingEndedAt)}`)
+  check(
+    rEnd > rStart,
+    `思考窗口应为"第一个分片 → 最后一个分片"（桩里两段隔了几百毫秒）,实际 ${job.thinkingStartedAt} → ${job.thinkingEndedAt}`
+  )
 
   // ── 6. SSE 增量：执行中就该有工具调用推过来（只有终态快照的话前端会一直"看不出在干啥"）──
   const toolEvents = seen.filter(e => e.event === 'job:toolcalls')
@@ -248,6 +271,22 @@ try {
   const callSize = (diskJob?.toolCalls || []).reduce((s, c) => s + (c.arguments || '').length + (c.result || '').length, 0)
   check(callSize > 0 && diskJob.size > callSize,
     `job.size 应把工具调用计入(${diskJob?.size} vs calls ${callSize})`)
+
+  // 落盘的 job 也要带思考段计时 —— 刷新页面 / 换实例打开时，折叠态的「思考 x 秒」
+  // 就是从 jobs.json 里的这两个字段折算出来的（只在内存里算的话刷新就没了）。
+  check(!!diskJob?.thinkingStartedAt && !!diskJob?.thinkingEndedAt,
+    `落盘的 job 应保留思考段计时,实际 ${JSON.stringify({ s: diskJob?.thinkingStartedAt, e: diskJob?.thinkingEndedAt })}`)
+
+  // ── 7.5 SSE 终态帧：job:update 带着计时字段（前端刷新计时值的权威来源）──
+  // 帧是异步送到的，轮询等它——终态 publish 就发生在这轮跑完之后不久
+  let sawTimingUpdate = false
+  for (let i = 0; i < 40 && !sawTimingUpdate; i += 1) {
+    sawTimingUpdate = seen.some(
+      e => e.event === 'job:update' && e.payload?.thinkingStartedAt && e.payload?.thinkingEndedAt
+    )
+    if (!sawTimingUpdate) await sleep(100)
+  }
+  check(sawTimingUpdate, 'SSE 的 job:update 应带上思考段计时')
 
   sseAbort.abort()
   await sseTask

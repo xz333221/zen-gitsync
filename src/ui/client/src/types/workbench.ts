@@ -65,6 +65,14 @@ export interface Job {
   agentError?: string
   /** 工具调用流水。老 job 可能没有这个字段（视为空） */
   toolCalls?: JobToolCall[]
+  /**
+   * 思考段计时（第一个思考分片 → 最后一个分片，ISO 字符串）。
+   * 服务端在追加思考时记录（见 taskRunner.appendThinkingToJob），随 jobs.json 落盘、
+   * 随 live-jobs 跨实例可见；前端折叠态靠它显示「思考 4.2s」。
+   * 老 job / 这轮没思考过 = null（前端不显示耗时，不会留占位）。
+   */
+  thinkingStartedAt?: string | null
+  thinkingEndedAt?: string | null
 }
 
 // ── Workbench 任务相关类型 ──────────────────────────────────────────
