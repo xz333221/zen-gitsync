@@ -31,6 +31,7 @@ import AttachmentZone from '@components/AttachmentZone.vue'
 import { ChatInput, ChatContainer } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { avatarForExecutor } from '@/utils/agentAvatar'
+import { MESSAGE_RAIL_CONFIG } from '@/utils/agentConversations'
 import { useConfigStore } from '@/stores/configStore'
 import { useToolsStore } from '@/stores/toolsStore'
 const configStore = useConfigStore()
@@ -1369,6 +1370,7 @@ const selectedTaskQueue = computed(() =>
                       :theme="configStore.theme"
                       :tool-calls-config="{ group: true, collapseThreshold: 2 }"
                       :plan-config="{ labels: { title: $t('@AGENT:计划'), raw: $t('@AGENT:原始参数') } }"
+                      :message-rail-config="MESSAGE_RAIL_CONFIG"
                       :show-input="false"
                     />
                   </div>

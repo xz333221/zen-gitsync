@@ -2,7 +2,7 @@
 // 「对话」Tab 的侧栏与文件空间里的对话面板共用同一份：
 // 两处的标题兜底、时间格式、生成中徽标、来源角标与文案保持一致，不会各自漂移。
 import { $t } from '@/lang/static'
-import type { ConversationItem, ConversationListLabels } from 'zen-ai-chat-ui'
+import type { ConversationItem, ConversationListLabels, MessageRailConfig } from 'zen-ai-chat-ui'
 import gAiAvatar from '@/assets/icons/svg/g-ai.svg'
 
 /** 侧栏 / 面板里那份会话（字段来自服务端 SessionMeta，允许本地乐观标记） */
@@ -81,6 +81,19 @@ export const AGENT_ASSISTANT_NAME = 'g ai'
  */
 export const AGENT_ASSISTANT_AVATAR = gAiAvatar
 
+/**
+ * 消息侧边条（zen-ai-chat-ui 的 MessageRail）：对话流左边缘一列短横条，
+ * **一轮问答一根**，条宽反映这一轮的篇幅；悬停浮出「提问 + 回答摘要」、点击跳到该轮提问。
+ *
+ * 库默认**关闭**（会话不长时它只是视觉噪音，要接入方显式打开）。这里统一打开：
+ * g ai 的会话动辄几十轮、工作台一条任务也会攒出十几轮，正是它有用的场景。
+ *
+ * 五个对话容器（智能体页 / 主 Agent 控制台 / 编辑器 g ai 面板 / 常用目录弹窗 /
+ * 工作台任务对话流）共用这一份 —— 各自写一份的后果不是"参数不一样"，而是**漏一处
+ * 就那一页没有**（用户在截图里挨个指出来的就是这么回事）。
+ * 只有 1 轮的对话库自己会隐藏（`bars.length > 1`），所以单轮场景无需另做判断。
+ */
+export const MESSAGE_RAIL_CONFIG: MessageRailConfig = { enable: true }
 
 /** 提问面板文案（走 app 的 i18n） */
 export function agentQuestionLabels() {

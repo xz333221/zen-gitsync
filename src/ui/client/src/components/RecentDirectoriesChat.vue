@@ -40,7 +40,7 @@ import type { PresetQuestion } from 'zen-ai-chat-ui'
 import { $t } from '@/lang/static'
 import { useAgentChat } from '@/composables/useAgentChat'
 import { useThemeObserver } from '@/composables/useThemeObserver'
-import { AGENT_ASSISTANT_NAME, agentQuestionLabels, agentQueueLabels } from '@/utils/agentConversations'
+import { AGENT_ASSISTANT_NAME, agentQuestionLabels, agentQueueLabels, MESSAGE_RAIL_CONFIG } from '@/utils/agentConversations'
 
 const props = defineProps<{
   /** 这批目录的状态(与发给 /api/recent_directories/summary 的是同一份,原样转发给服务端) */
@@ -189,6 +189,7 @@ onBeforeUnmount(() => {
       :question-submitting="answeringQuestion"
       :question-labels="questionLabels"
       :plan-config="{ labels: { title: $t('@AGENT:计划'), raw: $t('@AGENT:原始参数') } }"
+      :message-rail-config="MESSAGE_RAIL_CONFIG"
       @send="onSend"
       @select="onSelectPreset"
       @stop="stop"
