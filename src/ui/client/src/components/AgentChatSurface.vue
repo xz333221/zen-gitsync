@@ -60,6 +60,7 @@ import {
   AGENT_ASSISTANT_NAME,
   AGENT_ASSISTANT_AVATAR,
   MESSAGE_RAIL_CONFIG,
+  MESSAGE_META_CONFIG,
 } from '@/utils/agentConversations'
 import AgentEngineSelector from '@/components/AgentEngineSelector.vue'
 import TaskExecutorPicker from '@/components/TaskExecutorPicker.vue'
@@ -291,6 +292,7 @@ onMounted(() => {
           :question-labels="questionLabels"
           :plan-config="{ labels: { title: $t('@AGENT:计划'), raw: $t('@AGENT:原始参数') } }"
           :message-rail-config="MESSAGE_RAIL_CONFIG"
+          :message-meta-config="MESSAGE_META_CONFIG"
           @answer="answerQuestion"
         />
       </div>

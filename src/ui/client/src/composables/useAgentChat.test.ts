@@ -191,7 +191,91 @@ describe('useAgentChat parallel sessions', () => {
     expect(last?.status).toBe('done')
   })
 
-  // 回归：停止 = 服务端仍会落盘，但 writeSession 往往晚于停止后立刻发起的这次列表刷新。
+  // 本轮用时：服务端在 done 之后补一条 turn_done 才收尾，前端拿它给这条回答定格。
+  // 用服务端那个数、而不是前端自己再减一遍 —— 刷新后从会话文件读出来的是同一个值，
+  // 两份各算一遍必然差出几秒，同一轮就成了两个用时。
+  test('turn_done 给本轮回答定格用时', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const sendPromise = chat.sendMessage('跑一个长任务')
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    chatStreams[0].send({ type: 'thinking', delta: '先想一会儿' })
+    await flush()
+
+    // 跑的过程中还没有定格值：库靠 createdAt 实时跳
+    let last = chat.messages.value[chat.messages.value.length - 1]
+    expect(last?.meta?.durationMs).toBeUndefined()
+    expect(typeof last?.createdAt).toBe('number')
+
+    chatStreams[0].send({ type: 'done', content: '跑完了' })
+    chatStreams[0].send({ type: 'turn_done', turnIndex: 0, durationMs: 489_000 })
+    chatStreams[0].close()
+    await sendPromise
+    await flush()
+
+    last = chat.messages.value[chat.messages.value.length - 1]
+    expect(last?.status).toBe('done')
+    expect(last?.meta?.durationMs).toBe(489_000)
+    expect(typeof last?.finishedAt).toBe('number')
+  })
+
+  // 被停止的轮次同样有值。分两种到达情况：
+  //   · 服务端的 turn_done 已经收到（假流里能控制顺序）→ 用服务端那个数
+  //   · 真浏览器里点「停止」会把 fetch 掐断，turn_done 根本到不了 → 本地计时兜底，
+  //     否则用户在最想知道用时的时刻恰恰什么都看不到
+  test('停止的那一轮：服务端 turn_done 先到就用它的数', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const sendPromise = chat.sendMessage('太慢了')
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    chatStreams[0].send({ type: 'thinking', delta: '还在想' })
+    await flush()
+
+    chat.stop()
+    chatStreams[0].send({ type: 'error', error: '已取消' })
+    chatStreams[0].send({ type: 'turn_done', turnIndex: 0, durationMs: 42_000 })
+    // 先让读循环把这两条消费掉：stream.error() 会丢掉还没被取走的排队分片
+    await flush()
+    chatStreams[0].error(new DOMException('aborted', 'AbortError'))
+    await sendPromise
+    await flush()
+
+    const last = chat.messages.value[chat.messages.value.length - 1]
+    expect(last?.status).toBe('done')
+    expect(last?.meta?.durationMs).toBe(42_000)
+  })
+
+  test('停止的那一轮：turn_done 到不了（fetch 被掐断）也要有本地兜底的用时', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const sendPromise = chat.sendMessage('太慢了')
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    chatStreams[0].send({ type: 'content', delta: '写了一半' })
+    await flush()
+
+    chat.stop()
+    chatStreams[0].error(new DOMException('aborted', 'AbortError'))
+    await sendPromise
+    await flush()
+
+    const last = chat.messages.value[chat.messages.value.length - 1]
+    expect(last?.status).toBe('done')
+    expect(last?.content).toContain('已停止')
+    expect(typeof last?.meta?.durationMs).toBe('number')
+    expect(last!.meta!.durationMs!).toBeGreaterThanOrEqual(0)
+    expect(last?.finishedAt).toBeGreaterThanOrEqual(last!.createdAt!)
+  })
+
+
   // 之前的实现直接以服务端列表覆盖，左栏这一条就消失了（用户报的"一停止任务就没了"）。
   test('停止后服务端列表还没这条会话时，左栏条目要保留', async () => {
     const chat = useAgentChat()
@@ -703,6 +787,56 @@ describe('convertSessionToMessages 合并一次 AI 回合', () => {
     expect(call?.result).toBe('已读取图片 shot.png(1.2 KB)')
     // 图片本体不进对话流气泡(base64 大图塞进去没有意义,用户当时是看着回答的)
     expect(call?.result).not.toContain('base64')
+  })
+
+  // 每轮用时（session.turnTimings）：服务端/CLI 两个写入方都按"第几条 user 消息"
+  // 对齐（见 cli/ai/sessionStore.js）。这里守两件事：
+  //   ① 用时落在这一轮**合并后**的那条 assistant 气泡上（工具循环多轮也只算一轮）；
+  //   ② 序号错位不能发生 —— 中间那条空 user 消息（服务端照样占一轮）也要计入。
+  test('turnTimings 落到对应的 assistant 气泡上（含工具循环与空 user 消息）', () => {
+    const session = {
+      messages: [
+        { role: 'user', content: '第一轮' },
+        { role: 'assistant', content: '好的' },
+        { role: 'user', content: '' },
+        { role: 'user', content: '第二轮' },
+        {
+          role: 'assistant',
+          content: '先看代码',
+          tool_calls: [{ id: 'c1', type: 'function', function: { name: 'read_file', arguments: '{"path":"a.vue"}' } }]
+        },
+        { role: 'tool', tool_call_id: 'c1', name: 'read_file', content: '内容' },
+        { role: 'assistant', content: '看完了' }
+      ],
+      turnTimings: [
+        { turnIndex: 0, durationMs: 6_000, finishedAt: '2026-10-09T01:00:06.000Z' },
+        // 第 2 轮（空消息那轮）失败后重来 —— 同序号后写的覆盖先写的
+        { turnIndex: 2, durationMs: 9_000, finishedAt: '2026-10-09T01:01:00.000Z' },
+        { turnIndex: 1, durationMs: 3_000, finishedAt: '2026-10-09T01:00:30.000Z' },
+        { turnIndex: 2, durationMs: 489_000, finishedAt: '2026-10-09T01:08:09.000Z' }
+      ]
+    } as unknown as Parameters<typeof convertSessionToMessages>[0]
+
+    const msgs = convertSessionToMessages(session)
+    // 内容为空的那条 user 消息不渲染气泡，但它照样占掉 0-based 的第 1 轮 ——
+    // 序号按"第几条 user 消息"数，不是按气泡数
+    expect(msgs.map(m => m.role)).toEqual(['user', 'assistant', 'user', 'assistant'])
+    expect(msgs[1].meta?.durationMs).toBe(6_000)
+    expect(msgs[3].meta?.durationMs).toBe(489_000)
+    expect(msgs[3].content).toBe('先看代码看完了')
+    // 有真值就别用翻译时刻：createdAt 由 finishedAt - durationMs 反推出来
+    expect(msgs[3].finishedAt).toBe(Date.parse('2026-10-09T01:08:09.000Z'))
+    expect(msgs[3].createdAt).toBe(Date.parse('2026-10-09T01:08:09.000Z') - 489_000)
+  })
+
+  test('没有 turnTimings 的老会话：气泡照常，只是不带用时', () => {
+    const msgs = convertSessionToMessages(toSession([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: '在' }
+    ]))
+    expect(msgs[1].meta).toBeUndefined()
+    expect(msgs[1].finishedAt).toBeUndefined()
+    expect(Number.isFinite(msgs[1].createdAt)).toBe(true)
   })
 })
 

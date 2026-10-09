@@ -541,6 +541,9 @@ export async function handleSlashCommand(state, input, t) {
       state.messages = repairToolHistory(session.messages)
       state.lastTurnStats = session.lastTurnStats || null
       state.sessionStats = session.sessionStats || null
+      // 每轮用时（界面显示"这轮跑了多久"用）。恢复的会话要把旧记录带下去，
+      // 否则 CLI 侧下一次落盘会把 Web 端记的那些一起抹掉（快照是按白名单重建的）。
+      state.turnTimings = Array.isArray(session.turnTimings) ? session.turnTimings : []
       const systemMessage = {
         role: 'system',
         content: await buildProjectPrompt({ cwd: state.ctx.cwd, locale: state.locale, shellDesc: state.shellDesc, extra: extensionSuffix(state) }),
@@ -801,6 +804,7 @@ export async function runAiAgent(argv = []) {
     fullTools: false,
     lastTurnStats: null,
     sessionStats: null,
+    turnTimings: [],        // 每轮用时 [{turnIndex,durationMs,finishedAt}]（见 sessionStore.js）
     pendingImages: [],      // Alt+V / /image 附加的待发送图片 [{path, bytes}]
     pasting: false,         // 剪贴板读取进行中(防 Alt+V 连打并发)
     inWizard: false,        // /addmodel 交互式向导进行中:忽略 REPL 的 line 事件
@@ -827,6 +831,7 @@ export async function runAiAgent(argv = []) {
         messages: repairToolHistory(state.messages),
         lastTurnStats: state.lastTurnStats,
         sessionStats: state.sessionStats,
+        turnTimings: state.turnTimings,
       }))
       saving = saving.catch(() => {}).then(() => writeSession(sessionId, snapshot))
       await saving

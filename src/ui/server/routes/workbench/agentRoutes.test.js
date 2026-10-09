@@ -288,6 +288,81 @@ test('停止(客户端断开)后会话仍要落盘，并带上自动标题与已
   const last = saved.messages[saved.messages.length - 1];
   assert.equal(last.role, 'assistant');
   assert.equal(last.content, '已经写了一半');
+  // 被停止的轮次同样要留下用时 —— 用户点"停止"的那一刻，正是他最想知道
+  // "这一轮到底跑了多久"的时候（正常轮次的对照见下一个用例）
+  assert.deepEqual(saved.turnTimings.map(t => t.turnIndex), [0]);
+  assert.ok(saved.turnTimings[0].durationMs >= 0);
+  assert.match(saved.turnTimings[0].finishedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.match(output, /"type":"turn_done"/, '收尾要补一条 turn_done，前端靠它给这一轮定格用时');
+});
+
+// 每轮用时（session.turnTimings + SSE 的 turn_done）。
+// 这两份必须是**同一个数**：前端自己再算一遍，刷新后从会话文件读出来就会变，
+// 同一轮看着像有两个用时。序号按"第几条 user 消息"往后走，供前端对齐到对应气泡。
+test('每轮用时：turn_done 推给前端，并与落盘的 turnTimings 是同一个数', async () => {
+  const activeCwd = path.resolve('active-project');
+  let chatHandler;
+  const app = {
+    get() {},
+    delete() {},
+    put() {},
+    post(route, handler) {
+      if (route === '/api/agent/chat') chatHandler = handler;
+    }
+  };
+  registerAgentRoutes({
+    app,
+    getCurrentProjectPath: () => activeCwd,
+    configManager: {
+      readRawConfigFile: async () => ({
+        models: [{ model: 'test', name: 'T', baseURL: 'https://example.invalid/v1', apiKey: 'k', isDefault: true }]
+      })
+    },
+    snapshotter: STUB_SNAPSHOTTER
+  });
+
+  const reply = text => new Response(new ReadableStream({
+    start(stream) {
+      const bytes = new TextEncoder();
+      stream.enqueue(bytes.encode(event({ choices: [{ delta: { content: text } }] })));
+      stream.enqueue(bytes.encode('data: [DONE]\n\n'));
+      stream.close();
+    }
+  }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+
+  const runChat = async (body) => {
+    let output = '';
+    const req = { body: { cwd: activeCwd, ...body }, headers: {}, socket: { once() {} } };
+    const res = { set() {}, flushHeaders() {}, write: c => { output += c }, end() {} };
+    await chatHandler(req, res);
+    return output.split('\n').filter(l => l.trim().startsWith('data:'))
+      .map(l => { try { return JSON.parse(l.trim().slice(5)) } catch { return null } })
+      .filter(Boolean);
+  };
+
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => reply('第一轮的回答');
+    const first = await runChat({ userMessage: '第一轮' });
+    const sessionId = first.find(e => e.type === 'meta').sessionId;
+    const firstDone = first.find(e => e.type === 'turn_done');
+    assert.ok(firstDone, '正常跑完也要推 turn_done');
+    assert.equal(firstDone.turnIndex, 0);
+
+    // 同一会话的第二轮：序号往后走（前端靠它把用时对到对应的那条气泡上）
+    globalThis.fetch = async () => reply('第二轮的回答');
+    const second = await runChat({ userMessage: '第二轮', sessionId });
+    const secondDone = second.find(e => e.type === 'turn_done');
+    assert.equal(secondDone.turnIndex, 1);
+
+    const dir = path.join(SANDBOX, '.zen-gitsync', 'agent-sessions');
+    const saved = JSON.parse(readFileSync(path.join(dir, `${sessionId}.json`), 'utf-8'));
+    assert.deepEqual(saved.turnTimings.map(t => t.turnIndex), [0, 1], '两轮各记一条');
+    assert.equal(saved.turnTimings[0].durationMs, firstDone.durationMs, '推给前端的数必须就是落盘的那个数');
+    assert.equal(saved.turnTimings[1].durationMs, secondDone.durationMs);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 // ── dispatch_task 的注入闸门（2026-09-28）────────────────────────────────

@@ -37,6 +37,8 @@ import { nowIso, logger } from './shared.js';
 // 请求预算的解析公式与 CLI `g ai` 共用同一份（cli/ai/context.js），Web 侧只管把
 // 配置值喂进去、把结果传给 agentChat —— 2026-10-07 起每轮请求的字符预算可配。
 import { resolveRequestBudget } from '../../../../cli/ai/context.js';
+// 每轮用时记录的写入口径（与 CLI 侧共用一份，见函数上的注释）
+import { recordTurnTiming } from '../../../../cli/ai/sessionStore.js';
 
 const { genSessionId, autoTitle, read: readSession, write: writeSession, delete: deleteSession, listMeta: listSessionsMeta, enforceRetention, rename: renameSession } = agentSessionStore;
 
@@ -306,6 +308,9 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
   // §5. SSE 流式聊天（含工具调用循环）
   // ════════════════════════════════════════════════════════════════════════
   app.post('/api/agent/chat', async (req, res) => {
+    // 本轮用时的起点：从请求到达算起（含附件落盘、模型配置读取这些准备工作），
+    // 与前端"点下发送"的那一刻基本重合 —— 用户看到的计时就是这么量的。
+    const turnStartedAt = Date.now();
     const userMessage = String(req.body?.userMessage || '').trim();
     const sessionIdInput = String(req.body?.sessionId || '').trim();
     const locale = String(req.body?.locale || req.headers['accept-language'] || 'zh').startsWith('en') ? 'en' : 'zh';
@@ -532,6 +537,12 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
         })
         : undefined;
 
+      // 本轮用时记录要对齐到"第几条 user 消息"，这个序号必须在本轮消息入栈**之前**取：
+      // 失败轮次会把刚塞进去的 user 消息弹掉，事后按消息数数出来的序号会指向上一条，
+      // 把别人跑完的那一轮覆盖掉（见 cli/ai/sessionStore.js 的 recordTurnTiming）。
+      const turnIndex = (Array.isArray(session.messages) ? session.messages : [])
+        .filter(m => m?.role === 'user').length;
+
       if (useExternal) {
         // 外部 CLI 引擎：CLI 自己跑循环，服务端只做 spawn + 事件翻译。
         // 工作区状态块走 prompt 前缀（见 runExternalTurn 文件头：往项目里写
@@ -601,6 +612,15 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
           requestBudget
         });
       }
+
+      // 本轮用时：落盘的那份和推给前端的那份**用同一个数**。
+      // 让前端自己再算一遍（从它发请求到收到 done）必然与落盘值差出一点，刷新一下
+      // （改读文件里的数）就会变，看着像同一轮有两个用时。
+      const durationMs = Date.now() - turnStartedAt;
+      recordTurnTiming(session, { turnIndex, durationMs });
+      // 收尾事件：前端拿它给这条回答定格「本轮用时」。放在 done / error 之后 ——
+      // 中断（点停止、客户端断开）的轮次同样有值时，被停止的那一轮也能看到跑了多久。
+      send({ type: 'turn_done', turnIndex, durationMs });
 
       // 更新标题(新会话从第一条 user 消息自动生成)
       if (isNew) {

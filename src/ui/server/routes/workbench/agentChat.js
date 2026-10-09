@@ -35,6 +35,10 @@
 //   - { type: 'ask_user', interactionId, question, options, allowFreeText, multiple }
 //   - { type: 'done', content }            — 本轮最终完成
 //   - { type: 'error', error }
+//
+// 另外，轮次**跑完之后**路由层还会补发一条 { type: 'turn_done', turnIndex, durationMs }
+// （见 agentRoutes.js）—— 本轮用时的唯一权威值，前端拿它给回答气泡定格计时。
+// 不在这里发是因为它要覆盖中断/报错的轮次，得由真正知道本轮何时收尾的那一层给。
 
 import path from 'path';
 import os from 'os';

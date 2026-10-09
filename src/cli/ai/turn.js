@@ -4,6 +4,7 @@ import { createThinkFilter } from './streamFilter.js'
 import { imageToDataUrl } from './images.js'
 import { prepareRequestMessages } from './context.js'
 import { createTurnStats, addUsage, accumulateSessionStats } from './telemetry.js'
+import { recordTurnTiming } from './sessionStore.js'
 import * as terminal from './termui.js'
 
 // 「等人」型工具:执行期间会接管输入行、停下来等用户作答(目前只有 ask_user)。
@@ -40,6 +41,9 @@ export async function runAgentTurn(state, userText, t, images = [], dependencies
     stats.usageRequests++
     stats.usage = addUsage(stats.usage, usage)
   }
+  // 本轮是第几轮（0 基 user 序号），供 finally 里记用时用。
+  // 声明在 try 外面：finally 看不到 try 块里的 const，而 -1 正好是"这轮没轮到记"的哨兵值
+  let turnIndex = -1
   try {
     let userContent = userText
     if (images.length) {
@@ -49,8 +53,12 @@ export async function runAgentTurn(state, userText, t, images = [], dependencies
         catch { ui.printWarn(t.imageBadPath(img.path)) }
       }
     }
+    // 本轮用时记录要对齐到"第几条 user 消息"，序号得在这条消息入栈之前取
+    // （与 Web 侧 agentRoutes.js 同一口径，见 sessionStore.js 的 recordTurnTiming）
+    turnIndex = state.messages.filter(m => m?.role === 'user').length
     state.messages.push({ role: 'user', content: userContent })
     await checkpoint()
+
     // 兜底只在 state.maxToolIterations 缺失/非正数时生效,正常路径由 loadConfig 规范化后传入。
     // 默认值与 config.js 的 aiMaxToolIterations 保持一致(1000),别让两处悄悄分叉。
     const maxIterations = state.maxToolIterations > 0 ? state.maxToolIterations : 1000
@@ -159,6 +167,8 @@ export async function runAgentTurn(state, userText, t, images = [], dependencies
     stats.completedAt = new Date().toISOString()
     state.lastTurnStats = stats
     state.sessionStats = accumulateSessionStats(state.sessionStats, stats)
+    // 界面读的是这条（Web 端 g ai 对话列表里也能看到 CLI 会话的每轮用时）
+    recordTurnTiming(state, { turnIndex, durationMs: stats.totalMs, finishedAt: stats.completedAt })
     await checkpoint()
     ui.printTurnSummary(stats, { locale: state.locale })
   }

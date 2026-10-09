@@ -132,6 +132,21 @@ interface AgentSession {
   createdAt: string
   updatedAt: string
   messages: AgentMsg[]
+  /** 每轮用时（服务端与 CLI 两个写入方共用，见 cli/ai/sessionStore.js 的 recordTurnTiming） */
+  turnTimings?: AgentTurnTiming[]
+}
+
+/**
+ * 一轮对话的用时记录。
+ *
+ * `turnIndex` = 这一轮的 user 消息是会话里的第几条 user 消息（0 基），不是消息数组下标
+ * —— 数组还在长，下标会漂。同一序号后写的覆盖先写的（失败轮次会把 user 消息弹掉，
+ * 废记录会被复用同一序号的下一轮顶掉）。
+ */
+interface AgentTurnTiming {
+  turnIndex: number
+  durationMs: number
+  finishedAt?: string
 }
 
 // OpenAI 兼容的消息格式
@@ -168,12 +183,25 @@ export function convertSessionToMessages(session: AgentSession | null): ChatMess
   const result: ChatMessage[] = []
   const msgCount = session.messages.length
 
+  // 每轮用时按"第几条 user 消息"对齐（见 AgentTurnTiming）。同一序号后写的覆盖先写的
+  // —— 与服务端 recordTurnTiming 的覆盖规则一致，别一边覆盖一边取第一条。
+  const turnTimings = new Map<number, AgentTurnTiming>()
+  for (const t of session.turnTimings || []) {
+    if (typeof t?.turnIndex !== 'number' || !Number.isFinite(t?.durationMs)) continue
+    turnTimings.set(t.turnIndex, t)
+  }
+  // 已经走过的 user 消息条数 - 1 = 当前这一轮的序号
+  let turnIndex = -1
+
   for (let i = 0; i < msgCount; i++) {
     const m = session.messages[i]
 
     if (m.role === 'system') continue
 
     if (m.role === 'user') {
+      // 序号在"是否渲染这条气泡"之前就递增：服务端数的是会话里的 user 消息条数，
+      // 而**内容为空、不渲染气泡的那条同样占一轮** —— 漏算它后面全错位。
+      turnIndex += 1
       let text = ''
       let attachments: ChatAttachment[] | undefined
       if (typeof m.content === 'string') {
@@ -266,13 +294,23 @@ export function convertSessionToMessages(session: AgentSession | null): ChatMess
       const hasContent = !!content
       const hasToolCalls = toolCalls.length > 0
       if (hasContent || hasToolCalls) {
+        // 这一轮的用时（工具循环的多条记录合并成一条气泡，仍然是**同一轮**，
+        // 与实时流式期间那个占位消息的口径一致）。
+        // 时间戳一并补上：历史消息原先写的是 Date.now()（"翻译时刻"而不是"发送时刻"），
+        // 有真值就用真值 —— 库优先取 meta.durationMs，其余两个只影响将来可能的展示。
+        const timing = turnTimings.get(turnIndex)
+        const finishedAt = timing?.finishedAt ? Date.parse(timing.finishedAt) : NaN
         result.push({
           id,
           role: 'assistant',
           content,
           toolCalls: hasToolCalls ? toolCalls : undefined,
           status: 'done',
-          createdAt: Date.now()
+          createdAt: Number.isFinite(finishedAt) && timing
+            ? finishedAt - timing.durationMs
+            : Date.now(),
+          finishedAt: Number.isFinite(finishedAt) ? finishedAt : undefined,
+          meta: timing ? { durationMs: timing.durationMs } : undefined
         })
       }
     }
@@ -1086,6 +1124,18 @@ export function useAgentChat() {
               break
             }
 
+            // 本轮用时定格：服务端在这条之后才结束响应，所以它总是本轮**最后**到达的增量。
+            // 用服务端这个数、而不是前端自己再减一遍 —— 刷新后从会话文件读出来的
+            // 就是同一个值（见 convertSessionToMessages），否则同一轮会出现两个用时。
+            case 'turn_done': {
+              const ms = Number(evt.durationMs)
+              if (!Number.isFinite(ms) || ms < 0) break
+              if (assistantMsg.meta?.durationMs !== undefined) break
+              assistantMsg.finishedAt = Date.now()
+              assistantMsg.meta = { ...(assistantMsg.meta || {}), durationMs: ms }
+              break
+            }
+
             case 'error':
               assistantMsg.status = 'error'
               assistantMsg.error = String(evt.error || $t('@AGENT:未知错误'))
@@ -1111,6 +1161,17 @@ export function useAgentChat() {
         assistantMsg.status = 'done'
         if (assistantMsg.reasoningStatus === 'streaming') {
           assistantMsg.reasoningStatus = 'done'
+        }
+        // 用时的兜底：点「停止」会把 fetch 直接掐断，服务端随后补发的 turn_done
+        // 根本到不了（响应已经没了）—— 而"这一轮到底跑了多久"正是停下那一刻最想知道的事。
+        // 这里用前端自己量的值（发送 → 停止）顶上，与服务端口径只差请求往返那几十毫秒；
+        // 重新打开这条会话时读到的是落盘那份。
+        if (assistantMsg.meta?.durationMs === undefined) {
+          assistantMsg.finishedAt = Date.now()
+          assistantMsg.meta = {
+            ...(assistantMsg.meta || {}),
+            durationMs: assistantMsg.finishedAt - (assistantMsg.createdAt || assistantMsg.finishedAt)
+          }
         }
       } else {
         assistantMsg.status = 'error'

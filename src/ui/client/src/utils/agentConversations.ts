@@ -2,7 +2,7 @@
 // 「对话」Tab 的侧栏与文件空间里的对话面板共用同一份：
 // 两处的标题兜底、时间格式、生成中徽标、来源角标与文案保持一致，不会各自漂移。
 import { $t } from '@/lang/static'
-import type { ConversationItem, ConversationListLabels, MessageRailConfig } from 'zen-ai-chat-ui'
+import type { ConversationItem, ConversationListLabels, MessageMetaConfig, MessageRailConfig } from 'zen-ai-chat-ui'
 import gAiAvatar from '@/assets/icons/svg/g-ai.svg'
 
 /** 侧栏 / 面板里那份会话（字段来自服务端 SessionMeta，允许本地乐观标记） */
@@ -94,6 +94,31 @@ export const AGENT_ASSISTANT_AVATAR = gAiAvatar
  * 只有 1 轮的对话库自己会隐藏（`bars.length > 1`），所以单轮场景无需另做判断。
  */
 export const MESSAGE_RAIL_CONFIG: MessageRailConfig = { enable: true }
+
+/**
+ * 消息元信息行（zen-ai-chat-ui 的 MessageMeta）：回答气泡下方那行「本轮用时」。
+ *
+ * 库默认**关闭**（它是新增的可见元素，默认打开会让既有布局多出一行）。这里统一打开：
+ * 一轮 g ai 对话动辄跑几分钟（工具循环 + 长思考），"这轮跑了多久"是用户会盯着看的
+ * 那个数 —— 流式期间由库按消息的 createdAt 实时跳，跑完用服务端给的 durationMs 定格
+ * （见 useAgentChat 的 turn_done 分支）。
+ *
+ * 两个刻意的选择：
+ *   · `visibility: 'always'` —— 库默认跟操作栏一样"悬停才淡入"。可我们要的正是
+ *     "等得心焦时抬眼就能看到"，藏起来等于没有；触摸设备上库本来也会退化成常显。
+ *   · `items: ['duration']` —— 只留用时。`tokens` 项要 provider 报的真实 usage，
+ *     组件库明确拒绝估算（估出来的数字看着像真的、比不显示更糟），而 g ai 目前只在
+ *     输入框的上下文占用环上用 usage，没有逐条落盘。
+ *
+ * 与 MESSAGE_RAIL_CONFIG 同一条约束：四个 g ai 对话容器（智能体页·对话 Tab / 主 Agent
+ * 控制台 / 编辑器 g ai 面板 / 常用目录弹窗）共用这一份，漏一处就那一页没有。
+ * 拿不到用时的消息（老会话、没落盘的轮次）库那边什么都不显示，不会出现占位符。
+ */
+export const MESSAGE_META_CONFIG: MessageMetaConfig = {
+  enable: true,
+  items: ['duration'],
+  visibility: 'always',
+}
 
 /** 提问面板文案（走 app 的 i18n） */
 export function agentQuestionLabels() {

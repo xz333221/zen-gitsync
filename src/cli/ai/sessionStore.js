@@ -56,6 +56,49 @@ export function autoTitle(messages) {
   return '(新会话)';
 }
 
+// ── 每轮用时（session.turnTimings）────────────────────────────────────────
+//
+// 存的是一条条 `{ turnIndex, durationMs, finishedAt }`，给对话界面在气泡下方显示
+// 「这一轮跑了多久」。CLI 与 Web 两个写入方共用这一份形状，读的那一侧是
+// src/ui/client/src/composables/useAgentChat.ts 的 convertSessionToMessages。
+//
+// 为什么挂在会话顶层而不是塞进某条消息里：
+//   messages 是 **OpenAI 格式**，出站请求由 cli/ai/context.js 的
+//   buildRequestMessages 逐条 `{ ...m }` 复制 —— 往消息上挂自定义字段会连同它一起
+//   发给 provider（部分厂商对未知字段直接 400 拒掉整轮）。挂顶层就永远出不了站。
+//
+// turnIndex 对齐的是「本轮的 user 消息是会话里的第几条 user 消息」（0 基），
+// 不是消息数组下标：数组还在往后长，下标会漂；user 序号只增不改。
+// 同一 turnIndex **后写的覆盖先写的** —— 一轮失败时服务端会把刚塞进去的 user 消息
+// 弹掉（见 agentChat.js 的 LLM 请求失败分支），那条废记录的序号会被下一轮
+// 复用，覆盖后读出来指向的永远是真正跑完的那一轮。
+export const MAX_TURN_TIMINGS = 500;
+
+/**
+ * 记一轮用时。
+ *
+ * 调用方必须在**本轮 user 消息入栈之前**取好 turnIndex —— 失败轮次会把这条消息弹掉，
+ * 事后按消息数数出来的序号会指向上一条（覆盖掉别人跑完的那一轮）。
+ */
+export function recordTurnTiming(session, { turnIndex, durationMs, finishedAt }) {
+  const turn = Math.floor(Number(turnIndex));
+  const ms = Math.round(Number(durationMs));
+  if (!session || !Number.isFinite(turn) || turn < 0 || !Number.isFinite(ms) || ms < 0) return;
+  if (!Array.isArray(session.turnTimings)) session.turnTimings = [];
+  const entry = {
+    turnIndex: turn,
+    durationMs: ms,
+    finishedAt: typeof finishedAt === 'string' && finishedAt ? finishedAt : new Date().toISOString(),
+  };
+  const at = session.turnTimings.findIndex(t => t?.turnIndex === turn);
+  if (at >= 0) session.turnTimings[at] = entry;
+  else session.turnTimings.push(entry);
+  // 长会话（几百轮）不该让这个数组无限长:它只是给界面显示用时,留最近这些轮足够
+  if (session.turnTimings.length > MAX_TURN_TIMINGS) {
+    session.turnTimings.splice(0, session.turnTimings.length - MAX_TURN_TIMINGS);
+  }
+}
+
 /**
  * 写入会话(原子操作: tmp + rename)
  */
