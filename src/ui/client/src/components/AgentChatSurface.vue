@@ -458,6 +458,20 @@ onMounted(() => {
 .acs__chat :deep(.acu-avatar--left) {
   background: transparent;
 }
+/* 本轮用时钉在气泡头部右端（与「g ai」那一行同排）—— 库把元信息行渲染在下方那行
+   操作栏里，而同排的操作按钮平时 opacity:0，于是耗时孤零零挂在右边看着像掉队的字。
+   库的 MessageMetaConfig 只有 inline / below 两种位置、也没有插槽，只能盖样式。
+   理由与四个容器共用的那份说明见 MESSAGE_META_CONFIG 与 AgentView 里的同名规则。 */
+.acs__chat :deep(.acu-bubble-main) {
+  position: relative;
+}
+.acs__chat :deep(.acu-message-meta) {
+  position: absolute;
+  top: 0;
+  right: 0;
+  /* 库给 footer 的 margin-top 对绝对定位元素照样生效，会把它往下推 8px */
+  margin: 0;
+}
 .acs__foot {
   flex: none;
   display: flex;

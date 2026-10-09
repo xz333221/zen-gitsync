@@ -605,6 +605,23 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   background: transparent;
 }
 
+/* ── 本轮用时：钉在气泡头部右端（与「g ai」那一行同排） ──────────────
+   库把元信息行（耗时）渲染在气泡**下方**那行操作栏里，而与它同排的复制 / 重新生成按钮
+   平时是 opacity:0 —— 于是那行左边空着一截、只在最右边挂个「8.9s」，看着像掉队的一小段字
+   （用户 2026-10-09 截图指出）。库的 MessageMetaConfig 只有 inline / below 两种位置、
+   也没有插槽可换，只能盖样式：把它绝对定位到气泡本体右上角 —— 那块本来就是空的，
+   既不占内容高度，也不会和悬停才出现的操作按钮挤在一起。 */
+.agent-chat-host :deep(.acu-bubble-main) {
+  position: relative;
+}
+.agent-chat-host :deep(.acu-message-meta) {
+  position: absolute;
+  top: 0;
+  right: 0;
+  /* 库给 .acu-bubble-footer 的 margin-top 对绝对定位元素照样生效，会把它往下推 8px */
+  margin: 0;
+}
+
 /* 排队条带换成本项目「待处理」档的语义色 —— 与任务对话里那条 .wb-chat-queue 同一副面孔。
    库给 --acu-queue-* 四个变量就是留给宿主做这件事的，所以这里只映射颜色，不碰它的 class。 */
 .agent-chat-host :deep(.acu-input-queue) {

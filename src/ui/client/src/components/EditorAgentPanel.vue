@@ -570,6 +570,21 @@ onBeforeUnmount(() => {
   background: transparent;
 }
 
+/* 本轮用时钉在气泡头部右端（与「g ai」那一行同排）—— 库把元信息行渲染在下方那行
+   操作栏里，而同排的操作按钮平时 opacity:0，于是耗时孤零零挂在右边看着像掉队的字。
+   库的 MessageMetaConfig 只有 inline / below 两种位置、也没有插槽，只能盖样式。
+   四处容器（本面板 / 智能体页 / 主 Agent 控制台 / 常用目录弹窗）规则一致，改一处记得都改。 */
+.agent-panel-chat :deep(.acu-bubble-main) {
+  position: relative;
+}
+.agent-panel-chat :deep(.acu-message-meta) {
+  position: absolute;
+  top: 0;
+  right: 0;
+  /* 库给 footer 的 margin-top 对绝对定位元素照样生效，会把它往下推 8px */
+  margin: 0;
+}
+
 /* ── 当前文档卡片：和添加的附件同处一行、同一副样子 ─────────────
    锚点由 JS 插进库的输入框 DOM，动态创建的元素拿不到 scoped 属性，
    所以这些规则必须走 :deep()（编译成 `.agent-panel-chat[data-v-x] .agent-context-slot`，

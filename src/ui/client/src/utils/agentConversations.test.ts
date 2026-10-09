@@ -29,11 +29,60 @@ import { describe, expect, test } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { ChatContainer } from 'zen-ai-chat-ui'
 import type { ChatMessage } from 'zen-ai-chat-ui'
-import { MESSAGE_RAIL_CONFIG } from './agentConversations'
+import { MESSAGE_META_CONFIG, MESSAGE_RAIL_CONFIG } from './agentConversations'
 
 describe('MESSAGE_RAIL_CONFIG', () => {
   test('开关字段是 enable（库的 MessageRailConfig 只认这一个）', () => {
     expect(MESSAGE_RAIL_CONFIG).toEqual({ enable: true })
+  })
+})
+
+// 本轮用时（MessageMeta 的 duration 项）。与侧边条同一形态的「库支持、宿主没接」，
+// 但它还多一层：**位置**得由宿主 CSS 从气泡下方那行操作栏挪到头部（见下面第三条守卫）。
+describe('MESSAGE_META_CONFIG', () => {
+  test('形状：常显 + 只要 duration 一项', () => {
+    expect(MESSAGE_META_CONFIG).toEqual({ enable: true, items: ['duration'], visibility: 'always' })
+  })
+})
+
+describe('本轮用时真的画出来了（真挂库的 ChatContainer）', () => {
+  const proto = Element.prototype as unknown as { scrollTo?: () => void }
+  if (!proto.scrollTo) proto.scrollTo = () => {}
+
+  function withAnswer(meta?: ChatMessage['meta']): ChatMessage[] {
+    return [
+      { id: 'u1', role: 'user', content: '跑一个长任务', status: 'done', createdAt: Date.now() },
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '跑完了',
+        status: 'done',
+        createdAt: Date.now(),
+        meta
+      }
+    ]
+  }
+
+  test('回答带 meta.durationMs → 气泡上出现格式化后的耗时', async () => {
+    const wrapper = mount(ChatContainer, {
+      props: { messages: withAnswer({ durationMs: 3200 }), messageMetaConfig: MESSAGE_META_CONFIG },
+      global: { mocks: { $t: (k: string) => k } }
+    })
+    await new Promise(r => setTimeout(r, 0))
+
+    const item = wrapper.find('.acu-bubble-row.is-assistant .acu-meta-item.is-duration')
+    expect(item.exists()).toBe(true)
+    expect(item.text()).toBe('3.2s')
+  })
+
+  test('没有用时的消息（老会话）→ 什么都不画，不留占位符', async () => {
+    const wrapper = mount(ChatContainer, {
+      props: { messages: withAnswer(), messageMetaConfig: MESSAGE_META_CONFIG },
+      global: { mocks: { $t: (k: string) => k } }
+    })
+    await new Promise(r => setTimeout(r, 0))
+
+    expect(wrapper.find('.acu-bubble-row.is-assistant .acu-message-meta').exists()).toBe(false)
   })
 })
 
@@ -106,6 +155,14 @@ describe('源码守卫：渲染 ChatContainer 的地方都得接上侧边条', (
    */
   const SINGLE_TURN_SURFACES = ['../components/JobLogDetails.vue']
 
+  /**
+   * 用时的豁免名单：接了侧边条、但**故意**不接本轮用时的容器。
+   * 目前只有工作台任务对话流：那条浮层的头部细栏本来就给着「用时 x / 已运行 x」
+   * （与看板卡片逐字一致），气泡上再来一份是重复；而且 job 的起止（含 CLI spawn、
+   * 排队等待）与"一轮对话"不是同一个口径，要加得先把那个口径单独定下来。
+   */
+  const META_EXEMPT_SURFACES = ['../views/WorkbenchView.vue']
+
   test('五个对话容器都传了 :message-rail-config="MESSAGE_RAIL_CONFIG"', () => {
     const consumers = Object.entries(allSources).filter(([, src]) => src.includes('<ChatContainer'))
     // 兜底：glob 没扫到就是守卫自己坏了，不是"全都没接"
@@ -123,6 +180,43 @@ describe('源码守卫：渲染 ChatContainer 的地方都得接上侧边条', (
     // 白名单条目必须真的存在，否则是"规则过时了"
     for (const f of SINGLE_TURN_SURFACES) {
       expect(consumers, `白名单里的 ${f} 已经不再渲染 ChatContainer，规则该删了`).toContain(f)
+    }
+  })
+
+  test('接了侧边条的容器也要接本轮用时（同一批容器，别只接一半）', () => {
+    for (const [file, src] of Object.entries(allSources)) {
+      if (!src.includes(':message-rail-config="MESSAGE_RAIL_CONFIG"')) continue
+      if (SINGLE_TURN_SURFACES.includes(file) || META_EXEMPT_SURFACES.includes(file)) continue
+      expect(src, `${file} 接了侧边条却没接 :message-meta-config（这一页看不到本轮用时）`)
+        .toContain(':message-meta-config="MESSAGE_META_CONFIG"')
+    }
+  })
+
+  test('豁免名单里的容器确实还在渲染 ChatContainer（防止规则过时）', () => {
+    const consumers = Object.keys(allSources).filter(f => allSources[f].includes('<ChatContainer'))
+    for (const f of META_EXEMPT_SURFACES) {
+      expect(consumers, `豁免名单里的 ${f} 已经不再渲染 ChatContainer，规则该删了`).toContain(f)
+    }
+  })
+
+  // 用时的**位置**由宿主 CSS 定（库只给 inline / below，都不好看：跟在下方那行操作栏后面时，
+  // 左边那几个按钮平时是透明的，耗时孤零零挂在右边像掉队的字 —— 用户 2026-10-09 截图指出）。
+  // 两个规则是一对：main 定位基准 + meta 绝对定位到右上角。缺一个都会跑到别处去，
+  // 而且是那种"页面照样渲染、只有位置不对"的静默失效，所以钉在源码上。
+  test('接了用时的容器都得把元信息行钉到气泡头部（成对的两条 CSS 规则）', () => {
+    const consumers = Object.entries(allSources)
+      .filter(([, src]) => src.includes(':message-meta-config="MESSAGE_META_CONFIG"'))
+    expect(consumers.length).toBeGreaterThanOrEqual(4)
+
+    for (const [file, src] of consumers) {
+      const metaRule = /:deep\(\.acu-message-meta\)\s*\{[^}]*\}/.exec(src)
+      expect(metaRule, `${file} 接了 message-meta-config 却没有 :deep(.acu-message-meta) 规则`).toBeTruthy()
+      expect(metaRule![0], `${file} 的元信息行没有绝对定位到头部`).toContain('position: absolute')
+      expect(metaRule![0], `${file} 的元信息行没清掉库给的 margin-top（会被往下推 8px）`).toContain('margin: 0')
+
+      const mainRule = /:deep\(\.acu-bubble-main\)\s*\{[^}]*\}/.exec(src)
+      expect(mainRule, `${file} 少了 :deep(.acu-bubble-main) 定位基准（绝对定位会跑到更外层去）`).toBeTruthy()
+      expect(mainRule![0]).toContain('position: relative')
     }
   })
 })
