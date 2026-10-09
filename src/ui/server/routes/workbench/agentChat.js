@@ -33,6 +33,14 @@
 //   - { type: 'tool_output', toolCallId, chunk }       — 命令执行中的增量输出(仅展示)
 //   - { type: 'tool_result', toolCallId, name, result }
 //   - { type: 'ask_user', interactionId, question, options, allowFreeText, multiple }
+//   - { type: 'attempt', attempt }   — 一次 LLM 请求**开始**（工具循环里每轮一条）。
+//       发它是为了让前端记一个"断点"：这个位置上正文/思考已经有多长。
+//       自动重试时前端按这个断点回退，只丢掉失败那次尝试吐的字，
+//       本轮前面几轮（工具循环）说过的话留着。
+//       **重试不重发它**：重试要丢的正是这一轮请求吐的全部内容，断点还是同一个。
+//   - { type: 'retry', attempt, maxRetries, delayMs, reason }
+//       传输层正在自动重试（最多 10 次，见 cli/ai/transport.js）。前端收到就回退到断点、
+//       清掉错误态；不处理的话界面上会出现"半截答案 + 重来一遍"拼在一起的两段话。
 //   - { type: 'done', content }            — 本轮最终完成
 //   - { type: 'error', error }
 //
@@ -312,9 +320,15 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 //   - requestBudget: { maxChars, maxMessages, maxUserChars }  每轮请求的上下文预算
 //        （解析自全局配置 aiMaxRequestChars，见 cli/ai/context.js 的 resolveRequestBudget）。
 //        不传时 prepareRequestMessages 走默认值，行为与改造前一致。
+//   - resume: true 时**不再压入 user 消息**，直接拿着会话现有的尾巴继续跑。
+//        用于"重试上一轮"：失败那轮留下的 user + 工具结果都还在，再发一遍 user
+//        会让模型看到两条同样的请求 + 已经跑完的工具结果。
+//   - streamFn: LLM 传输函数，默认就是共享的 streamChatOnce。**只给测试留的接缝**
+//        （单测要整体关掉自动重试，真等退避会让一个用例跑成分钟级），
+//        生产调用点一律不传 —— 传了就等于换了一份传输实现。
 //
 // 返回: { aborted: boolean }
-export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, dispatchTask, getContextBlock, requestBudget = null }) {
+export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, dispatchTask, getContextBlock, requestBudget = null, resume = false, streamFn = streamChatOnce }) {
   const ctx = { cwd, locale, onChild, askUser, listProjects, dispatchTask };
 
   // 确保 session.messages 存在
@@ -328,16 +342,26 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
     });
   }
 
-  // 追加 user 消息：有图片时组装 OpenAI 多模态 content 数组（与 CLI agent.js 一致），否则保持纯字符串
-  const imageParts = (Array.isArray(images) ? images : [])
-    .filter(u => typeof u === 'string' && u.startsWith('data:image/'))
-    .map(u => ({ type: 'image_url', image_url: { url: u } }));
-  session.messages.push({
-    role: 'user',
-    content: imageParts.length > 0
-      ? [{ type: 'text', text: userMessage || ' ' }, ...imageParts]
-      : userMessage
-  });
+  // 追加 user 消息：有图片时组装 OpenAI 多模态 content 数组（与 CLI agent.js 一致），否则保持纯字符串。
+  // resume 是"接着跑上一轮"，会话尾巴上那条 user（或那批工具结果）就是要发的东西，不能重复压。
+  if (resume) {
+    // 尾巴上是一条**没有工具调用的 assistant**，说明上一轮其实跑完了（用户点的是操作栏那颗
+    // 「重新生成」，不是错误气泡的「重试」）。留着它的话，模型会顺着自己刚写完的答案往下说，
+    // 而且会话里会出现两条连着的 assistant —— 重开这条会话能看见两份答案。
+    // 摘掉它，语义就干净了：拿同一个问题再问一次。
+    const tail = session.messages[session.messages.length - 1];
+    if (tail?.role === 'assistant' && !(tail.tool_calls?.length > 0)) session.messages.pop();
+  } else {
+    const imageParts = (Array.isArray(images) ? images : [])
+      .filter(u => typeof u === 'string' && u.startsWith('data:image/'))
+      .map(u => ({ type: 'image_url', image_url: { url: u } }));
+    session.messages.push({
+      role: 'user',
+      content: imageParts.length > 0
+        ? [{ type: 'text', text: userMessage || ' ' }, ...imageParts]
+        : userMessage
+    });
+  }
 
   // 工作区状态快照:整轮只取一次(TTL 在生成器内部,见 aiContext/index.js),
   // 不放进循环 —— 否则每执行一次工具调用都要重拼一遍,而这轮对话里它不会变。
@@ -378,8 +402,11 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
     send({ type: 'context', usage });
 
     let result;
+    // 断点事件：告诉前端"从这里开始是这一次请求要写的内容"。
+    // 前端收到自动重试时按它回退 —— 只丢失败那次吐的字，本轮前面几轮说过的话留着。
+    send({ type: 'attempt', attempt: iter + 1 });
     try {
-      result = await streamChatOnce({
+      result = await streamFn({
         model,
         messages,
         signal,
@@ -389,11 +416,19 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
           if (thinking) send({ type: 'thinking', delta: thinking });
           if (content) send({ type: 'content', delta: content });
         },
+        // 传输层自动重试（长静默 / 网关 5xx / 流中断，见 cli/ai/transport.js）：
+        // 先告诉前端回退到断点，下一次尝试的增量才不会和上一截拼在一起。
+        onRetry: ({ attempt, maxRetries, delayMs, error }) => {
+          send({ type: 'retry', attempt, maxRetries, delayMs, reason: error?.message || '' });
+        },
       });
     } catch (err) {
-      // 请求失败时撤掉本轮塞入的 user 消息(如果末尾仍是 user)
-      const last = session.messages[session.messages.length - 1];
-      if (last?.role === 'user') session.messages.pop();
+      // 请求失败**不回滚**刚压入的 user 消息（2026-10-09 改）。
+      // 原先是"末尾仍是 user 就弹掉"，为的是让用户重发同一条时历史里不留两份。
+      // 现在有正经的「重试」了（前端那颗按钮 → resume 续跑本轮），而续跑的全部意义
+      // 就是"接着会话现有的尾巴跑"：尾巴被弹掉的话，续跑会退化成**重跑上一轮**。
+      // 留着它还有个更直接的好处：用户发出去的问题不再凭空消失（界面上一直看得见），
+      // 带图的那些附件也还在请求副本里，重试不用靠前端重建。
       send({ type: 'error', error: `LLM 请求失败: ${err.message}` });
       return { aborted: false };
     }

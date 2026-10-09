@@ -29,6 +29,7 @@ import {
 } from '@element-plus/icons-vue'
 import AttachmentZone from '@components/AttachmentZone.vue'
 import { ChatInput, ChatContainer } from 'zen-ai-chat-ui'
+import type { ChatMessage } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { avatarForExecutor } from '@/utils/agentAvatar'
 import { MESSAGE_RAIL_CONFIG } from '@/utils/agentConversations'
@@ -508,6 +509,21 @@ async function copyTaskDesc(t: Task | null) {
 // 任务对话流（通 useWorkbenchSimpleConversation 合并 jobs → ChatMessage[]）
 const { simpleConversationMessages, simpleAllJobsFor, simpleJobFor, simpleJobState } = useWorkbenchSimpleConversation(jobs, selectedTask)
 
+/**
+ * 对话流里那颗「重试」（组件库错误气泡按钮 → `retry` 事件）。
+ *
+ * 这里的"上一轮"是一条 job，不是 g ai 那种服务端会话：每轮都是独立起一个 CLI 进程，
+ * 所以重试 = **把这条 job 重跑一遍** —— 与执行日志里的「重新执行」是同一个动作，
+ * 直接复用执行层那份 onReExecuteJob，不另写一份重跑逻辑。
+ *
+ * 消息 id 是 `${job.id}-a`（见 useWorkbenchSimpleConversation），据此找回 job。
+ */
+function onChatRetry(message?: ChatMessage) {
+  const jobId = String(message?.id || '').replace(/-a$/, '')
+  const job = jobs.value.find(j => j.id === jobId)
+  return job ? onReExecuteJob(job) : false
+}
+
 // ── 一键复制「任务执行内容」──────────────────────────────────────────────────
 // 复制的是**这条任务全部轮次**（首次执行 + N 次续聊）的对话流，不是当前屏幕上选中的
 // 那一段文本 —— 所以走 utils/taskExecutionExport.ts 从 job 数据现拼，而不是读 DOM /
@@ -958,6 +974,8 @@ const {
 const {
   runTask, onContinueSendFromChat,
   cancelJob, clearExecutionForSelectedTask,
+  // 任务对话流上那颗「重试」（见 onChatRetry）—— 与执行日志里的「重新执行」是同一个动作
+  onReExecuteJob,
   // 重命名：本文件里已有一个按 Task 判定的 isTaskRunning（见下方 640 行附近），
   // 那边改成委托给这一份，全仓只留一个"这条任务在不在跑"的口径
   isTaskRunning: isTaskRunningById,
@@ -1372,6 +1390,7 @@ const selectedTaskQueue = computed(() =>
                       :plan-config="{ labels: { title: $t('@AGENT:计划'), raw: $t('@AGENT:原始参数') } }"
                       :message-rail-config="MESSAGE_RAIL_CONFIG"
                       :show-input="false"
+                      @retry="onChatRetry"
                     />
                   </div>
                   <!-- 输入区：**任务在跑的时候也常驻**。

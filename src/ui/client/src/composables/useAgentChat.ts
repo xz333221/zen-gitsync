@@ -415,6 +415,12 @@ interface SessionRun {
    * 条带上出现「立即发送」等用户拍板（只由它解除）。
    */
   queuePaused: boolean
+  /**
+   * 本会话最近一次发送的请求级参数（引擎 / 打开的文档 / 派发开关…）。
+   * 重试上一轮时原样复用 —— 用户在报错到点重试之间可能改过界面上的选择，
+   * 重算一遍等于把那一轮发出去时的东西换掉（与队列存快照同理）。
+   */
+  lastSendOptions?: AgentSendOptions
 }
 
 // ── composable ───────────────────────────────────────────
@@ -900,13 +906,64 @@ export function useAgentChat() {
     run.messages.push(assistantMsg)
 
     run.isStreaming = true
+    // 记住这一轮的请求参数：重试时要原样再来一遍（引擎 / 打开的文档 / 派发开关…），
+    // 见 retryTurn。存快照而不是重算 —— 用户在这中间可能改了界面上的选择。
+    run.lastSendOptions = options
 
     // 登记到全局活动计数（ActivityBar 左侧机器人图标上的数字读它）。
     // 令牌 = 实例 + 目标会话 + 本会话第几轮：三者都带上才不会与另一实例 / 另一轮撞号；
-    // 下面 finally 里销号，重复销号幂等，被下一轮顶掉时也只减自己那一个。
+    // runStream 的 finally 里销号，重复销号幂等，被下一轮顶掉时也只减自己那一个。
     const turnToken = `${instanceId}:${runKey}:${myNonce}`
     agentActivity.begin(turnToken)
 
+    await runStream(run, myNonce, myController, assistantMsg, turnToken, {
+      sessionId: run.sessionId || '',
+      userMessage: text,
+      // 新建会话时服务端用它确定项目归属(已有会话沿用其落盘 cwd)
+      cwd: configStore.currentDirectory || '',
+      // 引擎：只在**新建会话**时生效（已有会话服务端沿用自己落盘的那个，
+      // 想换会回 ENGINE_LOCKED）。传当前值即可，两种情形都对。
+      engine: options.engine ?? currentEngine.value,
+      ...(images.length > 0 ? { images } : {}),
+      // 非图片附件：服务端落到数据目录后，只把绝对路径写进请求副本的 system 提示
+      ...(attachments.length > 0 ? { attachments } : {}),
+      // 文件空间对话：把"当前打开的文档"带给服务端（请求级注入上下文，不落会话历史）
+      ...(options.openFilePath ? { openFilePath: options.openFilePath } : {}),
+      // 常用目录对话：把"那批目录的状态 + 界面上那段解读"带给服务端（同样只进请求副本）
+      ...(options.dirStatus?.length ? { dirStatus: options.dirStatus } : {}),
+      ...(options.dirSummary ? { dirSummary: options.dirSummary } : {}),
+      // 主 Agent 控制台：允许这一轮对话调用 dispatch_task 派发工作台任务，
+      // 并把界面上选好的执行器 / 预设提示词勾选一并带上（服务端拿它当工具的默认值）。
+      // 只在显式开启时才出现在请求体里 —— 其它入口（智能体页、编辑器面板）的请求
+      // 与改造前逐字节一致，它们没有派发能力。
+      ...(options.allowDispatch
+        ? {
+          allowDispatch: true,
+          dispatchExecutor: options.dispatchExecutor || '',
+          dispatchUseDefaultPrompt: options.dispatchUseDefaultPrompt !== false
+        }
+        : {})
+    })
+  }
+
+  /**
+   * 一次流式请求的执行体 —— 新的一轮（sendMessage）与重试上一轮（retryTurn）共用。
+   *
+   * 两者只有"请求体里带什么"不同：读 SSE、按事件更新那条 assistant 气泡、
+   * 收尾（活动计数 / 提示音 / 队列接棒 / 刷新会话列表）逐字一样。
+   * 抄第二份的话迟早只改一处 —— 本仓库 agentParity.test.js 就是为这类分叉立的规矩。
+   *
+   * @param requestBody  POST /api/agent/chat 的请求体（`{ resume: true }` 表示接着上一轮跑）
+   */
+  async function runStream(
+    run: SessionRun,
+    myNonce: number,
+    myController: AbortController,
+    assistantMsg: ChatMessage,
+    turnToken: string,
+    requestBody: Record<string, unknown>
+  ) {
+    const userText = String(requestBody.userMessage || '')
     // 当前 assistant 消息的工具调用列表（实时更新）
     let currentToolCalls: ToolCall[] = []
 
@@ -914,39 +971,15 @@ export function useAgentChat() {
     let streamSessionId: string | null = run.sessionId
     // 本轮是否被用户"停止"中止（中止后的列表刷新要保留条目，见 pendingPersistIds）
     let stoppedByUser = false
+    // 本次尝试的断点：服务端 attempt 事件给的"这一刻气泡里已经有多少内容"。
+    // 自动重试时按它回退，只丢掉失败那次尝试吐的字（见 'retry' 分支）。
+    let attemptMark: { content: number; reasoning: number; tools: number } | null = null
 
     try {
       const resp = await fetch('/api/agent/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-        body: JSON.stringify({
-          sessionId: run.sessionId || '',
-          userMessage: text,
-          // 新建会话时服务端用它确定项目归属(已有会话沿用其落盘 cwd)
-          cwd: configStore.currentDirectory || '',
-          // 引擎：只在**新建会话**时生效（已有会话服务端沿用自己落盘的那个，
-          // 想换会回 ENGINE_LOCKED）。传当前值即可，两种情形都对。
-          engine: options.engine ?? currentEngine.value,
-          ...(images.length > 0 ? { images } : {}),
-          // 非图片附件：服务端落到数据目录后，只把绝对路径写进请求副本的 system 提示
-          ...(attachments.length > 0 ? { attachments } : {}),
-          // 文件空间对话：把"当前打开的文档"带给服务端（请求级注入上下文，不落会话历史）
-          ...(options.openFilePath ? { openFilePath: options.openFilePath } : {}),
-          // 常用目录对话：把"那批目录的状态 + 界面上那段解读"带给服务端（同样只进请求副本）
-          ...(options.dirStatus?.length ? { dirStatus: options.dirStatus } : {}),
-          ...(options.dirSummary ? { dirSummary: options.dirSummary } : {}),
-          // 主 Agent 控制台：允许这一轮对话调用 dispatch_task 派发工作台任务，
-          // 并把界面上选好的执行器 / 预设提示词勾选一并带上（服务端拿它当工具的默认值）。
-          // 只在显式开启时才出现在请求体里 —— 其它入口（智能体页、编辑器面板）的请求
-          // 与改造前逐字节一致，它们没有派发能力。
-          ...(options.allowDispatch
-            ? {
-              allowDispatch: true,
-              dispatchExecutor: options.dispatchExecutor || '',
-              dispatchUseDefaultPrompt: options.dispatchUseDefaultPrompt !== false
-            }
-            : {})
-        }),
+        body: JSON.stringify(requestBody),
         signal: myController.signal
       })
 
@@ -1004,12 +1037,52 @@ export function useAgentChat() {
                 // 服务端 autoTitle 已按首条 user 消息算好标题；为空(纯图片消息等)
                 // 时退回本地文本，保证左栏不会出现空白行
                 const optimisticTitle = String(evt.title || '').trim() ||
-                  text.trim().split('\n')[0].trim().slice(0, 40) ||
+                  userText.trim().split('\n')[0].trim().slice(0, 40) ||
                   $t('@AGENT:无标题')
                 if (!run.title) run.title = optimisticTitle
                 upsertGeneratingSession(realId, optimisticTitle)
               }
               break
+
+            // 一次 LLM 请求开始（工具循环里每轮一次，自动重试也算新的一次）。
+            // 记下"这一刻气泡里已经有多少字 / 多少个工具块"当断点 —— 传输层自动重试时
+            // 按它回退，只丢掉失败那次尝试吐的字，本轮前面几轮说过的话、跑过的工具留着。
+            case 'attempt':
+              attemptMark = {
+                content: (assistantMsg.content || '').length,
+                reasoning: (assistantMsg.reasoning || '').length,
+                tools: assistantMsg.toolCalls?.length ?? 0
+              }
+              break
+
+            // 传输层正在自动重试（最多 10 次，见 cli/ai/transport.js）：
+            // 回退到断点、回到"生成中"，等服务端下一次尝试的增量。
+            // 不做这件事的后果是界面上出现"半截答案 + 重来一遍"拼在一起的两段话。
+            case 'retry': {
+              if (attemptMark) {
+                assistantMsg.content = (assistantMsg.content || '').slice(0, attemptMark.content)
+                if (assistantMsg.reasoning) {
+                  assistantMsg.reasoning = assistantMsg.reasoning.slice(0, attemptMark.reasoning)
+                }
+                if (assistantMsg.toolCalls && assistantMsg.toolCalls.length > attemptMark.tools) {
+                  assistantMsg.toolCalls.length = attemptMark.tools
+                  currentToolCalls = [...assistantMsg.toolCalls]
+                }
+              }
+              assistantMsg.status = 'pending'
+              assistantMsg.error = ''
+              assistantMsg.finishedAt = undefined
+              if (assistantMsg.reasoningStatus === 'streaming') {
+                assistantMsg.reasoningStatus = 'done'
+              }
+              // 服务端自己会重试，这条只是让用户知道"它在自愈"，不是要他再点一次
+              ElMessage.info($t('@AGENT:连接中断，正在自动重试（{attempt}/{max}）：{reason}', {
+                attempt: Number(evt.attempt) || 0,
+                max: Number(evt.maxRetries) || 0,
+                reason: String(evt.reason || '')
+              }))
+              break
+            }
 
             case 'thinking':
               if (!assistantMsg.reasoning) {
@@ -1228,6 +1301,93 @@ export function useAgentChat() {
     }
   }
 
+  /**
+   * 重试失败的那一轮 —— 错误气泡里那颗「重试」（zen-ai-chat-ui 的 `retry` 事件）。
+   *
+   * 做法是**接着跑**（请求体 `resume: true`），不是把用户那句话重发一遍：
+   * 失败十有八九发生在工具循环中途（比如第二轮请求超时），那时会话尾巴上是
+   * "assistant(tool_calls) + 一批 tool 结果"，重发 user 会让模型看到两条同样的请求、
+   * 还得把已经跑完的工具再跑一遍。服务端沿用它现有的会话状态，只把最后那次请求重来。
+   *
+   * 三条边界：
+   *   · 只认**最后一轮** —— 服务端的会话状态就挂在这一轮尾巴上，
+   *     重试中间的轮次要么重放不了、要么把后面的历史弄乱（库里那颗按钮按消息渲染，
+   *     历史里若有旧错误气泡也会显示，这里明确挡掉并说明）。
+   *   · 只认**内置 g ai** —— 外部 CLI 每轮都是新起一个进程，服务端手上没有
+   *     中途状态可续（服务端也会回 ENGINE_NO_RETRY）。
+   *   · 正在跑就不动（服务端另有同会话并发闸）。
+   */
+  async function retryTurn(message?: ChatMessage): Promise<boolean> {
+    const run = activeRun.value
+    if (!run || run.isStreaming) return false
+
+    const lastAssistant = [...run.messages].reverse().find(m => m.role === 'assistant')
+    const target = (message?.id ? run.messages.find(m => m.id === message.id) : null) || lastAssistant
+    if (!target || target.role !== 'assistant') return false
+    if (lastAssistant && target.id !== lastAssistant.id) {
+      ElMessage.warning($t('@AGENT:只能重试最后一轮'))
+      return false
+    }
+
+    // 续跑的对象是**服务端那条会话**：连 meta 都没回来过（例如"未配置模型"这种
+    // 请求还没进循环就被挡掉的失败）就没有可续的会话，只能让用户重新发。
+    if (!run.sessionId) {
+      ElMessage.warning($t('@AGENT:这条会话还没在服务端建立，请重新发送消息'))
+      return false
+    }
+
+    // 会话由哪个引擎跑以**会话**为准（引擎在会话建立时锁死，服务端会拦中途切换）
+    const sessionEngine = sessions.value.find(s => s.sessionId === run.sessionId)?.engine
+    const engine = (sessionEngine || currentEngine.value) as AgentEngineId
+    if (engine !== 'gai') {
+      ElMessage.warning($t('@AGENT:该会话由外部 CLI 引擎运行，不支持重试上一轮，请重新发送'))
+      return false
+    }
+
+    // 回退到"这一轮开始前"：丢掉失败那次尝试吐的内容，保留已经跑过的工具块
+    //（它们是这一轮真实干过的事，服务端的会话历史里也有）。
+    target.content = ''
+    target.reasoning = undefined
+    target.reasoningStatus = undefined
+    target.reasoningStartedAt = undefined
+    target.reasoningEndedAt = undefined
+    target.error = ''
+    target.status = 'pending'
+    target.finishedAt = undefined
+    // 用时也必须清掉：turn_done 那条有"已经有了就不覆盖"的保护，
+    // 留着上一轮的值会让重试跑完的用时定格在失败那次上。
+    if (target.meta) target.meta = { ...target.meta, durationMs: undefined }
+
+    run.nonce += 1
+    const myNonce = run.nonce
+    run.abortController = new AbortController()
+    const myController = run.abortController
+    run.pendingQuestion = null
+    run.answeringQuestion = false
+    run.isStreaming = true
+
+    const turnToken = `${instanceId}:${run.key}:${myNonce}`
+    agentActivity.begin(turnToken)
+    await runStream(run, myNonce, myController, target, turnToken, {
+      sessionId: run.sessionId || '',
+      // 服务端看到 resume 就不再压 user 消息，直接接着现有尾巴跑
+      resume: true,
+      cwd: configStore.currentDirectory || '',
+      engine,
+      ...(run.lastSendOptions?.openFilePath ? { openFilePath: run.lastSendOptions.openFilePath } : {}),
+      ...(run.lastSendOptions?.dirStatus?.length ? { dirStatus: run.lastSendOptions.dirStatus } : {}),
+      ...(run.lastSendOptions?.dirSummary ? { dirSummary: run.lastSendOptions.dirSummary } : {}),
+      ...(run.lastSendOptions?.allowDispatch
+        ? {
+          allowDispatch: true,
+          dispatchExecutor: run.lastSendOptions.dispatchExecutor || '',
+          dispatchUseDefaultPrompt: run.lastSendOptions.dispatchUseDefaultPrompt !== false
+        }
+        : {})
+    })
+    return true
+  }
+
   async function answerQuestion(answers: string[]) {
     const run = activeRun.value
     const pending = run?.pendingQuestion
@@ -1298,6 +1458,8 @@ export function useAgentChat() {
     renameSession,
     newSession,
     sendMessage,
+    // 重试失败的那一轮（组件库 ChatContainer 的 `retry` 事件 → 四个 g ai 对话入口共用）
+    retryTurn,
     answerQuestion,
     stop
   }

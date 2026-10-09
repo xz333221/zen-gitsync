@@ -65,14 +65,18 @@ export async function runAgentTurn(state, userText, t, images = [], dependencies
     for (let iter = 0; iter < maxIterations; iter++) {
       if (cancelled()) { stats.status = 'cancelled'; return stats }
       const spinner = ui.startSpinner(t.waiting)
-      const writer = ui.createAssistantWriter({
+      // 一次请求可能被传输层自动重试多次（长静默 / 网关 5xx / 流中断）。
+      // 每次尝试都换一套 writer + filter：终端没法把已经打出去的字擦掉，
+      // 与其让两次尝试的输出拼在一起，不如把上一截收尾、重开一块新的（中间一行重试提示）。
+      const makeWriter = () => ui.createAssistantWriter({
         showThinking: state.showThinking !== false,
         thinkingHeader: t.thinkingLabel,
         answerHeader: t.answerLabel,
         thinkingLimit: state.thinkingMode === 'compact' ? terminal.THINKING_PREVIEW_LINES : Infinity,
         thinkingHint: t.thinkingHint,
       })
-      const filter = createThinkFilter()
+      let writer = makeWriter()
+      let filter = createThinkFilter()
       const render = seg => {
         if (seg.content) {
           if (seg.content.trim() && stats.firstAnswerMs === null) stats.firstAnswerMs = performance.now() - started
@@ -90,6 +94,16 @@ export async function runAgentTurn(state, userText, t, images = [], dependencies
         const messages = prepareRequestMessages(state.messages, { locale: state.locale, ...(state.requestBudget || {}) })
         result = await chat({ model: state.model, messages, signal: state.abortController?.signal,
           sessionId: state.sessionId, extraTools: extensions?.tools,
+          onRetry: info => {
+            filter.flush().forEach(render)
+            writer.finish()
+            ui.printWarn(t.llmRetrying(info.attempt, info.maxRetries, info.error?.message || ''))
+            writer = makeWriter()
+            filter = createThinkFilter()
+            // 重试是一次**真的**请求，计入本轮请求数（/stats 里那个"请求数"要能对得上网关账单）
+            stats.requests++
+            stats.retries++
+          },
           onToken: token => {
             if (stats.firstTokenMs === null) stats.firstTokenMs = performance.now() - started
             if (token.content || (token.thinking && state.showThinking !== false)) spinner.stop()

@@ -71,6 +71,8 @@ const STRINGS = {
     unknownModel: (q) => `未找到匹配的模型: ${q},使用默认模型`,
     waiting: '思考中…',
     llmError: (msg) => `LLM 请求失败: ${msg}`,
+    // 传输层自动重试时的一行提示（失败原因原样带上，用户自己判断要不要 Ctrl+C 停掉）
+    llmRetrying: (attempt, max, reason) => `LLM 请求中断,正在重试(第 ${attempt}/${max} 次): ${reason}`,
     toolIterLimit: (n) => `已达单轮最大工具调用次数(${n}),本轮结束。如需继续请再发一条消息。`,
     toolRunning: (name) => `执行 ${name}…`,
     busy: '任务执行中，请稍候，或按 Ctrl+C 停止当前任务。',
@@ -130,6 +132,7 @@ const STRINGS = {
     unknownModel: (q) => `No model matching "${q}", falling back to default`,
     waiting: 'Thinking…',
     llmError: (msg) => `LLM request failed: ${msg}`,
+    llmRetrying: (attempt, max, reason) => `LLM request interrupted, retrying (${attempt}/${max}): ${reason}`,
     toolIterLimit: (n) => `Hit max tool iterations (${n}) for this turn. Send another message to continue.`,
     toolRunning: (name) => `Running ${name}…`,
     busy: 'Agent is working. Wait or press Ctrl+C to stop the task.',

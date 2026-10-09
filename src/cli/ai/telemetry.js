@@ -28,7 +28,9 @@ export function createTurnStats() {
   return {
     startedAt: new Date().toISOString(), completedAt: null, status: 'running',
     totalMs: 0, llmMs: 0, toolsMs: 0, firstTokenMs: null, firstAnswerMs: null,
-    requests: 0, toolCalls: 0, usageRequests: 0, usage: null,
+    // retries：本轮里被传输层自动重试掉的次数（已在 requests 里计过一次的额外请求）。
+    // 单独留一个数是为了让"请求数忽然变多"有解释，而不是看着像 bug（见 /stats）。
+    requests: 0, retries: 0, toolCalls: 0, usageRequests: 0, usage: null,
   }
 }
 

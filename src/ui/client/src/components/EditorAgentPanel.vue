@@ -106,6 +106,7 @@
           :message-rail-config="MESSAGE_RAIL_CONFIG"
           :message-meta-config="MESSAGE_META_CONFIG"
           @answer="answerQuestion"
+          @retry="retryTurn"
         />
       </div>
 
@@ -235,6 +236,7 @@ const {
   renameSession,
   newSession,
   sendMessage,
+  retryTurn,
   answerQuestion,
   stop,
   inputContextUsage,

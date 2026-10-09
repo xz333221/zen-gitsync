@@ -61,6 +61,7 @@ const {
   pendingQuestion,
   answeringQuestion,
   sendMessage,
+  retryTurn,
   answerQuestion,
   newSession,
   stop,
@@ -197,6 +198,7 @@ onBeforeUnmount(() => {
       @unqueue="removeQueuedMessage"
       @flush-queued="flushQueued"
       @answer="answerQuestion"
+      @retry="retryTurn"
     />
   </div>
 </template>

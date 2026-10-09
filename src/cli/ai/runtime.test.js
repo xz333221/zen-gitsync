@@ -59,8 +59,11 @@ test('unsupported stream_options retries once without requesting usage', async (
   assert.equal(result.usage, null)
 })
 
+// 这两条关心的都是"失败时怎么收场"，不是"重试几次" —— 一律 maxRetries: 0，
+// 否则要真等退避（最多 10 次、单次封顶 30s），一个用例就跑到分钟级。
+// 重试本身的行为在文件末尾那组用例里单独验（那里注入 sleepFn，不真等）。
 test('truncated streams do not yield executable tool calls', async () => {
-  await assert.rejects(streamChatOnce({ model, messages: [], fetchFn: async () => response([
+  await assert.rejects(streamChatOnce({ model, messages: [], maxRetries: 0, fetchFn: async () => response([
     event({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'x', function: { name: 'write_file', arguments: '{}' } }] } }] }),
   ]) }), /中断/)
 })
@@ -71,10 +74,96 @@ test('timeout and explicit cancellation have different outcomes', async () => {
     if (signal.aborted) abort()
     else signal.addEventListener('abort', abort, { once: true })
   })
-  await assert.rejects(streamChatOnce({ model, messages: [], fetchFn: hanging, timeoutMs: 10 }), /超时/)
+  await assert.rejects(streamChatOnce({ model, messages: [], fetchFn: hanging, idleTimeoutMs: 10, maxRetries: 0 }), /超时/)
   const result = await streamChatOnce({ model, messages: [], fetchFn: hanging, signal: AbortSignal.abort() })
   assert.equal(result.aborted, true)
   assert.deepEqual(result.toolCalls, [])
+})
+
+// ── 空闲超时 + 自动重试（2026-10-09）─────────────────────────────────
+//
+// 这一组钉的是两件事：
+//   1. 超时的判据是**空闲**（多久没数据）而不是整条流的时长 —— 慢回答不该被掐
+//   2. 失败会自己重试，而"重试也没用"的错误（4xx / 非法 index）不会白试十次
+
+test('空闲超时只在"真的没有数据"时触发，慢回答活得下来', async () => {
+  // 整条流故意拖过 idleTimeoutMs，但每 10ms 吐一段 —— 旧口径（总时长上限）在这里必红
+  const slowButAlive = async (_url, init) => new Response(new ReadableStream({
+    async start(controller) {
+      const bytes = new TextEncoder()
+      for (let i = 0; i < 6; i++) {
+        await new Promise(r => setTimeout(r, 12))
+        controller.enqueue(bytes.encode(event({ choices: [{ delta: { content: `c${i}` } }] })))
+      }
+      controller.enqueue(bytes.encode(event({ choices: [{ delta: {}, finish_reason: 'stop' }] })))
+      controller.enqueue(bytes.encode('data: [DONE]\n\n'))
+      controller.close()
+    },
+  }))
+  const result = await streamChatOnce({ model, messages: [], fetchFn: slowButAlive, idleTimeoutMs: 40, maxRetries: 0 })
+  assert.equal(result.content, 'c0c1c2c3c4c5')
+})
+
+test('可重试的失败会自己重试到成功，并把半截产物交给 onRetry', async () => {
+  let calls = 0
+  const retries = []
+  const flaky = async () => {
+    calls++
+    // 第一次：吐一段正文后流断掉（没有 finish_reason）—— 正是"重试能救"的那类
+    if (calls === 1) return response([event({ choices: [{ delta: { content: '半截' } }] })])
+    return response([event({ choices: [{ delta: { content: '好了' }, finish_reason: 'stop' }] }), 'data: [DONE]\n\n'])
+  }
+  const result = await streamChatOnce({
+    model, messages: [], fetchFn: flaky,
+    sleepFn: async () => {},          // 不真等退避
+    onRetry: info => retries.push(info),
+  })
+  assert.equal(calls, 2)
+  assert.equal(result.content, '好了')
+  assert.equal(retries.length, 1)
+  assert.equal(retries[0].attempt, 1)
+  assert.equal(retries[0].maxRetries, 10, '默认重试上限与 Claude Code 对齐（10）')
+  // 半截内容必须交出来 —— 调用方要靠它把界面上那半句丢掉，否则会看到两段拼在一起
+  assert.equal(retries[0].partial.content, '半截')
+})
+
+test('重试次数用尽后抛出最后一次的错误', async () => {
+  let calls = 0
+  await assert.rejects(streamChatOnce({
+    model, messages: [], maxRetries: 3, sleepFn: async () => {},
+    fetchFn: async () => { calls++; return response([event({ choices: [{ delta: { content: 'x' } }] })]) },
+  }), /中断/)
+  assert.equal(calls, 4, '首次 + 3 次重试')
+})
+
+test('4xx（重试也没用）不重试，网关原话照传', async () => {
+  let calls = 0
+  await assert.rejects(streamChatOnce({
+    model, messages: [], sleepFn: async () => {},
+    fetchFn: async () => { calls++; return new Response('{"error":{"message":"invalid api key"}}', { status: 401 }) },
+  }), /HTTP 401/)
+  assert.equal(calls, 1, '401 重试十次还是 401，不该白烧十次请求')
+})
+
+test('用户点了停止就不再重试', async () => {
+  const controller = new AbortController()
+  let attempts = 0
+  const hanging = async (_url, { signal }) => {
+    attempts++
+    return new Promise((_, reject) => {
+      const abort = () => reject(new DOMException('Aborted', 'AbortError'))
+      if (signal.aborted) abort()
+      else signal.addEventListener('abort', abort, { once: true })
+    })
+  }
+  // 超时→正要重试的那一刻用户按了停止（onRetry 里 abort，最贴近真实时序）
+  const result = await streamChatOnce({
+    model, messages: [], fetchFn: hanging, signal: controller.signal,
+    idleTimeoutMs: 10, sleepFn: async () => { controller.abort() },
+    onRetry: () => { controller.abort() },
+  })
+  assert.equal(result.aborted, true)
+  assert.equal(attempts, 1, '中止后不该再发第二次请求')
 })
 
 const call = n => ({ id: `call${n}`, type: 'function', function: { name: 'read_file', arguments: '{}' } })

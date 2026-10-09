@@ -72,6 +72,7 @@ const {
   renameSession,
   newSession,
   sendMessage,
+  retryTurn,
   pendingQuestion,
   answeringQuestion,
   answerQuestion,
@@ -377,6 +378,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
                 @unqueue="removeQueuedMessage"
                 @flush-queued="flushQueued"
                 @answer="answerQuestion"
+                @retry="retryTurn"
               >
               </ChatContainer>
             </div>

@@ -314,6 +314,11 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
     const userMessage = String(req.body?.userMessage || '').trim();
     const sessionIdInput = String(req.body?.sessionId || '').trim();
     const locale = String(req.body?.locale || req.headers['accept-language'] || 'zh').startsWith('en') ? 'en' : 'zh';
+    // 重试上一轮：不压新的 user 消息，直接接着会话现有的尾巴（那条 user / 那批工具结果）跑。
+    // 为什么需要它：失败可能发生在**工具循环的第二轮请求**上，那时会话里已经有
+    // user + assistant(tool_calls) + 一批 tool 结果 —— 把 user 重发一遍，模型会看到
+    // 两条一模一样的请求，还会把已经跑完的工具再跑一遍（见 agentChat.js 的 resume 参数）。
+    const resume = req.body?.resume === true;
 
     // 图片附件（base64 dataURL 数组）：前端已限制只能选图片，这里再做一层白名单校验
     const images = (Array.isArray(req.body?.images) ? req.body.images : [])
@@ -326,8 +331,12 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
       .slice(0, MAX_ATTACHMENTS)
       .map(a => ({ name: a?.name, dataUrl: a?.dataUrl }));
 
-    if (!userMessage && images.length === 0 && rawAttachments.length === 0) {
+    if (!resume && !userMessage && images.length === 0 && rawAttachments.length === 0) {
       return res.status(400).json({ success: false, error: '消息内容不能为空' });
+    }
+    // 续跑必须有会话可续（没有 sessionId 就没有"上一轮"这回事）
+    if (resume && !sessionIdInput) {
+      return res.status(400).json({ success: false, error: '重试需要指定会话' });
     }
 
     // 文件空间对话：客户端把"当前打开的文档"带上来，服务端只在请求副本里注入上下文（不落库）
@@ -464,6 +473,14 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
       //  deepseek-v4.1-flash）。为外部引擎要求"先在设置里配模型"是错的：
       // 明明能跑，却先被一道无关的校验拦住。
       const useExternal = isExternalEngine(session.engine);
+      // 外部 CLI 引擎没有"续跑半轮"这回事：每一轮都是新 spawn 一个进程，会话状态在它自己那边
+      //（engineSessionId），服务端手上没有可回灌的中途状态。与其装作能重试、把整段 prompt
+      // 再喂一遍（模型会把活重干一次），不如明确告诉用户走"重新发一条"。
+      if (resume && useExternal) {
+        send({ type: 'error', error: `${engineLabel(session.engine)} 引擎暂不支持重试上一轮，请重新发送这条消息。`, code: 'ENGINE_NO_RETRY' });
+        finished = true;
+        return res.end();
+      }
       let model = null;
       let requestBudget = null;
       if (!useExternal) {
@@ -542,6 +559,10 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
       // 把别人跑完的那一轮覆盖掉（见 cli/ai/sessionStore.js 的 recordTurnTiming）。
       const turnIndex = (Array.isArray(session.messages) ? session.messages : [])
         .filter(m => m?.role === 'user').length;
+      // 续跑的是**已经数过的那一轮**：那条 user 消息还在会话里，本轮不该另占一个槽
+      //（另占的话，这条消息的用时会被写成两份、界面上看到两个数）。
+      // recordTurnTiming 按 turnIndex 覆盖，所以重试成功后的用时正好把失败那次盖掉。
+      const effectiveTurnIndex = resume ? Math.max(0, turnIndex - 1) : turnIndex;
 
       if (useExternal) {
         // 外部 CLI 引擎：CLI 自己跑循环，服务端只做 spawn + 事件翻译。
@@ -609,7 +630,9 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
           getContextBlock,
           // 每轮请求的上下文预算（解析结果）。agentChat 拿它调 prepareRequestMessages，
           // 与 CLI turn.js 同一条口径。
-          requestBudget
+          requestBudget,
+          // 重试上一轮：不再压 user 消息，接着会话现有的尾巴跑
+          resume
         });
       }
 
@@ -617,10 +640,10 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
       // 让前端自己再算一遍（从它发请求到收到 done）必然与落盘值差出一点，刷新一下
       // （改读文件里的数）就会变，看着像同一轮有两个用时。
       const durationMs = Date.now() - turnStartedAt;
-      recordTurnTiming(session, { turnIndex, durationMs });
+      recordTurnTiming(session, { turnIndex: effectiveTurnIndex, durationMs });
       // 收尾事件：前端拿它给这条回答定格「本轮用时」。放在 done / error 之后 ——
       // 中断（点停止、客户端断开）的轮次同样有值时，被停止的那一轮也能看到跑了多久。
-      send({ type: 'turn_done', turnIndex, durationMs });
+      send({ type: 'turn_done', turnIndex: effectiveTurnIndex, durationMs });
 
       // 更新标题(新会话从第一条 user 消息自动生成)
       if (isNew) {

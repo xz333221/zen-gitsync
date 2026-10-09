@@ -657,9 +657,13 @@ export function renderTurnSummary(stats, { locale = 'zh-CN', session, width = Ma
   const timing = [status + (time ? ` ${time}` : ''), `${zh ? '总耗时' : 'total'} ${formatDuration(stats.totalMs)}`]
   if (stats.firstTokenMs != null) timing.push(`${zh ? '首响应' : 'first token'} ${formatDuration(stats.firstTokenMs)}`)
   if (stats.firstAnswerMs != null) timing.push(`${zh ? '正文等待' : 'first answer'} ${formatDuration(stats.firstAnswerMs)}`)
+  // 「重试 N」只在真的重试过时才出现：正常的一轮多一个恒为 0 的字段纯属噪音，
+  // 而真重试过的那一轮，用户需要一个解释（请求数为什么比平时多）。
+  const requestLine = `${zh ? '模型' : 'model'} ${formatDuration(stats.llmMs)} · ${zh ? '工具' : 'tools'} ${formatDuration(stats.toolsMs)} (${stats.toolCalls}) · ${zh ? '请求' : 'requests'} ${stats.requests}`
+    + (stats.retries > 0 ? ` · ${zh ? '重试' : 'retries'} ${stats.retries}` : '')
   const lines = [
     timing.join(' · '),
-    `${zh ? '模型' : 'model'} ${formatDuration(stats.llmMs)} · ${zh ? '工具' : 'tools'} ${formatDuration(stats.toolsMs)} (${stats.toolCalls}) · ${zh ? '请求' : 'requests'} ${stats.requests}`,
+    requestLine,
     usageLine(stats.usage, stats.usageRequests, stats.requests),
   ]
   if (session) lines.push(`${zh ? '会话累计' : 'Session'} (${session.turns}) · ${usageLine(session.usage, session.usageRequests, session.requests)}`)

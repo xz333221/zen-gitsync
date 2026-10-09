@@ -57,8 +57,13 @@ const longSession = () => {
 
 // 跑一轮真实的 runAgentTurn,桩掉 globalThis.fetch —— 抓住发出去的请求体与产生的事件
 // (respond 收到 fetch 的 init,方便测试按 signal 模拟"读到一半被中止")
-async function runWeb({ session, userMessage, respond, locale = 'zh-CN', signal, onEvent }) {
+//
+// streamFn：传输层现在默认会自动重试（最多 10 次、指数退避，见 cli/ai/transport.js）。
+// 这一组用例关心的是"失败时怎么收场"，不是"重试几次" —— 真等退避会让一个用例跑到分钟级。
+// 所以统一注入 maxRetries: 0 的那一份；重试自身的口径在 cli/ai/runtime.test.js 里逐条钉。
+async function runWeb({ session, userMessage, respond, locale = 'zh-CN', signal, onEvent, resume = false, streamFn }) {
   const { runAgentTurn } = await import('./agentChat.js')
+  const { streamChatOnce } = await import('../../../../cli/ai/transport.js')
   const events = []
   let sent
   const original = globalThis.fetch
@@ -68,6 +73,8 @@ async function runWeb({ session, userMessage, respond, locale = 'zh-CN', signal,
       session, model, userMessage, locale, cwd: process.cwd(),
       signal: signal ?? new AbortController().signal,
       send: e => { events.push(e); onEvent?.(e) },
+      resume,
+      streamFn: streamFn ?? (opts => streamChatOnce({ ...opts, maxRetries: 0 })),
     })
     return { sent, events, result }
   } finally {
@@ -299,4 +306,101 @@ test('tool_call_start 每种工具都带完整 arguments,argsPreview 仍是截�
   // 计划也要进会话记录 —— 重新打开会话时前端靠历史里的 arguments 复原清单
   const assistantWithPlan = session.messages.find(m => m.role === 'assistant' && m.tool_calls?.some(t => t.function.name === 'update_plan'))
   assert.equal(assistantWithPlan.tool_calls[0].function.arguments, planArgs)
+})
+
+// ── 重试与续跑（2026-10-09）────────────────────────────────────
+// 「重试」要能真的把上一轮跑下去，靠的是服务端两条口径：
+//   1. 失败时**不撤**那条 user 消息 —— 撤了的话 resume 会退化成"重跑上一轮"
+//   2. resume 时**不再压** user 消息 —— 压了就变成"同一条请求出现两次"
+// 两条各自都有明确的失效症状，所以各钉一条。
+
+test('失败时不再撤掉本轮压入的 user 消息（否则重试会退化成重跑上一轮）', async () => {
+  const session = newSession('ag-sandbox-keep-user', withSystem())
+  const boom = () => new Response(JSON.stringify({ error: { message: 'bad request: model not found' } }),
+    { status: 404, headers: { 'content-type': 'application/json' } })
+
+  const { events } = await runWeb({ session, userMessage: '这条不能消失', respond: boom })
+
+  assert.ok(events.some(e => e.type === 'error'))
+  const last = session.messages[session.messages.length - 1]
+  assert.equal(last.role, 'user')
+  assert.equal(last.content, '这条不能消失')
+})
+
+test('resume 不再压 user 消息，接着会话现有的尾巴跑', async () => {
+  const session = newSession('ag-sandbox-resume', withSystem())
+  const usersBefore = session.messages.filter(m => m.role === 'user').length
+
+  const { sent } = await runWeb({ session, userMessage: '', resume: true, respond: okStream })
+
+  assert.equal(sent.messages.length, 2, 'resume 不该往请求里加消息')
+  assert.deepEqual(sent.messages.map(m => m.content), ['rules', 'hi'])
+  // 会话记录里也不能多出一条 user（多出来的那条只会是本轮 assistant 的回答）
+  assert.equal(session.messages.filter(m => m.role === 'user').length, usersBefore)
+  assert.equal(session.messages[session.messages.length - 1].role, 'assistant')
+})
+
+test('每次 LLM 请求前发一条 attempt（前端靠它记重试断点），自动重试时发 retry', async () => {
+  const { streamChatOnce } = await import('../../../../cli/ai/transport.js')
+  let calls = 0
+  // 第一次吐半截就断流（可重试），第二次正常返回 —— 真链路走 streamChatOnce，
+  // 只把"真等退避"换掉，好让这条用例秒级跑完
+  const flaky = opts => streamChatOnce({
+    ...opts,
+    sleepFn: async () => {},
+    fetchFn: async () => {
+      calls++
+      if (calls === 1) return sse([event({ choices: [{ delta: { content: '半截' } }] })])
+      return okStream()
+    },
+  })
+  const session = newSession('ag-sandbox-retry', withSystem())
+
+  const { events } = await runWeb({ session, userMessage: '开始', streamFn: flaky })
+
+  assert.equal(calls, 2, '第一次断流后必须再试一次')
+  // attempt 是**每次工具循环的请求开始前**发的一条（不是每次尝试）：
+  // 自动重试沿用的还是同一个断点 —— 它要丢的正是这一轮请求吐的全部内容。
+  assert.equal(events.filter(e => e.type === 'attempt').length, 1)
+  const retry = events.find(e => e.type === 'retry')
+  assert.ok(retry, '自动重试必须通知前端，否则界面上会留下上一截的字')
+  assert.equal(retry.attempt, 1)
+  assert.equal(retry.maxRetries, 10)
+  assert.match(retry.reason, /中断/)
+  // 断点必须排在正文之前：前端是按"收到 attempt 时气泡里已有的长度"回退的
+  const order = events.map(e => e.type)
+  assert.ok(order.indexOf('attempt') < order.indexOf('content'), 'attempt 要在正文之前')
+  assert.ok(order.indexOf('content') < order.indexOf('retry'), 'retry 落在被丢弃的那段正文之后')
+})
+
+test('对跑完的一轮点「重新生成」：把尾巴那条 assistant 摘掉再问一次', async () => {
+  // 会话尾巴是一条没有工具调用的 assistant = 上一轮已经答完了。
+  // 留着它的话模型会顺着自己的答案往下说，重开会话还会看到两条连着的 assistant。
+  const session = newSession('ag-sandbox-regen', [
+    { role: 'system', content: 'rules' },
+    { role: 'user', content: 'hi' },
+    { role: 'assistant', content: '旧答案' },
+  ])
+
+  const { sent } = await runWeb({ session, userMessage: '', resume: true, respond: okStream })
+
+  assert.deepEqual(sent.messages.map(m => m.content), ['rules', 'hi'], '旧答案必须从请求里消失')
+  assert.equal(session.messages.filter(m => m.role === 'assistant').length, 1, '只剩这一次新生成的')
+  assert.equal(session.messages[session.messages.length - 1].content, 'ok')
+})
+
+test('对中途失败的一轮点「重试」：工具结果留在尾巴上，一条都不摘', async () => {
+  // 失败发生在工具循环中途时，尾巴是 assistant(tool_calls) + 一批 tool 结果 ——
+  // 这些是这一轮真干过的事，摘掉就等于让模型把工具再跑一遍。
+  const session = newSession('ag-sandbox-resume-tools', [
+    { role: 'system', content: 'rules' },
+    { role: 'user', content: 'hi' },
+    { role: 'assistant', content: null, tool_calls: [call(0)] },
+    { role: 'tool', tool_call_id: 'call0', content: 'file contents' },
+  ])
+
+  const { sent } = await runWeb({ session, userMessage: '', resume: true, respond: okStream })
+
+  assert.deepEqual(sent.messages.map(m => m.role), ['system', 'user', 'assistant', 'tool'])
+  assert.equal(sent.messages[3].content, 'file contents', '已经跑完的工具结果必须原样带上')
 })
