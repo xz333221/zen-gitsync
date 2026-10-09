@@ -305,9 +305,16 @@ onBeforeUnmount(() => {
 /* 本轮用时钉在气泡头部右端（与「g ai」那一行同排）—— 库把元信息行渲染在下方那行
    操作栏里，而同排的操作按钮平时 opacity:0，于是耗时孤零零挂在右边看着像掉队的字。
    库的 MessageMetaConfig 只有 inline / below 两种位置、也没有插槽，只能盖样式。
+   定位基准必须钉住宽度（库只给 max-width，这一列是 shrink-to-fit 的：内容一短右缘就
+   缩到名字旁边、用时会跟着跑到左边，只钉 assistant 行）。
    这块条窄、高度也紧，钉在头部比在下方多占一行更合适。 */
-.dir-chat :deep(.acu-bubble-main) {
+.dir-chat :deep(.acu-bubble-row.is-assistant .acu-bubble-main) {
   position: relative;
+  width: var(--acu-bubble-max-width);
+  max-width: var(--acu-bubble-max-width);
+}
+.dir-chat :deep(.acu-bubble-row.is-assistant .acu-bubble) {
+  align-self: flex-start;
 }
 .dir-chat :deep(.acu-message-meta) {
   position: absolute;

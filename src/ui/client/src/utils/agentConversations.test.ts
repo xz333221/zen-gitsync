@@ -201,9 +201,14 @@ describe('源码守卫：渲染 ChatContainer 的地方都得接上侧边条', (
 
   // 用时的**位置**由宿主 CSS 定（库只给 inline / below，都不好看：跟在下方那行操作栏后面时，
   // 左边那几个按钮平时是透明的，耗时孤零零挂在右边像掉队的字 —— 用户 2026-10-09 截图指出）。
-  // 两个规则是一对：main 定位基准 + meta 绝对定位到右上角。缺一个都会跑到别处去，
-  // 而且是那种"页面照样渲染、只有位置不对"的静默失效，所以钉在源码上。
-  test('接了用时的容器都得把元信息行钉到气泡头部（成对的两条 CSS 规则）', () => {
+  //
+  // 三条规则是一组，缺任何一个都是「页面照样渲染、只有位置不对」的静默失效，所以钉在源码上：
+  //   ① 定位基准（assistant 行的 .acu-bubble-main）—— 少了它绝对定位会跑到更外层去；
+  //   ② 基准必须**钉住宽度** —— 库只给 max-width，这一列是 shrink-to-fit 的，内容一短
+  //      （pending 的三个点 / 一句「好的」）右缘就缩到名字旁边，用时会跟着跑到左边压在
+  //      「g ai」上（用户 2026-10-09 第二次截图：同一屏里长回答在右、短回答在左）；
+  //   ③ 气泡本体继续按内容收窄 —— 否则基准被钉宽后，短回答的气泡也跟着被拉满。
+  test('接了用时的容器都得把元信息行钉到气泡头部（成组的三条 CSS 规则）', () => {
     const consumers = Object.entries(allSources)
       .filter(([, src]) => src.includes(':message-meta-config="MESSAGE_META_CONFIG"'))
     expect(consumers.length).toBeGreaterThanOrEqual(4)
@@ -214,9 +219,19 @@ describe('源码守卫：渲染 ChatContainer 的地方都得接上侧边条', (
       expect(metaRule![0], `${file} 的元信息行没有绝对定位到头部`).toContain('position: absolute')
       expect(metaRule![0], `${file} 的元信息行没清掉库给的 margin-top（会被往下推 8px）`).toContain('margin: 0')
 
-      const mainRule = /:deep\(\.acu-bubble-main\)\s*\{[^}]*\}/.exec(src)
-      expect(mainRule, `${file} 少了 :deep(.acu-bubble-main) 定位基准（绝对定位会跑到更外层去）`).toBeTruthy()
+      const mainRule = /:deep\(\.acu-bubble-row\.is-assistant \.acu-bubble-main\)\s*\{[^}]*\}/.exec(src)
+      expect(mainRule, `${file} 少了 assistant 行的定位基准（少了它绝对定位会跑到更外层去）`).toBeTruthy()
       expect(mainRule![0]).toContain('position: relative')
+      // 注意别写成 toContain('width: var(--acu-bubble-max-width)')：`max-width: var(...)`
+      // 里**含有**这个子串，断言会恒绿（反向验证时就是这么骗过我的）。钉在声明开头。
+      expect(
+        mainRule![0],
+        `${file} 的定位基准没钉宽度 —— 短气泡会把它缩回名字旁边，用时又跑到左边`
+      ).toMatch(/(^|[;{\s])width:\s*var\(--acu-bubble-max-width\)/)
+
+      const bubbleRule = /:deep\(\.acu-bubble-row\.is-assistant \.acu-bubble\)\s*\{[^}]*\}/.exec(src)
+      expect(bubbleRule, `${file} 少了「气泡本体仍按内容收窄」那条（短回答的气泡会被拉满）`).toBeTruthy()
+      expect(bubbleRule![0]).toContain('align-self: flex-start')
     }
   })
 })

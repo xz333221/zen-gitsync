@@ -112,6 +112,9 @@ export const MESSAGE_RAIL_CONFIG: MessageRailConfig = { enable: true }
  *   · **位置由宿主 CSS 挪到气泡头部**（库只给 inline / below，都不好看：跟在下方那行
  *     操作栏后面时，左边那几个按钮平时是透明的，耗时孤零零挂在右边像掉队的字）。
  *     四个容器各有一份同名 `:deep(.acu-message-meta)` 规则，见 AgentView 里的注释。
+ *     注意定位基准得**钉住宽度**：库的 `.acu-bubble-main` 只给了 max-width，是 shrink-to-fit
+ *     的 —— 内容一短（pending 的三个点 / 一句「好的」）右缘就缩到名字旁边，用时跟着跑到
+ *     左边去（用户 2026-10-09 第二次截图）。
  *
  * 与 MESSAGE_RAIL_CONFIG 同一条约束：四个 g ai 对话容器（智能体页·对话 Tab / 主 Agent
  * 控制台 / 编辑器 g ai 面板 / 常用目录弹窗）共用这一份，漏一处就那一页没有。

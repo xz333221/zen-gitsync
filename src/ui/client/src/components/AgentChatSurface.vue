@@ -461,9 +461,16 @@ onMounted(() => {
 /* 本轮用时钉在气泡头部右端（与「g ai」那一行同排）—— 库把元信息行渲染在下方那行
    操作栏里，而同排的操作按钮平时 opacity:0，于是耗时孤零零挂在右边看着像掉队的字。
    库的 MessageMetaConfig 只有 inline / below 两种位置、也没有插槽，只能盖样式。
-   理由与四个容器共用的那份说明见 MESSAGE_META_CONFIG 与 AgentView 里的同名规则。 */
-.acs__chat :deep(.acu-bubble-main) {
+   定位基准必须钉住宽度（库只给 max-width，这一列是 shrink-to-fit 的：内容一短右缘就
+   缩到名字旁边、用时会跟着跑到左边，只钉 assistant 行）。理由与四个容器共用的那份
+   说明见 MESSAGE_META_CONFIG 与 AgentView 里的同名规则。 */
+.acs__chat :deep(.acu-bubble-row.is-assistant .acu-bubble-main) {
   position: relative;
+  width: var(--acu-bubble-max-width);
+  max-width: var(--acu-bubble-max-width);
+}
+.acs__chat :deep(.acu-bubble-row.is-assistant .acu-bubble) {
+  align-self: flex-start;
 }
 .acs__chat :deep(.acu-message-meta) {
   position: absolute;

@@ -609,10 +609,24 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
    库把元信息行（耗时）渲染在气泡**下方**那行操作栏里，而与它同排的复制 / 重新生成按钮
    平时是 opacity:0 —— 于是那行左边空着一截、只在最右边挂个「8.9s」，看着像掉队的一小段字
    （用户 2026-10-09 截图指出）。库的 MessageMetaConfig 只有 inline / below 两种位置、
-   也没有插槽可换，只能盖样式：把它绝对定位到气泡本体右上角 —— 那块本来就是空的，
-   既不占内容高度，也不会和悬停才出现的操作按钮挤在一起。 */
-.agent-chat-host :deep(.acu-bubble-main) {
+   也没有插槽可换，只能盖样式：把它绝对定位到气泡本体右上角。
+
+   定位基准必须**钉住宽度**：库只给 max-width，这一列是 shrink-to-fit 的 —— 内容一短
+   （pending 的三个点、一句「好的」）它的右缘就缩到名字旁边，`right: 0` 的用时会跟着跑到
+   左边压在「g ai」上（用户 2026-10-09 第二次截图：同一屏里长回答的在右、短回答的在左）。
+   钉成库自己那个上限后，用时的 x 就恒定了。**只钉 assistant 行**：user 行不显示用时，
+   而且它靠 `align-items: flex-end` 靠右，一并钉宽会把它的气泡挪到左边去。
+   该规则必须成对存在 —— 只写 position: relative 是「页面照样渲染、只有位置不对」的
+   静默失效，所以源码守卫按成对钉死（agentConversations.test.ts）。 */
+.agent-chat-host :deep(.acu-bubble-row.is-assistant .acu-bubble-main) {
   position: relative;
+  width: var(--acu-bubble-max-width);
+  max-width: var(--acu-bubble-max-width);
+}
+/* 基准被钉宽后，气泡本体继续按内容收窄 —— 短回答的外观与改前逐像素一致
+   （长回答的 max-content 本来就顶到上限，收不收都一样宽）。 */
+.agent-chat-host :deep(.acu-bubble-row.is-assistant .acu-bubble) {
+  align-self: flex-start;
 }
 .agent-chat-host :deep(.acu-message-meta) {
   position: absolute;
