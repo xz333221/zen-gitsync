@@ -31,6 +31,7 @@ import 'zen-ai-chat-ui/style.css'
 import { useConfigStore } from '@/stores/configStore'
 import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
 import { buildConversationItems, agentConversationLabels, agentQuestionLabels, agentQueueLabels, AGENT_ASSISTANT_NAME, AGENT_ASSISTANT_AVATAR, MESSAGE_RAIL_CONFIG, MESSAGE_META_CONFIG } from '@/utils/agentConversations'
+import { resolveAgentPresets } from '@/utils/agentPresets'
 import { agentEngineName, type AgentEngineId } from '@/utils/agentEngine'
 import { useNarrowPane } from '@/composables/useNarrowPane'
 import MarketplacePanel from '@/components/MarketplacePanel.vue'
@@ -126,13 +127,10 @@ const currentSessionTitle = computed(
 const welcomeAvatarStyle = { '--welcome-avatar': `url("${AGENT_ASSISTANT_AVATAR}")` }
 
 // ── 预设问题 ──────────────────────────────────────────────
-const presetQuestions = computed(() => [
-  { id: 'p1', label: $t('@AGENT:查看项目结构'), prompt: $t('@AGENT:prompt_p1') },
-  { id: 'p2', label: $t('@AGENT:分析代码质量'), prompt: $t('@AGENT:prompt_p2') },
-  { id: 'p3', label: $t('@AGENT:帮我提交代码'), prompt: $t('@AGENT:prompt_p3') },
-  { id: 'p4', label: $t('@AGENT:Git 状态检查'), prompt: $t('@AGENT:prompt_p4') },
-  { id: 'p5', label: $t('@AGENT:帮我启动项目'), prompt: $t('@AGENT:prompt_p5') }
-])
+// 内容可配（设置 → AI 模型配置 → 预设提示词）：configStore 里有自定义用自定义，
+// 否则回落 utils/agentPresets 的内置默认（原先是这里硬编码的 5 条）。
+// computed 依赖 store，改完设置回来看欢迎页即时生效，不需要新开会话或刷新。
+const presetQuestions = computed(() => resolveAgentPresets(configStore.agentPresetPrompts))
 
 // ── 发送消息 ──────────────────────────────────────────────
 async function onSend(payload: { text: string; files: any[] }) {

@@ -126,6 +126,56 @@ export function normalizeNotifySwitch(value) {
   return typeof value === 'boolean' ? value : null;
 }
 
+// 「预设提示词」（智能体视图欢迎页的快捷卡片）的上限。
+// 只防"手改配置把 UI/请求写爆"，不是产品硬约束：卡片区是自适应网格，
+// 12 条在常见窗口里已经铺满；label 上限覆盖"一句话标题"，prompt 上限
+// 覆盖"一段能把要求说全的指令"。
+const AGENT_PRESET_PROMPTS_MAX = 12;
+const AGENT_PRESET_LABEL_MAX = 60;
+const AGENT_PRESET_PROMPT_MAX = 4000;
+
+/**
+ * 规范化「预设提示词」数组（全局配置，跨项目共享）。
+ *
+ * 语义约定（2026-10-09 新增）：
+ *   · undefined / null  → null（没配过，调用方回落 defaultConfig，即内置 5 条）
+ *   · []                → []（**合法值**：显式"恢复内置默认"就是这个表达）
+ *   · 非数组 / 任一条目结构坏 → null（整体拒绝：宁可整组回落内置，也不生成
+ *     "点了没反应"的半截卡片。UI 保存前会防呆，这条主要兜手改 config.json）
+ *   · 正常数组 → 清洗后的副本：trim、去重/补 id、超长截断、超条数截断
+ *     （超量与超长属于"手笔太大"，夹取比整组丢掉更贴近用户意图，
+ *     与 normalizeAiMaxToolIterations 的越界夹取同一套语义）
+ */
+export function normalizeAgentPresetPrompts(value) {
+  if (value === undefined || value === null) return null;
+  if (!Array.isArray(value)) return null;
+  const out = [];
+  const seen = new Set();
+  for (const item of value) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    const label = typeof item.label === 'string' ? item.label.trim() : '';
+    const prompt = typeof item.prompt === 'string' ? item.prompt.trim() : '';
+    if (!label || !prompt) return null;
+    let id = typeof item.id === 'string' ? item.id.trim() : '';
+    // id 缺失或重复都无伤大雅（前端只拿它当 v-for key），补一个稳定且唯一的即可；
+    // 真正需要拒绝的是 label/prompt 缺失 —— 那会让卡片点了没反应。
+    if (!id || seen.has(id)) {
+      let n = out.length + 1;
+      id = `preset-${n}`;
+      while (seen.has(id)) id = `preset-${++n}-${Math.random().toString(36).slice(2, 5)}`;
+    }
+    seen.add(id);
+    out.push({
+      id,
+      label: label.slice(0, AGENT_PRESET_LABEL_MAX),
+      prompt: prompt.slice(0, AGENT_PRESET_PROMPT_MAX),
+    });
+    // 超出上限的部分直接放弃检查（反正要截断），避免为"手滑粘贴 500 条"做无谓校验
+    if (out.length >= AGENT_PRESET_PROMPTS_MAX) break;
+  }
+  return out;
+}
+
 /**
  * 三个提示通道（页面提示 / 浏览器通知 / 提示音）的最终取值。
  *
@@ -213,6 +263,10 @@ const defaultConfig = {
   // 越界值夹取到 [20,000, 1,000,000]。解析公式见 cli/ai/context.js 的 resolveRequestBudget。
   // 旧字段 aiMaxRequestChars（字符口径）由 resolveRequestTokens 迁移读取。
   aiMaxRequestTokens: REQUEST_DEFAULT_MAX_TOKENS,
+  // 智能体视图欢迎页的「预设提示词」快捷卡片（全局配置，CLI 不消费、只有 Web 端用）。
+  // 空数组 = 使用前端内置的 5 条默认（zh/en 文案随界面语言走，见 utils/agentPresets.ts）；
+  // 非空 = 用户自定义全量（每条 {id, label, prompt}）。归一化见 normalizeAgentPresetPrompts。
+  agentPresetPrompts: [],
   // 工作台任务执行器（claude | opencode | codex）。全局配置，跨项目共享。
   // 决定「执行任务 / 执行子任务 / 从此处开始 / 简单任务续聊」这条链路
   // 默认 spawn 哪个本地 CLI；执行入口可以按次覆盖（见 workbench 执行路由）。
@@ -559,6 +613,8 @@ async function loadConfig() {
         ?? defaultConfig.aiMaxToolIterations,
       aiMaxRequestTokens: resolveRequestTokens(raw),
       taskExecutor: normalizeTaskExecutor(raw.taskExecutor) ?? defaultConfig.taskExecutor,
+      agentPresetPrompts: normalizeAgentPresetPrompts(raw.agentPresetPrompts)
+        ?? defaultConfig.agentPresetPrompts,
       ...resolveNotifySwitches(raw)
     };
   }
@@ -580,6 +636,8 @@ async function loadConfig() {
     aiMaxRequestTokens: resolveRequestTokens(raw),
     taskExecutor: normalizeTaskExecutor(raw?.taskExecutor) ?? defaultConfig.taskExecutor,
     // 同 taskExecutor：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
+    agentPresetPrompts: normalizeAgentPresetPrompts(raw?.agentPresetPrompts)
+      ?? defaultConfig.agentPresetPrompts,
     ...resolveNotifySwitches(raw)
   };
 }
@@ -633,6 +691,7 @@ async function saveConfig(config) {
   // 项目级是这一族键最容易踩的坑。解构出来本身不写回顶层（它已不再被任何地方读取）。
   const {
     theme, locale, models, ui, aiMaxToolIterations, aiMaxRequestTokens, taskExecutor,
+    agentPresetPrompts,
     notifyOnTaskDone: legacyNotifyOnTaskDone,
     notifyPageOnTaskDone, notifyBrowserOnTaskDone, notifySoundOnTaskDone,
     ...projectConfig
@@ -679,6 +738,12 @@ async function saveConfig(config) {
     if (normalized !== null) {
       raw[key] = normalized;
     }
+  }
+  // 预设提示词同属全局设置：空数组是**合法值**（= 恢复内置默认），照写；
+  // 非法值（结构坏）不落盘，保留磁盘旧值 —— 与上面各键同一套语义。
+  const normalizedPresets = normalizeAgentPresetPrompts(agentPresetPrompts);
+  if (normalizedPresets !== null) {
+    raw.agentPresetPrompts = normalizedPresets;
   }
 
   // 写入当前项目配置（在 defaultConfig 基础上合并，但不清空顶层其它键）
@@ -886,6 +951,8 @@ export default {
   // 只在 `export function` 里命名导出是不够的：漏加会变成 undefined 调用 → 路由 500，
   // 而且因为有 try/catch 兜底，前端只会看到"保存失败"，不知道是哪个函数缺了。
   normalizeNotifySwitch,
+  // 智能体视图「预设提示词」的规范化(GUI 保存前也要用,见 /api/config/save-ai-settings)
+  normalizeAgentPresetPrompts,
 };
 
 // 命名导出 — 用于测试与外部复用

@@ -92,7 +92,7 @@ vi.mock('@/composables/useAgentChat', async () => {
 vi.mock('zen-ai-chat-ui', () => ({
   ChatContainer: {
     name: 'ChatContainer',
-    props: ['messages', 'generating', 'disabled', 'allowQueue', 'queued', 'queuePaused', 'queueLabels', 'placeholder', 'theme', 'showInput'],
+    props: ['messages', 'generating', 'disabled', 'allowQueue', 'queued', 'queuePaused', 'queueLabels', 'placeholder', 'theme', 'showInput', 'presetQuestions'],
     template: '<div class="stub-chat" />',
     methods: { scrollToBottom() {} },
   },
@@ -107,8 +107,16 @@ vi.mock('@/components/MarketplacePanel.vue', () => ({
   default: { name: 'MarketplacePanel', template: '<div class="stub-marketplace" />' },
 }))
 
+// configStore 可变桩：预设提示词用例要按例切换 agentPresetPrompts。
+// （computed 读的是普通对象字段，直接赋值不会触发响应式 —— 用例改完值重新 mount 即可。）
+const configState = vi.hoisted(() => ({
+  theme: 'light' as const,
+  currentDirectory: '/tmp/proj',
+  agentPresetPrompts: [] as { id: string; label: string; prompt: string }[],
+}))
+
 vi.mock('@stores/configStore', () => ({
-  useConfigStore: () => ({ theme: 'light', currentDirectory: '/tmp/proj' }),
+  useConfigStore: () => configState,
 }))
 
 import AgentView from './AgentView.vue'
@@ -132,6 +140,7 @@ beforeEach(() => {
   agent.pendingEngine.value = 'gai'
   agent.isEngineLocked.value = false
   agent.pickEngine.mockClear()
+  configState.agentPresetPrompts = []
 })
 
 describe('AgentView 窄屏折行', () => {
@@ -327,5 +336,38 @@ describe('AgentView 生成中排队（接线）', () => {
 
     expect(agent.removeQueuedMessage).toHaveBeenCalledWith('q1')
     expect(agent.flushQueued).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('AgentView 预设提示词（可配置）', () => {
+  // 卡片数据源已从视图内硬编码改为 utils/agentPresets 的共享模块：
+  // 配置里有自定义用自定义，否则回落内置默认。这里只守"接线"：
+  // store 的值真的到了库的 ChatContainer 的 preset-questions 上。
+  function presetProps(w: ReturnType<typeof mountView>) {
+    const chat = w.findComponent({ name: 'ChatContainer' })
+    return chat.props('presetQuestions') as Array<{ id: string; label: string; prompt: string }>
+  }
+
+  it('配置为空时用内置默认（5 条，id = p1..p5）', async () => {
+    const w = mountView()
+    await nextTick()
+
+    const qs = presetProps(w)
+    expect(qs.length).toBe(5)
+    expect(qs.map(q => q.id)).toEqual(['p1', 'p2', 'p3', 'p4', 'p5'])
+  })
+
+  it('配置有自定义时原样用自定义（顺序与字段都不加工）', async () => {
+    configState.agentPresetPrompts = [
+      { id: 'u2', label: '第二条', prompt: '做点别的' },
+      { id: 'u1', label: '第一条', prompt: '跑测试' },
+    ]
+    const w = mountView()
+    await nextTick()
+
+    expect(presetProps(w)).toEqual([
+      { id: 'u2', label: '第二条', prompt: '做点别的' },
+      { id: 'u1', label: '第一条', prompt: '跑测试' },
+    ])
   })
 })

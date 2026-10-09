@@ -1091,7 +1091,21 @@ export default {
   '@42BB9:读取条目失败': 'Failed to read the entry',
   '@42BB9:删除失败': 'Delete failed',
   '@42BB9:记忆库位于 ~/.zen-gitsync/memory/，只有索引会进智能体的上下文，正文按需读取。': 'The library lives in ~/.zen-gitsync/memory/ — only the index enters the agent context; lesson bodies are read on demand.',
-  // @42BB9: file end (追加: 记忆库面板)
+  // 预设提示词（智能体视图欢迎页快捷卡片）
+  '@42BB9:预设提示词': 'Preset prompts',
+  '@42BB9:添加一条': 'Add one',
+  '@42BB9:智能体视图欢迎页的快捷卡片。点击卡片会把「内容」原样发送给 g ai；编辑完点右下角「保存设置」生效，清空则回到内置默认': 'Shortcut cards on the agent welcome screen. Clicking a card sends its "Prompt" to g ai verbatim. Click "Save settings" at the bottom right to apply; leave it empty to use the built-in defaults.',
+  '@42BB9:已删光所有预设 —— 点「恢复默认」用回内置版本，或「添加一条」自己写': 'All presets removed — click "Restore defaults" to bring back the built-in set, or "Add one" to write your own',
+  '@42BB9:标题，例如：查看项目结构': 'Label, e.g. View project structure',
+  '@42BB9:上移': 'Move up',
+  '@42BB9:下移': 'Move down',
+  '@42BB9:点击卡片发送给 g ai 的内容': 'What clicking the card sends to g ai',
+  '@42BB9:恢复默认': 'Restore defaults',
+  '@42BB9:已恢复为内置预设': 'Restored the built-in presets',
+  '@42BB9:至少保留一条预设 —— 想用回内置版本请点「恢复默认」': 'Keep at least one preset — click "Restore defaults" to return to the built-in set',
+  '@42BB9:每条预设的标题和内容都不能为空': 'Every preset needs both a label and a prompt',
+  '@42BB9:预设提示词已保存': 'Preset prompts saved',
+  // @42BB9: file end (追加: 记忆库面板 / 预设提示词)
   // @2AEBA: file path: components\GlobalLoading.vue
   '@2AEBA:加载中...': 'Loading...',
   // @2AEBA: file end

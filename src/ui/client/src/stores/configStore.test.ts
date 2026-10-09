@@ -112,3 +112,75 @@ describe('configStore 任务执行器「上次用过」', () => {
     expect(JSON.parse(String(init?.body))).toEqual({ lastTaskExecutor: 'opencode' })
   })
 })
+
+// 预设提示词（智能体视图欢迎页快捷卡片）：配置读写链路。
+// 两条容易踩的语义边界在这里钉住：
+//   1. 空数组是**合法值**（= 用内置默认），读取时保持空数组，不在这里注入内置文案
+//      —— 内置文案跟着界面语言走，注入到 store 就等于把语言腌进了数据；
+//   2. 保存空数组也要真的发出去（恢复内置默认全靠它），不能被"空即省略"的逻辑吃掉。
+describe('configStore 预设提示词（agentPresetPrompts）', () => {
+  function stubFetch(configData: Record<string, unknown>, saveReply: Record<string, unknown> = { success: true }) {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/config/getConfig') {
+        return new Response(JSON.stringify({ currentDirectory: 'C:\repo-a', ...configData }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return new Response(JSON.stringify(saveReply), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }))
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  test('load 读取预设；缺 label/prompt 的脏条目被防御性过滤', async () => {
+    stubFetch({
+      agentPresetPrompts: [
+        { id: 'u1', label: '我的', prompt: '跑测试' },
+        { id: 'u2', label: '缺内容就被丢' },
+        'oops',
+      ],
+    })
+    const store = useConfigStore()
+    await store.loadConfig()
+
+    expect(store.agentPresetPrompts).toEqual([{ id: 'u1', label: '我的', prompt: '跑测试' }])
+  })
+
+  test('未配置时保持空数组（= 用内置默认，不把内置文案腌进 store）', async () => {
+    stubFetch({})
+    const store = useConfigStore()
+    await store.loadConfig()
+
+    expect(store.agentPresetPrompts).toEqual([])
+  })
+
+  test('保存空数组：body 要真的带上 agentPresetPrompts: []（恢复内置默认）', async () => {
+    stubFetch({}, { success: true, agentPresetPrompts: [] })
+    const store = useConfigStore()
+    await store.loadConfig()
+
+    const ok = await store.saveAiSettings({ agentPresetPrompts: [] })
+
+    expect(ok).toBe(true)
+    const saveCall = vi.mocked(fetch).mock.calls.find(c => c[0] === '/api/config/save-ai-settings')
+    expect(saveCall).toBeTruthy()
+    expect(JSON.parse(String(saveCall![1]?.body))).toEqual({ agentPresetPrompts: [] })
+    expect(store.agentPresetPrompts).toEqual([])
+  })
+
+  test('保存：以回执里的归一化结果回写 store（补 id 等以服务端为准）', async () => {
+    stubFetch({}, { success: true, agentPresetPrompts: [{ id: 'preset-1', label: 'a', prompt: 'b' }] })
+    const store = useConfigStore()
+    await store.loadConfig()
+
+    await store.saveAiSettings({ agentPresetPrompts: [{ id: '', label: 'a', prompt: 'b' }] })
+
+    expect(store.agentPresetPrompts).toEqual([{ id: 'preset-1', label: 'a', prompt: 'b' }])
+  })
+})

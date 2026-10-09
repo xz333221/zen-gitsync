@@ -519,6 +519,85 @@
               </div>
             </div>
           </div>
+
+          <!-- 预设提示词（智能体视图欢迎页的快捷卡片，全局配置、跨项目共享） -->
+          <div class="settings-section">
+            <div class="section-title model-section-title">
+              <span>{{ $t('@42BB9:预设提示词') }}</span>
+              <button
+                type="button"
+                class="add-model-btn"
+                :disabled="presetDraft.length >= PRESET_MAX"
+                @click="addPreset"
+              >+ {{ $t('@42BB9:添加一条') }}</button>
+            </div>
+            <p class="preset-hint">
+              {{ $t('@42BB9:智能体视图欢迎页的快捷卡片。点击卡片会把「内容」原样发送给 g ai；编辑完点右下角「保存设置」生效，清空则回到内置默认') }}
+            </p>
+
+            <div v-if="presetDraft.length === 0" class="preset-empty">
+              {{ $t('@42BB9:已删光所有预设 —— 点「恢复默认」用回内置版本，或「添加一条」自己写') }}
+            </div>
+
+            <div class="preset-list">
+              <div v-for="(item, idx) in presetDraft" :key="item.id" class="preset-card">
+                <div class="preset-card-head">
+                  <span class="preset-card-index">{{ String(idx + 1).padStart(2, '0') }}</span>
+                  <el-input
+                    v-model="item.label"
+                    :maxlength="60"
+                    class="preset-card-label"
+                    :placeholder="$t('@42BB9:标题，例如：查看项目结构')"
+                  />
+                  <div class="preset-card-acts">
+                    <button
+                      type="button"
+                      class="preset-act-btn"
+                      :disabled="idx === 0"
+                      :title="$t('@42BB9:上移')"
+                      :aria-label="$t('@42BB9:上移')"
+                      @click="movePreset(idx, -1)"
+                    >
+                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15" /></svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="preset-act-btn"
+                      :disabled="idx === presetDraft.length - 1"
+                      :title="$t('@42BB9:下移')"
+                      :aria-label="$t('@42BB9:下移')"
+                      @click="movePreset(idx, 1)"
+                    >
+                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="preset-act-btn preset-act-btn--danger"
+                      :title="$t('@42BB9:删除')"
+                      :aria-label="$t('@42BB9:删除')"
+                      @click="removePreset(idx)"
+                    >
+                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                    </button>
+                  </div>
+                </div>
+                <el-input
+                  v-model="item.prompt"
+                  type="textarea"
+                  :rows="2"
+                  :maxlength="4000"
+                  :placeholder="$t('@42BB9:点击卡片发送给 g ai 的内容')"
+                />
+              </div>
+            </div>
+
+            <div class="preset-foot">
+              <span class="preset-count">{{ presetDraft.length }} / {{ PRESET_MAX }}</span>
+              <button type="button" class="model-btn" @click="handleResetPresets">
+                {{ $t('@42BB9:恢复默认') }}
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- Git 全局设置面板 -->
@@ -788,6 +867,7 @@ import { useLocaleStore } from '@/stores/localeStore'
 import { useConfigStore, type ModelInfo } from '@/stores/configStore'
 import { useToolsStore, type ToolId } from '@/stores/toolsStore'
 import { TASK_EXECUTOR_OPTIONS, type TaskExecutorId } from '@/utils/taskExecutor'
+import { builtinAgentPresets, newAgentPresetId, type AgentPresetPrompt } from '@/utils/agentPresets'
 import { TOOL_DISPLAY_NAMES } from '@/composables/useDirectoryOpenActions'
 import {
   notificationPermission,
@@ -959,6 +1039,53 @@ async function handleAiMaxRequestCharsChange(value: number | undefined) {
   }
 }
 
+// ── 预设提示词（智能体视图欢迎页的快捷卡片）──────────────────
+// 编辑走**草稿模式**（与「通用设置」「Git 设置」同一套交互）：改动先落 presetDraft，
+// footer 的「保存设置」按 hasChanges 出现，保存时全量提交；
+// 「恢复默认」是例外 —— 它是个明确动作，点了立即提交空数组（= 内置默认）并重置草稿。
+// 条数上限与后端 src/config.js 的 AGENT_PRESET_PROMPTS_MAX 保持一致。
+const PRESET_MAX = 12
+const presetDraft = ref<AgentPresetPrompt[]>([])
+
+/** 用「当前生效值」重置草稿：配置里有自定义 → 拷贝自定义；否则 → 内置默认（当前语言） */
+function initPresetDraft() {
+  const custom = configStore.agentPresetPrompts
+  presetDraft.value = (custom.length > 0 ? custom : builtinAgentPresets()).map(x => ({ ...x }))
+}
+
+/** 草稿 vs 当前生效值（自定义或内置）的差异 —— 有差异 footer 才出现「保存设置」 */
+const presetDirty = computed(() =>
+  JSON.stringify(presetDraft.value) !== JSON.stringify(
+    configStore.agentPresetPrompts.length > 0 ? configStore.agentPresetPrompts : builtinAgentPresets()
+  )
+)
+
+function addPreset() {
+  if (presetDraft.value.length >= PRESET_MAX) return
+  presetDraft.value.push({ id: newAgentPresetId(), label: '', prompt: '' })
+}
+
+function removePreset(idx: number) {
+  presetDraft.value.splice(idx, 1)
+}
+
+function movePreset(idx: number, delta: number) {
+  const next = idx + delta
+  if (next < 0 || next >= presetDraft.value.length) return
+  // splice 出再插回：Vue 会按 key 复用节点，输入框焦点/光标都不丢
+  const [item] = presetDraft.value.splice(idx, 1)
+  presetDraft.value.splice(next, 0, item)
+}
+
+async function handleResetPresets() {
+  // 提交**空数组**（不是内置文案的全量）—— 语义是"恢复内置默认"而不是"把当前语言
+  // 的内置文案快照成自定义"。后端存 []，之后切语言时内置文案仍会跟着切。
+  const ok = await configStore.saveAiSettings({ agentPresetPrompts: [] })
+  if (!ok) return
+  initPresetDraft()
+  ElMessage.success($t('@42BB9:已恢复为内置预设'))
+}
+
 const currentThemeForForm = computed(() =>
   configStore.theme === 'light' ? 'light' : 'dark'
 )
@@ -997,6 +1124,11 @@ const hasChanges = computed(() => {
   if (activeTab.value === 'editor') {
     return tempEditorAutoSave.value !== configStore.ui.editorAutoSave ||
       tempFileTreeAutoRefresh.value !== configStore.ui.fileTreeAutoRefresh
+  }
+  // AI 模型 tab：工具轮次 / token 上限是即时保存的（不参与），只有预设提示词
+  // 是草稿模式 —— 有未保存改动时才让 footer 出现「保存设置」。
+  if (activeTab.value === 'ai-models') {
+    return presetDirty.value
   }
   return false
 })
@@ -1126,6 +1258,9 @@ watch(() => props.modelValue, async (val) => {
     aiModels.value = [...configStore.models]
     aiMaxToolIterationsInput.value = configStore.aiMaxToolIterations
     aiMaxRequestTokensInput.value = configStore.aiMaxRequestTokens
+    // 预设提示词草稿：每次打开都用当前生效值重置 —— 上次「取消」丢弃的编辑
+    // 不该残留到下一次打开（这里的 configStore 刚被强制刷新过，拿的是最新盘上值）
+    initPresetDraft()
     editingModelId.value = undefined
     // 加载编辑器设置
     tempEditorAutoSave.value = configStore.ui.editorAutoSave
@@ -1520,6 +1655,27 @@ async function handleSave() {  // 配置编辑 tab 单独处理
     configStore.ui.editorAutoSave = tempEditorAutoSave.value
     configStore.ui.fileTreeAutoRefresh = tempFileTreeAutoRefresh.value
     ElMessage.success($t('@42BB9:编辑器设置已保存'))
+    visible.value = false
+    return
+  }
+  // 预设提示词：草稿全量提交。校验只拦"点了没反应"的坏数据（空条目），
+  // 长度/条数上限由 input 的 maxlength 与后端归一化兜底。
+  if (activeTab.value === 'ai-models') {
+    const cleaned = presetDraft.value.map(x => ({ id: x.id, label: x.label.trim(), prompt: x.prompt.trim() }))
+    if (cleaned.length === 0) {
+      ElMessage.warning($t('@42BB9:至少保留一条预设 —— 想用回内置版本请点「恢复默认」'))
+      return
+    }
+    if (cleaned.some(x => !x.label || !x.prompt)) {
+      ElMessage.warning($t('@42BB9:每条预设的标题和内容都不能为空'))
+      return
+    }
+    const ok = await configStore.saveAiSettings({ agentPresetPrompts: cleaned })
+    if (!ok) return
+    // 用 trim 后的值对齐草稿：否则"看着一样但还挂着 dirty"（末尾空格造成假差异），
+    // footer 的保存按钮会一直杵在那儿
+    presetDraft.value = cleaned.map(x => ({ ...x }))
+    ElMessage.success($t('@42BB9:预设提示词已保存'))
     visible.value = false
     return
   }
@@ -2288,6 +2444,108 @@ html.dark .label-icon {
 .model-btn--danger:hover {
   border-color: var(--el-color-danger);
   color: var(--color-danger-dark);
+}
+
+/* 预设提示词（智能体视图欢迎页快捷卡片） */
+.preset-hint {
+  font-size: var(--font-size-xs);
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
+  margin: 0 0 10px;
+}
+
+.preset-empty {
+  font-size: var(--font-size-sm);
+  color: var(--el-text-color-secondary);
+  padding: 12px 0;
+}
+
+.preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.preset-card {
+  padding: 10px 12px;
+  border: 1px solid var(--el-border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-container);
+  transition: border-color var(--transition-base);
+}
+
+.preset-card:hover {
+  border-color: var(--color-primary);
+}
+
+.preset-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.preset-card-index {
+  flex-shrink: 0;
+  width: 18px;
+  font-size: var(--font-size-xs);
+  color: var(--el-text-color-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.preset-card-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.preset-card-acts {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* 图标按钮：无背景无边框，hover 才浮出色块（与顶栏 icon 按钮同一取向） */
+.preset-act-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  transition: var(--transition-ui-base);
+}
+
+.preset-act-btn:hover:not(:disabled) {
+  background: var(--tint-primary-12);
+  color: var(--color-primary);
+}
+
+.preset-act-btn--danger:hover:not(:disabled) {
+  background: var(--el-color-danger-light-9);
+  color: var(--el-color-danger);
+}
+
+.preset-act-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.preset-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.preset-count {
+  font-size: var(--font-size-xs);
+  color: var(--el-text-color-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .model-form {

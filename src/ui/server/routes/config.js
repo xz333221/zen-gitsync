@@ -1124,6 +1124,20 @@ export function registerConfigRoutes({
         }
         updates.aiMaxRequestTokens = normalized
       }
+      // 智能体视图「预设提示词」（欢迎页快捷卡片）：{id?, label, prompt} 数组。
+      // 空数组是**合法值**（= 恢复内置默认），所以判空用 !== undefined 而不是 length。
+      // 结构坏的值整体拒绝（400），不清洗 —— 与 normalizeAgentPresetPrompts 语义一致；
+      // 响应把归一化后的最终值带回（含补 id/截断），前端以回执为准。
+      if (body.agentPresetPrompts !== undefined) {
+        const normalized = configManager.normalizeAgentPresetPrompts(body.agentPresetPrompts)
+        if (normalized === null) {
+          return res.status(400).json({
+            success: false,
+            error: 'agentPresetPrompts 非法: 需要 [{label, prompt}] 数组（每项都不能为空）'
+          })
+        }
+        updates.agentPresetPrompts = normalized
+      }
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ success: false, error: '缺少可保存的参数' })
       }

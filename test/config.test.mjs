@@ -63,7 +63,7 @@ after(async () => {
 const configMod = await import(pathToFileURL(path.join(projectRoot, 'src/config.js')).href)
 // 注意:saveConfig / loadConfig 等业务函数挂在 default export 上;
 // ConfigWriteError / normalizeProjectPath 是命名导出(用于测试与复用)
-const { normalizeProjectPath, ConfigWriteError, normalizeAiMaxToolIterations, normalizeNotifySwitch } = configMod
+const { normalizeProjectPath, ConfigWriteError, normalizeAiMaxToolIterations, normalizeNotifySwitch, normalizeAgentPresetPrompts } = configMod
 const { saveConfig } = configMod.default
 
 // 直接读沙箱磁盘上的 config.json：比走 loadConfig 更能暴露"写入位置不对"
@@ -158,6 +158,68 @@ test('normalizeNotifySwitch: 非布尔值一律 null(调用方取默认/保留�
   for (const bad of [undefined, null, 0, 1, '', 'true', 'false', {}, [], NaN]) {
     assert.equal(normalizeNotifySwitch(bad), null, `${JSON.stringify(bad)} 应返回 null`)
   }
+})
+
+// ========== normalizeAgentPresetPrompts(智能体视图欢迎页的预设提示词) ==========
+// 2026-10-09 新增。语义边界（三种状态）：
+//   null(没配过，回落内置 5 条) / [](显式恢复内置) / 合法数组(自定义全量)。
+// 外加两条防御：坏数据整体拒绝（不生成点了没反应的半截卡片）、超量超长夹取。
+
+test('normalizeAgentPresetPrompts: 未配置返回 null(调用方回落内置默认)', () => {
+  assert.equal(normalizeAgentPresetPrompts(undefined), null)
+  assert.equal(normalizeAgentPresetPrompts(null), null)
+})
+
+test('normalizeAgentPresetPrompts: 空数组是合法值(显式恢复内置默认)', () => {
+  assert.deepEqual(normalizeAgentPresetPrompts([]), [])
+})
+
+test('normalizeAgentPresetPrompts: 合法条目 trim 后保留, 只留 id/label/prompt 三个字段', () => {
+  const out = normalizeAgentPresetPrompts([
+    { id: 'a', label: '  查看项目结构  ', prompt: '  请列出目录结构  ', extra: 'ignored' }
+  ])
+  assert.deepEqual(out, [{ id: 'a', label: '查看项目结构', prompt: '请列出目录结构' }])
+})
+
+test('normalizeAgentPresetPrompts: label 或 prompt 为空/缺失 → 整体 null(不生成半截卡片)', () => {
+  assert.equal(normalizeAgentPresetPrompts([{ id: 'a', label: '', prompt: 'x' }]), null)
+  assert.equal(normalizeAgentPresetPrompts([{ id: 'a', label: 'x', prompt: '   ' }]), null)
+  assert.equal(normalizeAgentPresetPrompts([{ id: 'a', label: 'x' }]), null)
+  // 好坏混杂也整体拒绝 —— 不做"部分清洗"，避免悄悄存下一份少了几条的版本
+  assert.equal(normalizeAgentPresetPrompts([
+    { id: 'a', label: 'ok', prompt: 'ok' },
+    { id: 'b', label: 'ok', prompt: '' }
+  ]), null)
+})
+
+test('normalizeAgentPresetPrompts: 非数组 / 条目不是对象 → null', () => {
+  for (const bad of ['x', 42, {}, [1], [{ label: 'a', prompt: 'b' }, 'oops']]) {
+    assert.equal(normalizeAgentPresetPrompts(bad), null, `${JSON.stringify(bad)} 应返回 null`)
+  }
+})
+
+test('normalizeAgentPresetPrompts: id 缺失或重复时补唯一 id', () => {
+  const out = normalizeAgentPresetPrompts([
+    { label: 'a', prompt: 'pa' },
+    { id: 'dup', label: 'b', prompt: 'pb' },
+    { id: 'dup', label: 'c', prompt: 'pc' }
+  ])
+  assert.equal(out.length, 3)
+  const ids = out.map(x => x.id)
+  assert.equal(new Set(ids).size, 3, `id 必须唯一: ${ids.join(', ')}`)
+})
+
+test('normalizeAgentPresetPrompts: 超长截断(标题 60 / 内容 4000)', () => {
+  const out = normalizeAgentPresetPrompts([
+    { label: 'L'.repeat(100), prompt: 'P'.repeat(5000) }
+  ])
+  assert.equal(out[0].label.length, 60)
+  assert.equal(out[0].prompt.length, 4000)
+})
+
+test('normalizeAgentPresetPrompts: 超条数截断到 12', () => {
+  const many = Array.from({ length: 20 }, (_, i) => ({ id: `i${i}`, label: `l${i}`, prompt: `p${i}` }))
+  assert.equal(normalizeAgentPresetPrompts(many).length, 12)
 })
 
 const NOTIFY_KEYS = ['notifyPageOnTaskDone', 'notifyBrowserOnTaskDone', 'notifySoundOnTaskDone']
@@ -256,6 +318,42 @@ test('旧键 notifyOnTaskDone 不再被写入，也不会漏进项目配置', as
   assert.deepEqual(polluted, [], `旧键不该出现在项目配置里: ${polluted.join(', ')}`)
 })
 
+// ========== agentPresetPrompts(预设提示词)顶层全局键 ==========
+
+test('预设提示词的默认值是空数组(用内置 5 条，文案在前端随语言走)', async () => {
+  await writeRawConfig({ defaultCommitMessage: 'test', projects: {} })
+  const cfg = await configMod.default.loadConfig()
+  assert.deepEqual(cfg.agentPresetPrompts, [], '未配置时应是空数组，由前端回落内置默认')
+})
+
+test('预设提示词存成顶层全局键，且不漏进项目配置', async () => {
+  // 与 notifyOnTaskDone 一族同一个坑：saveConfig 的 ...projectConfig 展开会把
+  // 没解构出来的键写进 raw.projects[key]。这里钉住它必须走顶层。
+  await writeRawConfig({ defaultCommitMessage: 'test', projects: {} })
+  const presets = [{ id: 'u1', label: '我的', prompt: '跑测试' }]
+  await saveConfig({ defaultCommitMessage: 'test', agentPresetPrompts: presets })
+  const raw = await readRawConfig()
+  assert.deepEqual(raw.agentPresetPrompts, presets, '应写在 config.json 顶层')
+  const polluted = Object.entries(raw.projects || {})
+    .filter(([, p]) => p && typeof p === 'object' && 'agentPresetPrompts' in p)
+    .map(([k]) => k)
+  assert.deepEqual(polluted, [], `不该出现在项目配置里: ${polluted.join(', ')}`)
+})
+
+test('预设提示词：空数组合法写盘(恢复内置默认)；非法值不落盘保留磁盘旧值', async () => {
+  await saveConfig({ defaultCommitMessage: 'test', agentPresetPrompts: [{ id: 'a', label: 'x', prompt: 'y' }] })
+  // 空数组 = 显式恢复内置默认 —— 必须真的写盘，不能因为"空"被当成未提供跳过
+  await saveConfig({ defaultCommitMessage: 'test', agentPresetPrompts: [] })
+  assert.deepEqual((await readRawConfig()).agentPresetPrompts, [], '空数组要真的写盘')
+  assert.deepEqual((await configMod.default.loadConfig()).agentPresetPrompts, [], '读回来也是空数组(合法态)')
+
+  // 非法值（非数组 / 半截条目）不落盘：磁盘上仍是上一次的合法值
+  await saveConfig({ defaultCommitMessage: 'test', agentPresetPrompts: 'oops' })
+  assert.deepEqual((await readRawConfig()).agentPresetPrompts, [], '非数组不该覆盖磁盘上的合法值')
+  await saveConfig({ defaultCommitMessage: 'test', agentPresetPrompts: [{ label: '缺 prompt' }] })
+  assert.deepEqual((await readRawConfig()).agentPresetPrompts, [], '半截条目同样不落盘')
+})
+
 test('默认导出对象必须包含路由要用的规范化函数（漏加 = undefined 调用 → 路由 500）', () => {
   // src/ui/server 是 `import config from '../../config.js'`，拿的是**默认导出的对象字面量**；
   // 只在命名导出里加函数是不够的。2026-09-29 加提示音开关时正是漏了这一步：
@@ -265,7 +363,8 @@ test('默认导出对象必须包含路由要用的规范化函数（漏加 = un
   for (const name of [
     'normalizeAiMaxToolIterations',
     'normalizeTaskExecutor',
-    'normalizeNotifySwitch'
+    'normalizeNotifySwitch',
+    'normalizeAgentPresetPrompts'
   ]) {
     assert.equal(typeof configMod.default[name], 'function', `默认导出缺少 ${name}`)
   }
