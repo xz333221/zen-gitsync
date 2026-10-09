@@ -63,6 +63,7 @@ import {
   mimeForExt,
   findStagingFile,
   cleanupDispatchStaging,
+  claimStagedAttachments,
 } from './attachmentUtils.js';
 import {
   resolveJobImagePath,
@@ -311,12 +312,20 @@ export function registerWorkbenchRoutes({
       await writeJson(TASKS_FILE, { tasks });
       return res.json({ success: true, task: tasks[i] });
     }
+    const taskId = genId();
     const task = {
-      id: genId(),
+      id: taskId,
       title: safeTitle,
       desc: desc || '',
       simpleOverride: safeOverride,
       projectPath: bodyProjectPath || currentProjectPath || '',
+      // 新建弹窗的附件：用户在任务被建出来之前就先贴/拖进暂存区（`_dispatch/`），
+      // 这里按 id 认领进来 —— 与派发指令走同一个函数，两条链路的附件口径只有一份。
+      //
+      // 字段名刻意**不叫** attachments：编辑器保存走的是整 task 体提交
+      // （WorkbenchView.persistTask），里面的 attachments 是已挂好的记录（带 absolutePath），
+      // 混进来会被当成"暂存区里的草稿"去认领，结果是保存一次就把附件全判失效。
+      attachments: await claimStagedAttachments(req.body?.stagedAttachments, taskId, now),
       status: 'todo',
       createdAt: now,
       updatedAt: now
@@ -941,6 +950,22 @@ export function registerWorkbenchRoutes({
   // 之前这里既 push 了一次、调用方又 push 一次，而两处指向同一个数组（target 是浅拷贝），
   // 于是每次上传都在 tasks.json 里留下一条 id 完全相同的幽灵附件：附件数翻倍、
   // 缩略图列表出现重复项，删一条另一条还在。
+  /**
+   * 解码附件原名。
+   *
+   * HTTP 头只允许 ISO-8859-1，中文文件名原样放进 `X-Original-Name` 会让浏览器
+   * **在发请求之前**就抛错（"String contains non ISO-8859-1 code point"），
+   * 上传根本没发出去 —— 前端连重试的机会都没有。所以约定：客户端先 encodeURIComponent。
+   * 容忍没编码的老调用方：解不开（例如名字里本来就有裸 `%`）就按原样用。
+   */
+  function decodeHeaderName(raw) {
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }
+
   async function writeAttachmentTo({ req, target }) {
     if (!req.body || !(req.body instanceof Buffer) || req.body.length === 0) {
       throw new HttpError(400, '请求体为空');
@@ -948,7 +973,7 @@ export function registerWorkbenchRoutes({
     if (req.body.length > MAX_IMAGE_BYTES) {
       throw new HttpError(413, `单文件不得超过 ${MAX_IMAGE_BYTES / 1024 / 1024}MB`);
     }
-    const originalName = String(req.get('X-Original-Name') || 'attachment').slice(0, 200);
+    const originalName = decodeHeaderName(String(req.get('X-Original-Name') || 'attachment')).slice(0, 200);
     const mimeType = String(req.get('X-Mime-Type') || 'application/octet-stream').slice(0, 120);
     const ext = resolveExt({ originalName, mime: mimeType });
     if (!ext) {

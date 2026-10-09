@@ -23,13 +23,23 @@
   一个刻意的决定：
     **标题与描述至少填一个**。看板上的空任务会被 pruneBlankTasks 清掉，
     从这里放行一个空任务只会让用户以为"建成功了"，然后它自己消失。
+
+  附件（2026-10-09 补）：这一刻任务还不存在，所以和主 Agent 控制台一样先落到
+  服务端的派发暂存区（`_dispatch/`），创建时按 id 被服务端认领进 `_task-{id}/`。
+  两条链路共用 useWorkbenchAttachments + 服务端的 claimStagedAttachments ——
+  附件口径只该有一份。
 -->
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { canonicalProjectPath } from '@/utils/path'
 import CommonDialog from '@/components/CommonDialog.vue'
-import type { ProjectSummary, Task } from '@/types/workbench'
+import AttachmentZone from '@/components/AttachmentZone.vue'
+import {
+  useWorkbenchAttachments,
+  type AttachmentTarget
+} from '@/composables/useWorkbenchAttachments'
+import type { Attachment, ProjectSummary, Task } from '@/types/workbench'
 
 const props = defineProps<{
   modelValue: boolean
@@ -51,6 +61,76 @@ const submitting = ref(false)
 const error = ref('')
 
 /**
+ * 草稿附件。**任务还不存在**，所以它们此刻躺在服务端的派发暂存区
+ * （`~/.zen-gitsync/workbench-images/_dispatch/`），由创建请求触发认领 —— 见 submit()。
+ */
+const drafts = ref<Attachment[]>([])
+const dragging = ref(false)
+/** 草稿阶段附件还在暂存区，缩略图 / 预览必须走暂存端点，任务侧端点此刻一定 404 */
+const DRAFT_RAW_BASE = '/api/workbench/orchestrator/attachments'
+
+/** 本次是否已经创建成功 —— 决定关窗时该不该把暂存文件删掉（见 discardDrafts） */
+let committed = false
+
+const attachTarget = computed<AttachmentTarget>(() => ({
+  kind: 'draft',
+  list: drafts.value,
+  // 必须换成新数组：uploadAttachment 是"先 push 再回写"，
+  // 若这里赋回同一个引用，Vue 收不到变更、缩略图不会出现。
+  replace: (next) => { drafts.value = next }
+}))
+
+const {
+  isUploading,
+  isImageAttachment,
+  humanSize,
+  onAttachmentPaste,
+  onAttachmentDrop,
+  removeAttachment,
+  pickAttachmentFile
+} = useWorkbenchAttachments()
+
+const attachBusy = computed(() => isUploading('draft'))
+
+/**
+ * 粘贴统一入口，挂在弹窗根节点（`.nc`）上。
+ *
+ * 只挂这一层：`<input>` / `<textarea>` 上的 paste **会冒泡**到根节点，
+ * 所以"在标题里 / 在描述里 / 点在附件区"三种位置都能收到。
+ * 反过来若在 AttachmentZone 上也挂一份，粘一张图会被处理两次 ——
+ * 去重逻辑挡不住（上传是异步的，第二次进来看列表还是空的），最后多出重复附件。
+ */
+function onPaste(e: ClipboardEvent) {
+  e.stopPropagation()
+  onAttachmentPaste(e, attachTarget.value)
+}
+function onDrop(e: DragEvent) {
+  dragging.value = false
+  onAttachmentDrop(e, attachTarget.value)
+}
+function onPickAttachment() { pickAttachmentFile(attachTarget.value) }
+function onRemoveAttachment(att: Attachment) { removeAttachment(attachTarget.value, att) }
+
+/**
+ * 关掉弹窗时清掉还没被认领的草稿附件。
+ *
+ * 与主 Agent 控制台的取舍**相反**：那边派发失败（超长 / 目录不存在）后刻意留着
+ * 暂存文件，好让用户改一改重发；而这里是用户主动关窗放弃这次新建，
+ * 那些文件永远不会被认领，留着只会在 `_dispatch/` 里堆截图，等到下次进程启动才被清。
+ *
+ * 创建成功那一路不算放弃（服务端已把文件搬进 `_task-{id}/`，删了就是把附件删掉）。
+ */
+function discardDrafts() {
+  const list = drafts.value
+  drafts.value = []
+  if (committed || list.length === 0) return
+  for (const a of list) {
+    // 串行无意义（不同 id，互不覆盖），失败也不必打扰用户
+    fetch(`${DRAFT_RAW_BASE}/${encodeURIComponent(a.id)}`, { method: 'DELETE' }).catch(() => {})
+  }
+}
+
+/**
  * 把「默认项目路径」映射到下拉里真正存在的那个 option 值。
  *
  * 两个口径必须分开：项目条目里 `key` 是归一化路径（Windows 形式小写 + 反斜杠），
@@ -69,9 +149,15 @@ function matchOptionPath(raw: string): string {
 
 // 打开时重置成一个干净的草稿（并带上默认项目），关掉时丢弃
 watch(() => props.modelValue, (open) => {
-  if (!open) return
+  if (!open) {
+    discardDrafts()
+    return
+  }
   title.value = ''
   desc.value = ''
+  drafts.value = []
+  dragging.value = false
+  committed = false
   projectPath.value = matchOptionPath(props.defaultProjectPath)
   error.value = ''
   submitting.value = false
@@ -80,8 +166,11 @@ watch(() => props.modelValue, (open) => {
 /** 项目下拉的候选：只列真实的项目条目（含目录已失效的，用户可能就是想建个占位） */
 const projectOptions = computed(() => props.projects)
 
+// 附件还在上传时不许提交：那一刻提交，飞在半路的那张图既进不了任务目录、
+// 也不会被 discardDrafts 清掉（它还没进 drafts），只在暂存区里留个孤儿。
 const canSubmit = computed(() =>
-  !submitting.value && (title.value.trim().length > 0 || desc.value.trim().length > 0)
+  !submitting.value && !attachBusy.value &&
+  (title.value.trim().length > 0 || desc.value.trim().length > 0)
 )
 
 const projectName = computed(() => {
@@ -101,15 +190,29 @@ async function submit(openEditor: boolean) {
       desc: desc.value,
     }
     if (projectPath.value) body.projectPath = projectPath.value
+    // 只回传 id / ext / originalName：服务端按 id 回暂存区找文件，路径不由前端拼。
+    // 字段名是 stagedAttachments 而不是 attachments —— 后者是任务上已挂好的附件记录
+    // （编辑器整 task 体提交时带的就是它），混用会让服务端把已挂好的附件当草稿去认领。
+    if (drafts.value.length > 0) {
+      body.stagedAttachments = drafts.value.map(a => ({
+        id: a.id,
+        ext: a.ext,
+        originalName: a.originalName
+      }))
+    }
     const res = await fetch('/api/workbench/tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }).then(r => r.json()).catch(() => null)
     if (!res?.success) {
+      // 失败**不清**草稿：附件还在暂存区躺着，用户改一改标题就能重试（同控制台的口径）
       error.value = res?.error || $t('@WORKBENCH:保存失败')
       return
     }
+    // 置在 emit 之前：关窗那一下 watch 就会跑 discardDrafts，
+    // 晚一行写就会把刚认领进任务目录的附件删掉。
+    committed = true
     emit('update:modelValue', false)
     emit('created', { task: res.task, openEditor })
   } finally {
@@ -126,7 +229,14 @@ async function submit(openEditor: boolean) {
     :close-on-click-modal="false"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <div class="nc">
+    <div
+      class="nc"
+      @paste="onPaste"
+      @drop.prevent="onDrop"
+      @dragover.prevent="dragging = true"
+      @dragenter.prevent="dragging = true"
+      @dragleave="dragging = false"
+    >
       <div class="nc__field">
         <label class="nc__label" for="nc-project">{{ $t('@WORKBENCH:项目') }}</label>
         <select id="nc-project" v-model="projectPath" class="nc__select">
@@ -164,6 +274,29 @@ async function submit(openEditor: boolean) {
           @keydown.ctrl.enter.prevent="submit(false)"
           @keydown.meta.enter.prevent="submit(false)"
         />
+      </div>
+
+      <!--
+        附件：任务还不存在，所以先落暂存区，创建时由服务端认领进 `_task-{id}/`。
+        刻意**常驻**渲染（控制台那边是"有附件才出现"+ 一枚回形针按钮）：
+        弹窗里没有别的入口能挂"添加附件"，空态只有一行 "附件 0 [添加附件]"，
+        这也是唯一能让"可以粘图"这件事被看见的地方 —— 没发现这个能力等于没有。
+      -->
+      <div class="nc__field">
+        <AttachmentZone
+          :attachments="drafts"
+          :is-image="isImageAttachment"
+          :human-size="humanSize"
+          :is-uploading="attachBusy"
+          :is-paste-hover="dragging"
+          :on-pick="onPickAttachment"
+          :on-remove="onRemoveAttachment"
+          :raw-base="DRAFT_RAW_BASE"
+          @dragover.prevent="dragging = true"
+          @dragenter.prevent="dragging = true"
+          @dragleave="dragging = false"
+        />
+        <p class="nc__hint">{{ $t('@WORKBENCH:粘贴图片以快速添加') }}</p>
       </div>
 
       <p v-if="error" class="nc__error">{{ error }}</p>

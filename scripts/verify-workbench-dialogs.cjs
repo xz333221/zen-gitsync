@@ -18,6 +18,15 @@
  *         两个口径搞混就会让下拉显示空白、提示错说成"跟随当前目录"）
  *   F2    编辑器弹窗宽度必须 ≥1200px（用户明确要求"弹窗可以做得比较大"）
  *
+ * 新建弹窗的附件链路（2026-10-09 补，契约是「任务还不存在时先落暂存区」）：
+ *   D5 在弹窗里粘一张图 -> 恰好 1 个草稿附件（回归：@paste 只挂一层，挂两层会重复上传）
+ *   D6 缩略图必须走**暂存端点** /api/workbench/orchestrator/attachments/:id/raw
+ *      且真的加载出来（任务侧端点此刻一定 404）—— 顺带记下 id 供后面查暂存文件
+ *   D9 中文文件名也要传得上去（HTTP 头只认 ISO-8859-1，前端不 encode 就发不出去）
+ *   D7 点「取消」-> 暂存文件被删掉（放弃新建就不该在 _dispatch/ 里堆截图）
+ *   D8 再次打开弹窗 -> 草稿为空（上一条的附件不会跟到这一次）
+ *   E5 创建请求带上附件后，任务记录里的附件已落到 `_task-{id}/`（不是还躺在暂存区）
+ *
  * 前置：dev server 已启动（npm run dev，前端 5544）。
  * 用法：node scripts/verify-workbench-dialogs.cjs
  * 退出码：0 全通过，1 有失败项。
@@ -76,6 +85,58 @@ async function noVisibleDialog(page, timeout = 6000) {
 async function boardVisible(page) {
   const el = page.locator('.board').first()
   return (await el.count()) > 0 && (await el.isVisible())
+}
+
+/** 轮询直到条件成立（上传要经 vite 代理转发，偶发慢到 2.5s，别用固定 sleep 等） */
+async function waitUntil(fn, timeout = 12000, interval = 150) {
+  const t0 = Date.now()
+  while (Date.now() - t0 < timeout) {
+    if (await fn()) return true
+    await sleep(interval)
+  }
+  return false
+}
+
+// 1x1 红点 PNG
+const PNG_B64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+
+/** 往新建弹窗根节点派发一次「粘贴了一张 PNG」事件（模拟用户 Ctrl+V） */
+async function pastePng(page, fileName) {
+  await page.evaluate(({ b64, fileName }) => {
+    const el = document.querySelector('.nc')
+    if (!el) throw new Error('找不到新建弹窗根节点 .nc')
+    const bin = atob(b64)
+    const arr = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+    const file = new File([arr], fileName, { type: 'image/png' })
+    const dt = new DataTransfer()
+    dt.items.add(file)
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+  }, { b64: PNG_B64, fileName })
+}
+
+/** 弹窗里草稿附件的原始文件地址形如 /api/workbench/orchestrator/attachments/<id>/raw */
+const STAGING_RE = /\/api\/workbench\/orchestrator\/attachments\/([^/]+)\/raw/
+
+/**
+ * 等这一轮上传真的结束。
+ *
+ * 必须先等"开始了"（出现附件或按钮转成「上传中…」）再等"结束了"：
+ * 直接看按钮文案会在上传还没开始时就读到「添加附件」，把还在飞的那一份漏掉，
+ * 于是重复上传（@paste 挂两层）反而"通过"。
+ */
+async function uploadSettled(page) {
+  await waitUntil(async () => {
+    const n = await page.locator('.nc .wb-attachment').count()
+    if (n > 0) return true
+    const t = await page.locator('.nc .wb-attachments__add').first().textContent().catch(() => '')
+    return !!t && /上传中/.test(t)
+  })
+  return await waitUntil(async () => {
+    const t = await page.locator('.nc .wb-attachments__add').first().textContent().catch(() => '')
+    return !!t && !/上传中/.test(t)
+  })
 }
 
 async function main() {
@@ -140,12 +201,65 @@ async function main() {
     check('D3 项目下拉自动匹配到当前项目（非空白）', !!(sel && sel.value && sel.matchedText), sel ? `value="${sel.value}" -> "${sel.matchedText}"` : '找不到下拉')
     check('D4 归属提示指向真实项目', !!(sel && sel.hint && !/跟随/.test(sel.hint)), sel ? `hint="${sel.hint}"` : '')
 
-    // ── E 创建 -> 提示 + 关闭 + 上板 ─────────────────────────────────
+    // ── D5/D6 附件：草稿先落暂存区，缩略图必须走暂存端点 ──────────────
+    await pastePng(page, 'dialog-draft.png')
+    await uploadSettled(page)
+    const draftN = await page.locator('.nc .wb-attachment').count()
+    check('D5 弹窗里粘图 -> 恰好 1 个草稿附件', draftN === 1, `实测 ${draftN} 个`)
+
+    const thumb = await page.evaluate(() => {
+      const img = document.querySelector('.nc .wb-attachment__icon img')
+      return img ? { src: img.getAttribute('src') || '', w: img.naturalWidth } : null
+    })
+    const draftId = (thumb?.src.match(STAGING_RE) || [])[1] || ''
+    // 任务还不存在，走任务侧端点必然 404；这里同时钉住"端点对"与"图真的加载出来了"
+    check('D6 草稿缩略图走暂存端点且真的加载出来',
+      !!thumb && /orchestrator\/attachments/.test(thumb.src) && thumb.w > 0,
+      thumb ? `src=${thumb.src} naturalWidth=${thumb.w}` : '没渲染出缩略图')
+
+    // ── D9 中文文件名 ─────────────────────────────────────────────────
+    // HTTP 头只允许 ISO-8859-1，前端不 encodeURIComponent 的话浏览器在 fetch 阶段
+    // 就抛错 —— 上传根本没发出去，用户只看到"上传失败"（截图存成中文名太常见了）。
+    await pastePng(page, '登录模块-改造前.png')
+    const cnN = await waitUntil(async () => (await page.locator('.nc .wb-attachment').count()) === 2)
+    await uploadSettled(page)
+    const cnName = ((await page.locator('.nc .wb-attachment__name').last().textContent().catch(() => '')) || '').trim()
+    check('D9 中文文件名能传上去且名字不走样', cnN && cnName === '登录模块-改造前.png',
+      `实测 ${await page.locator('.nc .wb-attachment').count()} 个，末条名字="${cnName}"`)
+
+    // ── D7/D8 取消 -> 暂存文件清掉；再打开 -> 草稿不留痕 ───────────────
+    const draftIds = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.nc .wb-attachment__icon img'))
+        .map(img => (img.getAttribute('src') || '').match(/\/orchestrator\/attachments\/([^/]+)\/raw/)?.[1])
+        .filter(Boolean)
+    )
+    await page.locator('.nc__foot .nc__btn').first().click()
+    check('D7 点「取消」关闭新建弹窗', await noVisibleDialog(page))
+    const allGone = draftIds.length > 0 && await waitUntil(async () => {
+      for (const id of draftIds) {
+        const r = await fetch(`${BASE}/api/workbench/orchestrator/attachments/${encodeURIComponent(id)}/raw`)
+        if (r.status !== 404) return false
+      }
+      return true
+    })
+    check('D7b 取消后暂存区的草稿附件全部被清掉', allGone,
+      draftIds.length ? `${draftIds.length} 个：${draftIds.join(', ')}（含最初粘的那个 ${draftId}）` : '没从缩略图拿到草稿 id')
+
+    await page.locator('.kb-col__add-btn').first().click()
+    const cdlg2 = await waitDialog(page, d => d.hasCreate)
+    const reopenN = await page.locator('.nc .wb-attachment').count()
+    check('D8 重新打开弹窗时草稿为空（上一次的附件不跟过来）', !!cdlg2 && reopenN === 0, `实测 ${reopenN} 个`)
+
+    // ── E 创建 -> 提示 + 关闭 + 上板（这一次带一张附件）─────────────────
     await page.fill('#nc-title', MARK)
+    await pastePng(page, 'dialog-created.png')
+    await uploadSettled(page)
     await page.locator('.nc__foot .nc__btn--primary').first().click()
-    const toastOk = await page.locator('.el-message--success').first()
+    // 认「已创建任务」这条，而不是"随便哪条 success toast" —— 前面粘图时的那条
+    // 「已添加：xxx」还在屏幕上挂着，按 `.el-message--success` 取第一条会白捡一个绿。
+    const toastOk = await page.locator('.el-message--success', { hasText: '已创建任务' }).first()
       .waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false)
-    check('E 创建成功出现成功提示', toastOk, toastOk ? ((await page.locator('.el-message--success').first().textContent()) || '').trim() : '')
+    check('E 创建成功出现成功提示', toastOk, toastOk ? ((await page.locator('.el-message--success', { hasText: '已创建任务' }).first().textContent()) || '').trim() : '')
     check('E2 创建后新建弹窗自动关闭', await noVisibleDialog(page))
 
     let cardThere = false
@@ -155,6 +269,19 @@ async function main() {
     }
     check('E3 新任务卡片出现在看板上（未离开看板）', cardThere)
     check('E4 创建全程看板仍在', await boardVisible(page))
+
+    // ── E5/E6 服务端把暂存附件认领进了任务目录 ─────────────────────────
+    // 按"带附件的那条 MARK 任务"取样：开头为了验弹窗直接 POST 过一条同名任务（无附件）。
+    const withAtt = (await fetch(`${BASE}/api/workbench/tasks`).then(r => r.json()).catch(() => ({})))
+      .tasks?.find(t => t && t.title === MARK && (t.attachments || []).length > 0) || null
+    const atts = withAtt?.attachments || []
+    check('E5 新任务的附件已从暂存区搬进 _task-{id}/',
+      atts.length === 1 && /[\\/]_task-[^\\/]+[\\/]/.test(atts[0]?.absolutePath || ''),
+      atts.length ? `count=${atts.length} path=${atts[0].absolutePath}` : '任务上没有附件')
+    const claimed = atts[0]
+      ? await fetch(`${BASE}/api/workbench/orchestrator/attachments/${encodeURIComponent(atts[0].id)}/raw`).then(r => r.status === 404)
+      : false
+    check('E6 暂存区里那份已被认领（raw 404，不留双份）', claimed)
 
     // ── F 点卡片 -> 编辑器大弹窗 ─────────────────────────────────────
     // （这里顺带钉住"点卡片不再被中间的只读详情弹窗拦一道"：一次点击就该看到 .wb-editor）

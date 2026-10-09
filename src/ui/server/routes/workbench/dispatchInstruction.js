@@ -28,7 +28,6 @@
 // 所以本文件不 import index.js —— 那条边一旦建立就是循环依赖。
 
 import fsp from 'node:fs/promises';
-import path from 'node:path';
 import { HttpError } from '../../utils/asyncRoute.js';
 import {
   logger,
@@ -37,10 +36,9 @@ import {
   nowIso,
   genId,
   TASKS_FILE,
-  IMAGES_DIR,
   MAX_INSTRUCTION_CHARS,
 } from './shared.js';
-import { stagingPath, mimeForExt } from './attachmentUtils.js';
+import { claimStagedAttachments } from './attachmentUtils.js';
 import { readOrchestrator, resolveDispatchPrompt, appendInstruction } from './orchestratorStore.js';
 import { buildProjectEntries } from './projectRegistry.js';
 import { resolveInstructionTarget } from './targetResolver.js';
@@ -183,64 +181,14 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
       ? { text: '', source: '' }
       : resolveDispatchPrompt(orchestratorState, targetPath);
 
-    // ── 附件：调用方只回传 { id, ext, originalName }，服务端按 id 回暂存区找文件 ──
-    // 路径完全由服务端拼（stagingPath 会同时校验 id 形状与 ext 白名单），
-    // 所以不存在"调用方指定任意路径"这回事 —— 比"信任 absolutePath 再校验前缀"干净。
-    // 这里只校验**每个附件自己**（形状 + 文件是否还在）；数量不设上限，
-    // 真正的卡点只有下游读得动读不动。
-    const rawAttachments = Array.isArray(payload.attachments) ? payload.attachments : [];
-    const staged = [];
-    for (const item of rawAttachments) {
-      const attId = typeof item?.id === 'string' ? item.id : '';
-      const ext = typeof item?.ext === 'string' ? item.ext : '';
-      const from = stagingPath(attId, ext);
-      if (!from) throw new HttpError(400, '附件参数不合法');
-      let attStat = null;
-      try { attStat = await fsp.stat(from); } catch { /* 下面统一报错 */ }
-      if (!attStat || !attStat.isFile()) throw new HttpError(400, '附件已失效，请重新添加');
-      staged.push({
-        id: attId,
-        ext,
-        from,
-        size: attStat.size,
-        originalName: String(item?.originalName || `attachment.${ext}`).slice(0, 200),
-      });
-    }
-
     // tasks / data 已在上面读好（落点解析要用），这里不再重复读一遍
     const now = nowIso();
     const taskId = genId();
 
-    // 附件从暂存区搬进任务自己的目录（`_task-{id}/`），这样删除任务时会被一并清掉
-    const attachmentDir = path.join(IMAGES_DIR, '_task-' + taskId);
-    const attachments = [];
-    if (staged.length > 0) {
-      await fsp.mkdir(attachmentDir, { recursive: true });
-      for (const s of staged) {
-        const storedName = `${s.id}.${s.ext}`;
-        const dest = path.join(attachmentDir, storedName);
-        try {
-          await fsp.rename(s.from, dest);
-        } catch {
-          // 极端情况（跨卷等）退化成复制 + 删除；仍失败就跳过这个附件，
-          // 而不是让整条指令派发不出去 —— 指令本身是好的，不该被一个文件拖死。
-          try {
-            await fsp.copyFile(s.from, dest);
-            await fsp.unlink(s.from);
-          } catch { continue; }
-        }
-        attachments.push({
-          id: s.id,
-          originalName: s.originalName,
-          mimeType: mimeForExt(s.ext),
-          size: s.size,
-          ext: s.ext,
-          storedName,
-          absolutePath: dest,
-          createdAt: now,
-        });
-      }
-    }
+    // 附件从暂存区搬进任务自己的目录（`_task-{id}/`），这样删除任务时会被一并清掉。
+    // 校验与搬运都在 claimStagedAttachments 里 —— 看板「新建任务」弹窗走的是同一个函数，
+    // 两份实现分叉的表现是"不报错，只是其中一条路建出来的任务丢了附件"。
+    const attachments = await claimStagedAttachments(payload.attachments, taskId, now);
 
     const task = {
       id: taskId,

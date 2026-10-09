@@ -235,7 +235,11 @@ export function useWorkbenchAttachments() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/octet-stream',
-          'X-Original-Name': out.name,
+          // 文件名必须百分号编码：HTTP 头只允许 ISO-8859-1，中文文件名
+          // （「登录模块-改造前.png」这种）原样塞进 header 会让 fetch **在发请求前**抛错 ——
+          // 上传根本没出去，用户只看到一句 "上传失败：String contains non ISO-8859-1 code point"。
+          // 服务端对应解码，见 writeAttachmentTo 里的 decodeHeaderName。
+          'X-Original-Name': encodeURIComponent(out.name),
           'X-Mime-Type': out.type || 'application/octet-stream'
         },
         body: out

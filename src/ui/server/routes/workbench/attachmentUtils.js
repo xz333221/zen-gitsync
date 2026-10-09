@@ -22,7 +22,8 @@
 
 import path from 'path';
 import fsp from 'fs/promises';
-import { IMAGES_DIR } from './shared.js';
+import { HttpError } from '../../utils/asyncRoute.js';
+import { IMAGES_DIR, nowIso } from './shared.js';
 
 // 白名单后缀：图片 + 常见文档
 export const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
@@ -166,4 +167,76 @@ export async function cleanupDispatchStaging(maxAgeMs = 24 * 60 * 60 * 1000) {
     try { await fsp.rmdir(DISPATCH_STAGING_DIR); } catch { /* 还有别的文件留在里面，留着目录 */ }
   }
   return removed;
+}
+
+/**
+ * 认领暂存区里的附件：搬进 `_task-{taskId}/`，产出可直接写进 `task.attachments` 的记录。
+ *
+ * 两条链路共用它，刻意不各写一份：
+ *   1. 派发一条指令（主 Agent 控制台 / 内置智能体的 dispatch_task）—— 见 dispatchInstruction.js；
+ *   2. 看板「新建任务」弹窗 —— 任务同样是在附件之后才被建出来的。
+ * 各写一份的失效方式很隐蔽：**不报错**，只是其中一条链路建出来的任务把附件弄丢了
+ * （与 dispatchInstruction 文件头列的"四处提示词 / 三处路径归一"是同一类坑）。
+ *
+ * 调用方只回传 `{ id, ext, originalName }`（前端持有草稿记录，服务端在这里**无状态**），
+ * 路径完全由服务端拼 —— stagingPath 会同时校验 id 形状与 ext 白名单，
+ * 所以不存在"调用方指定任意路径"这回事，比"信任 absolutePath 再校验前缀"干净。
+ *
+ * 校验是**先全量、后动文件**：一个附件失效时前面几个还没被搬走，
+ * 否则暂存区与任务目录会各留一半，谁也说不清哪边是完整的。
+ *
+ * @param {Array<{id?: string, ext?: string, originalName?: string}>} items
+ * @param {string} taskId 必须由服务端生成（genId），本函数直接拿它拼目录名
+ * @returns {Promise<Array<object>>} 附件记录；数量不设上限（真正的卡点只有下游读得动读不动）
+ */
+export async function claimStagedAttachments(items, taskId, now = nowIso()) {
+  const list = Array.isArray(items) ? items : [];
+  if (list.length === 0) return [];
+
+  const staged = [];
+  for (const item of list) {
+    const attId = typeof item?.id === 'string' ? item.id : '';
+    const ext = typeof item?.ext === 'string' ? item.ext : '';
+    const from = stagingPath(attId, ext);
+    if (!from) throw new HttpError(400, '附件参数不合法');
+    let st = null;
+    try { st = await fsp.stat(from); } catch { /* 下面统一报错 */ }
+    if (!st || !st.isFile()) throw new HttpError(400, '附件已失效，请重新添加');
+    staged.push({
+      id: attId,
+      ext,
+      from,
+      size: st.size,
+      originalName: String(item?.originalName || `attachment.${ext}`).slice(0, 200),
+    });
+  }
+
+  const dir = path.join(IMAGES_DIR, '_task-' + taskId);
+  await fsp.mkdir(dir, { recursive: true });
+  const attachments = [];
+  for (const s of staged) {
+    const storedName = `${s.id}.${s.ext}`;
+    const dest = path.join(dir, storedName);
+    try {
+      await fsp.rename(s.from, dest);
+    } catch {
+      // 极端情况（跨卷等）退化成复制 + 删除；仍失败就跳过这个附件，
+      // 而不是让整次创建失败 —— 任务本身是好的，不该被一个文件拖死。
+      try {
+        await fsp.copyFile(s.from, dest);
+        await fsp.unlink(s.from);
+      } catch { continue; }
+    }
+    attachments.push({
+      id: s.id,
+      originalName: s.originalName,
+      mimeType: mimeForExt(s.ext),
+      size: s.size,
+      ext: s.ext,
+      storedName,
+      absolutePath: dest,
+      createdAt: now,
+    });
+  }
+  return attachments;
 }
