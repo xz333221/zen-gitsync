@@ -32,6 +32,11 @@ import { registerAgentMarketplaceRoutes } from './agentMarketplace.js';
 import { createProjectListProvider } from './projectTool.js';
 import { createDispatcher } from './dispatchInstruction.js';
 import { createWorkspaceSnapshotter } from '../aiContext/wiring.js';
+// 「同一会话同一时刻只允许一个生成中的轮次」的闸，与定时任务调度器共享
+// （见 sessionGate.js —— 拆出去是为了让调度器复用同一份判定口径）。
+import { isSessionBusy, acquireSession, releaseSession } from './sessionGate.js';
+import { createScheduler } from './scheduler.js';
+import { registerScheduleRoutes } from './scheduleRoutes.js';
 import { normalizeItems, filterToRecentDirs, buildDirStatusBlock } from '../recentDirectoriesAiSummary.js';
 import { nowIso, logger } from './shared.js';
 // 请求预算的解析公式与 CLI `g ai` 共用同一份（cli/ai/context.js），Web 侧只管把
@@ -61,9 +66,6 @@ function sessionBelongsTo(sessionCwd, projectCwd) {
 // An ask_user call keeps its chat SSE request open until this map receives the
 // matching response. The entry is removed on every completion or disconnect.
 const pendingAgentQuestions = new Map();
-
-/** 正在进行中的会话 id 集合：同一会话同一时刻只允许一个生成中的轮次 */
-const activeSessionTurns = new Set();
 
 function interactionKey(sessionId, interactionId) {
   return `${String(sessionId)}:${String(interactionId)}`;
@@ -183,7 +185,7 @@ export async function runDispatchTask({ dispatch, payload, defaults }) {
   }
 }
 
-export function registerAgentRoutes({ app, getCurrentProjectPath, configManager, snapshotter }) {
+export function registerAgentRoutes({ app, getCurrentProjectPath, configManager, snapshotter, scheduler }) {
 
   registerAgentMarketplaceRoutes({ app, getCurrentProjectPath });
 
@@ -206,6 +208,26 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
   // 和 PowerShell、还去连一次网。默认值写成参数默认值,不传时才构造。
   const workspaceSnapshotter = snapshotter || createWorkspaceSnapshotter({ configManager, getCurrentProjectPath });
   const getContextBlock = ({ locale } = {}) => workspaceSnapshotter.getBlock({ locale });
+
+  // 定时任务：调度器 + 路由（见 scheduler.js / scheduleRoutes.js）。
+  //
+  // 依赖注入的三件事与对话链路是**同一份实现**：list_projects、上下文快照、
+  // dispatch_task。其中 dispatch 对定时任务**无条件开放** —— 用户在任务里写
+  // "帮我派发 xx"就是要它去派；这与 /api/agent/chat 的 allowDispatch 闸门不冲突：
+  // 那道闸防的是"普通对话里模型擅自往外派活"，而定时任务本身就是用户显式授权的动作。
+  const scheduleDispatchTask = (payload) => runDispatchTask({
+    dispatch: dispatchInstruction,
+    payload,
+    defaults: { executor: '', useDefaultPrompt: true },
+  });
+  const scheduleScheduler = scheduler || createScheduler({
+    configManager,
+    getCurrentProjectPath,
+    listProjects,
+    dispatchTask: scheduleDispatchTask,
+    getContextBlock,
+  });
+  registerScheduleRoutes({ app, scheduler: scheduleScheduler, getCurrentProjectPath });
 
   // ════════════════════════════════════════════════════════════════════════
   // §1. 会话列表
@@ -367,7 +389,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
 
     // 同一会话同一时刻只允许一个进行中的生成：跨视图（对话 Tab / 文件空间面板）
     // 或前端连点都靠这道闸挡住，否则两个流各自的会话快照会互相覆盖。
-    if (sessionIdInput && activeSessionTurns.has(sessionIdInput)) {
+    if (sessionIdInput && isSessionBusy(sessionIdInput)) {
       send({ type: 'error', error: '该会话正在生成中，请等它结束后再发送' });
       finished = true;
       return res.end();
@@ -457,7 +479,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
 
       // 本轮占用该会话（finally 里释放）
       activeSessionKey = session.sessionId;
-      activeSessionTurns.add(activeSessionKey);
+      acquireSession(activeSessionKey);
 
       // 附件落盘（拿到绝对路径后再把路径交给模型）。落盘失败不该拖垮整轮对话：
       // 拿不到路径最多是模型看不到附件，用户仍能正常对话。
@@ -663,12 +685,13 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
       finished = true;
       res.end();
     } finally {
-      if (activeSessionKey) activeSessionTurns.delete(activeSessionKey);
+      if (activeSessionKey) releaseSession(activeSessionKey);
     }
   });
 
   // 把生成器交出去:调用方(server/index.js)要在服务启动后预热一次快照,
   // 覆盖"g ui 刚启动"这个时机。预热调用刻意留在**生产入口**而不是这里 ——
   // 单测会调 registerAgentRoutes 四次,预热写在这里等于测试机上 spawn 四轮 gh。
-  return { snapshotter: workspaceSnapshotter };
+  // 调度器同理:这里只建实例(单测调用不会真的开跑),start() 由生产入口调。
+  return { snapshotter: workspaceSnapshotter, scheduler: scheduleScheduler };
 }

@@ -184,3 +184,76 @@ test('段落里不得暗示可以绕过凭据（不出现 token 输入类指引�
     }
   }
 });
+
+// ── 定时任务段（2026-10-09 随 schedule_task 工具一起落地）─────────────────
+//
+// 同一失效模式：段落在四个入口各写一遍，改一处忘三处不会报错，
+// 只会让某个入口（比如 CLI）下的模型继续口头承诺"我会定时跑"。
+
+const SCHED_HEADER_ZH = '# 定时任务';
+const SCHED_HEADER_EN = '# Scheduled tasks';
+
+const SCHED_FACTS = [
+  {
+    what: '不能用"我会定时做"口头承诺（不能自己定时的边界）',
+    zh: [/不要口头承诺/],
+    en: [/never promise "I'll do it on schedule"/],
+  },
+  {
+    // 这条是执行模型的关键边界：调度器在 g ui 进程里，没运行时不会触发。
+    // 漏掉的话模型会向用户承诺"到点一定跑"，那是错的。
+    what: 'g ui 没运行时任务不执行的边界 + 错过补偿策略',
+    zh: [/g ui 没运行的时间段任务不会执行/, /on_missed/],
+    en: [/while g ui is not running, tasks do not fire/, /on_missed/],
+  },
+  {
+    what: '每轮执行落在任务的专属会话',
+    zh: [/专属会话/],
+    en: [/dedicated session/],
+  },
+  {
+    what: 'prompt 要写成自足的一轮请求',
+    zh: [/自足的一轮请求/],
+    en: [/self-contained request/],
+  },
+  {
+    what: 'list 先拿任务 id',
+    zh: [/action: list/],
+    en: [/action: list/],
+  },
+];
+
+test('四个入口的提示词里都带着「定时任务」段落（CLI/Web × 中/英）', () => {
+  for (const { label, file } of PROMPT_FILES) {
+    const src = readFileSync(file, 'utf8');
+    for (const header of [SCHED_HEADER_ZH, SCHED_HEADER_EN]) {
+      assert.ok(
+        src.includes(header),
+        `${label} 缺少 ${header} 段落；schedule_task 的能力说明必须四个入口一起加`,
+      );
+    }
+  }
+});
+
+test('「定时任务」段落四条口径覆盖同样的事实（跨语言对齐）', () => {
+  const sections = [];
+  for (const { label, file } of PROMPT_FILES) {
+    const src = readFileSync(file, 'utf8');
+    sections.push({ label: `${label} · zh`, text: extractSection(src, SCHED_HEADER_ZH, label) });
+    sections.push({ label: `${label} · en`, text: extractSection(src, SCHED_HEADER_EN, label) });
+  }
+  assert.equal(sections.length, 4, '恰好四个入口：CLI/Web × 中/英');
+
+  for (const fact of SCHED_FACTS) {
+    for (const section of sections) {
+      const isEn = section.label.endsWith('· en');
+      for (const pattern of (isEn ? fact.en : fact.zh)) {
+        const hit = typeof pattern === 'string' ? section.text.includes(pattern) : pattern.test(section.text);
+        assert.ok(
+          hit,
+          `${section.label} 里缺少「${fact.what}」；该事实在四个入口必须一致`,
+        );
+      }
+    }
+  }
+});

@@ -38,6 +38,10 @@ import { checkDangerousCommand } from './safety.js'
 import { guardCommand } from './platformGuard.js'
 import { augmentEnvPath, isCommandNotFound, pathValueOf } from '../../utils/shellPath.js'
 import { checkImageFile, imageToDataUrl, formatBytes, isImagePath, SUPPORTED_IMAGE_EXTS } from './images.js'
+// 定时任务库：CLI 与 GUI 共享同一份文件（~/.zen-gitsync/schedules.json）。
+// 本工具只负责登记/管理，真正的到点执行由 g ui 服务端的调度器完成。
+import { createTask, loadTasks, deleteTask, updateTask } from '../../utils/scheduleStore.js'
+import { nextFireAfter } from '../../utils/scheduleCron.js'
 
 // ──────────────────────────────────────────────
 // 常量
@@ -326,6 +330,57 @@ export const TOOL_DEFINITIONS = [
           },
         },
         required: ['text'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'schedule_task',
+      description: '创建和管理**定时任务**：到点自动发起一轮对话（等价于用户那时对你说下面那段话）。'
+        + '用户说"每天/每周/到点帮我做某事"就用它，不要用别的方式承诺"我会定时做" —— 你不能自己定时，'
+        + '只有登记成定时任务才会真的执行。'
+        + '执行者是 zen-gitsync GUI（g ui）服务端的调度器：本工具只登记任务；**g ui 没运行的时间段任务不会执行**，'
+        + '重新运行后是否补跑由任务的 on_missed 决定。每轮执行结果落在该任务的专属会话里，用户随时可回看。'
+        + '动作：create（默认，新建任务）| list（列出全部任务与 id）| remove（删除）| enable / disable（启停）。'
+        + 'remove / enable / disable 要先从 list 拿到任务的 id。',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['create', 'list', 'remove', 'enable', 'disable'],
+            description: '要执行的动作，默认 create。',
+          },
+          name: {
+            type: 'string',
+            description: '任务名（create 必填），如「每日拉代码」。要短、能一眼看出做什么。',
+          },
+          schedule: {
+            type: 'string',
+            description: 'cron 表达式（create 必填）：5 个字段 = 分 时 日 月 周，本地时间。'
+              + '如 "0 9 * * *" 每天 09:00；"*/30 * * * *" 每 30 分钟；"0 10 * * 1" 每周一 10:00；"30 18 * * 1-5" 工作日 18:30。',
+          },
+          prompt: {
+            type: 'string',
+            description: '到点后发给你的完整指令（create 必填）。写成一次独立、自足的请求 —— '
+              + '未来那一轮没有现在的对话上下文，要说清目标、范围与验收标准。',
+          },
+          cwd: {
+            type: 'string',
+            description: '任务落在哪个项目目录（绝对路径），不传用当前目录。定时拉代码这类任务要绑定到具体仓库目录。',
+          },
+          id: {
+            type: 'string',
+            description: '任务 id（remove / enable / disable 必填），从 list 的结果里拿。',
+          },
+          on_missed: {
+            type: 'string',
+            enum: ['run', 'skip'],
+            description: '错过补偿：g ui 没运行导致错过触发点时，run（默认）= 重新运行后补跑一次；skip = 直接跳过。',
+          },
+        },
+        required: ['action'],
       },
     },
   },
@@ -868,6 +923,74 @@ async function toolDispatchTask(args, ctx) {
   return ctx.dispatchTask(payload)
 }
 
+// schedule_task：定时任务的登记与管理。
+//
+// 与 dispatch_task 的注入模式不同：它不依赖 GUI 层的 configManager / 任务系统，
+// 实现就落在 CLI 与 GUI 共享的任务库（utils/scheduleStore.js）上，所以两个入口
+// 直接可用、无需 ctx 注入。但**谁执行**必须说清楚：CLI 是即用即走的进程，
+// 不做调度；真正到点跑的是 g ui 服务端的调度器。工具结果里要把这个边界讲明白
+// —— 否则模型会向用户承诺"到点我会自动跑"，而 g ui 不开时那句话就是错的。
+async function toolScheduleTask(args, ctx) {
+  const action = String(args.action || 'create').trim().toLowerCase()
+  try {
+    switch (action) {
+      case 'create': {
+        const name = String(args.name || '').trim()
+        if (!name) return '错误: create 需要 name（任务名，如「每日拉代码」）。'
+        const schedule = String(args.schedule || '').trim()
+        if (!schedule) return '错误: create 需要 schedule（cron 表达式，如 "0 9 * * *"）。'
+        const prompt = String(args.prompt || '').trim()
+        if (!prompt) return '错误: create 需要 prompt（到点后要执行什么）。'
+        const cwd = String(args.cwd || ctx.cwd || '').trim()
+        if (!cwd) return '错误: 无法确定项目目录，请显式传 cwd。'
+        const task = await createTask({
+          name,
+          schedule,
+          prompt,
+          cwd,
+          onMissed: args.on_missed === 'skip' ? 'skip' : 'run',
+          locale: String(ctx?.locale || 'zh').startsWith('en') ? 'en' : 'zh',
+        })
+        const next = nextFireAfter(task.schedule, new Date())
+        return `已创建定时任务「${task.name}」（id: ${task.id}，目录: ${task.cwd}）。`
+          + `计划: ${task.schedule}；下次执行: ${next ? next.toLocaleString() : '无法计算'}。`
+          + '注意：任务由 g ui 服务端的调度器执行 —— 如果那一刻 g ui 没在运行，这一轮不会跑'
+          + `（on_missed=${task.onMissed}：${task.onMissed === 'run' ? 'g ui 重新运行后会补跑一次' : 'g ui 重新运行后直接跳过'}）。`
+          + '每轮执行结果都会落进该任务的专属会话，用户随时可以回看。'
+      }
+      case 'list': {
+        const tasks = await loadTasks()
+        if (tasks.length === 0) return '当前没有任何定时任务。'
+        const lines = tasks.map((t) => {
+          const state = t.enabled ? '启用' : '停用'
+          const last = t.lastRun ? `；上次 ${t.lastRun.status} @ ${t.lastRun.at}` : '；还没跑过'
+          const next = t.enabled ? nextFireAfter(t.schedule, new Date()) : null
+          const nextStr = next ? `；下次 ${next.toLocaleString()}` : ''
+          return `- [${state}] ${t.name} | ${t.schedule} | 目录 ${t.cwd} | 提示词: ${t.prompt.slice(0, 60)}${t.prompt.length > 60 ? '…' : ''} | id=${t.id}${last}${nextStr}`
+        })
+        return `共 ${tasks.length} 个定时任务：\n${lines.join('\n')}`
+      }
+      case 'remove': {
+        const id = String(args.id || '').trim()
+        if (!id) return '错误: remove 需要 id（先用 list 查看）。'
+        await deleteTask(id)
+        return `已删除定时任务 ${id}。`
+      }
+      case 'enable':
+      case 'disable': {
+        const id = String(args.id || '').trim()
+        if (!id) return `错误: ${action} 需要 id（先用 list 查看）。`
+        const task = await updateTask(id, { enabled: action === 'enable' })
+        return `已${action === 'enable' ? '启用' : '停用'}定时任务「${task.name}」(${task.id})。`
+      }
+      default:
+        return `错误: 未知的 action "${action}"，支持 create / list / remove / enable / disable。`
+    }
+  } catch (err) {
+    return `错误: ${err?.message || String(err)}`
+  }
+}
+
 // ──────────────────────────────────────────────
 // 工具分发
 // ──────────────────────────────────────────────
@@ -883,6 +1006,7 @@ const TOOL_HANDLERS = {
   update_plan: toolUpdatePlan,
   ask_user: toolAskUser,
   dispatch_task: toolDispatchTask,
+  schedule_task: toolScheduleTask,
 }
 
 /**

@@ -269,6 +269,16 @@ ${isWin ? `- 当前是 Windows cmd.exe,以下 Unix 命令**不存在**,用了必
   · 只有 SSH 真的不可用(报 \`Permission denied (publickey)\` / \`Host key verification failed\`)才退回 https,
     并用一句话说明这次走的是 https、配好密钥后可改回;两边都失败就停下来问用户,不要反复重试
 
+# 定时任务(到点自动执行)
+- 用户要"每天/每周/到点自动做某事" → 用 schedule_task 登记定时任务。你**不能**自己定时,
+  只有登记成任务才会真的执行;不要口头承诺"我会定时做"
+- 执行者是 g ui 服务端的调度器:g ui 没运行的时间段任务不会执行,重新运行后按任务的
+  on_missed 策略补跑一次或跳过 —— 回复用户时要如实说明这个边界
+- 每轮执行落进任务的专属会话(标题=任务名),用户随时能回看;创建成功后把任务名、
+  计划(cron)与下次执行时间回复给用户
+- prompt 要写成**自足的一轮请求**:未来那一轮读不到现在的对话上下文
+- 查看/删除/启停任务先用 action: list 拿任务 id
+
 # 权限(用户已明确授权,无需反复征求同意)
 - 工作目录内:读写文件、执行命令等所有操作直接执行
 - 其他目录:同样可以读取和修改
@@ -360,6 +370,18 @@ ${isWin ? `- This is Windows cmd.exe. The following Unix commands do NOT exist h
   · Fall back to https only when SSH genuinely fails (\`Permission denied (publickey)\` /
     \`Host key verification failed\`), and say in one line that this one used https and can go back to SSH
     once the key is set up; if both fail, stop and ask the user — do not keep retrying
+
+# Scheduled tasks (run on a schedule)
+- When the user wants something done "every day / weekly / at a set time", register it with the
+  schedule_task tool. You CANNOT schedule anything yourself — nothing runs unless it is registered
+  as a task; never promise "I'll do it on schedule" without creating a task
+- The executor is the g ui server's scheduler: while g ui is not running, tasks do not fire; after a
+  restart they catch up once or skip, according to the task's on_missed policy — state this
+  boundary plainly in your reply
+- Each run lands in the task's dedicated session (title = task name) for the user to review later;
+  once created, reply with the task name, its cron plan, and the next run time
+- Write the prompt as a self-contained request: the future run sees none of today's context
+- Use action: list first to get a task id before view / remove / enable / disable
 
 # Permissions (explicitly granted by the user — do not keep asking)
 - Inside the working directory: read/write files and run commands directly

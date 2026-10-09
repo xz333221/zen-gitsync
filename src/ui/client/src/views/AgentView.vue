@@ -25,7 +25,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { $t } from '@/lang/static'
 import { ElIcon } from 'element-plus'
-import { Loading, ChatDotRound, Goods, Connection } from '@element-plus/icons-vue'
+import { Loading, ChatDotRound, Goods, Connection, Timer } from '@element-plus/icons-vue'
 import { ChatContainer, ConversationList } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { useConfigStore } from '@/stores/configStore'
@@ -35,6 +35,7 @@ import { resolveAgentPresets } from '@/utils/agentPresets'
 import { agentEngineName, type AgentEngineId } from '@/utils/agentEngine'
 import { useNarrowPane } from '@/composables/useNarrowPane'
 import MarketplacePanel from '@/components/MarketplacePanel.vue'
+import SchedulePanel from '@/components/SchedulePanel.vue'
 import AgentEngineSelector from '@/components/AgentEngineSelector.vue'
 import CopySessionButton from '@/components/CopySessionButton.vue'
 
@@ -48,13 +49,14 @@ const { narrow } = useNarrowPane(rootRef)
 const chatPage = ref<'list' | 'chat'>('chat')
 
 // ── 顶部 Tab ─────────────────────────────────────────────
-// 会话列表只在「对话」Tab 显示 —— 广场占满宽度更好浏览;
+// 会话列表只在「对话」Tab 显示 —— 广场/定时任务占满宽度更好浏览;
 // 两个广场共用一个 MarketplacePanel 实例,切类型时组件内部自己重拉数据。
-type AgentTab = 'chat' | 'skill' | 'mcp'
+type AgentTab = 'chat' | 'schedule' | 'skill' | 'mcp'
 const activeTab = ref<AgentTab>('chat')
 const marketplaceType = computed(() => (activeTab.value === 'mcp' ? 'mcp' : 'skill'))
 const tabs = computed(() => [
   { id: 'chat' as const, label: $t('@AGENT:对话'), icon: ChatDotRound },
+  { id: 'schedule' as const, label: $t('@AGENT:定时任务'), icon: Timer },
   { id: 'skill' as const, label: $t('@AGENT:Skill 广场'), icon: Goods },
   { id: 'mcp' as const, label: $t('@AGENT:MCP 广场'), icon: Connection },
 ])
@@ -171,6 +173,15 @@ watch(() => messages.value.length, () => {
 function selectSession(sessionId: string) {
   loadSession(sessionId)
   chatPage.value = 'chat'
+}
+
+// ── 定时任务面板「查看会话」────────────────────────────────
+// 切回对话 Tab 并打开该任务的专属会话 —— 执行结果都在那里面，这是看结果的唯一入口。
+// 窄屏顺带切到对话页（否则还停在列表页）。
+function handleScheduleOpenSession(sessionId: string) {
+  if (!sessionId) return
+  activeTab.value = 'chat'
+  selectSession(sessionId)
 }
 
 // ── 新建会话 ──────────────────────────────────────────────
@@ -384,6 +395,12 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
             </div>
           </template>
         </div>
+
+        <!-- ── 定时任务 ── -->
+        <SchedulePanel
+          v-else-if="activeTab === 'schedule'"
+          @open-session="handleScheduleOpenSession"
+        />
 
         <!-- ── Skill 广场 / MCP 广场 ── -->
         <MarketplacePanel v-else :type="marketplaceType" />

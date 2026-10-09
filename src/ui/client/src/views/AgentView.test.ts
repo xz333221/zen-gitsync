@@ -107,6 +107,15 @@ vi.mock('@/components/MarketplacePanel.vue', () => ({
   default: { name: 'MarketplacePanel', template: '<div class="stub-marketplace" />' },
 }))
 
+// 定时任务面板同样只关心"在不在"——真实组件会发 fetch 拉任务列表，桩掉。
+vi.mock('@/components/SchedulePanel.vue', () => ({
+  default: {
+    name: 'SchedulePanel',
+    emits: ['open-session'],
+    template: '<div class="stub-schedule" />',
+  },
+}))
+
 // configStore 可变桩：预设提示词用例要按例切换 agentPresetPrompts。
 // （computed 读的是普通对象字段，直接赋值不会触发响应式 —— 用例改完值重新 mount 即可。）
 const configState = vi.hoisted(() => ({
@@ -225,11 +234,23 @@ describe('AgentView 窄屏折行', () => {
     await w.find('.agent-page-back').trigger('click')
     expect(w.find('.agent-list-page').exists()).toBe(true)
 
-    // 第二个 Tab = Skill 广场
-    await w.findAll('.agent-tab')[1].trigger('click')
+    // 切到 Skill 广场 —— 按文本定位，不按位置（Tab 会随迭代增删，位置索引会静默指偏）
+    const skillTab = w.findAll('.agent-tab').find(t => t.text().includes('@AGENT:Skill 广场'))
+    expect(skillTab).toBeTruthy()
+    await skillTab!.trigger('click')
     expect(w.find('.stub-marketplace').exists()).toBe(true)
     expect(w.find('.agent-list-page').exists()).toBe(false)
     expect(w.find('.agent-page-bar').exists()).toBe(false)
+  })
+
+  it('切到定时任务 Tab 渲染 SchedulePanel（与广场同级、同样占满宽度）', async () => {
+    const w = mountView()
+    await setNarrow(false)
+    const scheduleTab = w.findAll('.agent-tab').find(t => t.text().includes('@AGENT:定时任务'))
+    expect(scheduleTab).toBeTruthy()
+    await scheduleTab!.trigger('click')
+    expect(w.find('.stub-schedule').exists()).toBe(true)
+    expect(w.find('.agent-engine').exists()).toBe(false)
   })
 })
 
@@ -301,7 +322,9 @@ describe('AgentView 引擎选择器', () => {
   it('非对话 Tab（广场）不显示引擎选择器 —— 那里没在跑智能体', async () => {
     const w = mountView()
     await setNarrow(false)
-    await w.find('.agent-tab:nth-child(2)').trigger('click')
+    const skillTab = w.findAll('.agent-tab').find(t => t.text().includes('@AGENT:Skill 广场'))
+    expect(skillTab).toBeTruthy()
+    await skillTab!.trigger('click')
     await nextTick()
     expect(w.find('.agent-engine').exists()).toBe(false)
   })

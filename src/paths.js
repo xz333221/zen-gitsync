@@ -135,6 +135,12 @@ export const SPLIT_SESSIONS_DIR = path.join(DATA_DIR, 'ai-split-sessions');
 export const AI_DIFF_SUMMARIES_DIR = path.join(DATA_DIR, 'ai-diff-summaries');
 export const TMP_DIR = path.join(DATA_DIR, 'tmp');
 
+// ── 定时任务（g ai 的定时对话）──────────────────────────────
+// 任务库：CLI 与 GUI 共享同一份（CLI/对话里创建的任务也由 g ui 服务端调度执行）。
+// 认领目录：多实例并发时靠 wx 原子创建的文件名去重（见 utils/scheduleStore.js）
+export const SCHEDULES_FILE = path.join(DATA_DIR, 'schedules.json');
+export const SCHEDULE_CLAIMS_DIR = path.join(DATA_DIR, 'schedule-claims');
+
 // 布局迁移标记 + 迁移期发现的垃圾的留档目录(不直接删,便于回溯)
 export const LAYOUT_MIGRATION_MARKER = path.join(DATA_DIR, '.layout-migrated');
 export const MIGRATION_BACKUP_DIR = path.join(DATA_DIR, '_legacy-cleanup');

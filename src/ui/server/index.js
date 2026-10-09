@@ -498,12 +498,17 @@ async function startUIServer(noOpen = false, savePort = false) {
 
   // 智能体：Web 端 AI 编码助手（含工具调用 + 会话持久化）
   // 快照生成器在上面已经建好（要走同一个实例），这里注入进去复用。
-  registerAgentRoutes({
+  const { scheduler: scheduleScheduler } = registerAgentRoutes({
     app,
     getCurrentProjectPath: () => currentProjectPath,
     configManager,
     snapshotter: aiContextSnapshotter
   });
+
+  // 定时任务调度器：注册阶段只建实例（单测调 registerAgentRoutes 不会真的开跑），
+  // 启动动作留在生产入口 —— 与快照预热同一约定。start 后的首个 tick 就会处理
+  // 「g ui 不在时错过」的任务（错过补偿），所以这里必须无条件启动。
+  scheduleScheduler.start();
 
   perfMark('全部 API 路由注册完成')
 
