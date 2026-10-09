@@ -518,7 +518,7 @@ async function submitForm() {
       size="small"
       width="400px"
       :z-index="3000000"
-      custom-class="schedule-dialog"
+      custom-class="schedule-dialog-confirm"
     >
       <p class="sch-confirm-text">
         {{ $t('@SCHED:确定删除「{name}」吗？已产生的会话会保留，但任务不再执行。', { name: confirmTarget?.name || '' }) }}
