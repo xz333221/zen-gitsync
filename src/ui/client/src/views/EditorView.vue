@@ -1892,6 +1892,7 @@ function stopPreviewResize() {
               v-else-if="showPreview && activeExt === 'md' && activeTabRef"
               :key="activeTabRef.path"
               :content="activeTabRef.content"
+              :base-path="activeTabRef.path"
               class="preview-markdown"
             />
             <!-- HTML / SVG → sandboxed iframe (JS 可执行,不透明 origin 隔离宿主) -->

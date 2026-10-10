@@ -25,6 +25,7 @@
 import { computed } from 'vue'
 import { render as renderMarkdown } from 'flowdash-md-preview'
 import { MindMap, markdownToMindMap } from 'flow-mindmap'
+import { getRawFileUrl } from '@/utils/fileKind'
 import 'flow-mindmap/style.css'
 
 interface Props {
@@ -32,6 +33,11 @@ interface Props {
   content: string
   /** 是否允许 markdown 中的原始 HTML。AI 等不可信内容应关闭。 */
   allowHtml?: boolean
+  /**
+   * 源文件绝对路径。给了它，正文里相对路径的图片才会被解析成
+   * /api/editor/raw 端点（浏览器按当前页面 URL 解析相对路径必然 404）。
+   */
+  basePath?: string
 }
 
 const props = withDefaults(defineProps<Props>(), { allowHtml: true })
@@ -68,6 +74,43 @@ function sanitizeRenderedHtml(value: string): string {
 }
 
 /**
+ * 把 markdown 里相对路径的图片解析成绝对路径，并换成 /api/editor/raw 端点。
+ * - 外部 URL / 协议 / 锚点 / data: / 以 / 开头的路径一律不动
+ * - 相对路径以 basePath（源文件绝对路径）所在目录为基准，处理 ./ 与 ../
+ */
+function resolveLocalAssetPath(basePath: string, rawUrl: string): string | null {
+  const url = rawUrl.trim()
+  if (!url) return null
+  if (/^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith('//') || url.startsWith('#') || url.startsWith('/')) {
+    return null
+  }
+  let decoded = url
+  try { decoded = decodeURIComponent(url) } catch { /* 非法转义就按原值用 */ }
+  const normalizedBase = basePath.replace(/\\/g, '/')
+  const dir = normalizedBase.replace(/\/[^/]*$/, '')
+  const stack: string[] = []
+  for (const seg of `${dir}/${decoded}`.split('/')) {
+    if (seg === '' || seg === '.') continue
+    if (seg === '..') { stack.pop(); continue }
+    stack.push(seg)
+  }
+  const joined = stack.join('/')
+  return normalizedBase.startsWith('/') ? `/${joined}` : joined
+}
+
+function rewriteLocalAssetUrls(html: string, basePath: string): string {
+  if (typeof document === 'undefined') return html
+  const template = document.createElement('template')
+  template.innerHTML = html
+  template.content.querySelectorAll('img[src]').forEach((element) => {
+    const src = element.getAttribute('src') || ''
+    const resolved = resolveLocalAssetPath(basePath, src)
+    if (resolved) element.setAttribute('src', getRawFileUrl(resolved))
+  })
+  return template.innerHTML
+}
+
+/**
  * 拆分 markdown:
  * 1. 抽出所有 ```mindmap 围栏块,记录 id 和内容
  * 2. 把围栏替换为占位符(markdown-it 会把 \u0000 规范化成 U+FFFD,
@@ -94,7 +137,8 @@ const segments = computed<Segment[]>(() => {
     className: false,
     html: props.allowHtml
   })
-  const html = props.allowHtml ? parsedHtml : sanitizeRenderedHtml(parsedHtml)
+  let html = props.allowHtml ? parsedHtml : sanitizeRenderedHtml(parsedHtml)
+  if (props.basePath) html = rewriteLocalAssetUrls(html, props.basePath)
 
   // 独占一行的占位符会被 markdown-it 包成 <p>占位符</p>,切分时连标签一起吃掉,
   // 免得片段边界留下空的 <p>
