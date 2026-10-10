@@ -1527,7 +1527,6 @@ export default {
   '@76872:默认提交信息设置成功': 'Default commit information setting successful',
   '@76872:AI生成提交信息': 'AI Generate Commit Message',
   '@76872:AI已生成提交信息': 'AI has generated the commit message',
-  '@76872:AI 正在生成提交信息…': 'AI is writing the commit message…',
   '@76872:AI生成失败': 'AI generation failed',
   '@76872:AI生成超时，请重试或检查模型响应速度': 'AI generation timed out, please retry or check the model response speed',
   '@76872:未配置AI模型，请先在通用设置中添加模型': 'No AI model configured, please add one in General Settings first',

@@ -123,4 +123,27 @@ describe('AiQuickPushButton.vue', () => {
     const withChanges = mountBtn()
     expect(withChanges.find('.one-ai-push-desc').text()).toBe('@2E184:AI 生成信息 + 推送')
   })
+
+  // ========== 生成阶段的按钮文案（2026-10-10）==========
+  //
+  // 用户要求「不要搞成全屏的，就在按钮上 loading 就行」—— 全屏 GlobalLoading 撤了之后，
+  // 这一阶段的反馈只剩按钮自己：转圈 + 文案说明在做什么。这条文案是唯一的进度说明，
+  // 掉了就退化成"一颗不知在干嘛的转圈按钮"。
+
+  test('AIQ-12: generating=true → 标题改说「AI 正在生成提交信息…」且收掉副标题', async () => {
+    mockGitStore.fileList = [{ path: 'a.ts' }]
+    const w = mountBtn({ generating: true })
+    expect(w.find('.one-ai-push-title').text()).toBe('@2E184:AI 正在生成提交信息…')
+    // 主标题已经说明白了,再挂一行「AI 生成信息 + 推送」是同一句话两遍
+    expect(w.find('.one-ai-push-desc').text()).toBe('')
+    expect(w.find('button').classes()).toContain('is-loading')
+  })
+
+  test('AIQ-13: 非 generating → 标题回到「AI 提交并推送」(反向对照)', async () => {
+    mockGitStore.fileList = [{ path: 'a.ts' }]
+    const w = mountBtn()
+    expect(w.find('.one-ai-push-title').text()).toBe('@2E184:AI 提交并推送')
+    expect(w.find('.one-ai-push-desc').text()).toBe('@2E184:AI 生成信息 + 推送')
+    expect(w.find('button').classes()).not.toContain('is-loading')
+  })
 })

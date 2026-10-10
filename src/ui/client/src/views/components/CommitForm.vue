@@ -120,13 +120,12 @@ async function handleAiQuickPush() {
     );
 
     if (isSelectedMode || hasChanges) {
-      showLoading({ text: $t("@76872:AI 正在生成提交信息…"), showProgress: false });
-      let ok = false;
-      try {
-        ok = await requestAiCommitMessage();
-      } finally {
-        hideLoading();
-      }
+      // 2026-10-10：这一段原先盖了一层全屏 GlobalLoading，只为等一个网络请求
+      // 就把整个界面糊住（用户："这个不要搞成全屏的，就在按钮上 loading 就行"）。
+      // 现在生成期间的反馈全部由按钮自己承担 —— AiQuickPushButton 的
+      // :generating（= aiQuickPushing）驱动它自己的 loading 转圈 + 文案，
+      // 这里不再碰全局遮罩；随后的暂存/提交/推送照旧走 gitStore 那套状态。
+      const ok = await requestAiCommitMessage();
       if (!ok) return;
 
       // finalCommitMessage / hasUserCommitMessage 是 computed，要等这一帧的

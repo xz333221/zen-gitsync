@@ -2,16 +2,22 @@
 // 覆盖:AI generate(成功 + 5 个错误码)、handleEnterKey 早退分支、模板填字段、watcher pendingMergeMessage。
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
 
-vi.mock('@stores/gitStore', () => ({ useGitStore: () => mockGitStore }))
-vi.mock('@stores/configStore', () => ({ useConfigStore: () => mockConfigStore }))
-vi.mock('@stores/localeStore', () => ({ useLocaleStore: () => mockLocaleStore }))
-vi.mock('@/composables/useGlobalLoading', () => ({
-  useGlobalLoading: () => ({
+// 全屏遮罩的调用要能在测试里断言 —— mock 工厂在 import 期就执行，
+// 直接引用普通 const 会撞 TDZ，所以走 vi.hoisted
+const { mockGlobalLoading } = vi.hoisted(() => ({
+  mockGlobalLoading: {
     loadingState: { value: false },
     setLoadingText: vi.fn(),
     show: vi.fn(),
     hide: vi.fn(),
-  }),
+  },
+}))
+
+vi.mock('@stores/gitStore', () => ({ useGitStore: () => mockGitStore }))
+vi.mock('@stores/configStore', () => ({ useConfigStore: () => mockConfigStore }))
+vi.mock('@stores/localeStore', () => ({ useLocaleStore: () => mockLocaleStore }))
+vi.mock('@/composables/useGlobalLoading', () => ({
+  useGlobalLoading: () => mockGlobalLoading,
 }))
 vi.mock('@/composables/useSuccessModal', () => ({
   useSuccessModal: () => ({ successState: { value: false }, show: vi.fn() }),
@@ -62,6 +68,8 @@ describe('CommitForm.vue', () => {
     vi.mocked(ElMessage).mockClear()
     vi.mocked(ElMessage.success).mockClear()
     vi.mocked(ElMessage.error).mockClear()
+    mockGlobalLoading.show.mockClear()
+    mockGlobalLoading.hide.mockClear()
   })
 
   afterEach(() => {
@@ -325,6 +333,43 @@ describe('CommitForm.vue', () => {
     const vm: any = w.vm
     await vm.handleAiQuickPush()
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  // 2026-10-10 用户："这个不要搞成全屏的，就在按钮上 loading 就行" ——
+  // 「AI 生成提交信息」这一阶段原先 `showLoading({ text: 'AI 正在生成提交信息…' })`
+  // 盖一层全屏 GlobalLoading 等网络请求，已撤掉；反馈改由 AiQuickPushButton 的
+  // :generating（= aiQuickPushing）承担。这条断言当回归闸：谁把全屏遮罩加回来就红。
+  test('CF-29: handleAiQuickPush 生成阶段不盖全屏遮罩，只让按钮转圈', async () => {
+    mockGitStore.fileList = [{ path: 'a.ts' }]
+    let release: (r: Response) => void = () => {}
+    const pending = new Promise<Response>((r) => { release = r })
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => pending as any)
+
+    const w = mountCommitForm()
+    const vm: any = w.vm
+    const running = vm.handleAiQuickPush()
+    await Promise.resolve()
+
+    // 按钮 loading 的唯一来源就是它；同时界面上不该出现全屏遮罩
+    expect(vm.aiQuickPushing).toBe(true)
+    expect(mockGlobalLoading.show).not.toHaveBeenCalled()
+
+    release(new Response(JSON.stringify({ success: true, type: 'fix', description: '修复按钮' }), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    }))
+    await running
+    expect(vm.aiQuickPushing).toBe(false)
+    expect(vm.commitDescription).toBe('修复按钮')
+    expect(mockGlobalLoading.show).not.toHaveBeenCalled()
+    expect(mockGlobalLoading.hide).not.toHaveBeenCalled()
+  })
+
+  // 反向对照：暂存/推送那条链路**该**保留全屏遮罩（本轮只撤 AI 生成这一段），
+  // 免得"撤全屏"被理解成"把 GlobalLoading 整个删掉"
+  test('CF-30: handleQuickPushBefore 仍走全屏遮罩（对照）', () => {
+    const w = mountCommitForm()
+    w.vm.handleQuickPushBefore()
+    expect(mockGlobalLoading.show).toHaveBeenCalled()
   })
 
   test('CF-28: handleAiQuickPush 非标准模式 → 生成整条 commitMessage', async () => {

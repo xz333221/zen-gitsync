@@ -115,6 +115,12 @@ const tooltipText = computed(() => {
 });
 
 const buttonTitle = computed(() => {
+  // 生成阶段把文案说在按钮上（2026-10-10）：原先这段等待盖的是一层全屏
+  // GlobalLoading，用户要求「不要全屏，按钮上 loading 就行」—— 全屏撤掉后，
+  // 光转圈不说话会让人以为卡在推送，所以这一阶段按钮自己报出在做什么。
+  if (props.generating) {
+    return $t('@2E184:AI 正在生成提交信息…');
+  }
   return gitStore.isSelectionMode && hasSelectedToStage.value
     ? $t('@2E184:AI 提交并推送所选')
     : $t('@2E184:AI 提交并推送');
@@ -122,6 +128,9 @@ const buttonTitle = computed(() => {
 
 const buttonDesc = computed(() => {
   if (props.from !== 'form') return '';
+  // 生成阶段收掉副标题：主标题已经换成「AI 正在生成提交信息…」，
+  // 再挂一行「AI 生成信息 + 推送」是同一句话说了两遍，还多占一行高度。
+  if (props.generating) return '';
   if (isPushOnly.value) {
     return $t('@2E184:本地已提交，直接推送');
   }

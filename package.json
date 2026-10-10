@@ -136,6 +136,8 @@
     "verify:git-operations-drawer:reverse": "node scripts/verify-git-operations-drawer.cjs --reverse",
     "verify:commit-ai-suffix": "node scripts/verify-commit-ai-suffix.cjs",
     "verify:commit-ai-suffix:reverse": "node scripts/verify-commit-ai-suffix.cjs --reverse",
+    "verify:ai-push-loading": "node scripts/verify-ai-push-loading.cjs",
+    "verify:ai-push-loading:reverse": "node scripts/verify-ai-push-loading.cjs --reverse",
     "verify:header-monitor": "node scripts/verify-header-monitor.cjs",
     "verify:header-git-buttons": "node scripts/verify-header-git-buttons.cjs",
     "verify:header-git-buttons:reverse": "node scripts/verify-header-git-buttons.cjs --reverse"
