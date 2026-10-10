@@ -24,6 +24,9 @@
  *     正在跑 → 实时「已运行 x」（不是 0、不是旧用时）；
  *     从没跑过 → 只有时间、没有占位；窗口收窄 → 细栏不换行/不增高/不溢出，
  *     让位的是这一块，左边四项（返回 / 项目名 / 执行于 / 任务执行）宽度全程不变（±1px 取整）
+ *   H11–H15 状态徽标（2026-10-10 加）：细栏里一枚角色色徽标回答"这条任务现在什么状态"，
+ *     正在跑=执行中(running) / 跑完=已完成(done) / 从没跑过=待处理(todo)。它**参与让位**
+ *     （flex-shrink 与时间块同档），所以不在"宽度全程不变"的左组里；但常规宽度下必须完整可见。
  *   D/F1–F3 是前置事实而不是 UI 契约：F1 fixture 与运行中后端口径无漂移（否则后面的断言
  *   验的不是同一块板子）、F2/F3 服务端时长口径（反证注入到真正拍板的那一层）。
  *
@@ -325,6 +328,7 @@ async function main() {
       const hint = bar.querySelector('.wb-editor-bar__hint')
       const proj = bar.querySelector('.wb-editor-bar__project')
       const back = bar.querySelector('.wb-back-btn')
+      const status = bar.querySelector('.wb-editor-bar__status')
       return {
         found: true,
         text: time ? norm(time.textContent) : null,
@@ -334,6 +338,11 @@ async function main() {
         timeW: w(time),
         // 被裁掉多少（>0 = 尾巴被省略号吃了，窄容器下这就是"让位中"）
         timeClipped: time ? time.scrollWidth - time.clientWidth : null,
+        // 状态徽标：文案 / 语义键 / 宽度 / 被裁掉多少
+        statusText: status ? norm(status.textContent) : null,
+        statusKey: status ? status.getAttribute('data-status') : null,
+        statusW: w(status),
+        statusClipped: status ? status.scrollWidth - status.clientWidth : null,
         // 左边四项各自的宽度：收窄时它们一个字节都不该变
         backW: w(back),
         // 返回按钮的**行数**：宽度没变、字却折成两行，是最典型的那种"被挤变形"
@@ -464,6 +473,10 @@ async function main() {
     check('H4b 这一块贴在细栏最右端、紧挨「任务执行」（空白在它之前，不是在它之后）',
       bar.gapToHint !== null && Math.abs(bar.gapToHint - 8) <= 1 && bar.freeBefore > 200,
       `与「任务执行」间距 ${bar.gapToHint}px（flex gap 8）· 左侧空白 ${bar.freeBefore}px`)
+    // 状态徽标（2026-10-10 加）：跑完的任务 → done 档「已完成」
+    check('H12 已完成的任务：状态徽标 = 已完成（绿 · done）',
+      bar.statusKey === 'done' && bar.statusText === (lang === 'en' ? 'Done' : '已完成'),
+      `${bar.statusKey} / ${bar.statusText}`)
     await page.screenshot({ path: path.resolve(__dirname, '../tmp-verify-wb-editor-bar.png') })
     // 再单独拍一条细栏本身：整页图里它只有 34px 高，看不清那两串字
     await page.locator('.wb-editor-bar').first().screenshot({ path: path.resolve(__dirname, '../tmp-verify-wb-editor-bar-crop.png') })
@@ -478,6 +491,12 @@ async function main() {
       runBar.spent === wantLive, `${runBar.spent} ≠ ${wantLive}`)
     check('H5b 它这时也没有同时挂着「用时」（同一个数不该出现两次，更不该出现两个）',
       !/用时|took/.test(String(runBar.text)), runBar.text)
+    // 状态徽标：正在跑 → running 档「执行中」（与 H5 的「已运行」是两件事：这个是"什么状态"）
+    check('H11 正在跑的任务：状态徽标 = 执行中（琥珀 · running）',
+      runBar.statusKey === 'running' && runBar.statusText === (lang === 'en' ? 'Running' : '执行中'),
+      `${runBar.statusKey} / ${runBar.statusText}`)
+    // 拍一张"正在跑"的细栏存证：这是加状态徽标要解决的那个场景（旧版这里看着像跑完了）
+    await page.locator('.wb-editor-bar').first().screenshot({ path: path.resolve(__dirname, '../tmp-verify-wb-editor-bar-running-crop.png') })
 
     // 从没跑过：只显示时间，整段用时不存在（不写「用时 —」这类占位）
     await backToBoard()
@@ -486,6 +505,10 @@ async function main() {
     check('H6 从没跑过的任务：细栏只有时间，没有用时那一截、也没有占位符',
       !!virginBar.ago && virginBar.spent === null && virginBar.text === virginBar.ago,
       `${virginBar.text}（ago=${virginBar.ago} spent=${virginBar.spent}）`)
+    // 状态徽标：从没跑过 → todo 档「待处理」
+    check('H13 从没跑过的任务：状态徽标 = 待处理（灰 · todo）',
+      virginBar.statusKey === 'todo' && virginBar.statusText === (lang === 'en' ? 'To do' : '待处理'),
+      `${virginBar.statusKey} / ${virginBar.statusText}`)
 
     // 收窄：细栏不换行、不增高、不溢出；让位顺序是「时间 · 用时」先收，
     // 左边四项（返回 / 项目名 / 执行于 / 任务执行）一个字节都不动。
@@ -531,6 +554,15 @@ async function main() {
         near(b.backW, wide.backW) && near(b.projW, wide.projW) && near(b.repoW, wide.repoW) && near(b.hintW, wide.hintW)),
       `受压档位 ${squeezed.map(b => `${b.w}px`).join('/') || '（一个都没有 —— 夹具太松，这条等于空跑）'}；` +
       `timeW ${wide.timeW} → ${narrow.timeW}（最窄档裁掉 ${narrow.timeClipped}px）`)
+    // 状态徽标参与让位（flex-shrink 与时间块同档，≤620px 直接整个收起），所以它**不属于**
+    // 上面那条"宽度全程不变"的左组；但要守住两点：常规宽度下它完整可见（这是加它的全部意义），
+    // 收窄时它退场、不把左边四项顶变形。
+    check('H14 常规宽度下状态徽标完整可见（没被挤到裁字）',
+      wide.statusW > 0 && wide.statusClipped <= 0 && wide.statusText === (lang === 'en' ? 'Done' : '已完成'),
+      `w=${wide.statusW} clipped=${wide.statusClipped} text=${wide.statusText}`)
+    check('H15 收窄时状态徽标退场（让位 / 收起），不把左边四项顶变形',
+      widths.every(b => near(b.backW, wide.backW) && near(b.projW, wide.projW) && near(b.repoW, wide.repoW) && near(b.hintW, wide.hintW)),
+      widths.map(b => `${b.w}:status${b.statusW}/proj${b.projW}`).join(' '))
 
     check('G1 页面无 console / page 错误', consoleErrors.length === 0 && pageErrors.length === 0,
       [...consoleErrors, ...pageErrors].slice(0, 3).join(' | '))

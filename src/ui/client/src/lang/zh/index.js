@@ -2360,6 +2360,8 @@ export default {
   '@WORKBENCH:退出执行': '退出执行',
   '@WORKBENCH:退出后将清空本次对话的全部轮次,确认?': '退出后将清空本次对话的全部轮次,确认?',
   '@WORKBENCH:执行失败': '执行失败',
+  '@WORKBENCH:这条任务正在执行': '这条任务正在执行',
+  '@WORKBENCH:上一次执行报错，点开对话流查看原因': '上一次执行报错，点开对话流查看原因',
   '@WORKBENCH:已删除': '已删除',
   '@WORKBENCH:确认': '确认',
   '@WORKBENCH:删除任务「{title}」？': '删除任务「{title}」？',

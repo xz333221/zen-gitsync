@@ -2353,6 +2353,8 @@ export default {
   '@WORKBENCH:退出执行': 'Exit Conversation',
   '@WORKBENCH:退出后将清空本次对话的全部轮次,确认?': 'Exiting will clear all conversation turns. Continue?',
   '@WORKBENCH:执行失败': 'Execution failed',
+  '@WORKBENCH:这条任务正在执行': 'This task is running',
+  '@WORKBENCH:上一次执行报错，点开对话流查看原因': 'The last run failed — open the conversation to see why',
   '@WORKBENCH:已删除': 'Deleted',
   '@WORKBENCH:确认': 'Confirm',
   '@WORKBENCH:删除任务「{title}」？': 'Delete task "{title}"?',

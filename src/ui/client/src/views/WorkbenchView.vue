@@ -669,6 +669,54 @@ const runButtonTitle = computed(() => {
   return selectedTaskHasRun.value ? $t('@WORKBENCH:重新跑一轮:上一轮的执行记录会被清空') : ''
 })
 
+/**
+ * 顶部细栏的状态徽标：把"这条任务现在什么状态"一句话摆在弹窗顶上。
+ *
+ * 为什么需要它（用户报，2026-10-10）：细栏原先只有「相对时间 · 用时」两串字，而这两串
+ * 字**推不出状态** —— 一条正在跑的任务（对话区在流、输入框提示排队、还有个「停止」）
+ * 顶上可能还挂着上一轮的「1 小时前 · 用时 13 分 15 秒」，看着像早就跑完了。
+ * 加这枚标之后，"在跑 / 跑完 / 失败 / 还没跑"一眼可辨。
+ *
+ * 判据与看板卡片同源（读**同一份** BoardTask 快照，不是拿本地 jobs 重算一遍列与状态
+ * —— 见 utils/taskTime 那段为什么不能各算一遍）。唯一的例外是「在跑」：本地 jobs 里
+ * 有 running/pending 就是权威（与侧栏脉动圆点、停止按钮、输入框排队提示同一个口径，
+ * 不必等 5s 轮询），再并上看板快照的 runningJobs 兜住"别的 g ui 实例在跑"。
+ *
+ * 色相走角色色（--role-active / done / error / pending，见 variables.scss 的语义角色色段）：
+ * 与看板列头同一套语言，用户把"琥珀=在跑、绿=完成、红=失败"直接搬过来看。
+ */
+type BarStatusKey = 'running' | 'done' | 'error' | 'todo'
+const barStatus = computed<{ key: BarStatusKey; label: string; title: string } | null>(() => {
+  if (!selectedTask.value) return null
+  const bt = selectedBoardTask.value
+  if (selectedTaskRunning.value || (bt ? bt.runningJobs > 0 : false)) {
+    return { key: 'running', label: $t('@WORKBENCH:执行中'), title: $t('@WORKBENCH:这条任务正在执行') }
+  }
+  if (bt) {
+    if (bt.column === 'done') {
+      return {
+        key: 'done',
+        label: $t('@WORKBENCH:已完成'),
+        // AI 判定 / 手动标记要看得出差别（与看板卡片的 autoDoneTitle 同一套说法）
+        title: bt.autoCompleted
+          ? $t('@WORKBENCH:静默超时后由 AI 核对，判定这条任务已经完成')
+          : bt.manualDoneAt ? $t('@WORKBENCH:已标记为已完成') : ''
+      }
+    }
+    if (bt.lastJobStatus === 'error') {
+      return { key: 'error', label: $t('@WORKBENCH:执行失败'), title: $t('@WORKBENCH:上一次执行报错，点开对话流查看原因') }
+    }
+    return { key: 'todo', label: $t('@WORKBENCH:待处理'), title: '' }
+  }
+  // 看板快照还没到（刚建任务 / 轮询还没轮到）：退到本地最近一条 job 的状态
+  switch (simpleJobState(simpleJobFor(selectedTask.value))) {
+    case 'done': return { key: 'done', label: $t('@WORKBENCH:已完成'), title: '' }
+    case 'error': return { key: 'error', label: $t('@WORKBENCH:执行失败'), title: '' }
+    case 'cancelled': return { key: 'todo', label: $t('@WORKBENCH:已取消'), title: '' }
+    default: return { key: 'todo', label: $t('@WORKBENCH:待处理'), title: '' }
+  }
+})
+
 /** 任务「提示词」只读展示：派发时冻结的分段快照（全局/项目两段）；
  *  老任务（合并前派发的）没有分段字段，回退整段展示 simpleOverride。 */
 const selectedTaskPromptParts = computed<{ key: string; label: string; text: string }[]>(() => {
@@ -1053,6 +1101,24 @@ const selectedTaskQueue = computed(() =>
         <span>{{ $t('@WORKBENCH:返回看板') }}</span>
       </button>
       <span class="wb-editor-bar__project" :title="currentProject.path">{{ currentProject.name }}</span>
+      <!--
+        任务状态徽标（见脚本里 barStatus 那段为什么要有它）：
+        紧挨项目名 —— 它和"我在哪 / 打开的是谁"同属"这条任务是什么"的上下文，
+        比挤到右端的时间块旁边更好找。色相走角色色，在跑时圆点脉动。
+        data-status 给探针一个稳定钩子（值 = running / done / error / todo）。
+      -->
+      <span
+        v-if="barStatus"
+        class="wb-editor-bar__status"
+        :class="'is-' + barStatus.key"
+        :data-status="barStatus.key"
+        :title="barStatus.title || undefined"
+      >
+        <span class="wb-editor-bar__status-pill">
+          <span class="wb-editor-bar__status-dot" aria-hidden="true" />
+          <span class="wb-editor-bar__status-label">{{ barStatus.label }}</span>
+        </span>
+      </span>
       <span
         v-if="foreignRepo"
         class="wb-editor-bar__repo"
@@ -1552,6 +1618,76 @@ const selectedTaskQueue = computed(() =>
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+}
+/* ── 细栏状态徽标 ─────────────────────────────────────────────────────
+   角色色：底色 wash（承载状态的那一块）、文字 ink、描边 edge —— 与设计系统的
+   角色色分工一致（见 variables.scss 的「语义角色色」段）。四档默认就是 pending（灰蓝），
+   running / done / error 各自覆盖。
+
+   外层 / 内层拆成两个盒子是有原因的（不是多余）：徽标要跟时间块一起让位，就得能一路收到
+   0；而带 padding+border 的盒子最小宽度被它们卡在 ~17px（收不下去）。所以外层是不带
+   padding / border 的收拢壳（min-width:0 + overflow:hidden，能真收到 0），视觉全压在内层
+   pill 上 —— 这样最窄档让位的是徽标与时间，而不是把左边的「项目名」顶变形（H9/H10 守的）。 */
+.wb-editor-bar__status {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 100;
+  min-width: 0;
+  overflow: hidden;
+}
+.wb-editor-bar__status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  height: 20px;
+  padding: 0 8px 0 7px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--role-pending-edge);
+  background: var(--role-pending-wash);
+  color: var(--role-pending-ink);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+.wb-editor-bar__status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.wb-editor-bar__status-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wb-editor-bar__status.is-running .wb-editor-bar__status-pill {
+  border-color: var(--role-active-edge);
+  background: var(--role-active-wash);
+  color: var(--role-active-ink);
+}
+/* 在跑：圆点脉动（与看板列头/侧栏脉动点同一档语义 —— "它是活的"） */
+.wb-editor-bar__status.is-running .wb-editor-bar__status-dot {
+  animation: wb-bar-status-pulse 1.4s ease-in-out infinite;
+}
+.wb-editor-bar__status.is-done .wb-editor-bar__status-pill {
+  border-color: var(--role-done-edge);
+  background: var(--role-done-wash);
+  color: var(--role-done-ink);
+}
+.wb-editor-bar__status.is-error .wb-editor-bar__status-pill {
+  border-color: var(--role-error-edge);
+  background: var(--role-error-wash);
+  color: var(--role-error-ink);
+}
+@keyframes wb-bar-status-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.7); }
+}
+/* 极窄（≈手机宽）时整条细栏挤不下第 5 个元素：把状态徽标整个收起，
+   而不是让它压着「项目名」变形（H9/H10 的契约），也不是显示半截字。
+   阈值 620px 是按"弹窗宽 = min(1520, 96vw)，细栏内容宽度 ≳ 526px 才装得下徽标"推出来的：
+   低于它就轮到徽标退场。 */
+@media (max-width: 620px) {
+  .wb-editor-bar__status { display: none; }
 }
 .wb-editor-bar__hint {
   margin-left: auto;
