@@ -62,8 +62,20 @@ export const PROVIDERS = [
   { id: 'opencode',   label: 'OpenCode Go',         url: 'https://opencode.ai/zen/go/v1' },
   { id: 'commandcode', label: 'Command Code',       url: 'https://api.commandcode.ai/provider/v1' },
   { id: 'agnes',      label: 'Agnes AI',            url: 'https://apihub.agnes-ai.com/v1' },
+  // 火山方舟订阅套餐:同域名不同数据面路径(/api/plan/v3 与 /api/coding/v3),填错直接 404
+  { id: 'ark-agent-plan',  label: '火山方舟 Agent Plan',  url: 'https://ark.cn-beijing.volces.com/api/plan/v3' },
+  { id: 'ark-coding-plan', label: '火山方舟 Coding Plan', url: 'https://ark.cn-beijing.volces.com/api/coding/v3' },
   { id: 'ollama',     label: 'Ollama (本地)',        url: 'http://localhost:11434/v1' },
 ]
+
+// ──────────────────────────────────────────────
+// 火山方舟两个订阅套餐的端点
+//   Agent Plan  → /api/plan/v3
+//   Coding Plan → /api/coding/v3
+// 同域名不同数据面路径,填错直接 404;两边都只认套餐内的模型名。
+// ──────────────────────────────────────────────
+export const ARK_AGENT_PLAN_URL = 'https://ark.cn-beijing.volces.com/api/plan/v3'
+export const ARK_CODING_PLAN_URL = 'https://ark.cn-beijing.volces.com/api/coding/v3'
 
 // ──────────────────────────────────────────────
 // 内置常用模型列表
@@ -180,6 +192,63 @@ export const BUILTIN_MODELS = {
     'claude-opus-5-5', 'claude-opus-5', 'claude-opus-4-8',
     'claude-haiku-5-5', 'claude-haiku-4-5-20251001',
   ],
+  // 火山方舟套餐 — 两个端点都只认套餐内的模型名(不是自建 Endpoint ID),
+  // 且它们的 /models 返回的是方舟全量目录(含向量/视频/已下线模型)而不是套餐清单,
+  // 所以这两个端点走 BUILTIN_ONLY_ENDPOINTS:不拉实时列表,只用下面的实测清单。
+  // 更新: 2026-10-10,用真实套餐 Key 逐个请求核实,与 ai-model-form 同步。
+  [ARK_AGENT_PLAN_URL]: [
+    'doubao-seed-2-1-pro-260915', 'doubao-seed-2-1-pro-260628', 'doubao-seed-2-1-turbo-260628',
+    'doubao-seed-2-1-lite-260915',
+    'doubao-seed-2-0-pro-260215', 'doubao-seed-2-0-lite-260428', 'doubao-seed-2-0-lite-260215',
+    'doubao-seed-2-0-mini-260428', 'doubao-seed-2-0-mini-260215',
+    'doubao-seed-2-0-code-preview-260215', 'doubao-seed-evolving',
+    'deepseek-v4-pro-ga-260813', 'deepseek-v4-pro-260425',
+    'deepseek-v4-1-flash-260910', 'deepseek-v4-flash-ga-260731',
+    'glm-5-3-flash-260828', 'glm-5-2-260617',
+  ],
+  [ARK_CODING_PLAN_URL]: [
+    'doubao-seed-code', 'doubao-seed-evolving',
+    'doubao-seed-2-1-pro-260915', 'doubao-seed-2-1-pro-260628', 'doubao-seed-2-1-turbo-260628',
+    'doubao-seed-2-1-lite-260915',
+    'doubao-seed-2-0-pro-260215', 'doubao-seed-2-0-mini-260428', 'doubao-seed-2-0-mini-260215',
+    'doubao-seed-2-0-code-preview-260215',
+    'deepseek-v4-pro-ga-260813', 'deepseek-v4-pro-260425',
+    'deepseek-v4-1-flash-260910', 'deepseek-v4-flash-ga-260731',
+    'glm-5-3-flash-260828', 'glm-5-2-260617',
+    'kimi-k2-thinking-251104', 'kimi-k2-turbo-preview-250905', 'kimi-k2-250905',
+  ],
+}
+
+// ──────────────────────────────────────────────
+// 火山方舟套餐的辅助判断(端点常量见文件顶部)
+// ──────────────────────────────────────────────
+
+/**
+ * 这些端点的 /models 不能用来填候选列表(返回的是全量目录,不是可用的模型集合),
+ * 必须只用 BUILTIN_MODELS。与 ai-model-form 的 ARK_PLAN_URLS 保持同步。
+ */
+export const BUILTIN_ONLY_ENDPOINTS = new Set([ARK_AGENT_PLAN_URL, ARK_CODING_PLAN_URL])
+
+/** 归一化 baseURL(去尾斜杠),用于和上面的常量比对 */
+function normalizeEndpoint(baseURL) {
+  return String(baseURL || '').trim().replace(/\/+$/, '')
+}
+
+/** 套餐端点的展示名 */
+function arkPlanLabel(baseURL) {
+  return normalizeEndpoint(baseURL) === ARK_CODING_PLAN_URL ? 'Coding Plan' : 'Agent Plan'
+}
+
+/**
+ * 套餐端点把"不在套餐里"表达成 404 UnsupportedModel,和"模型名写错"共用同一个状态码,
+ * 所以只能认那句专属文案,不能只看状态码。
+ * @param {{code?: string, message?: string}} err - readErrorBody 的结果
+ * @param {'agent'|'coding'} plan
+ */
+function isArkPlanModelError(err, plan) {
+  const blob = `${err?.code || ''} ${err?.message || ''}`
+  // 错误码是 camelCase 的 UnsupportedModel,两种写法都认
+  return /unsupported[_\s-]?model/i.test(blob) && new RegExp(`does not support the ${plan} plan`, 'i').test(blob)
 }
 
 // ──────────────────────────────────────────────
@@ -277,6 +346,16 @@ export function getBuiltinModels(baseURL) {
   if (!baseURL || typeof baseURL !== 'string') return []
   const normalized = baseURL.replace(/\/$/, '')
   return BUILTIN_MODELS[normalized] || []
+}
+
+/**
+ * 该端点是否只能靠内置清单列候选模型(实时 /models 返回的不是可用模型集合)。
+ * @param {string} baseURL
+ * @returns {boolean}
+ */
+export function isBuiltinOnlyEndpoint(baseURL) {
+  if (!baseURL || typeof baseURL !== 'string') return false
+  return BUILTIN_ONLY_ENDPOINTS.has(baseURL.trim().replace(/\/+$/, ''))
 }
 
 /**
@@ -438,19 +517,47 @@ export async function testModelConnection({ baseURL, model, apiKey, timeoutMs = 
     if (res.status === 400) {
       const err = await readErrorBody(res)
       const blob = `${err.code} ${err.message}`
-      if (/unsupported_model|must be called via|is not supported on this endpoint/i.test(blob)) {
+      if (/unsupported[_\s-]?model|must be called via|is not supported on this endpoint/i.test(blob)) {
         return {
           ok: false,
           message: `模型 "${model}" 在该接口不可用 (400)${err.message ? '：' + err.message : ''}`,
           status: 400,
         }
       }
+      // 限流 / 额度类 400 不是"探活参数太小被拒",不能算连接成功
+      if (/rate.?limit|quota|throttl|too many|overload|busy|concurrenc/i.test(blob)) {
+        return {
+          ok: false,
+          message: `接口限流或额度不足 (400)${err.message ? '：' + err.message : ''}`,
+          status: 400,
+        }
+      }
       return { ok: true, message: 'OK', status: 400 }
     }
     if (res.status === 401) {
+      if (BUILTIN_ONLY_ENDPOINTS.has(normalizeEndpoint(baseURL))) {
+        return {
+          ok: false,
+          message: `API Key 无效或与套餐不匹配 (401)：${arkPlanLabel(baseURL)} 需要该套餐下发的 Key`,
+          status: 401,
+        }
+      }
       return { ok: false, message: 'API Key 无效或未授权 (401)', status: 401 }
     }
     if (res.status === 404) {
+      // 套餐端点用 404 表达"模型不在套餐内",和"模型名不存在"是同一个状态码
+      if (BUILTIN_ONLY_ENDPOINTS.has(normalizeEndpoint(baseURL))) {
+        const err = await readErrorBody(res)
+        const label = arkPlanLabel(baseURL)
+        if (isArkPlanModelError(err, normalizeEndpoint(baseURL) === ARK_CODING_PLAN_URL ? 'coding' : 'agent')) {
+          return {
+            ok: false,
+            message: `${label} 套餐不含模型 "${model}"：请从内置清单里选套餐内的模型,`
+              + `或在火山方舟控制台确认 ${label} 的可用模型清单`,
+            status: 404,
+          }
+        }
+      }
       return { ok: false, message: `模型 "${model}" 不存在 (404)`, status: 404 }
     }
     return { ok: false, message: `服务器返回错误: ${res.status}`, status: res.status }
@@ -827,15 +934,21 @@ export async function collectModelInput({ locale = 'zh-CN', rl: injectedRl, fetc
     const apiKey = await asker.ask(t.apiKeyPrompt)
 
     // 4. 选择/输入模型名称
-    // 先尝试从 API 获取模型列表(有了 apiKey 才能调通)
-    const fetchSpinner = startSpinner(t.fetchingModels)
-    const fetchedModels = await fetchModelsFromApi({ baseURL, apiKey, fetchFn })
-    fetchSpinner.stop()
+    // 先尝试从 API 获取模型列表(有了 apiKey 才能调通)。
+    // 例外:套餐端点的 /models 返回的是全量目录而不是套餐清单,拉回来会让用户
+    // 以为套餐里能调 qwen3/seedream,所以这类端点直接跳过请求,只用内置清单。
+    const builtinOnly = isBuiltinOnlyEndpoint(baseURL)
+    let fetchedModels = []
+    if (!builtinOnly) {
+      const fetchSpinner = startSpinner(t.fetchingModels)
+      fetchedModels = await fetchModelsFromApi({ baseURL, apiKey, fetchFn })
+      fetchSpinner.stop()
+    }
 
     // 使用 API 返回的模型列表,如果失败则使用内置列表
     const modelList = fetchedModels.length > 0 ? fetchedModels : getBuiltinModels(baseURL)
 
-    if (fetchedModels.length === 0 && getBuiltinModels(baseURL).length > 0) {
+    if (!builtinOnly && fetchedModels.length === 0 && getBuiltinModels(baseURL).length > 0) {
       console.log(chalk.dim(`  ${t.fetchModelsFailed}`))
     }
 
@@ -968,4 +1081,4 @@ export async function runModelSetup({ locale = 'zh-CN', rl: injectedRl, fetchFn 
   }
 }
 
-export default { runModelSetup, collectModelInput, fetchModelsFromApi, testModelConnection, getBuiltinModels, findProviderByUrl, validateEndpoint, buildModelConfig, PROVIDERS, BUILTIN_MODELS }
+export default { runModelSetup, collectModelInput, fetchModelsFromApi, testModelConnection, getBuiltinModels, isBuiltinOnlyEndpoint, findProviderByUrl, validateEndpoint, buildModelConfig, PROVIDERS, BUILTIN_MODELS }

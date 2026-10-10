@@ -20,6 +20,7 @@ import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import {
   getBuiltinModels,
+  isBuiltinOnlyEndpoint,
   findProviderByUrl,
   validateEndpoint,
   buildModelConfig,
@@ -267,6 +268,80 @@ test('testModelConnection: 404 模型不存在', async () => {
   assert.match(result.message, /404/)
 })
 
+test('testModelConnection: 400 限流/额度不足 → 报失败,不能当成"连接成功"', async () => {
+  const result = await testModelConnection({
+    baseURL: 'https://api.deepseek.com/v1',
+    model: 'deepseek-chat',
+    fetchFn: mockFetch({
+      status: 400,
+      ok: false,
+      body: { error: { code: 'RateLimitExceeded', message: 'too many requests' } },
+    }),
+  })
+  assert.equal(result.ok, false)
+  assert.match(result.message, /限流或额度不足/)
+})
+
+// ── 火山方舟套餐:错误语义映射 ──────────────────
+
+test('testModelConnection: 套餐端点 404=不在套餐内,不能说成"模型不存在"', async () => {
+  const result = await testModelConnection({
+    baseURL: 'https://ark.cn-beijing.volces.com/api/coding/v3',
+    model: 'qwen3-8b-20250429',
+    apiKey: 'ark-test',
+    fetchFn: mockFetch({
+      status: 404,
+      ok: false,
+      body: {
+        error: {
+          code: 'UnsupportedModel',
+          message: 'The requested model does not support the coding plan feature.',
+        },
+      },
+    }),
+  })
+  assert.equal(result.ok, false)
+  assert.match(result.message, /Coding Plan 套餐不含模型/)
+  assert.doesNotMatch(result.message, /不存在/)
+})
+
+test('testModelConnection: Agent Plan 端点的 404 指向 Agent Plan', async () => {
+  const result = await testModelConnection({
+    baseURL: 'https://ark.cn-beijing.volces.com/api/plan/v3',
+    model: 'doubao-seed-code',
+    apiKey: 'ark-test',
+    fetchFn: mockFetch({
+      status: 404,
+      ok: false,
+      body: {
+        error: {
+          code: 'UnsupportedModel',
+          message: 'The requested model does not support the agent plan feature.',
+        },
+      },
+    }),
+  })
+  assert.equal(result.ok, false)
+  assert.match(result.message, /Agent Plan 套餐不含模型/)
+})
+
+test('testModelConnection: 套餐端点 401 提示 Key 与套餐不匹配', async () => {
+  const result = await testModelConnection({
+    baseURL: 'https://ark.cn-beijing.volces.com/api/plan/v3',
+    model: 'doubao-seed-2-0-pro-260215',
+    apiKey: 'ark-coding-key',
+    fetchFn: mockFetch({
+      status: 401,
+      ok: false,
+      body: { error: { code: 'AuthenticationError', message: 'invalid' } },
+    }),
+  })
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 401)
+  assert.match(result.message, /Agent Plan/)
+  assert.match(result.message, /套餐不匹配/)
+})
+
 test('testModelConnection: 500 服务器错误', async () => {
   const result = await testModelConnection({
     baseURL: 'https://api.deepseek.com/v1',
@@ -383,6 +458,52 @@ test('BUILTIN_MODELS: 每个 key 都能在 PROVIDERS 中找到', () => {
   const providerUrls = new Set(PROVIDERS.map(p => p.url))
   for (const url of Object.keys(BUILTIN_MODELS)) {
     assert.ok(providerUrls.has(url), `BUILTIN_MODELS 的 key "${url}" 不在 PROVIDERS 中`)
+  }
+})
+
+// ── 火山方舟套餐(Agent Plan / Coding Plan) ────
+
+const ARK_AGENT_PLAN_URL = 'https://ark.cn-beijing.volces.com/api/plan/v3'
+const ARK_CODING_PLAN_URL = 'https://ark.cn-beijing.volces.com/api/coding/v3'
+
+test('火山方舟: 两个套餐都有预设且路径不同(填错会 404)', () => {
+  const agent = findProviderByUrl(ARK_AGENT_PLAN_URL)
+  const coding = findProviderByUrl(ARK_CODING_PLAN_URL)
+  assert.ok(agent, 'Agent Plan 应有预设')
+  assert.ok(coding, 'Coding Plan 应有预设')
+  assert.notEqual(agent.url, coding.url)
+  // 同域名、不同数据面路径:这是最容易填错的地方,锁住
+  assert.equal(new URL(agent.url).hostname, new URL(coding.url).hostname)
+  assert.equal(new URL(agent.url).pathname, '/api/plan/v3')
+  assert.equal(new URL(coding.url).pathname, '/api/coding/v3')
+})
+
+test('火山方舟: 两个套餐都标为"只用内置清单"(/models 返回的是全量目录)', () => {
+  assert.equal(isBuiltinOnlyEndpoint(ARK_AGENT_PLAN_URL), true)
+  assert.equal(isBuiltinOnlyEndpoint(ARK_CODING_PLAN_URL), true)
+  assert.equal(isBuiltinOnlyEndpoint(ARK_AGENT_PLAN_URL + '/'), true, '尾斜杠也要认')
+  assert.equal(isBuiltinOnlyEndpoint('https://api.deepseek.com/v1'), false)
+})
+
+test('火山方舟: 两个套餐的内置清单非空且互有差异', () => {
+  const agent = getBuiltinModels(ARK_AGENT_PLAN_URL)
+  const coding = getBuiltinModels(ARK_CODING_PLAN_URL)
+  assert.ok(agent.length > 0)
+  assert.ok(coding.length > 0)
+  // doubao-seed-code 只在 Coding Plan(实测 Agent Plan 回 UnsupportedModel),
+  // 两边清单如果被同步成一份,这条会红
+  assert.ok(coding.includes('doubao-seed-code'))
+  assert.ok(!agent.includes('doubao-seed-code'))
+  // kimi 系同样只在 Coding Plan
+  assert.ok(coding.includes('kimi-k2-250905'))
+  assert.ok(!agent.includes('kimi-k2-250905'))
+})
+
+test('火山方舟: 清单里不含全量目录里的非套餐模型', () => {
+  const all = [...getBuiltinModels(ARK_AGENT_PLAN_URL), ...getBuiltinModels(ARK_CODING_PLAN_URL)]
+  // /models 返回的全量目录里有这些,但它们不在套餐内,不该出现在候选里
+  for (const bad of ['qwen3-8b-20250429', 'doubao-seedream-4-0-250828', 'doubao-embedding-text-240515']) {
+    assert.ok(!all.includes(bad), `套餐清单不应包含 ${bad}`)
   }
 })
 
@@ -560,6 +681,42 @@ test('collectModelInput: Ctrl+C 只取消当前问题并阻止 readline 关闭',
     assert.equal(result, null)
     assert.equal(rl.closed, false)
     assert.equal(rl.lastCtrlCKey.name, 'escape', 'Ctrl+C 应在 readline 处理前被中和')
+  } finally {
+    restore()
+  }
+})
+
+test('collectModelInput: 套餐端点不拉 /models,直接用内置清单', async () => {
+  const restore = silenceConsole()
+  try {
+    const calls = []
+    // /models 故意返回一个"看起来能用"的全量目录,如果被采信,model 就会是 api-model-1
+    const spyFetch = async (url) => {
+      calls.push(String(url))
+      if (String(url).endsWith('/models')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: [{ id: 'api-model-1' }, { id: 'api-model-2' }] }),
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({}) }
+    }
+    // 选 Coding Plan(21) → 确认 baseURL → apiKey → 选内置清单第 1 个 → displayName
+    const rl = createMockRl(['21', '', 'ark-test-key', '1', ''])
+    const result = await collectModelInput({
+      locale: 'zh-CN',
+      rl,
+      fetchFn: spyFetch,
+    })
+    assert.ok(result)
+    assert.equal(result.baseURL, ARK_CODING_PLAN_URL)
+    assert.ok(
+      !calls.some((u) => u.endsWith('/models')),
+      `套餐端点不该请求 /models,实际请求: ${calls.join(', ')}`
+    )
+    assert.equal(result.model, getBuiltinModels(ARK_CODING_PLAN_URL)[0], '应来自内置清单')
+    assert.equal(result.apiKey, 'ark-test-key')
   } finally {
     restore()
   }
