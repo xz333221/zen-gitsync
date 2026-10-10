@@ -32,6 +32,7 @@ import SvgIcon from '@/components/SvgIcon/index.vue'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import { PREVIEW_IFRAME_SANDBOX, injectHtmlPreviewShims } from '@/utils/previewSandbox'
 import { isOfficeFile } from '@/utils/officeFile'
+import { prepareHtml, prepareRichText } from '@/utils/markdownClipboard'
 
 // 配置 Monaco web worker(避免回退到主线程导致 UI 卡顿)
 // 使用 Vite 的 ?worker 语法为 Monaco 创建 web worker
@@ -1487,6 +1488,106 @@ function toggleAgentChat() {
   agentOpened.value = true
 }
 
+// ── Markdown 预览复制（导出到公众号 / 富文本编辑器）─────────────────────
+const mdPreviewRef = ref<InstanceType<typeof MarkdownPreview> | null>(null)
+const mdCopyBusy = ref(false)
+const mdCopiedType = ref<'' | 'md' | 'html' | 'rich'>('')
+/** 复制时是否把同源图片转成 Base64（默认开：本机图不内嵌，粘到外部平台就是裂图）。 */
+const mdCopyInlineImages = ref(true)
+let mdCopiedTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 复制按钮栏只在 markdown 预览时出现（思维导图不参与）。 */
+const mdCopyAvailable = computed(() =>
+  !showMindmap.value && showPreview.value && activeExt.value === 'md' && !!activeTabRef.value
+)
+
+function mdSourceText(): string {
+  return activeTabRef.value?.content ?? ''
+}
+
+function mdDocTitle(): string {
+  const match = mdSourceText().match(/^\s*#\s+(.+?)\s*(?:\r?\n|$)/)
+  return match?.[1]?.trim() ?? ''
+}
+
+function mdCopyFeedback(ok: boolean, leftover: number, type: 'md' | 'html' | 'rich') {
+  if (!ok) { ElMessage.error($t('@EDITOR:复制失败')); return }
+  mdCopiedType.value = type
+  if (mdCopiedTimer) clearTimeout(mdCopiedTimer)
+  mdCopiedTimer = setTimeout(() => { mdCopiedType.value = '' }, 1800)
+  if (leftover > 0) ElMessage.warning($t('@EDITOR:{n} 张图片未能转成 Base64，已保留原地址', { n: leftover }))
+  else ElMessage.success($t('@EDITOR:已复制'))
+}
+
+async function copyMarkdownSource() {
+  const ok = await copyToClipboard(mdSourceText())
+  mdCopyFeedback(ok, 0, 'md')
+}
+
+async function copyRenderedHtml() {
+  const root = mdPreviewRef.value?.getRenderedElement()
+  if (!root) return
+  mdCopyBusy.value = true
+  try {
+    const { html, leftover } = await prepareHtml(root, mdCopyInlineImages.value)
+    const ok = await copyToClipboard(html)
+    mdCopyFeedback(ok, leftover, 'html')
+  } finally {
+    mdCopyBusy.value = false
+  }
+}
+
+/** 选区兜底：部分浏览器不允许脚本写富文本剪贴板，用一次选区复制顶上。 */
+function copyRichTextBySelection(html: string): boolean {
+  const holder = document.createElement('div')
+  holder.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;'
+  holder.innerHTML = html
+  document.body.appendChild(holder)
+  try {
+    const sel = window.getSelection()
+    const range = document.createRange()
+    range.selectNodeContents(holder)
+    sel?.removeAllRanges()
+    sel?.addRange(range)
+    const ok = document.execCommand('copy')
+    sel?.removeAllRanges()
+    return ok
+  } catch {
+    return false
+  } finally {
+    document.body.removeChild(holder)
+  }
+}
+
+async function copyRichTextToClipboard() {
+  const root = mdPreviewRef.value?.getRenderedElement()
+  if (!root) return
+  mdCopyBusy.value = true
+  try {
+    const { html, leftover } = await prepareRichText(root, {
+      inline: mdCopyInlineImages.value,
+      title: mdDocTitle(),
+    })
+    const plain = mdSourceText()
+    let ok = false
+    try {
+      if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/html': new Blob([html], { type: 'text/html' }),
+            'text/plain': new Blob([plain], { type: 'text/plain' })
+          })
+        ])
+        ok = true
+      }
+    } catch { ok = false }
+    if (!ok) ok = copyRichTextBySelection(html)
+    mdCopyFeedback(ok, leftover, 'rich')
+  } finally {
+    mdCopyBusy.value = false
+  }
+}
+
 // 生成 iframe srcdoc（md / html / htm / svg）
 const previewSrcdoc = computed(() => {
   const tab = activeTabRef.value
@@ -1874,6 +1975,46 @@ function stopPreviewResize() {
             </button>
           </div>
           <div class="preview-body">
+            <!-- 复制栏：Markdown 预览导出到公众号 / 其它富文本编辑器 -->
+            <div v-if="mdCopyAvailable" class="preview-copybar">
+              <button
+                class="preview-copy-btn"
+                :class="{ done: mdCopiedType === 'md' }"
+                :disabled="mdCopyBusy"
+                :title="$t('@EDITOR:复制 Markdown 源码')"
+                @click="copyMarkdownSource"
+              >
+                <span class="preview-copy-btn-icon">{ }</span>
+                <span>{{ mdCopiedType === 'md' ? $t('@EDITOR:已复制') : 'Markdown' }}</span>
+              </button>
+              <button
+                class="preview-copy-btn"
+                :class="{ done: mdCopiedType === 'html' }"
+                :disabled="mdCopyBusy"
+                :title="$t('@EDITOR:复制渲染后的 HTML（图片按开关内嵌）')"
+                @click="copyRenderedHtml"
+              >
+                <span class="preview-copy-btn-icon">&lt;/&gt;</span>
+                <span>{{ mdCopiedType === 'html' ? $t('@EDITOR:已复制') : 'HTML' }}</span>
+              </button>
+              <button
+                class="preview-copy-btn preview-copy-btn--primary"
+                :class="{ done: mdCopiedType === 'rich' }"
+                :disabled="mdCopyBusy"
+                :title="$t('@EDITOR:复制为富文本，可直接粘贴到公众号编辑器')"
+                @click="copyRichTextToClipboard"
+              >
+                <span class="preview-copy-btn-icon">⊞</span>
+                <span>{{ mdCopyBusy ? $t('@EDITOR:转换图片中…') : (mdCopiedType === 'rich' ? $t('@EDITOR:已复制') : $t('@EDITOR:复制富文本')) }}</span>
+              </button>
+              <label
+                class="preview-copy-embed"
+                :title="$t('@EDITOR:复制时把本地图片转成 Base64 内嵌，关闭后保留原图地址')"
+              >
+                <input v-model="mdCopyInlineImages" type="checkbox" />
+                <span>{{ $t('@EDITOR:图片转 Base64') }}</span>
+              </label>
+            </div>
             <!-- 思维导图:整篇 markdown → 一张大导图 -->
             <MindmapPreview
               v-if="showMindmap && activeExt === 'md' && activeTabRef"
@@ -1890,6 +2031,7 @@ function stopPreviewResize() {
                  那种情况下不该把用户踢回顶部。 -->
             <MarkdownPreview
               v-else-if="showPreview && activeExt === 'md' && activeTabRef"
+              ref="mdPreviewRef"
               :key="activeTabRef.path"
               :content="activeTabRef.content"
               :base-path="activeTabRef.path"
@@ -2520,6 +2662,89 @@ function stopPreviewResize() {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+/* 预览顶部复制栏（仅 markdown 预览）*/
+.preview-copybar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-panel);
+}
+
+.preview-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.preview-copy-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.preview-copy-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.preview-copy-btn.done {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--tint-primary-12);
+}
+
+.preview-copy-btn--primary {
+  border-color: transparent;
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.preview-copy-btn--primary:hover:not(:disabled) {
+  background: var(--color-primary-dark, var(--color-primary));
+  color: #fff;
+}
+
+.preview-copy-btn--primary.done {
+  border-color: transparent;
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.preview-copy-btn-icon {
+  font-family: monospace;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.preview-copy-embed {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  color: var(--text-meta);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  user-select: none;
+}
+
+.preview-copy-embed input {
+  margin: 0;
+  accent-color: var(--color-primary);
 }
 
 .preview-iframe {

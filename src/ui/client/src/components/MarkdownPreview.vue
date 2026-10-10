@@ -22,7 +22,7 @@
  * - 排版与配色统一由 flowdash-md-preview 的主题提供（见 utils/markdownTheme.ts，
  *   全应用只注入一套），本组件不再自带排版样式，避免与主题打架
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { render as renderMarkdown } from 'flowdash-md-preview'
 import { MindMap, markdownToMindMap } from 'flow-mindmap'
 import { getRawFileUrl } from '@/utils/fileKind'
@@ -165,10 +165,14 @@ const segments = computed<Segment[]>(() => {
   }
   return result
 })
+
+const rootRef = ref<HTMLElement | null>(null)
+/** 供外部（如复制到剪贴板）拿到渲染后的 DOM。 */
+defineExpose({ getRenderedElement: () => rootRef.value })
 </script>
 
 <template>
-  <div class="md-preview">
+  <div ref="rootRef" class="md-preview">
     <template v-for="(seg, idx) in segments" :key="idx">
       <div
         v-if="seg.type === 'html'"

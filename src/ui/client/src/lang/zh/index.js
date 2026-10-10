@@ -2162,6 +2162,16 @@ export default {
   '@EDITOR:搜索文件...': '搜索文件...',
   '@EDITOR:清除搜索': '清除搜索',
   '@EDITOR:未找到匹配文件': '未找到匹配文件',
+  '@EDITOR:复制 Markdown 源码': '复制 Markdown 源码',
+  '@EDITOR:复制渲染后的 HTML（图片按开关内嵌）': '复制渲染后的 HTML（图片按开关内嵌）',
+  '@EDITOR:复制为富文本，可直接粘贴到公众号编辑器': '复制为富文本，可直接粘贴到公众号编辑器',
+  '@EDITOR:复制富文本': '复制富文本',
+  '@EDITOR:复制时把本地图片转成 Base64 内嵌，关闭后保留原图地址': '复制时把本地图片转成 Base64 内嵌，关闭后保留原图地址',
+  '@EDITOR:图片转 Base64': '图片转 Base64',
+  '@EDITOR:转换图片中…': '转换图片中…',
+  '@EDITOR:已复制': '已复制',
+  '@EDITOR:复制失败': '复制失败',
+  '@EDITOR:{n} 张图片未能转成 Base64，已保留原地址': '{n} 张图片未能转成 Base64，已保留原地址',
   // @EDITOR: file end
   // @INSSW: file path: components/InstanceSwitcher.vue, components/ServerClosedOverlay.vue
   '@INSSW:个实例': '个实例',
