@@ -76,6 +76,7 @@ import { ALL_AI_CONTEXT_SECTIONS, refreshAiContext, refreshAiContextForView } fr
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import { useTaskNotifier } from '@/composables/useTaskNotifier'
 import { useServerLifecycle } from '@/composables/useServerLifecycle'
+import { providerLogoUrlForBaseURL, type ProviderTheme } from '@/utils/providerLogo'
 
 const configInfo = ref('')
 // 添加组件实例类型
@@ -141,8 +142,11 @@ const initCompleted = ref(false)
 // 从 configStore 代理当前目录
 const currentDirectory = computed(() => configStore.currentDirectory)
 
+// 默认模型（设置里标了「默认」的那条）
+const defaultModel = computed(() => configStore.models.find((m: any) => m.isDefault) ?? null)
+
 const defaultModelName = computed(() => {
-  const m = configStore.models.find((m: any) => m.isDefault)
+  const m = defaultModel.value
   if (!m) return ''
   return m.name || m.model
 })
@@ -403,6 +407,18 @@ function openUserSettingsDialog(tab?: SettingsTab) {
 // useThemeObserver 集中处理 MutationObserver + onBeforeUnmount cleanup,
 // 与 SourceMapView / MonacoEditor 共用同一份实现
 const { theme: isDarkTheme } = useThemeObserver()
+
+// 底栏「默认模型」前面的服务商 logo：按模型的 baseURL 认服务商，跟
+// 「设置 → AI 模型配置」里接口地址输入框左侧那颗是同一套图标（见 @/utils/providerLogo）
+const defaultModelLogo = computed(() =>
+  providerLogoUrlForBaseURL(defaultModel.value?.baseURL, isDarkTheme.value as ProviderTheme)
+)
+
+// CDN 上认不出的服务商（图 404）就把 img 藏掉，别留个破图图标
+function hideBrokenLogo(e: Event) {
+  const el = e.target as HTMLImageElement | null
+  if (el) el.style.display = 'none'
+}
 
 // 顶栏主题切换按钮「先不显示」（2026-10-06 用户要求）。
 // 这个位置让给了「命令历史 + Git 操作」——它们原先挂在提交区 header，
@@ -1036,6 +1052,16 @@ function stopVResize() {
       :aria-label="`${$t('@F13B4:默认模型')}: ${defaultModelName}`"
       @click="() => openUserSettingsDialog('ai-models')"
     >
+      <img
+        v-if="defaultModelLogo"
+        :key="defaultModelLogo"
+        class="footer-model-hint__logo"
+        :src="defaultModelLogo"
+        alt=""
+        width="14"
+        height="14"
+        @error="hideBrokenLogo"
+      />
       <span class="footer-model-hint__label">{{ $t('@F13B4:默认模型') }}</span>
       <span class="footer-model-hint__name">{{ defaultModelName }}</span>
     </button>
@@ -1986,6 +2012,20 @@ h1 {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: var(--focus-ring-soft);
+}
+
+.footer-model-hint__logo {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 3px;
+  opacity: 0.9;
+  transition: opacity var(--transition-base) var(--ease-custom);
+}
+
+.footer-model-hint:hover .footer-model-hint__logo {
+  opacity: 1;
 }
 
 .footer-model-hint__label {
