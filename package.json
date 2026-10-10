@@ -88,6 +88,7 @@
     "verify:wb-open-with-permission": "node scripts/verify-open-with-permission-menus.cjs",
     "verify:open-with-permission": "node --test test/open-with-permission.test.mjs",
     "verify:repo-list": "node scripts/verify-repo-list.cjs",
+    "verify:repo-list:reverse": "node scripts/verify-repo-list.cjs --reverse",
     "verify:startup-ai-panel": "node scripts/verify-startup-ai-panel.cjs",
     "verify:startup-ai-panel:reverse": "node scripts/verify-startup-ai-panel.cjs --reverse",
     "verify:startup-ai-panel:empty": "node scripts/verify-startup-ai-panel.cjs --empty",

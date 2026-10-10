@@ -40,6 +40,7 @@ import {
   DocumentCopy,
   Download,
   FolderAdd,
+  FolderOpened,
   Key,
   Link,
   Loading,
@@ -452,12 +453,20 @@ function languageColor(language: string) {
  *  本地克隆那句排在描述前面:决定"要不要点克隆"时,它比仓库简介有用。 */
 function repoTooltip(repo: RemoteRepo) {
   const lines = [repo.fullName]
-  const localPath = clonedPathOf(repo)
-  if (localPath) {
-    lines.push($t('@REPOLIST:本地已克隆：{path}', { path: localPath }))
+  const localPaths = clonedPathsOf(repo)
+  if (localPaths.length === 1) {
+    lines.push($t('@REPOLIST:本地已克隆：{path}', { path: localPaths[0] }))
+  } else if (localPaths.length > 1) {
+    // 多处克隆：先说清"有几处"，再逐个列出 —— 悬浮提示是本功能唯一的说明处
+    lines.push($t('@REPOLIST:本地已克隆 {count} 处：', { count: localPaths.length }))
+    for (const p of localPaths) lines.push(`  ${p}`)
+  }
+  if (localPaths.length) {
     // 悬浮提示是这条快捷键唯一的说明处：徽标在 hover 时会淡出给操作按钮让位，
     // 所以没法把提示挂在徽标上
-    lines.push($t('@REPOLIST:按住 Ctrl 点击用 g ui 打开'))
+    lines.push(localPaths.length > 1
+      ? $t('@REPOLIST:按住 Ctrl 点击选择要打开的位置')
+      : $t('@REPOLIST:按住 Ctrl 点击用 g ui 打开'))
   }
   if (repo.description) lines.push(repo.description)
   const pushed = formatDate(repo.pushedAt)
@@ -588,15 +597,28 @@ function startPolling(until: (payload: RemoteReposPayload) => boolean, maxTries 
 // 都不必一致（把仓库克隆成别的目录名是常事），只有 origin 指向谁才是可靠依据。
 // 归一化规则在 utils/remoteUrl.ts 的 toRepoKey，这里只查表。
 //
+// 值是**路径列表**：同一个仓库可能被克隆到好几处（换了盘、留了两份 worktree）。
+// 徽标据此显示条数（`已克隆 ×2`）、悬浮提示列出全部、"Ctrl+点击"弹菜单让人挑一处
+// 用 g ui 打开 —— 用户报的正是"克隆到多个文件夹时看不出来"。
+//
 // 它是**补充信息**：拿不到（服务端还没重启、接口报错）就只是没有徽标，不影响
 // 列表、不弹错。缓存与并发去重都在 utils/localClones.ts —— 必须是独立模块，
 // 写在组件里的模块级变量随 Tab 切换重建就没了（见那个文件头）。
-const localClones = ref<Record<string, string>>({})
+const localClones = ref<Record<string, string[]>>({})
 
-/** 该仓库本地是否已有克隆？有则返回本地目录（给 tooltip 用），没有返回空串 */
-function clonedPathOf(repo: RemoteRepo) {
+/** 该仓库在本地一共克隆到哪些目录？没有则为空数组（顺序由 localClones.normalize 定） */
+function clonedPathsOf(repo: RemoteRepo): string[] {
   const key = toRepoKey(repo.url)
-  return key ? localClones.value[key] || '' : ''
+  return key ? localClones.value[key] || [] : []
+}
+
+/** 徽标文案：一处写「已克隆」，多处补上条数（`已克隆 ×2`）——
+ *  要能一眼看出本地存在好几份，而不是以为只有一处。 */
+function clonedBadgeLabel(repo: RemoteRepo) {
+  const count = clonedPathsOf(repo).length
+  return count > 1
+    ? $t('@REPOLIST:已克隆 ×{count}', { count })
+    : $t('@REPOLIST:已克隆')
 }
 
 /** 拉一份「本地已克隆」映射。失败静默：徽标有就有、没有就没有。
@@ -635,11 +657,51 @@ async function openClonedInGuiUi(dirPath: string) {
   }
 }
 
+// ── 多处克隆：Ctrl+点击先弹一处位置选择 ──────────────────────────────────
+// 同一个仓库克隆到两个目录时，"Ctrl+点击该开哪个"没有唯一答案 —— 直接开第一个
+// 等于替用户拍板，而且第二处根本触达不到。所以在光标处给一份位置菜单让他挑。
+// 只有一处时**不弹菜单**：保持原来的"Ctrl+点击直接打开"，不为大多数情况多一步点击。
+//
+// 关闭用整层透明遮罩的 mousedown，而不是 window 的 click —— 菜单正是被一次 click
+// 打开的，那次事件还会继续冒泡到 window，用 window click 会把它开了就关。
+interface CloneChoiceMenu { paths: string[]; x: number; y: number }
+const cloneChoiceMenu = ref<CloneChoiceMenu | null>(null)
+
+function openCloneChoiceMenu(paths: string[], event: MouseEvent) {
+  // 贴着光标，但不许溢出屏幕右边 / 下边（菜单本身高度随条数变，这里按上限估）
+  const MENU_W = 420
+  const MENU_H = 60 + paths.length * 34 + 16
+  cloneChoiceMenu.value = {
+    paths,
+    x: Math.max(8, Math.min(event.clientX, window.innerWidth - MENU_W - 8)),
+    y: Math.max(8, Math.min(event.clientY, window.innerHeight - MENU_H - 8)),
+  }
+}
+function closeCloneChoiceMenu() {
+  if (cloneChoiceMenu.value) cloneChoiceMenu.value = null
+}
+function pickCloneLocation(dirPath: string) {
+  closeCloneChoiceMenu()
+  void openClonedInGuiUi(dirPath)
+}
+
+/** Esc / 滚轮 / 缩放都要收回菜单：它悬在固定坐标上，界面一动位置就失去意义 */
+function onCloneMenuKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') closeCloneChoiceMenu()
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', onCloneMenuKeydown)
+  window.addEventListener('scroll', closeCloneChoiceMenu, true)
+  window.addEventListener('resize', closeCloneChoiceMenu)
+}
+
 /**
  * 卡片点击。
  *
  * - 普通点击 = 在浏览器打开仓库主页（一直以来的行为，不变）
- * - Ctrl/Cmd+点击 **且本地已有克隆** = 到那个目录里新开标签页跑 `g ui`
+ * - Ctrl/Cmd+点击 **且本地已有克隆**：
+ *     · 只有一处 → 直接到那个目录里新开标签页跑 `g ui`
+ *     · 有多处 → 弹出位置菜单，由用户挑一处
  *
  * 为什么挂在整张卡片而不是「已克隆」徽标上：徽标在卡片 hover 时会淡出给右侧操作
  * 按钮让位（交叉淡入那一套），做成点击区就等于让它在最该被点的时刻消失。
@@ -647,9 +709,10 @@ async function openClonedInGuiUi(dirPath: string) {
  * 没克隆时 Ctrl+点击退回原行为 —— 没有本地目录可去，不该只是"这次点击没反应"。
  */
 function onCardClick(repo: RemoteRepo, event: MouseEvent) {
-  const localPath = clonedPathOf(repo)
-  if (localPath && (event.ctrlKey || event.metaKey)) {
-    void openClonedInGuiUi(localPath)
+  const paths = clonedPathsOf(repo)
+  if (paths.length && (event.ctrlKey || event.metaKey)) {
+    if (paths.length === 1) void openClonedInGuiUi(paths[0])
+    else openCloneChoiceMenu(paths, event)
     return
   }
   openUrl(repo.url)
@@ -846,7 +909,15 @@ onMounted(() => {
   // 没缓存(第一次切到这一屏)→ 老老实实进加载态
   void load({ silent: Boolean(cached) })
 })
-onBeforeUnmount(stopPolling)
+onBeforeUnmount(() => {
+  stopPolling()
+  closeCloneChoiceMenu()
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('keydown', onCloneMenuKeydown)
+    window.removeEventListener('scroll', closeCloneChoiceMenu, true)
+    window.removeEventListener('resize', closeCloneChoiceMenu)
+  }
+})
 </script>
 
 <template>
@@ -1118,11 +1189,12 @@ onBeforeUnmount(stopPolling)
                 <span class="repo-card__tags">
                   <!-- 「已克隆」排在最前:它是"本地已经有了"的结论,比 Fork / 私有 /
                        语言这类仓库自身的属性更该被一眼看到(尤其在点克隆按钮之前)。
+                       本地有多处克隆时徽标补上条数(已克隆 ×2),悬浮提示列出全部路径。
                        Ctrl+点击整张卡片 = 到那个目录里跑 g ui(见 onCardClick);
                        徽标自己不做点击区 —— hover 时它会淡出给操作按钮让位。 -->
-                  <span v-if="clonedPathOf(repo)" class="repo-card__tag repo-card__tag--cloned">
+                  <span v-if="clonedPathsOf(repo).length" class="repo-card__tag repo-card__tag--cloned">
                     <el-icon aria-hidden="true"><CircleCheck /></el-icon>
-                    {{ $t('@REPOLIST:已克隆') }}
+                    {{ clonedBadgeLabel(repo) }}
                   </span>
                   <span v-if="repo.isFork" class="repo-card__tag repo-card__tag--plain">{{ $t('@REPOLIST:Fork') }}</span>
                   <span v-if="repo.isPrivate" class="repo-card__tag repo-card__tag--plain">{{ $t('@REPOLIST:私有') }}</span>
@@ -1211,6 +1283,41 @@ onBeforeUnmount(stopPolling)
       @close="clonePickerVisible = false"
       @confirm="onCloneDirConfirm"
     />
+
+    <!-- 多处克隆的位置选择菜单（见脚本 openCloneChoiceMenu 段）。
+         渲染到 body：卡片有 overflow 裁剪、hover 还会位移，留在卡片里会被切掉。
+         整层透明遮罩负责"点外面关掉"。 -->
+    <teleport to="body">
+      <div
+        v-if="cloneChoiceMenu"
+        class="repo-clone-choice__layer"
+        @mousedown="closeCloneChoiceMenu"
+        @contextmenu.prevent="closeCloneChoiceMenu"
+      >
+        <div
+          class="repo-clone-choice"
+          role="menu"
+          :style="{ left: cloneChoiceMenu.x + 'px', top: cloneChoiceMenu.y + 'px' }"
+          @mousedown.stop
+        >
+          <div class="repo-clone-choice__head">
+            {{ $t('@REPOLIST:这个仓库本地有 {count} 处克隆，选择用 g ui 打开的位置', { count: cloneChoiceMenu.paths.length }) }}
+          </div>
+          <button
+            v-for="p in cloneChoiceMenu.paths"
+            :key="p"
+            type="button"
+            class="repo-clone-choice__item"
+            role="menuitem"
+            :title="p"
+            @click="pickCloneLocation(p)"
+          >
+            <el-icon aria-hidden="true"><FolderOpened /></el-icon>
+            <span class="repo-clone-choice__path">{{ p }}</span>
+          </button>
+        </div>
+      </div>
+    </teleport>
   </div>
 </template>
 
@@ -1980,5 +2087,66 @@ onBeforeUnmount(stopPolling)
 .repo-list__footnote .el-icon {
   color: var(--color-success-dark);
   font-size: var(--font-size-sm);
+}
+
+/* ── 多处克隆的位置选择菜单 ────────────────────────────────────────────
+   与 AttachmentZone 的 .wb-ctx-menu 同一套浮层语汇（fixed + 光标处 + 中阴影）。
+   渲染到 body（见模板 teleport）：卡片的 hover 位移与 overflow 会把菜单切掉。
+   遮罩是一整层透明 fixed —— 它的 mousedown 管"点外面关掉"，不用 window click
+   （菜单就是被一次 click 打开的，同一次冒泡会立刻把它关掉）。 */
+.repo-clone-choice__layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-menu-float);
+}
+.repo-clone-choice {
+  position: fixed;
+  min-width: 240px;
+  max-width: 420px;
+  padding: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-container);
+  box-shadow: var(--shadow-md);
+  user-select: none;
+}
+.repo-clone-choice__head {
+  padding: 6px 10px 8px;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+.repo-clone-choice__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-base);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-mid);
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.repo-clone-choice__item:hover {
+  background: var(--tint-primary-12);
+  color: var(--color-primary);
+}
+.repo-clone-choice__item:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: -2px;
+}
+.repo-clone-choice__item .el-icon {
+  flex-shrink: 0;
+  font-size: var(--font-size-base);
+}
+.repo-clone-choice__path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

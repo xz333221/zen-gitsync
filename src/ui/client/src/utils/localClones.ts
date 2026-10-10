@@ -16,8 +16,10 @@
 //
 // 数据来源：GET /api/local-repos（服务端**全盘扫**本机所有 Git 仓库、读各自的
 // origin，结果落盘缓存）。这里把本地 origin 归一化成 `host/owner/repo`，产出
-// `{ [repoKey]: 本地目录 }`：键够渲染徽标，带上路径是为了悬浮提示里能直接说清
-// "克隆到哪了"。
+// `{ [repoKey]: [本地目录, ...] }`：值是**列表**，因为同一个远程仓库完全可能被
+// 克隆到多个目录（换了盘、留了两份 worktree）—— 徽标据此显示条数，悬浮提示列出
+// 全部路径，Ctrl+点击再让用户挑一个打开。`{ [repoKey]: 单个路径 }` 那种写法会
+// 把第二处克隆悄悄吃掉（用户报的正是这个）。
 //
 // 为什么判据不只限于「常用目录」：用户要回答的是"这个远程仓库我本地有了吗"，
 // 而"本地有"和"最近打开过"是两回事 —— 刚克隆到别的盘、或者早就克隆但从没在这个
@@ -34,8 +36,8 @@
 
 import { toRepoKey } from '@/utils/remoteUrl'
 
-/** 键 = host/owner/repo（小写）；值 = 本地目录绝对路径 */
-export type LocalClones = Record<string, string>
+/** 键 = host/owner/repo（小写）；值 = 本地目录绝对路径列表（同一仓库可能拥有多处克隆） */
+export type LocalClones = Record<string, string[]>
 
 /** 拿到结果后多久算新鲜（与仓库列表自己的 TTL 同档） */
 const TTL_MS = 60_000
@@ -50,16 +52,20 @@ let inflight: Promise<LocalClones> | null = null
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-/** 服务端的 `{ [仓库目录]: origin 地址 }` → `{ [host/owner/repo]: 仓库目录 }` */
+/** 服务端的 `{ [仓库目录]: origin 地址 }` → `{ [host/owner/repo]: [仓库目录, ...] }` */
 function normalize(repos: unknown): LocalClones {
   if (!repos || typeof repos !== 'object') return {}
   const map: LocalClones = {}
   for (const [dir, url] of Object.entries(repos as Record<string, unknown>)) {
     const key = toRepoKey(String(url))
-    // 同一个仓库被克隆到两个目录时，以先出现的为准（遍历顺序 = 服务端给的顺序）；
-    // 徽标只需要"有 / 没有"，路径只进 tooltip
-    if (key && !map[key]) map[key] = dir
+    if (!key) continue
+    // 同一个仓库有几处克隆就收几处 —— 徽标要能说出条数，提示与"挑一个打开"要用全集
+    const list = map[key] ?? (map[key] = [])
+    if (!list.includes(dir)) list.push(dir)
   }
+  // 排序：服务端的目录顺序来自并发遍历，两次扫描未必一致；这里排一下，
+  // 保证同一份数据渲染出的条数与顺序稳定（徽标、提示、菜单都不会忽上忽下）
+  for (const list of Object.values(map)) list.sort((a, b) => a.localeCompare(b))
   return map
 }
 

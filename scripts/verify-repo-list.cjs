@@ -20,6 +20,9 @@
  *   P8 默认按工作空间分组:同一 owner 的仓库收拢在同一个容器里,组头写明空间名与数量,
  *      组内顺序仍跟随排序规则,组间顺序 = 组内最靠前的那个仓库的位次;
  *      只有一个空间时不渲染组头(那时它只是把每张卡片的前缀重复一遍)
+ *   P9 同一仓库克隆到多个文件夹时:卡片徽标显示条数(已克隆 ×2),Ctrl+点击弹出
+ *      位置菜单列出全部目录,Esc 收起 —— 劫持 /api/local-repos 造确定性数据,
+ *      `--reverse` 只给一处克隆,这两条断言必须翻红(自证不是恒绿)
  *
  * ⚠️ 排序断言(P2 / P4)一律在**不分组**下做:分组会把跨空间的全局顺序按空间收拢,
  *    在分组态下比全局序列必然对不上 —— 那是分组生效的证据,不是排序坏了。
@@ -31,7 +34,7 @@
  *    三段 rgb() 一律视为不透明,别再写成"取最后一组数字当 alpha"。
  *
  * 前置:dev server 已启动(npm run dev,后端 5545 / 前端 5544),且 gh / gitee 已登录。
- * 用法:node scripts/verify-repo-list.cjs
+ * 用法:node scripts/verify-repo-list.cjs [--reverse]
  * 退出码:0 全通过,1 有失败项,2 脚本异常。
  */
 const path = require('node:path')
@@ -276,6 +279,60 @@ const byFullName = (a, b) => (a.fullName.toLowerCase() < b.fullName.toLowerCase(
   await sleep(400)
   await page.screenshot({ path: path.join(shotDir, 'repolist-search.png') })
   console.log(`  截图: ${path.join(shotDir, 'repolist-grouped.png')} / repolist-sorted.png / repolist-search.png`)
+
+  // ── P9 同一仓库克隆到多个文件夹 ────────────────────────────────────────
+  // 用户报的现象:仓库被克隆到两个目录时,卡片只看得出"已克隆",看不出有几处、
+  // 也没法选择打开哪一处(前端旧实现只保留第一处)。这里劫持 /api/local-repos
+  // 造出确定性的"某个仓库在两处克隆",验三件事:
+  //   a) 徽标显示条数(`已克隆 ×2`)
+  //   b) Ctrl+点击弹出位置菜单,列出全部路径
+  //   c) Esc 能收起菜单
+  // --reverse:只给一处克隆(相当于退回到旧行为),a / b 必须翻红 —— 用来自证
+  //   这两条断言测的是"多处克隆"这件事本身,不是碰巧恒绿。
+  const REVERSE = process.argv.includes('--reverse')
+  const target = serverOrder[0]
+  const cloneDirs = ['D:/verify/clone-a', 'D:/verify/clone-b']
+  const localRepos = REVERSE
+    ? { [cloneDirs[0]]: `https://gitee.com/${target.fullName}.git` }
+    : {
+        [cloneDirs[0]]: `https://gitee.com/${target.fullName}.git`,
+        [cloneDirs[1]]: `git@gitee.com:${target.fullName}.git`,
+      }
+  await page.route('**/api/local-repos**', (route) => {
+    const url = route.request().url()
+    if (url.includes('/api/local-repos/scan')) {
+      return route.fulfill({ json: { success: true, started: true } })
+    }
+    return route.fulfill({ json: { success: true, scanning: false, scannedAt: 1, repos: localRepos } })
+  })
+  // 别让"单处克隆"的反向分支真去开终端:这是探针,不该在机器上弹窗
+  await page.route('**/api/open-new-tab-gui', (route) => route.fulfill({ json: { success: true } }))
+
+  // 清掉截图那步留在搜索框里的词,再点「刷新」—— 刷新走 force,绕过 60s 缓存取注入的这份
+  await page.fill('.repo-list__search-input', '')
+  await page.click('.repo-list__action')
+  await sleep(800)
+
+  const badgeText = await page.$$eval('.repo-card', (cards, fullName) => {
+    const card = cards.find((el) => (el.getAttribute('title') || '').split('\n')[0] === fullName)
+    return card?.querySelector('.repo-card__tag--cloned')?.textContent.trim() ?? ''
+  }, target.fullName)
+  check('P9 多处克隆的徽标显示条数(已克隆 ×2)',
+    badgeText === `已克隆 ×${cloneDirs.length}`, `badge="${badgeText}"`)
+
+  await page.click(`.repo-card[title^="${target.fullName}"]`, { modifiers: ['Control'] })
+  await sleep(400)
+  const menuCount = await page.$$eval('.repo-clone-choice', (els) => els.length)
+  const menuPaths = await page.$$eval('.repo-clone-choice__item .repo-clone-choice__path',
+    (els) => els.map((e) => e.textContent.trim()))
+  check('P9 Ctrl+点击弹出位置菜单,列出全部克隆目录',
+    menuCount === 1 && menuPaths.length === cloneDirs.length && cloneDirs.every((d) => menuPaths.includes(d)),
+    `菜单 ${menuCount} 个 / 路径: ${menuPaths.join(' | ')}`)
+
+  await page.keyboard.press('Escape')
+  await sleep(200)
+  check('P9 Esc 收起位置菜单', (await page.$('.repo-clone-choice')) === null)
+
   check('  页面无 console error', consoleErrors.length === 0, consoleErrors.slice(0, 2).join(' | '))
 
   await browser.close()

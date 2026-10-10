@@ -54,22 +54,24 @@ describe('loadLocalClones', () => {
     const map = await loadLocalClones()
     expect(spy.mock.calls[0][0]).toBe('/api/local-repos')
     expect(map).toEqual({
-      'github.com/xz333221/zen-gitsync': 'D:/workspace/github_workspace/zen-gitsync',
-      'gitee.com/xz_web/xiangqi': 'D:/workspace/gitee_workspace/xiangqi',
+      'github.com/xz333221/zen-gitsync': ['D:/workspace/github_workspace/zen-gitsync'],
+      'gitee.com/xz_web/xiangqi': ['D:/workspace/gitee_workspace/xiangqi'],
     })
   })
 
-  test('同一个仓库克隆在多个目录时,以先出现的那个为准;解析不出的地址丢掉', async () => {
+  test('同一个仓库克隆在多个目录时,全部保留(按路径排序);解析不出的地址丢掉', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       snap({
-        'D:/first': 'git@gitee.com:xz_web/xiangqi.git',
         'D:/second': 'https://gitee.com/xz_web/xiangqi',
+        'D:/first': 'git@gitee.com:xz_web/xiangqi.git',
         // 不是仓库地址 → 丢弃,不能凭半个地址去误配
         'D:/junk': 'not-a-url',
       }),
     )
 
-    expect(await loadLocalClones()).toEqual({ 'gitee.com/xz_web/xiangqi': 'D:/first' })
+    expect(await loadLocalClones()).toEqual({
+      'gitee.com/xz_web/xiangqi': ['D:/first', 'D:/second'],
+    })
   })
 
   test('拿不到数据(旧服务端回 HTML / 网络失败)一律回空对象,不抛错', async () => {
@@ -116,7 +118,7 @@ describe('loadLocalClones', () => {
     await vi.advanceTimersByTimeAsync(3_000)
     await vi.advanceTimersByTimeAsync(3_000)
 
-    expect(await pending).toEqual({ 'github.com/xz333221/zen-gitsync': 'D:/w/zen' })
+    expect(await pending).toEqual({ 'github.com/xz333221/zen-gitsync': ['D:/w/zen'] })
     expect(spy).toHaveBeenCalledTimes(3)
   })
 
@@ -126,7 +128,7 @@ describe('loadLocalClones', () => {
     )
 
     // 一次请求就返回:非首次运行时不该因为"正在重扫"而空手而归
-    expect(await loadLocalClones()).toEqual({ 'github.com/xz333221/zen-gitsync': 'D:/old/zen' })
+    expect(await loadLocalClones()).toEqual({ 'github.com/xz333221/zen-gitsync': ['D:/old/zen'] })
     expect(spy).toHaveBeenCalledTimes(1)
   })
 
@@ -183,7 +185,7 @@ describe('rescanLocalClones', () => {
     // 第一趟 GET 时服务端还在扫(旧快照里只有 xiangqi)—— 不能就此收工
     await vi.advanceTimersByTimeAsync(3_000)
 
-    await expect(pending).resolves.toEqual({ 'github.com/xz333221/zen-gitsync': 'D:/new/zen' })
+    await expect(pending).resolves.toEqual({ 'github.com/xz333221/zen-gitsync': ['D:/new/zen'] })
     expect(gets()).toBe(2)
     // 顺序必须是"先踢重扫,再取快照" —— 反了就等于取的是重扫前的值
     expect(seen[0]).toBe('POST /api/local-repos/scan')
@@ -199,7 +201,7 @@ describe('rescanLocalClones', () => {
     })
 
     await expect(rescanLocalClones()).resolves.toEqual({
-      'github.com/xz333221/zen-gitsync': 'D:/new/zen',
+      'github.com/xz333221/zen-gitsync': ['D:/new/zen'],
     })
     expect(seen[0]).toBe('POST /api/local-repos/scan')
   })
@@ -215,7 +217,7 @@ describe('rescanLocalClones', () => {
     const pending = rescanLocalClones()
     await vi.advanceTimersByTimeAsync(3_000 * 8)
 
-    await expect(pending).resolves.toEqual({ 'gitee.com/xz_web/xiangqi': 'D:/old/xiangqi' })
+    await expect(pending).resolves.toEqual({ 'gitee.com/xz_web/xiangqi': ['D:/old/xiangqi'] })
     // MAX_RETRIES = 8
     expect(gets()).toBe(8)
   })

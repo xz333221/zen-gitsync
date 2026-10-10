@@ -61,7 +61,7 @@ npm install -g zen-gitsync
 - **Project startup** — Auto-run commands or workflows when a project opens
 - **Built-in code editor** — Monaco-based file editor with Markdown preview
 - **Workbench** — a multi-project board with a kanban view and a master-agent dispatch console; task-driven agent execution (Claude Code or OpenCode) with prompt presets, isolated per-task processes, live streaming output, AI-generated presets and task-level attachments
-- **Repository cloning** — clone any GitHub / Gitee repository into a folder straight from the repo browser, with an *Already cloned* badge (and its local path) backed by a whole-disk local-repository scan
+- **Repository cloning** — clone any GitHub / Gitee repository into a folder straight from the repo browser, with an *Already cloned* badge (and its local path(s), including the count when a repo lives in several folders) backed by a whole-disk local-repository scan
 - **Skill / MCP marketplace** — install skills and MCP servers from the Agent view into the current project or the `g ai` agent
 - **Reset to remote** — One-click `git reset --hard origin/<branch>` from the Git panel (auto-refreshes branch info first to avoid wrong-target resets)
 - **AI commit message** — Generate commit message from staged diff automatically
@@ -187,7 +187,7 @@ In either mode, click **AI Generate** to fill in the fields automatically based 
 - **No refetch on tab switch** — the list is cached per account, so coming back to the tab paints instantly instead of shelling out to `gh repo list` again; once the cache is a minute old it paints from cache first and refreshes quietly in the background, while **刷新** always pulls for real
 - **Informative cards** — repository name, description and privacy / fork / language / star badges, plus a third line with last-push date, fork count, non-`main` default branch and license (each omitted when there is nothing to say)
 - **Clone straight to a folder** — a repository that is not on your disk yet offers **Clone to folder…**: pick a directory and the clone runs over SSH (`git@github.com:owner/repo.git`), with an `https://` URL normalised first so it never stalls on a Git Credential Manager prompt
-- **"Already cloned" badge** — the server keeps a whole-disk index of local Git repositories (built in the background and refreshable on demand), so a card for a repo you already have shows its local path instead of offering another clone
+- **"Already cloned" badge** — the server keeps a whole-disk index of local Git repositories (built in the background and refreshable on demand), so a card for a repo you already have shows its local path instead of offering another clone; cloned the same repo into several folders and the badge calls out the count (`Cloned ×2`), the tooltip lists every path, and Ctrl+click opens a menu to pick which copy to launch `g ui` in
 - **One click to open or copy** — clicking a card opens the repository page in your browser; the actions that appear on hover copy the URL or open it
 
 ---
@@ -762,7 +762,7 @@ npm install -g zen-gitsync
 - **项目启动** — 打开项目时自动运行命令或工作流
 - **内置代码编辑器** — 基于 Monaco 的文件编辑器，支持 Markdown 预览
 - **工作台** — 多项目看板 + 主 Agent 派发控制台；任务驱动的智能体执行（Claude Code 或 OpenCode），支持提示词预置、任务级附件、独立进程、实时流式回传与 AI 生成预置提示词
-- **仓库克隆** — 在仓库浏览器里把任意 GitHub / Gitee 仓库直接克隆到指定文件夹，卡片带「已克隆」徽标与本地路径（由全盘本地仓库扫描得出）
+- **仓库克隆** — 在仓库浏览器里把任意 GitHub / Gitee 仓库直接克隆到指定文件夹，卡片带「已克隆」徽标与本地路径（同一仓库克隆到多处时会显示条数，由全盘本地仓库扫描得出）
 - **Skill / MCP 广场** — 在智能体页把 Skill 与 MCP 服务安装到当前项目或 `g ai` 智能体
 - **重置到远程** — 在 Git 面板一键执行 `git reset --hard origin/<branch>`（点击前会先自动刷新分支信息，避免重置到陈旧分支）
 - **AI 生成提交信息** — 基于 staged diff 自动生成提交消息
@@ -919,7 +919,7 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 - **切 Tab 不重拉** — 列表按账号各缓存一份，切回来直接渲染，不再重跑一遍 `gh repo list`；缓存超过一分钟后先用它画出来、再在后台静默刷新，点「刷新」则永远真的去拉
 - **信息更全的卡片** — 仓库名、描述，以及私有 / Fork / 语言 / 星标徽标，第三行再给最近推送日期、Fork 数、非 `main` 的默认分支与许可证（没有的项直接省略，不留占位）
 - **直接克隆到文件夹** — 本地还没有的仓库提供「克隆到文件夹」：选好目录即可开始克隆，走 SSH 形式（`git@github.com:owner/repo.git`），遇到 `https://` 地址会先归一化，不会再卡在 Git Credential Manager 的账密弹窗上
-- **「已克隆」徽标** — 服务端维护一份全盘本地 Git 仓库索引（后台构建、也可随时手动重扫），因此本地已有的仓库卡片会直接标出本地路径，而不是再让你克隆一遍
+- **「已克隆」徽标** — 服务端维护一份全盘本地 Git 仓库索引（后台构建、也可随时手动重扫），因此本地已有的仓库卡片会直接标出本地路径，而不是再让你克隆一遍；同一个仓库克隆到了多个文件夹时，徽标会标出条数（`已克隆 ×2`），悬浮提示列出全部路径，按住 Ctrl 点击会弹出菜单让你挑一处用 `g ui` 打开
 - **一键打开 / 复制** — 点击卡片在浏览器打开仓库主页，悬浮时出现的按钮可复制地址或直接打开
 
 ---
