@@ -2494,6 +2494,7 @@ export default {
   '@WORKBENCH:自动': 'Auto',
   '@WORKBENCH:手动': 'Manual',
   '@WORKBENCH:{n} 个任务进行中': '{n} task(s) running',
+  '@WORKBENCH:{n} 个任务': '{n} task(s)',
   '@WORKBENCH:已运行 {elapsed}': 'Running for {elapsed}',
   '@WORKBENCH:工具 {n} 次': '{n} tool calls',
   '@WORKBENCH:静默 {elapsed}': 'Silent for {elapsed}',

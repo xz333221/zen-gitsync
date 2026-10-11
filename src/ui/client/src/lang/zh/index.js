@@ -2501,6 +2501,7 @@ export default {
   '@WORKBENCH:自动': '自动',
   '@WORKBENCH:手动': '手动',
   '@WORKBENCH:{n} 个任务进行中': '{n} 个任务进行中',
+  '@WORKBENCH:{n} 个任务': '{n} 个任务',
   '@WORKBENCH:已运行 {elapsed}': '已运行 {elapsed}',
   '@WORKBENCH:工具 {n} 次': '工具 {n} 次',
   '@WORKBENCH:静默 {elapsed}': '静默 {elapsed}',

@@ -657,7 +657,13 @@ const gitSummary = computed(() => {
  * 选择记在 localStorage —— 控制台是常驻栏，每次刷新都跳回默认值会很烦
  * （与 MODE_KEY / INPUT_H_KEY 同一套做法，隐私模式下不记偏好但不影响用）。
  */
-const SECT_KEY = { history: 'wb.ocHistoryOpen.v1', git: 'wb.ocGitOpen.v1' } as const
+const SECT_KEY = {
+  history: 'wb.ocHistoryOpen.v1',
+  git: 'wb.ocGitOpen.v1',
+  // 2026-10-11：任务事实默认折起 —— 它是从正在跑的任务里抄的原始证据，
+  // 与中间看板「进行中」卡片高度重合，展开时把报告正文整个顶出视口（用户截图反馈）
+  facts: 'wb.ocFactsOpen.v1',
+} as const
 
 function readSectOpen(key: string): boolean {
   try { return localStorage.getItem(key) === '1' } catch { return false }
@@ -665,9 +671,10 @@ function readSectOpen(key: string): boolean {
 
 const historyOpen = ref(readSectOpen(SECT_KEY.history))
 const gitOpen = ref(readSectOpen(SECT_KEY.git))
+const factsOpen = ref(readSectOpen(SECT_KEY.facts))
 
-function toggleSect(which: 'history' | 'git') {
-  const target = which === 'history' ? historyOpen : gitOpen
+function toggleSect(which: 'history' | 'git' | 'facts') {
+  const target = which === 'history' ? historyOpen : which === 'git' ? gitOpen : factsOpen
   target.value = !target.value
   try { localStorage.setItem(SECT_KEY[which], target.value ? '1' : '0') } catch { /* 同上 */ }
 }
@@ -878,13 +885,27 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 
           <!-- 事实区：给一个区块标题是为了把"判断"与"依据"分开 —— 上面那段是模型说的，
                下面这几张卡是从正在跑的任务里抄出来的事实，两者对不上时用户得能一眼
-               看出是模型在编（见服务端 progressReport.js 的 buildReportPrompt）。 -->
-          <div v-if="currentTasks.length" class="rp__facts">
-            <p
-              class="rp__facts-cap"
-              :title="$t('@WORKBENCH:上面是主 Agent 的判断，下面这些是从正在跑的任务里抄出来的事实')"
-            >{{ $t('@WORKBENCH:任务事实') }}</p>
-            <ul class="rp__tasks">
+               看出是模型在编（见服务端 progressReport.js 的 buildReportPrompt）。
+               2026-10-11 改为默认折起：内容与看板「进行中」卡片几乎同源，常展开只会
+               重复占掉半栏；折起来时标题行保留任务数，点击展开看证据明细。 -->
+          <div v-if="currentTasks.length" class="rp__facts" :class="{ 'is-collapsed': !factsOpen }">
+            <button
+              type="button"
+              class="oc__sect rp__facts-toggle"
+              :aria-expanded="factsOpen"
+              :title="factsOpen ? $t('@WORKBENCH:收起') : $t('@WORKBENCH:展开')"
+              @click="toggleSect('facts')"
+            >
+              <el-icon class="oc__sect-caret"><component :is="factsOpen ? ArrowDown : ArrowRight" /></el-icon>
+              <span
+                class="oc__sect-title"
+                :title="$t('@WORKBENCH:上面是主 Agent 的判断，下面这些是从正在跑的任务里抄出来的事实')"
+              >{{ $t('@WORKBENCH:任务事实') }}</span>
+              <span class="oc__sect-meta">
+                <span class="oc__sect-brief">{{ $t('@WORKBENCH:{n} 个任务', { n: currentTasks.length }) }}</span>
+              </span>
+            </button>
+            <ul v-show="factsOpen" class="rp__tasks">
               <li
                 v-for="(t, i) in currentTasks"
                 :key="t.taskId || i"
@@ -1642,19 +1663,14 @@ html.dark .oc__mode-btn.is-active { color: var(--color-primary-light); }
 }
 /* 事实区：正文（判断）与下面这堆（依据）之间要有一道真边界。标题这行把两者的
    身份写出来 —— 上面那段是模型说的，下面是从 job 里抄的，对不上时一眼能看出是谁在编 */
-.rp__facts {
-  margin: 9px 0 0;
-  padding-top: 7px;
-  border-top: 1px solid var(--border-color);
-}
-.rp__facts-cap {
-  margin: 0 0 5px;
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  color: var(--text-meta);
-  letter-spacing: 0.04em;
-  cursor: help;
-}
+.rp__facts { margin: 9px 0 0; padding-top: 7px; border-top: 1px solid var(--border-color); }
+/* 折起时少留一点空隙：下面只剩标题一行，再压 7px 会显得和正文脱节 */
+.rp__facts.is-collapsed { margin-top: 7px; }
+/* 2026-10-11：任务事实的标题从纯文字换成 oc__sect 折叠头（历史报告/项目概览同款）。
+   字号压回 xs 与原 caption 一致；折起时去掉底部 margin，让标题行贴住分界线 */
+.rp__facts-toggle { margin-bottom: 0; font-size: var(--font-size-xs); }
+.rp__facts:not(.is-collapsed) .rp__facts-toggle { margin-bottom: 5px; }
+.rp__facts-toggle .oc__sect-title { letter-spacing: 0.04em; }
 .rp__tasks {
   list-style: none;
   display: flex;
