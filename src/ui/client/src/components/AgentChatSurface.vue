@@ -98,7 +98,6 @@ const {
   messages,
   isStreaming,
   questionPanel,
-  questionAnswers,
   answeringQuestion,
   isSessionGenerating,
   currentEngine,
@@ -290,7 +289,6 @@ onMounted(() => {
           :assistant-avatar="AGENT_ASSISTANT_AVATAR"
           :theme="chatTheme"
           :question="questionPanel"
-          :question-answers="questionAnswers"
           :question-submitting="answeringQuestion"
           :question-labels="questionLabels"
           :plan-config="{ labels: { title: $t('@AGENT:计划'), raw: $t('@AGENT:原始参数') } }"

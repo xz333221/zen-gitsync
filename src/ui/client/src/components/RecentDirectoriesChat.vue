@@ -59,7 +59,6 @@ const {
   messages,
   isStreaming,
   questionPanel,
-  questionAnswers,
   answeringQuestion,
   sendMessage,
   retryTurn,
@@ -188,7 +187,6 @@ onBeforeUnmount(() => {
       :welcome-description="$t('@13D1C:它已经拿到了这批目录的 Git 状态，可以直接问该先处理哪个、某个项目落后了什么。')"
       :preset-questions="presetQuestions"
       :question="questionPanel"
-      :question-answers="questionAnswers"
       :question-submitting="answeringQuestion"
       :question-labels="questionLabels"
       :plan-config="{ labels: { title: $t('@AGENT:计划'), raw: $t('@AGENT:原始参数') } }"

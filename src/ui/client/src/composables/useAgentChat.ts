@@ -69,16 +69,12 @@ export interface PendingAgentQuestion {
 }
 
 /**
- * 已作答的提问（提问面板的只读留档）。
+ * 一轮问答在页面上留下的痕迹**不在宿主这一侧**：
  *
- * 用户点选后 `pendingQuestion` 会清空（这一轮不再等人回答），但面板不该就此人间蒸发
- * —— 把问题连同选择一起存在这里，宿主把它喂给库的 `questionAnswers`，面板原地转成
- * 只读「已回答」（选项保留、所选打勾）。下一条消息 / 下一次提问到来时清掉。
+ * 答完之后的留档由组件库从消息流里的 `ask_user` 工具调用还原 —— 它本来就带着
+ * 问题（arguments）和用户答了什么（result），库把它渲染成只读的「已回答」块，
+ * 跟着对话一起滚。宿主只需要在**等回答**时把 `pendingQuestion` 喂给面板。
  */
-export interface AnsweredAgentQuestion extends PendingAgentQuestion {
-  /** 用户提交的答案（多选为多项，与提交给服务端的形状一致） */
-  answers: string[]
-}
 
 /**
  * sendMessage 的第三个参数：这一轮的**请求级**上下文（都不落会话历史）。
@@ -417,8 +413,6 @@ interface SessionRun {
   abortController: AbortController | null
   nonce: number
   pendingQuestion: PendingAgentQuestion | null
-  /** 上一轮已作答的提问：非空时提问面板原地保留为只读「已回答」（见 AnsweredAgentQuestion） */
-  answeredQuestion: AnsweredAgentQuestion | null
   answeringQuestion: boolean
   /** 本会话最近一次请求的上下文占用；还没发过消息时为 null */
   contextUsage: AgentContextUsage | null
@@ -484,7 +478,6 @@ export function useAgentChat() {
       abortController: null,
       nonce: 0,
       pendingQuestion: null,
-      answeredQuestion: null,
       answeringQuestion: false,
       contextUsage: null,
       queue: [],
@@ -566,19 +559,14 @@ export function useAgentChat() {
   const pendingQuestion = computed<PendingAgentQuestion | null>(() => activeRun.value?.pendingQuestion ?? null)
   const answeringQuestion = computed(() => activeRun.value?.answeringQuestion ?? false)
   /**
-   * 喂给组件库 `ChatContainer.question` 的问题：正在等回答的优先，否则回落到上一轮
-   * 已作答的那条（只读留档）。`pendingQuestion` 保持"只表示还在等人答"的语义 ——
-   * 收尾提示 / 队列是否继续都靠它，不能把已答的那条混进去。
+   * 喂给组件库 `ChatContainer.question` 的问题：**只有正在等回答时才有值**。
+   *
+   * 答完之后面板就该让位 —— 这一轮问答的留档由库从消息流里的 `ask_user` 工具调用
+   * 还原（问答跟着对话一起滚，见 utils/askUser），宿主不再拿它钉在输入框上方。
+   * `pendingQuestion` 的"只表示还在等人答"语义也照旧给收尾提示 / 队列判据用。
    */
   const questionPanel = computed<PendingAgentQuestion | null>(() =>
-    activeRun.value?.pendingQuestion ?? activeRun.value?.answeredQuestion ?? null
-  )
-  /**
-   * 喂给组件库 `ChatContainer.questionAnswers` 的已作答内容：非空 → 面板切成只读
-   * 「已回答」。只在展示"已作答那条"时给值；正在等新回答时必须是空数组。
-   */
-  const questionAnswers = computed<string[]>(() =>
-    activeRun.value?.pendingQuestion ? [] : (activeRun.value?.answeredQuestion?.answers ?? [])
+    activeRun.value?.pendingQuestion ?? null
   )
 
   // ── 排队（生成中继续发） ─────────────────────────────────
@@ -898,8 +886,6 @@ export function useAgentChat() {
     run.abortController = new AbortController()
     const myController = run.abortController
     run.pendingQuestion = null
-    // 新一轮开始：上一轮那条只读留档的问答让位（它的内容也已经在消息流的 ask_user 工具块里）
-    run.answeredQuestion = null
     run.answeringQuestion = false
 
     // 乐观推入 user 消息（图片显示缩略图，非图片显示文件名 chip）
@@ -1205,8 +1191,7 @@ export function useAgentChat() {
             }
 
             case 'ask_user':
-              // 来了新问题：上一轮那条只读留档让位，面板切回可交互的新提问
-              run.answeredQuestion = null
+              // 来了新问题：面板切回可交互（上一轮的留档在消息流里，不受影响）
               run.pendingQuestion = {
                 interactionId: String(evt.interactionId || ''),
                 question: String(evt.question || ''),
@@ -1400,7 +1385,6 @@ export function useAgentChat() {
     run.abortController = new AbortController()
     const myController = run.abortController
     run.pendingQuestion = null
-    run.answeredQuestion = null
     run.answeringQuestion = false
     run.isStreaming = true
 
@@ -1447,9 +1431,8 @@ export function useAgentChat() {
         }),
       }).then(r => r.json())
       if (!res.success) throw new Error(res.error || $t('@AGENT:回答提交失败'))
-      // 留档：面板不该在点选后消失。把问题连同选择存下来，宿主喂给库的 questionAnswers，
-      // 面板原地转成只读「已回答」；下一次提问 / 下一条消息到来时才让位。
-      run.answeredQuestion = { ...pending, answers: [...values] }
+      // 面板让位：留档由库从消息流里的 ask_user 工具调用还原（问题在 arguments、
+      // 答案在 result），那块跟着对话滚；宿主这一侧不留状态
       run.pendingQuestion = null
       return true
     } catch (err: any) {
@@ -1477,9 +1460,8 @@ export function useAgentChat() {
     isStreaming,
     sessionLoading,
     pendingQuestion,
-    // 面板展示用：questionPanel = 待答的问题 ?? 上一轮已作答的只读留档
+    // 面板展示用：只有正在等回答时非空
     questionPanel,
-    questionAnswers,
     answeringQuestion,
     isSessionGenerating,
     // 上下文占用：当前会话最近一次请求的实测/估算值（服务端 measureContextUsage 的形状）

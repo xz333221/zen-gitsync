@@ -2808,6 +2808,10 @@ export default {
   '@AGENT:等待你的回答': '等待你的回答',
   '@AGENT:输入回答': '输入回答',
   '@AGENT:提交回答': '提交回答',
+  // 问答留档（答完之后消息流里那块，见库的 utils/askUser）
+  '@AGENT:已回答': '已回答',
+  '@AGENT:展开完整问答': '展开完整问答',
+  '@AGENT:收起完整问答': '收起完整问答',
   // 生成中排队（四个 g ai 入口共用 utils/agentConversations.ts 的 agentQueueLabels）
   '@AGENT:排队中': '排队中',
   '@AGENT:本轮结束后依次发送': '本轮结束后依次发送',

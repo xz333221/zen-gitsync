@@ -32,7 +32,6 @@ vi.mock('@/composables/useAgentChat', async () => {
       isStreaming: ref(false),
       pendingQuestion: ref(null),
       questionPanel: ref(null),
-      questionAnswers: ref([]),
       answeringQuestion: ref(false),
       sendMessage: agent.sendMessage,
       answerQuestion: vi.fn(),

@@ -126,12 +126,21 @@ export const MESSAGE_META_CONFIG: MessageMetaConfig = {
   visibility: 'always',
 }
 
-/** 提问面板文案（走 app 的 i18n） */
+/**
+ * 提问面板文案（走 app 的 i18n）。
+ *
+ * 同一份文案喂两处：等回答时钉在输入框上方的可交互面板，以及答完之后留在
+ * 消息流里的只读问答留档（库从 ask_user 工具调用还原，见库的 utils/askUser）。
+ * 两处必须是同一套说法 —— 不然同一个面板在答前答后叫两个名字。
+ */
 export function agentQuestionLabels() {
   return {
     title: $t('@AGENT:等待你的回答'),
     placeholder: $t('@AGENT:输入回答'),
     submit: $t('@AGENT:提交回答'),
+    answered: $t('@AGENT:已回答'),
+    expand: $t('@AGENT:展开完整问答'),
+    collapse: $t('@AGENT:收起完整问答'),
   }
 }
 

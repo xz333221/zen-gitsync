@@ -76,7 +76,6 @@ const {
   sendMessage,
   retryTurn,
   questionPanel,
-  questionAnswers,
   answeringQuestion,
   answerQuestion,
   isSessionGenerating,
@@ -379,7 +378,6 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
                 :context-usage="inputContextUsage"
                 :placeholder="isStreaming ? $t('@AGENT:生成中，发送后会排队，等本轮跑完自动接上…') : $t('@AGENT:输入消息，Enter 发送')"
                 :question="questionPanel"
-                :question-answers="questionAnswers"
                 :question-submitting="answeringQuestion"
                 :question-labels="questionLabels"
                 :plan-config="{ labels: { title: $t('@AGENT:计划'), raw: $t('@AGENT:原始参数') } }"

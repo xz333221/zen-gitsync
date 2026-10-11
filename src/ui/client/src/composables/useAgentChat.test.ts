@@ -405,11 +405,10 @@ describe('useAgentChat parallel sessions', () => {
     expect(chat.pendingQuestion.value?.options).toEqual(['A.ts', 'B.ts', 'C.ts'])
 
     await chat.answerQuestion(['A.ts', 'C.ts'])
+    // 作答后面板立刻让位：留档不归宿主管 —— 库从消息流里的 ask_user 工具调用还原
+    // （问题在 arguments、答案在 result），那块跟着对话滚，见库的 utils/askUser
     expect(chat.pendingQuestion.value).toBeNull()
-    // 面板留档：待答的那条清空，但问题与选择留在 questionPanel / questionAnswers 里，
-    // 宿主据此把面板切成只读「已回答」，不再点完就人间蒸发。
-    expect(chat.questionPanel.value?.question).toBe('要改哪几个文件？')
-    expect(chat.questionAnswers.value).toEqual(['A.ts', 'C.ts'])
+    expect(chat.questionPanel.value).toBeNull()
 
     const call = vi.mocked(globalThis.fetch).mock.calls.find(([url]) => url === '/api/agent/respond')
     expect(call).toBeTruthy()
@@ -424,10 +423,9 @@ describe('useAgentChat parallel sessions', () => {
     await sendPromise
   })
 
-  // 已作答的问答面板留档，直到「下一次提问」或「下一条消息」到来才让位。
-  // 守的是：点选后 pendingQuestion 清空（收尾提示 / 队列接棒靠它判断），但展示层
-  // questionPanel/questionAnswers 还留着那条只读记录。
-  test('ask_user 作答后：旧留档让位给新提问，发新消息时也清掉', async () => {
+  // 守的是：点选后 pendingQuestion 立刻清空（收尾提示 / 队列接棒靠它判断），
+  // 面板也跟着下去；模型接着问下一轮时再顶上来。
+  test('ask_user 作答后面板让位，下一轮提问再接上', async () => {
     const chat = useAgentChat()
     await chat.loadSessions()
     await chat.loadSession('A')
@@ -447,10 +445,9 @@ describe('useAgentChat parallel sessions', () => {
 
     await chat.answerQuestion(['B'])
     expect(chat.pendingQuestion.value).toBeNull()
-    expect(chat.questionPanel.value?.question).toBe('选哪个？')
-    expect(chat.questionAnswers.value).toEqual(['B'])
+    expect(chat.questionPanel.value).toBeNull()
 
-    // 模型接着问下一个：旧的留档让位，面板切回可交互的新问题（answers 必须清空）
+    // 模型接着问下一个：面板切回可交互的新问题
     chatStreams[0].send({
       type: 'ask_user',
       interactionId: 'q2',
@@ -461,21 +458,19 @@ describe('useAgentChat parallel sessions', () => {
     })
     await flush()
     expect(chat.questionPanel.value?.question).toBe('那再选一个？')
-    expect(chat.questionAnswers.value).toEqual([])
 
     await chat.answerQuestion(['C'])
-    expect(chat.questionAnswers.value).toEqual(['C'])
+    expect(chat.questionPanel.value).toBeNull()
 
     chatStreams[0].send({ type: 'done', content: '好' })
     chatStreams[0].close()
     await sendPromise
     await flush()
 
-    // 新一轮开始：留档清掉（内容也已经在消息流的 ask_user 工具块里）
+    // 新一轮开始：面板本来就是空的
     const next = chat.sendMessage('继续')
     await flush()
     expect(chat.questionPanel.value).toBeNull()
-    expect(chat.questionAnswers.value).toEqual([])
     chatStreams[1].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
     chatStreams[1].send({ type: 'done', content: '好' })
     chatStreams[1].close()
