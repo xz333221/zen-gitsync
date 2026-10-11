@@ -22,7 +22,9 @@ import UpgradeDialog from './UpgradeDialog.vue'
 
 // 由 vite.config.ts 在构建时从外层 package.json 注入
 const buildVersion = import.meta.env.PKG_VERSION
-const releasesUrl = 'https://github.com/xz333221/zen-gitsync/releases'
+// 用户 2026-10-11：GitHub 上只打 tag、不发 Release，/releases 页面是空的；
+// 版本号跳转到 tags 页才能看到各版本。
+const releasesUrl = 'https://github.com/xz333221/zen-gitsync/tags'
 
 // 升级成功后会被后端返回的 current 覆盖，确保 footer 立刻反映新版本
 const runtimeVersion = ref<string>(buildVersion)

@@ -426,7 +426,7 @@ function hideBrokenLogo(e: Event) {
 // 那两个入口必须留在常驻的顶栏，否则工作区干净时连 pull/fetch/merge 都点不到。
 // 主题仍可在「设置 → 主题」里切；想恢复这个按钮：把下面的常量改回 true 即可
 // （按钮代码原样保留，没有删）。
-const SHOW_THEME_TOGGLE = false
+const SHOW_THEME_TOGGLE = true
 
 // ── header 系统监控指示器辅助函数 ───────────────────────────────────────
 function formatBytes(bytes: number): string {
@@ -872,7 +872,21 @@ function stopVResize() {
           :aria-selected="gitTab === tab.id"
           :aria-controls="'git-panel-' + tab.id"
           @click="gitTab = tab.id"
-        >{{ $t(tab.labelKey) }}</button>
+        ><svg
+            v-if="tab.id === 'github'"
+            class="git-tab__icon"
+            viewBox="0 0 16 16"
+            width="14"
+            height="14"
+            aria-hidden="true"
+          ><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg><svg
+            v-else-if="tab.id === 'gitee'"
+            class="git-tab__icon"
+            viewBox="0 0 1024 1024"
+            width="14"
+            height="14"
+            aria-hidden="true"
+          ><path fill="currentColor" d="M512 1024C229.2 1024 0 794.8 0 512S229.2 0 512 0s512 229.2 512 512-229.2 512-512 512z m259.2-569.6H480c-12.8 0-25.6 12.8-25.6 25.6v64c0 12.8 12.8 25.6 25.6 25.6h176c12.8 0 25.6 12.8 25.6 25.6v12.8c0 41.6-35.2 76.8-76.8 76.8h-240c-12.8 0-25.6-12.8-25.6-25.6V416c0-41.6 35.2-76.8 76.8-76.8h355.2c12.8 0 25.6-12.8 25.6-25.6v-64c0-12.8-12.8-25.6-25.6-25.6H416c-105.6 0-192 86.4-192 192v355.2c0 12.8 12.8 25.6 25.6 25.6h374.4c92.8 0 172.8-76.8 172.8-172.8v-144c0-12.8-12.8-25.6-25.6-25.6z"/></svg>{{ $t(tab.labelKey) }}</button>
       </div>
 
       <div class="git-pane__body">
@@ -1262,6 +1276,14 @@ body {
   white-space: nowrap;
   cursor: pointer;
   transition: color var(--transition-fast), background var(--transition-fast);
+}
+.git-tab__icon {
+  flex: 0 0 auto;
+  margin-right: 6px;
+  opacity: 0.9;
+}
+.git-tab.is-active .git-tab__icon {
+  opacity: 1;
 }
 .git-tab:hover {
   color: var(--text-primary);
