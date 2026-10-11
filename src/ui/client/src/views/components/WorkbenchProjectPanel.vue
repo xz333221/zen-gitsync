@@ -730,37 +730,36 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   padding: 0 12px 8px;
   flex-shrink: 0;
 }
-/* 2026-10-07：这个搜索框固定白底，明暗两套主题都一样 —— 它是深色面板里的一块浅色区域。
-   因此框内**不能再吃随主题翻转的 --text-\* / --bg-subtle**（深色主题下它们会变亮，
-   压在纯白上就是白底白字）；灰阶 / 描边 / 聚焦环统一走本地变量写死。
-   color-scheme 也要显式声明成 light：根节点在深色主题下是 color-scheme: dark，
-   原生 <input type="search"> 的清除按钮与光标会按深色渲染（浅色），在白底上等于看不见。 */
+/* 2026-10-11：这个搜索框跟着主题走。
+   原先（2026-10-07）为了修"深色下白底白字"把底色写死成纯白、框内灰阶走本地变量，
+   但纯白在深色面板里太扎眼（用户反馈"很突兀"）。现在改用随主题翻转的输入框令牌：
+   --bg-input（light 白 / dark #24292e）、--border-input、--text-primary、--text-meta、
+   --color-primary 焦点描边 —— 明暗两套都成立，字色与底色同向翻转，不会再白底白字。
+   也因此**不再需要 color-scheme: light**：底色已随主题变深，原生清除按钮 / 光标
+   继承根的 color-scheme 即可，深浅两套下都看得见。 */
 .proj__search {
-  --proj-search-ink: #1f2937;   /* 已输入文字 */
-  --proj-search-meta: #6b7280;  /* 图标 + placeholder */
-  --proj-search-edge: #d1d5db;  /* 静止态描边（不用 --border-color：深色主题下它近乎透明） */
   display: flex;
   align-items: center;
   gap: 4px;
   height: 24px;
   padding: 0 8px;
-  border: 1px solid var(--proj-search-edge);
+  border: 1px solid var(--border-input);
   border-radius: var(--radius-md);
-  background: #fff;
-  color-scheme: light;
+  background: var(--bg-input);
   transition:
     border-color var(--transition-fast) var(--ease-custom),
     box-shadow var(--transition-fast) var(--ease-custom);
 }
-/* 聚焦态单独指定：--focus-ring-soft 是 12% 透明蓝，压在白底上只剩一层灰雾；
-   这里用更实的蓝描边 + 28% 焦点环，两种主题下都一眼可见。 */
+.proj__search:hover:not(:focus-within) {
+  border-color: var(--border-input-hover);
+}
 .proj__search:focus-within {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.28);
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring-soft);
 }
 .proj__search-icon {
   font-size: var(--font-size-sm);
-  color: var(--proj-search-meta);
+  color: var(--text-meta);
   flex-shrink: 0;
 }
 .proj__search-input {
@@ -771,10 +770,10 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   outline: none;
   font-family: inherit;
   font-size: var(--font-size-sm);
-  color: var(--proj-search-ink);
-  caret-color: var(--proj-search-ink);
+  color: var(--text-primary);
+  caret-color: var(--color-primary);
 }
-.proj__search-input::placeholder { color: var(--proj-search-meta); }
+.proj__search-input::placeholder { color: var(--text-meta); }
 .proj__toggles {
   display: flex;
   align-items: center;

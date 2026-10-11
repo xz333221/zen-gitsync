@@ -1,28 +1,34 @@
 /**
- * 左栏「项目列表」搜索框：固定白底 + 白底可读性 —— 浏览器验证。
+ * 左栏「项目列表」搜索框：跟随主题 + 可读性 —— 浏览器验证。
  *
  * 守的契约（对应 WorkbenchProjectPanel.vue 的 .proj__search / __icon / __input）：
- *   S1  静态：`.proj__search` 块内**不再引用随主题翻转的令牌**（--text-* / --bg-subtle /
- *       --border-color / --focus-ring-soft / --color-primary）。这是本页最核心的一条 ——
- *       只要有一个漏回去，深色主题下就是白底白字 / 看不见的描边。
- *   S2  静态：`.proj__search` 显式声明 color-scheme: light，`.proj__search-input` 有 caret-color
- *   R1/R2  两套主题下容器底色都是纯白、图标与 placeholder 都是 #6b7280
- *   R3  已输入文字 #1f2937、caret 同色、color-scheme 实测 light
- *   R4  静止态描边可见（非透明、非零宽）且无焦点环；聚焦态描边 #2563eb + 3px 实蓝焦点环
- *   R5  正文 / placeholder 对白底都 ≥ 4.5:1（WCAG AA）
- *   R6  两个开关仍完整落在筛选条内、等宽不重叠、搜索框内无横向溢出（白底没挤坏这一行）
+ *   S1  静态：`.proj__search` 块内**不含写死的浅色字面量**（#fff / #1f2937 / #6b7280 /
+ *       #d1d5db / #2563eb / --proj-search- 本地变量）。这是本页最核心的一条 ——
+ *       只要又写死回来，深色主题下就是一块刺眼白底。
+ *   S2a 静态：`.proj__search` 块内**不声明 color-scheme**（底色已随主题翻转，
+ *       原生清除按钮 / 光标继承根节点即可）
+ *   S2b 静态：块内引用全套随主题翻转的输入框令牌（--bg-input / --border-input /
+ *       --border-input-hover / --text-primary / --text-meta / --focus-ring-soft / --color-primary）
+ *   S2c 静态：`.proj__search-input` 有 caret-color
+ *   R1  两套主题下容器底色分别是白 / #24292e（跟随 --bg-input）
+ *   R2  图标与 placeholder 跟随 --text-meta（light #686a6f / dark #cbd0d6）
+ *   R3  color-scheme 跟随主题（light→light / dark→dark），原生控件不再被钉死成浅色
+ *   R4  静止态描边可见（非透明、非零宽）且无焦点环；聚焦态描边 = --color-primary + --focus-ring-soft
+ *   R5  正文 / placeholder 对**各自底色**都 ≥ 4.5:1（WCAG AA）
+ *   R6  两个开关仍完整落在筛选条内、等宽不重叠、搜索框内无横向溢出
  *
  * ⚠️ 断言用**实测计算样式 + WCAG 对比度**，不是"截图看着白"。--reverse 把旧写法
- *   （--bg-subtle 底 + --text-* 前景 + --focus-ring-soft 焦点环）注回去，R1~R5 必须变红 ——
- *   证明这些断言守的是这套值本身，而不是"页面没崩"。S1/S2 是源码断言，注入的 CSS 在运行时，
- *   它们照旧应当是绿的。
+ *   （固定 #fff 白底 + 写死灰阶 + color-scheme: light + 28% 实蓝焦点环）注回去，
+ *   那些"跟随主题"的断言必须变红 —— 证明它们守的是这套值本身，而不是"页面没崩"。
+ *   S1/S2 是源码断言，注入的 CSS 在运行时，它们照旧应当是绿的。
  *
- * 反向验证（把修复撤掉后哪几条会红）：
- *   · 底色换回 var(--bg-subtle) → R1 红（深色下 rgba(255,255,255,.05)）
- *   · 前景换回 var(--text-primary) / var(--text-meta) → R2 / R3 红，深色下对比度掉到 1.0:1
- *   · 焦点环换回 var(--focus-ring-soft) → R4 红（12% 透明蓝，实测 alpha .12）
- *   · 去掉 color-scheme: light → R3 红（深色主题下实测 color-scheme=dark，
- *     原生 type=search 的清除按钮会按浅色渲染，压在纯白上等于看不见）
+ * 反向验证（把新写法撤成旧写法后哪几条会红）：
+ *   · 底色/字色换回写死的 #fff + #1f2937 + #6b7280 → 深色下 D1/D2/D5a 红（白底扎眼、
+ *     与浅色主题同款值）；浅色下 L2/L5a 也红（旧灰阶 ≠ 新令牌值）
+ *   · 去掉 color-scheme: light 后旧写法在深色下 D3 红 — 新写法本就不该有 color-scheme
+ *   · 焦点环换回 rgba(37,99,235,.28) → L6a/L6b、D6a/D6b 红
+ *   · 对比度断言两套主题下都该**保持绿**：旧白底配深字本身也过 AA，它守的是可读性、
+ *     不是主题跟随，所以不在 MUST_FAIL 名单里。
  */
 const path = require('node:path')
 const fs = require('node:fs')
@@ -63,15 +69,22 @@ if (from < 0 || to < 0 || to <= from) {
 }
 const block = stripComments(raw.slice(from, to))
 
-const BANNED = ['--text-primary', '--text-secondary', '--text-meta', '--bg-subtle',
-  '--border-color', '--focus-ring-soft', '--color-primary']
-const leaked = BANNED.filter((v) => block.includes(v))
-check('S1 .proj__search 块内不引用随主题翻转的令牌', leaked.length === 0,
-  leaked.length ? `漏进去的：${leaked.join(' ')}` : `检查了 ${BANNED.length} 个令牌`)
+// 写死的浅色字面量 / 本地变量：只要有一个回来，就说明底色或字色又被钉死了
+const BANNED = ['#fff', '#1f2937', '#6b7280', '#d1d5db', '#2563eb', '--proj-search-']
+const banned = BANNED.filter((v) => block.includes(v))
+check('S1 .proj__search 块内不含写死的浅色字面量 / 本地变量', banned.length === 0,
+  banned.length ? `又写死回来的：${banned.join(' ')}` : `检查了 ${BANNED.length} 个字面量`)
 
-check('S2a .proj__search 声明了 color-scheme: light', /color-scheme:\s*light/.test(block))
-check('S2b .proj__search-input 声明了 caret-color', /caret-color:/.test(block))
-check('S2c 底色是纯白字面量（不是令牌）', /background:\s*#fff\b/i.test(block))
+check('S2a .proj__search 块内不声明 color-scheme（底色已随主题翻转）',
+  !/color-scheme/.test(block))
+
+const REQUIRED = ['--bg-input', '--border-input', '--border-input-hover', '--text-primary',
+  '--text-meta', '--focus-ring-soft', '--color-primary']
+const missing = REQUIRED.filter((v) => !block.includes(v))
+check('S2b .proj__search 块引用了全套随主题翻转的输入框令牌', missing.length === 0,
+  missing.length ? `缺令牌：${missing.join(' ')}` : `检查了 ${REQUIRED.length} 个令牌`)
+
+check('S2c .proj__search-input 声明了 caret-color', /caret-color:/.test(block))
 check('S2d 范围没外溢：右栏「搜索任务标题或描述」的样式不在这个块里',
   !block.includes('__task-search') && !block.includes('placeholder="搜索任务'))
 
@@ -79,20 +92,21 @@ check('S2d 范围没外溢：右栏「搜索任务标题或描述」的样式不
 // B. 运行时断言（两套主题各量一次）
 // ─────────────────────────────────────────────────────────────
 
-/** 旧写法 —— 只给 --reverse 注入用 */
+/** 旧写法（固定白底）—— 只给 --reverse 注入用 */
 const LEGACY_CSS = `
 .proj__search {
-  background: var(--bg-subtle) !important;
-  border-color: var(--border-color) !important;
-  color-scheme: dark !important;
+  background: #fff !important;
+  border-color: #d1d5db !important;
+  color-scheme: light !important;
 }
+.proj__search:hover:not(:focus-within) { border-color: #d1d5db !important; }
 .proj__search:focus-within {
-  border-color: var(--color-primary) !important;
-  box-shadow: var(--focus-ring-soft) !important;
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.28) !important;
 }
-.proj__search-icon { color: var(--text-meta) !important; }
-.proj__search-input { color: var(--text-primary) !important; caret-color: var(--text-primary) !important; }
-.proj__search-input::placeholder { color: var(--text-meta) !important; }
+.proj__search-icon { color: #6b7280 !important; }
+.proj__search-input { color: #1f2937 !important; caret-color: #1f2937 !important; }
+.proj__search-input::placeholder { color: #6b7280 !important; }
 `
 
 const stats = (over = {}) => ({
@@ -156,10 +170,36 @@ const contrast = (a, b) => {
   return (x + 0.05) / (y + 0.05)
 }
 
-const WHITE = 'rgb(255, 255, 255)'
-const GRAY = 'rgb(107, 114, 128)' // #6b7280
-const INK = 'rgb(31, 41, 55)' // #1f2937
-const BLUE_EDGE = 'rgb(37, 99, 235)' // #2563eb
+/* 新契约的期望值（与 variables.scss / dark-theme.scss 一一对应）：
+   --bg-input     light white / dark #24292e
+   --text-primary light #303133 / dark #fff
+   --text-meta    light #686a6f / dark #cbd0d6
+   --color-primary #3b82f6（两套同值） */
+const EXPECT = {
+  light: {
+    bg: 'rgb(255, 255, 255)',
+    ink: 'rgb(48, 49, 51)',   // #303133
+    meta: 'rgb(104, 106, 111)', // #686a6f
+    colorScheme: 'light',
+  },
+  dark: {
+    bg: 'rgb(36, 41, 46)',    // #24292e
+    ink: 'rgb(255, 255, 255)',
+    meta: 'rgb(203, 208, 214)', // #cbd0d6
+    colorScheme: 'dark',
+  },
+}
+const BLUE = 'rgb(59, 130, 246)' // #3b82f6 --color-primary
+
+/* --focus-ring-soft = 「--color-primary 12% 透明」的焦点环。
+   ⚠️ ChatGPT/Chrome 会把 color-mix() 的结果序列化成 `color(srgb 0.231373 0.509804 0.964706 / 0.12)`，
+   而不是 `rgba(59, 130, 246, 0.12)` —— 所以不能只匹配 rgba 写法，得同时认两种，
+   并按 `--color-primary` 的通道值（59/255=0.231373, 130/255=0.509804, 246/255=0.964706）
+   与 12% 的 alpha 判，别用裸 `0.12` 子串。 */
+const isPrimarySoftRing = (shadow) =>
+  shadow !== 'none' && /3px/.test(shadow)
+  && (/59,\s*130,\s*246|0\.231373\s+0\.509804\s+0\.964706/.test(shadow))
+  && /[\/,]\s*0\.12\s*\)/.test(shadow) // 12% alpha（.28 的实蓝环不会命中）
 
 /** 等焦点环的过渡彻底退完再量 —— 否则读到的是过渡中的中间值 */
 async function settleIdle(page) {
@@ -220,6 +260,7 @@ async function main() {
       }
       await sleep(250)
       const tag = theme === 'light' ? 'L' : 'D'
+      const exp = EXPECT[theme]
 
       // 静止态：placeholder / 描边 / 焦点环
       await page.locator('.proj__search-input').fill('')
@@ -228,11 +269,12 @@ async function main() {
       let s = await obs()
       if (!s) { check(`${tag}0 搜索框 + 筛选条都在 DOM 里`, false); continue }
 
-      check(`${tag}1  容器底色 = 纯白`, s.bg === WHITE, s.bg)
-      check(`${tag}2  图标与 placeholder 色 = #6b7280`,
-        s.iconColor === GRAY && s.placeholderColor === GRAY, `icon ${s.iconColor} / ph ${s.placeholderColor}`)
-      check(`${tag}3  color-scheme 实测 light（原生清除按钮/光标按浅色渲染）`,
-        s.colorScheme.includes('light'), s.colorScheme)
+      check(`${tag}1  容器底色跟随 --bg-input`, s.bg === exp.bg, `实测 ${s.bg} / 期望 ${exp.bg}`)
+      check(`${tag}2  图标与 placeholder 色跟随 --text-meta`,
+        s.iconColor === exp.meta && s.placeholderColor === exp.meta,
+        `icon ${s.iconColor} / ph ${s.placeholderColor} / 期望 ${exp.meta}`)
+      check(`${tag}3  color-scheme 跟随主题（原生清除按钮/光标不再被钉死）`,
+        s.colorScheme.includes(exp.colorScheme), s.colorScheme)
       check(`${tag}4a 静止态描边可见（非透明、非零宽）`,
         s.borderWidth !== '0px' && !/rgba\(0, 0, 0, 0\)/.test(s.borderColor),
         `${s.borderWidth} ${s.borderColor}`)
@@ -244,20 +286,21 @@ async function main() {
       await page.locator('.proj__search-input').focus()
       await sleep(250)
       s = await obs()
-      check(`${tag}5a 已输入文字色 = #1f2937`, s.textColor === INK, s.textColor)
-      check(`${tag}5b caret 色 = #1f2937（白底可见）`, s.caretColor === INK, s.caretColor)
-      check(`${tag}6a 聚焦态描边 = #2563eb`, s.borderColor === BLUE_EDGE, s.borderColor)
-      check(`${tag}6b 聚焦态焦点环可见（实蓝 28%，不是 12% 灰雾）`,
-        /rgba\(37, 99, 235, 0\.28\)/.test(s.boxShadow), s.boxShadow)
+      check(`${tag}5a 已输入文字色跟随 --text-primary`, s.textColor === exp.ink,
+        `实测 ${s.textColor} / 期望 ${exp.ink}`)
+      check(`${tag}5b caret 色 = --color-primary`, s.caretColor === BLUE, s.caretColor)
+      check(`${tag}6a 聚焦态描边 = --color-primary`, s.borderColor === BLUE, s.borderColor)
+      check(`${tag}6b 聚焦态焦点环可见（--focus-ring-soft，蓝 12%）`,
+        isPrimarySoftRing(s.boxShadow), s.boxShadow)
       await page.locator('.proj__search').screenshot({ path: path.join(SHOT_DIR, `search-${theme}-focus${REVERSE ? '-legacy' : ''}.png`) })
 
-      // 对比度：白底上的正文与 placeholder
+      // 对比度：**各自底色**上的正文与 placeholder
       const cInk = contrast(s.textColor, s.bg)
       const cMeta = contrast(s.placeholderColor, s.bg)
-      check(`${tag}7a 正文对白底 ≥ 4.5:1（WCAG AA）`, cInk >= 4.5, `${cInk.toFixed(2)}:1`)
-      check(`${tag}7b placeholder 对白底 ≥ 4.5:1`, cMeta >= 4.5, `${cMeta.toFixed(2)}:1`)
+      check(`${tag}7a 正文对本主题底色 ≥ 4.5:1（WCAG AA）`, cInk >= 4.5, `${cInk.toFixed(2)}:1`)
+      check(`${tag}7b placeholder 对本主题底色 ≥ 4.5:1`, cMeta >= 4.5, `${cMeta.toFixed(2)}:1`)
 
-      // 几何：白底没把这一行挤坏
+      // 几何：这一行没被挤坏
       const inTools = (r) => r.l >= s.toolsRect.l - 0.5 && r.r <= s.toolsRect.r + 0.5
       const [t0, t1] = s.toggles
       check(`${tag}8a 两个开关都完整落在筛选条内`,
@@ -293,26 +336,20 @@ async function main() {
 
   /* --reverse 的期望是**指定那几条**变红，不是"运行时全红"：
      S1/S2 是源码断言，注入的旧 CSS 在运行时，它们照旧应当是绿的；
-     8a/8b/8c 量的是布局，旧写法不动布局，也不该红。 */
+     4a/4b/7a/7b/8a/8b/8c 不受旧写法影响，也不该红（对比度旧白底也过 AA）。 */
   const MUST_FAIL_IN_REVERSE = [
-    'L1  容器底色 = 纯白',
-    'L2  图标与 placeholder 色 = #6b7280',
-    'L3  color-scheme 实测 light（原生清除按钮/光标按浅色渲染）',
-    'L5a 已输入文字色 = #1f2937',
-    'L5b caret 色 = #1f2937（白底可见）',
-    'L6a 聚焦态描边 = #2563eb',
-    'L6b 聚焦态焦点环可见（实蓝 28%，不是 12% 灰雾）',
-    'L7a 正文对白底 ≥ 4.5:1（WCAG AA）',
-    'L7b placeholder 对白底 ≥ 4.5:1',
-    'D1  容器底色 = 纯白',
-    'D2  图标与 placeholder 色 = #6b7280',
-    'D3  color-scheme 实测 light（原生清除按钮/光标按浅色渲染）',
-    'D5a 已输入文字色 = #1f2937',
-    'D5b caret 色 = #1f2937（白底可见）',
-    'D6a 聚焦态描边 = #2563eb',
-    'D6b 聚焦态焦点环可见（实蓝 28%，不是 12% 灰雾）',
-    'D7a 正文对白底 ≥ 4.5:1（WCAG AA）',
-    'D7b placeholder 对白底 ≥ 4.5:1',
+    'L2  图标与 placeholder 色跟随 --text-meta',
+    'L5a 已输入文字色跟随 --text-primary',
+    'L5b caret 色 = --color-primary',
+    'L6a 聚焦态描边 = --color-primary',
+    'L6b 聚焦态焦点环可见（--focus-ring-soft，蓝 12%）',
+    'D1  容器底色跟随 --bg-input',
+    'D2  图标与 placeholder 色跟随 --text-meta',
+    'D3  color-scheme 跟随主题（原生清除按钮/光标不再被钉死）',
+    'D5a 已输入文字色跟随 --text-primary',
+    'D5b caret 色 = --color-primary',
+    'D6a 聚焦态描边 = --color-primary',
+    'D6b 聚焦态焦点环可见（--focus-ring-soft，蓝 12%）',
   ]
 
   console.log(`用例 ${results.length}，通过 ${results.length - failed.length}，失败 ${failed.length}`
