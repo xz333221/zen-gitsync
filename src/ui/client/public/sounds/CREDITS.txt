@@ -15,6 +15,7 @@ Creative Commons Zero (CC0 1.0) —— 公共领域，可自由用于个人 / �
 
     task-done.wav   ← confirmation_001.wav   0.29s  44.1kHz 单声道 16bit  任务正常跑完
     task-error.wav  ← error_005.wav          0.52s  44.1kHz 单声道 16bit  任务执行出错
+    task-question.wav ← question_001.wav     0.50s  44.1kHz 单声道 16bit  智能体提问等你回话
 
 为什么选 CC0
 ------------

@@ -13,6 +13,7 @@
 // limitations under the License.
 //
 // 对话轮次结束提示（2026-09-29）—— g ai / claude / codex 那一轮流式回复收尾时"叮"一声。
+// 2026-10-11 起多一条"智能体提问"：ask_user 挂起等回答时也响一声（见 announceAgentQuestion）。
 //
 // 为什么不复用 useTaskNotifier 的那条链路：
 //   那边的触发源是 SSE 帧（工作台 job 的 job:update），而对话结束是**本地 fetch 的
@@ -32,7 +33,7 @@ import { ElMessage } from 'element-plus'
 import { $t } from '@/lang/static'
 import { useConfigStore } from '@stores/configStore'
 import { notifySystem, shouldUseSystemNotification } from '@/utils/taskNotify'
-import { playFinishSound } from '@/utils/taskSound'
+import { playFinishSound, playQuestionSound } from '@/utils/taskSound'
 import type { JobFinishKind, NotifySwitches } from '@/composables/useTaskNotifier'
 import { anyChannelOn } from '@/composables/useTaskNotifier'
 
@@ -61,6 +62,39 @@ export function agentTurnNoticeTitle(kind: AgentTurnKind): string {
 }
 
 /**
+ * 三个提示通道的开关。开关在 config.json（全局），每次读实时值：
+ * 用户在设置里关掉后立刻生效。
+ */
+function readSwitches(): NotifySwitches {
+  const sw: NotifySwitches = { page: false, browser: false, sound: false }
+  try {
+    const store = useConfigStore()
+    sw.page = !!store.notifyPageOnTaskDone
+    sw.browser = !!store.notifyBrowserOnTaskDone
+    sw.sound = !!store.notifySoundOnTaskDone
+  } catch { /* store 不可用（单测 / 极早的启动期）→ 三个都保持 false，即不提示 */ }
+  return sw
+}
+
+/**
+ * 智能体提问（ask_user）时的提示：**只出一声**。
+ *
+ * 为什么只有声音、不跟着弹 toast / 系统通知：
+ *   这一轮并没有结束 —— 面板就停在输入框上方等人点选，页面提示是多余的；
+ *   而用户此刻很可能切去了别的窗口（去查它问的那件事），所以需要的是一个
+ *   "它问话了"的听觉信号，把人叫回页面即可。要发系统通知得另有一句文案，
+ *   而"问的是什么"只能截断着念，不如回来看面板。
+ *
+ * 与终态提示同一口径：只认**提示音**这一个开关（用户在设置里关掉就一声不出），
+ * 且失败一律静默 —— 调用点在 SSE 回调里，抛出去会打断后续帧。
+ */
+export function announceAgentQuestion(): boolean {
+  const sw = readSwitches()
+  if (!sw.sound) return false
+  return playQuestionSound()
+}
+
+/**
  * 发一条"这一轮对话结束了"的提示。返回是否真的提示出去了（开关关着 → false）。
  *
  * alreadyToast：调用点自己已经弹过应用内提示时传 true（出错那条 ElMessage.error
@@ -73,14 +107,7 @@ export function announceAgentTurn(opts: {
   tag?: string
   alreadyToast?: boolean
 }): boolean {
-  // 开关在 config.json（全局），每次读实时值：用户在设置里关掉后立刻生效
-  const sw: NotifySwitches = { page: false, browser: false, sound: false }
-  try {
-    const store = useConfigStore()
-    sw.page = !!store.notifyPageOnTaskDone
-    sw.browser = !!store.notifyBrowserOnTaskDone
-    sw.sound = !!store.notifySoundOnTaskDone
-  } catch { /* store 不可用（单测 / 极早的启动期）→ 三个都保持 false，即不提示 */ }
+  const sw = readSwitches()
   if (!anyChannelOn(sw)) return false
 
   const name = String(opts.title || '').trim() || $t('@AGENT:无标题')

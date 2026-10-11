@@ -18,7 +18,7 @@ import { parsePlanArgs, planProgress } from 'zen-ai-chat-ui'
 import { $t } from '@/lang/static'
 import { useConfigStore } from '@/stores/configStore'
 import { useAgentActivityStore } from '@/stores/agentActivity'
-import { announceAgentTurn, type AgentTurnKind } from '@/utils/agentTurnNotify'
+import { announceAgentQuestion, announceAgentTurn, type AgentTurnKind } from '@/utils/agentTurnNotify'
 import {
   getSelectedAgentEngine,
   setSelectedAgentEngine,
@@ -1214,6 +1214,9 @@ export function useAgentChat() {
                 allowFreeText: evt.allowFreeText !== false,
                 multiple: evt.multiple === true,
               }
+              // 响一声：这一轮挂起等回答，用户可能正看着别的窗口
+              // （后台会话的问题同样要响 —— "它问话了"这件事与会话在不在前台无关）
+              announceAgentQuestion()
               break
 
             case 'done': {

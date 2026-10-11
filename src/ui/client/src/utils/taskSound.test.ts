@@ -5,7 +5,7 @@
 // 元数据没就绪时设 currentTime 抛错。这些分支都必须安静降级 —— 调用点在 SSE
 // 回调里，一个冒泡出去的异常就会打断后续帧的处理。
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { playFinishSound, soundUrlFor, __resetSoundPool } from './taskSound'
+import { playFinishSound, playQuestionSound, soundUrlFor, __resetSoundPool } from './taskSound'
 
 type AnyAudio = typeof Audio
 
@@ -62,6 +62,20 @@ describe('soundUrlFor：终态 → 音源', () => {
 
   it('用户自己按的停止不响 —— 人就在页面上，再响一声是打扰', () => {
     expect(soundUrlFor('cancelled')).toBe('')
+  })
+
+  it('智能体提问有独立音源 —— 与"跑完了"必须是两声，否则两个信号分不开', () => {
+    expect(soundUrlFor('question')).toBe('/sounds/task-question.wav')
+    expect(soundUrlFor('question')).not.toBe(soundUrlFor('done'))
+  })
+})
+
+describe('playQuestionSound', () => {
+  it('走的是 question 那条音源，并真的发起播放', () => {
+    const { created } = installAudio()
+    expect(playQuestionSound()).toBe(true)
+    expect(created.map((a) => a.src)).toEqual(['/sounds/task-question.wav'])
+    expect(created[0].play).toHaveBeenCalledTimes(1)
   })
 })
 

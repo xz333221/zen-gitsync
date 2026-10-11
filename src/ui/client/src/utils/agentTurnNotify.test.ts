@@ -51,10 +51,19 @@ vi.mock('@/utils/taskSound', () => ({
     snd.played.push(kind)
     return true
   },
+  playQuestionSound: () => {
+    snd.played.push('question')
+    return true
+  },
 }))
 
 import { ElMessage } from 'element-plus'
-import { announceAgentTurn, agentTurnDetail, agentTurnNoticeTitle } from './agentTurnNotify'
+import {
+  announceAgentQuestion,
+  announceAgentTurn,
+  agentTurnDetail,
+  agentTurnNoticeTitle,
+} from './agentTurnNotify'
 
 const successCalls = () => (ElMessage.success as unknown as { mock: { calls: any[][] } }).mock.calls
 const errorCalls = () => (ElMessage.error as unknown as { mock: { calls: any[][] } }).mock.calls
@@ -186,5 +195,26 @@ describe('announceAgentTurn 分流', () => {
     sys.useSystem = true
     announceAgentTurn({ kind: 'done', title: '   ' })
     expect(sys.sent[0].body).toBe('@AGENT:无标题')
+  })
+})
+
+describe('announceAgentQuestion：提问只出一声', () => {
+  it('提示音开着 → 响 question 这一声', () => {
+    expect(announceAgentQuestion()).toBe(true)
+    expect(snd.played).toEqual(['question'])
+  })
+
+  it('只出声：页面提示与浏览器通知都开着也不弹 toast、不发系统通知', () => {
+    sys.useSystem = true
+    announceAgentQuestion()
+    expect(successCalls()).toHaveLength(0)
+    expect(errorCalls()).toHaveLength(0)
+    expect(sys.sent).toHaveLength(0)
+  })
+
+  it('提示音关着 → 一声不出（这一声只认提示音开关）', () => {
+    state.sound = false
+    expect(announceAgentQuestion()).toBe(false)
+    expect(snd.played).toHaveLength(0)
   })
 })

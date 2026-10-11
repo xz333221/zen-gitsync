@@ -13,6 +13,7 @@
 // limitations under the License.
 //
 // 任务结束提示音封装（2026-09-29）—— 任务从"跑着"变终态时"叮"一声。
+// 2026-10-11 起多一声"智能体提问"：ask_user 挂起等回答时也响（见 SoundCue）。
 //
 // 音源：Kenney《Interface Sounds》，CC0 1.0（公共领域，无需署名）。
 //   选 CC0 而不是随手下一个 mp3：本仓库以 Apache-2.0 发布到 npm，构建产物会带上
@@ -35,21 +36,31 @@
 import type { JobFinishKind } from '@/composables/useTaskNotifier'
 
 /**
- * 每种终态对应的音源。空串 = 不响。
+ * 能出声的几种提示音。
+ *
+ * 前三种是任务/对话的**终态**（见 JobFinishKind）；`question` 不是终态 ——
+ * 智能体 ask_user 时这一轮还挂着等回答，是"该你了"而不是"结束了"，
+ * 所以给它单独一声，别和"跑完了"混成同一个信号。
+ */
+export type SoundCue = JobFinishKind | 'question'
+
+/**
+ * 每种提示音对应的音源。空串 = 不响。
  * cancelled（用户自己按的停止）故意留空 —— 人就在页面上点的那一下，再响一声是打扰。
  */
-const SOUND_SRC: Record<JobFinishKind, string> = {
+const SOUND_SRC: Record<SoundCue, string> = {
   done: '/sounds/task-done.wav',
   error: '/sounds/task-error.wav',
   cancelled: '',
+  question: '/sounds/task-question.wav',
 }
 
 /** src → 已创建的 Audio 实例。懒创建：没触发过提示音就一个字节都不会去下载 */
 const pool = new Map<string, HTMLAudioElement>()
 
-/** 某种终态该用哪个音源（纯函数，方便测试直接断言映射关系，不用碰 Audio） */
-export function soundUrlFor(kind: JobFinishKind): string {
-  return SOUND_SRC[kind] || ''
+/** 某种提示音该用哪个音源（纯函数，方便测试直接断言映射关系，不用碰 Audio） */
+export function soundUrlFor(cue: SoundCue): string {
+  return SOUND_SRC[cue] || ''
 }
 
 function audioFor(src: string): HTMLAudioElement | null {
@@ -69,7 +80,7 @@ function audioFor(src: string): HTMLAudioElement | null {
 }
 
 /**
- * 播一次结束提示音。
+ * 播一次提示音（终态与提问共用的一条路径，只有音源不同）。
  *
  * ⚠️ 会被浏览器的自动播放策略拦下：用户从没跟页面交互过时 `play()` 直接 reject
  * （NotAllowedError）。这属于正常现象，静默吞掉即可 —— 工作台的任务都是用户点出来的，
@@ -78,8 +89,8 @@ function audioFor(src: string): HTMLAudioElement | null {
  * @returns 是否**已发起**播放。注意这不等于一定出声（可能被策略拦、也可能被系统静音），
  *          只表示代码走到了该走的地方；调用点不需要据此分支，留着是为了测试能断言。
  */
-export function playFinishSound(kind: JobFinishKind): boolean {
-  const src = soundUrlFor(kind)
+function playCue(cue: SoundCue): boolean {
+  const src = soundUrlFor(cue)
   if (!src) return false
   const el = audioFor(src)
   if (!el) return false
@@ -99,6 +110,16 @@ export function playFinishSound(kind: JobFinishKind): boolean {
     /* 同上：某些环境 play() 直接抛而不是 reject */
   }
   return true
+}
+
+/** 任务 / 对话终态的提示音 */
+export function playFinishSound(kind: JobFinishKind): boolean {
+  return playCue(kind)
+}
+
+/** 智能体提问（ask_user，等用户回话）的提示音 */
+export function playQuestionSound(): boolean {
+  return playCue('question')
 }
 
 /** 仅供测试：清空实例池，避免用例之间互相看到对方的 Audio */

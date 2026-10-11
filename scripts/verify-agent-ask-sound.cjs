@@ -1,0 +1,223 @@
+/**
+ * g ai 提问提示音（ask_user 到帧响一声）的浏览器验证。
+ *
+ * 验收契约（改这块时别破坏）：
+ *   A 模型 ask_user 到帧 → 创建 /sounds/task-question.wav 的 Audio 并真的发起播放
+ *   B 这一声**不是**终态那两声（done / error 的音源），否则两个信号分不开
+ *   C 作答（POST /api/agent/respond）本身不响 —— 响的是"它问话了"，不是"我答了"
+ *   D 音源能在这台机器的真实浏览器里解码（decodeAudioData 拿得到时长）
+ *     —— 路径错 / 文件损坏 / 格式不支持都会在这里挂掉，而单测的 Audio 是假的
+ *   E 提问不弹 toast、不发系统通知（这一轮还没结束，面板就杵在输入框上方）
+ *   F 页面无 console / page 错误（存量 rail.getBoundingClientRect 除外）
+ *
+ * 为什么拦 fetch 造合成 SSE，而不是真让模型调一次 ask_user：
+ *   真跑一轮要几十秒、要花额度，且"模型这次会不会调 ask_user"本身不可控；
+ *   这里要验的是「ask_user 帧 → 响一声」这条链路，合成帧秒级且确定。
+ *   拦 /api/agent/sessions 是因为会话列表为空时 AgentView 会走 newSession()，
+ *   不拦的话第一轮跑完整个屏幕会被清掉（只见欢迎页）。
+ *
+ * 前置：vite dev server 已启动（5544）。其余接口仍走真实后端，所以后端也得活着。
+ * 用法：node scripts/verify-agent-ask-sound.cjs
+ * 退出码：0 全通过，1 有失败项。
+ */
+const path = require('node:path')
+
+// playwright 装在 src/ui/client 下，这里把它的 node_modules 挂进解析路径，脚本可独立运行
+module.paths.unshift(path.resolve(__dirname, '../src/ui/client/node_modules'))
+const { chromium } = require('playwright')
+
+const BASE = process.env.ZEN_BASE || 'http://127.0.0.1:5544'
+
+const results = []
+const consoleErrors = []
+const pageErrors = []
+
+function check(name, ok, extra = '') {
+  results.push({ name, ok, extra })
+  console.log(`${ok ? '  PASS' : '  FAIL'}  ${name}${extra ? '  :: ' + extra : ''}`)
+}
+const log = (...a) => console.log('[verify]', ...a)
+
+/** 存量红：库 MessageRail 里 rail.getBoundingClientRect 不是函数（与本轮改动无关） */
+const isPreExistingError = (t) => /getBoundingClientRect is not a function/.test(String(t))
+
+async function main() {
+  const browser = await chromium.launch()
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
+
+  page.on('console', (m) => {
+    if (m.type() === 'error' && !isPreExistingError(m.text())) consoleErrors.push(m.text())
+  })
+  page.on('pageerror', (e) => {
+    if (!isPreExistingError(e)) pageErrors.push(String(e))
+  })
+
+  // 合成 SSE + 记录 Audio 音源。addInitScript 保证在任何模块执行前就位
+  await page.addInitScript(() => {
+    window.__sounds = []
+    window.__respondCalls = 0
+    const RealAudio = window.Audio
+    class RecordingAudio extends RealAudio {
+      constructor(src) {
+        super(src)
+        window.__sounds.push(String(src))
+      }
+    }
+    window.Audio = RecordingAudio
+
+    const realFetch = window.fetch.bind(window)
+    const enc = new TextEncoder()
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : (input && input.url) || ''
+      if (url.includes('/api/agent/respond')) {
+        window.__respondCalls += 1
+        return Promise.resolve(new Response(JSON.stringify({ success: true }), {
+          headers: { 'Content-Type': 'application/json' }
+        }))
+      }
+      if (url.includes('/api/agent/sessions')) {
+        return Promise.resolve(new Response(JSON.stringify({ success: true, sessions: [] }), {
+          headers: { 'Content-Type': 'application/json' }
+        }))
+      }
+      if (url.includes('/api/agent/chat')) {
+        const stream = new ReadableStream({
+          start(c) {
+            const send = (o) => c.enqueue(enc.encode(`data: ${JSON.stringify(o)}\n\n`))
+            setTimeout(() => {
+              send({ type: 'meta', sessionId: 'probe-ask-sound', title: '提问提示音探针' })
+              send({
+                type: 'ask_user',
+                interactionId: 'probe-q1',
+                question: '探针：选一个',
+                options: ['甲', '乙'],
+                allowFreeText: false,
+                multiple: false
+              })
+            }, 60)
+            // 故意不 close：服务端就是这样挂着等回答的（见 agentRoutes 的 pendingInteractions）
+          }
+        })
+        return Promise.resolve(new Response(stream, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' }
+        }))
+      }
+      return realFetch(input, init)
+    }
+  })
+
+  await page.goto(BASE, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(2500)
+
+  // 切到智能体视图：ActivityBar 里 aria-pressed 的那个按钮
+  const buttons = page.locator('.activity-btn')
+  const n = await buttons.count()
+  let clicked = false
+  for (let i = 0; i < n; i++) {
+    const label = (await buttons.nth(i).getAttribute('aria-label')) || ''
+    if (/智能体|Agent/i.test(label)) {
+      await buttons.nth(i).click()
+      clicked = true
+      break
+    }
+  }
+  if (!clicked && n > 0) await buttons.nth(n - 1).click()
+  await page.waitForTimeout(1200)
+
+  const input = page.locator('.acu-input-textarea').first()
+  await input.waitFor({ timeout: 20000 })
+  await input.fill('探针：随便说句话，触发提问')
+  await input.press('Enter')
+  await page.waitForTimeout(2000)
+
+  const sounds = await page.evaluate(() => window.__sounds.slice())
+  const panelVisible = await page.locator('.acu-ask-user').first().isVisible().catch(() => false)
+
+  check('提问面板出现了（合成 ask_user 帧生效）', panelVisible)
+  check('A 响的是 /sounds/task-question.wav', sounds.includes('/sounds/task-question.wav'), JSON.stringify(sounds))
+  check('B 不是终态那两声', !sounds.includes('/sounds/task-done.wav') && !sounds.includes('/sounds/task-error.wav'), JSON.stringify(sounds))
+
+  // 作答：只发请求，不响第二声
+  await page.locator('.acu-ask-user-option').first().click()
+  await page.waitForTimeout(1200)
+  const after = await page.evaluate(() => ({ sounds: window.__sounds.slice(), responds: window.__respondCalls }))
+  check('C 作答本身不响（仍只有一声）', after.sounds.filter((s) => s.includes('task-question')).length === 1, JSON.stringify(after.sounds))
+
+  // D 音源能在真实浏览器里解码
+  const decoded = await page.evaluate(async () => {
+    const buf = await (await fetch('/sounds/task-question.wav')).arrayBuffer()
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    try {
+      const audio = await ctx.decodeAudioData(buf.slice(0))
+      return { ok: true, duration: audio.duration, channels: audio.numberOfChannels, rate: audio.sampleRate }
+    } catch (e) {
+      return { ok: false, error: String(e) }
+    } finally {
+      ctx.close?.()
+    }
+  })
+  check('D 音源可解码', decoded.ok && decoded.duration > 0.2 && decoded.duration < 2,
+    JSON.stringify(decoded))
+
+  // E 提问不弹 toast
+  const toastCount = await page.locator('.el-message').count()
+  check('E 提问不弹应用内提示条', toastCount === 0, `toast=${toastCount}`)
+
+  // G/H 作答后面板收起成一行（组件库 AskUserPanel 的只读留档态），点标题能展开
+  const collapsed = await page.evaluate(() => {
+    const p = document.querySelector('.acu-ask-user')
+    if (!p) return null
+    const title = p.querySelector('.acu-ask-user-title')
+    const text = p.querySelector('.acu-ask-user-title-text')
+    const ans = p.querySelector('.acu-ask-user-title-answer')
+    // 「已回答」被右边那串答案压到 min-content 时会竖着摞成一列：
+    // 那三个字的盒子会变成"一列宽"且比一行高。量几何，别数 innerText 的换行
+    // （flex 行里两个 span 的 innerText 本来就用 \n 分隔，不代表换行）
+    const box = (el) => {
+      const b = el.getBoundingClientRect()
+      return { w: Math.round(b.width), h: Math.round(b.height), top: Math.round(b.top) }
+    }
+    return {
+      isCollapsed: p.classList.contains('is-collapsed'),
+      hasQuestion: !!p.querySelector('.acu-ask-user-question'),
+      height: Math.round(p.getBoundingClientRect().height),
+      titleTag: title?.tagName || null,
+      title: box(title),
+      label: text ? box(text) : null,
+      answer: ans ? box(ans) : null
+    }
+  })
+  check('G 作答后面板收起成一行', !!collapsed && collapsed.isCollapsed && !collapsed.hasQuestion && collapsed.height < 60,
+    JSON.stringify(collapsed && { h: collapsed.height }))
+  check('G 「已回答」没被压成竖排（一行内，与答案同一条基线）',
+    !!collapsed && collapsed.label
+      && collapsed.label.w > collapsed.label.h          // 横着的：宽 > 高
+      && collapsed.label.h <= collapsed.title.h          // 不超出一行
+      && Math.abs(collapsed.label.top - collapsed.answer.top) <= 2, // 与答案同排
+    JSON.stringify(collapsed && { label: collapsed.label, answer: collapsed.answer }))
+
+  await page.screenshot({ path: 'tmp-verify-agent-ask-sound-collapsed.png' })
+  await page.locator('.acu-ask-user-title.is-toggle').first().click()
+  await page.waitForTimeout(400)
+  const expanded = await page.evaluate(() => {
+    const p = document.querySelector('.acu-ask-user')
+    return { isCollapsed: p.classList.contains('is-collapsed'), hasQuestion: !!p.querySelector('.acu-ask-user-question') }
+  })
+  check('H 点标题能展开回完整问答', !expanded.isCollapsed && expanded.hasQuestion, JSON.stringify(expanded))
+
+  check('F 无 console 错误', consoleErrors.length === 0, consoleErrors.slice(0, 3).join(' | '))
+  check('F 无 page 错误', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | '))
+
+  await page.screenshot({ path: 'tmp-verify-agent-ask-sound.png' })
+  await browser.close()
+
+  const failed = results.filter((r) => !r.ok)
+  log(`${results.length - failed.length}/${results.length} 通过`)
+  process.exit(failed.length ? 1 : 0)
+}
+
+main().catch((e) => {
+  console.error('[verify] 探针自身出错：', e)
+  process.exit(1)
+})

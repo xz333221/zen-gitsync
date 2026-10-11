@@ -26,11 +26,16 @@ import { useAgentActivityStore } from '@/stores/agentActivity'
 import { convertSessionToMessages, useAgentChat } from './useAgentChat'
 
 // 提示链路单独测（utils/agentTurnNotify.test.ts），这里只守"什么该提示、什么不该提示"
-const notice = vi.hoisted(() => ({ calls: [] as any[] }))
+const notice = vi.hoisted(() => ({ calls: [] as any[], questions: 0 }))
 
 vi.mock('@/utils/agentTurnNotify', () => ({
   announceAgentTurn: (opts: any) => {
     notice.calls.push(opts)
+    return true
+  },
+  // ask_user 到帧时响的那一声：只数次数，出声与否是 taskSound 的事
+  announceAgentQuestion: () => {
+    notice.questions += 1
     return true
   },
 }))
@@ -95,6 +100,7 @@ describe('useAgentChat parallel sessions', () => {
   beforeEach(() => {
     chatStreams = []
     notice.calls = []
+    notice.questions = 0
     setActivePinia(createPinia())
     const store = useConfigStore()
     store.setCurrentDirectory('C:/proj')
@@ -476,9 +482,36 @@ describe('useAgentChat parallel sessions', () => {
     await next
   })
 
-  // 文件空间对话：把"当前打开的文档"随请求带给服务端（服务端只在请求副本里注入上下文）
-  test('sendMessage 的 openFilePath 选项会进请求体', async () => {
+  // 提示音：模型提问的那一刻响一声（用户可能正看着别的窗口 / 别的会话）
+  test('ask_user 到帧响一声提示音；作答本身不响', async () => {
     const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const sendPromise = chat.sendMessage('选一个')
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    chatStreams[0].send({
+      type: 'ask_user',
+      interactionId: 'q1',
+      question: '选哪个？',
+      options: ['A', 'B'],
+      allowFreeText: false,
+      multiple: false
+    })
+    await flush()
+    expect(notice.questions).toBe(1)
+
+    await chat.answerQuestion(['B'])
+    expect(notice.questions).toBe(1)
+
+    chatStreams[0].send({ type: 'done', content: '好' })
+    chatStreams[0].close()
+    await sendPromise
+  })
+
+  // 文件空间对话：把"当前打开的文档"随请求带给服务端（服务端只在请求副本里注入上下文）
+  test('sendMessage 的 openFilePath 选项会进请求体', async () => {    const chat = useAgentChat()
     await chat.loadSessions()
     await chat.loadSession('A')
 
