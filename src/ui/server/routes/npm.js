@@ -28,19 +28,61 @@ const __dirname = path.dirname(__filename);
 
 // ── 环境探测（模块级纯函数，便于单测）───────────────────────────────────
 //
-// 判定"要不要 sudo 才能全局装包"这件事，历史上曾经写成 `process.platform === 'win32'`，
-// 这个判断在 MSYS/Cygwin 环境下会翻车：那种 Node 是伪 Unix 构建，platform 报 'linux'，
-// 于是走进 Unix 分支、去调 sudo —— 而 MSYS 自带的 sudo 只是个只会输出
-// "sudo: a password is required" 的桩程序，跟真实密码无关，用户无论输什么都装不上。
+// 判定"要不要 sudo 才能全局装包"这件事，历史上翻过两次车：
+//   ① 曾写成 `process.platform === 'win32'`：MSYS/Cygwin 的 Node 是伪 Unix 构建
+//      (platform 报 'linux')，于是走进 Unix 分支去调 sudo —— 而 MSYS 自带的 sudo
+//      只是个只会输出 "sudo: a password is required" 的桩程序，跟真实密码无关；
+//   ② 只看 uid：真 Unix 的普通用户一律加 sudo。可 nvm / n / ~/.npm-global 这类
+//      用户级 prefix 本来就归用户自己所有，`npm install -g` 完全写得进去，
+//      凭空多出来的 sudo 只会撞上"需要密码"把升级卡死。
 //
-// 正确做法（对齐 npm / nvm 的处理思路）：
-//   1. 只要不是真 Unix（win32 / MSYS / Cygwin）→ 永远不需要 sudo；
+// 正确做法（对齐 npm 自身的思路）：
+//   1. 不是真 Unix（win32 / MSYS / Cygwin）→ 永远不需要 sudo；
 //   2. 是真 Unix 但已经是 root（uid 0，如装了 setuid 的 node）→ 不需要 sudo；
-//   3. 其余（真 Unix 的普通用户）→ 需要 sudo。
+//   3. 真 Unix 普通用户，但全局 prefix 目录当前可写（nvm 等用户级安装）→ 不需要 sudo；
+//   4. 其余（真 Unix 普通用户 + 系统级 prefix）→ 需要 sudo。
+
+// 推导 npm 全局 prefix，等价于 `npm prefix -g`：
+//   Unix / nvm / n / 官方安装器：<prefix>/bin/node   → <prefix>
+//   Windows 官方安装器：          <prefix>\node.exe → <prefix>
+// 用户显式配置优先（npm 会把 .npmrc 的 prefix 注入成 npm_config_prefix）。
+export function detectGlobalPrefix({
+  execPath = process.execPath,
+  env = process.env,
+  platform = process.platform,
+} = {}) {
+  const explicit = env.npm_config_prefix || env.PREFIX
+  if (explicit) return explicit
+  const binDir = path.dirname(execPath || '')
+  if (!binDir || binDir === '.') return null
+  if (platform !== 'win32' && path.basename(binDir).toLowerCase() === 'bin') {
+    return path.dirname(binDir)
+  }
+  return binDir
+}
+
+// prefix 目录对当前进程可写 → `npm install -g` 无需提权。
+// nvm / 用户级 prefix 是常态，系统级 /usr/local 则不可写。
+export function isDirWritable(dir, {
+  accessSync = fsSync.accessSync,
+  W_OK = fsSync.constants.W_OK,
+} = {}) {
+  if (!dir) return false
+  try {
+    accessSync(dir, W_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function needsSudo({
   platform = process.platform,
   env = process.env,
   getuid = process.getuid,
+  // 可注入：prefix 目录路径 / 该目录是否可写（测试与"已知答案"场景用）
+  prefix,
+  writable,
 } = {}) {
   // MSYS / Cygwin 会把这两个变量注入进程环境，是识别伪 Unix 最可靠的信号
   const isMsysLike = !!(env.MSYSTEM || env.CYGWIN)
@@ -49,9 +91,12 @@ export function needsSudo({
   if (typeof getuid === 'function') {
     try {
       if (getuid() === 0) return false
-    } catch { /* getuid 在某些环境会抛，落回"需要 sudo" */ }
+    } catch { /* getuid 在某些环境会抛，继续往下判 */ }
   }
-  return true
+  // 真 Unix 非 root：全局 prefix 若本就归当前用户（nvm 等），裸装即可，不要 sudo
+  const dir = prefix !== undefined ? prefix : detectGlobalPrefix({ platform, env })
+  const canWrite = writable !== undefined ? writable : isDirWritable(dir)
+  return !canWrite
 }
 
 // 根据环境决定 npm 可执行文件名 / 是否需要 sudo / 是否要走 shell。
@@ -226,9 +271,8 @@ export function registerNpmRoutes({
     }
     const finish = () => { try { res.end() } catch { /* ignore */ } }
 
-    // 升级命令按"运行环境"而非"操作系统名"决定要不要 sudo。
-    // 之前用 process.platform === 'win32' 判断，MSYS/Cygwin 的伪 Unix Node
-    // （platform 报 'linux'）会误走 sudo 分支，撞上 MSYS 那个假 sudo 桩程序卡死。
+    // 升级命令按"运行环境"而非"操作系统名"决定要不要 sudo，并且真 Unix 上还要看
+    // 全局 prefix 是否本就归当前用户（nvm / ~/.npm-global 等）——可写就裸装。
     // 详见 needsSudo / resolveUpgradeCommand 的注释。
     const upgradeArgs = ['install', '-g', 'zen-gitsync', '--registry', 'https://registry.npmjs.org/']
     const { cmd, args: finalArgs, useShell, sudo } = resolveUpgradeCommand(upgradeArgs)
