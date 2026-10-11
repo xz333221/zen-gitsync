@@ -64,6 +64,8 @@ vi.mock('@/composables/useAgentChat', async () => {
       isStreaming: ref(false),
       sessionLoading: ref(false),
       pendingQuestion: ref(null),
+      questionPanel: ref(null),
+      questionAnswers: ref([]),
       answeringQuestion: ref(false),
       isSessionGenerating: () => false,
       currentEngine: agent.currentEngine,

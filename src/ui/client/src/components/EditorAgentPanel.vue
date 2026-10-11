@@ -99,7 +99,8 @@
           :assistant-name="AGENT_ASSISTANT_NAME"
           :assistant-avatar="AGENT_ASSISTANT_AVATAR"
           :theme="chatTheme"
-          :question="pendingQuestion"
+          :question="questionPanel"
+          :question-answers="questionAnswers"
           :question-submitting="answeringQuestion"
           :question-labels="questionLabels"
           :plan-config="{ labels: { title: $t('@AGENT:计划'), raw: $t('@AGENT:原始参数') } }"
@@ -223,7 +224,8 @@ const {
   currentSessionId,
   messages,
   isStreaming,
-  pendingQuestion,
+  questionPanel,
+  questionAnswers,
   answeringQuestion,
   isSessionGenerating,
   currentEngine,

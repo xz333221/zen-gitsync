@@ -58,7 +58,8 @@ const chatTheme = computed<'light' | 'dark'>(() => (theme.value === 'dark' ? 'da
 const {
   messages,
   isStreaming,
-  pendingQuestion,
+  questionPanel,
+  questionAnswers,
   answeringQuestion,
   sendMessage,
   retryTurn,
@@ -186,7 +187,8 @@ onBeforeUnmount(() => {
       :welcome-title="$t('@13D1C:可以接着问 g ai')"
       :welcome-description="$t('@13D1C:它已经拿到了这批目录的 Git 状态，可以直接问该先处理哪个、某个项目落后了什么。')"
       :preset-questions="presetQuestions"
-      :question="pendingQuestion"
+      :question="questionPanel"
+      :question-answers="questionAnswers"
       :question-submitting="answeringQuestion"
       :question-labels="questionLabels"
       :plan-config="{ labels: { title: $t('@AGENT:计划'), raw: $t('@AGENT:原始参数') } }"

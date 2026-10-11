@@ -52,6 +52,8 @@ vi.mock('@/composables/useAgentChat', async () => {
       messages: ref([]),
       isStreaming: agent.isStreaming,
       pendingQuestion: ref(null),
+      questionPanel: ref(null),
+      questionAnswers: ref([]),
       answeringQuestion: ref(false),
       isSessionGenerating: () => agent.isStreaming.value,
       currentEngine: ref('gai'),
