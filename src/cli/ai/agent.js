@@ -55,6 +55,7 @@ import {
   printOk, printWarn, printError, printDim,
 } from './termui.js'
 import { readClipboardImage, checkImageFile, formatBytes } from './images.js'
+import { enableSystemCAs } from './systemCa.js'
 import { installPasteCapture, enableBracketedPaste, disableBracketedPaste } from './paste.js'
 import { runModelSetup, collectModelInput, buildModelConfig, selectFromList } from './modelSetup.js'
 import { genSessionId, autoTitle, writeSession, enforceRetention, listSessions } from './sessionStore.js'
@@ -745,6 +746,11 @@ export async function handleSlashCommand(state, input, t) {
 // 主入口
 // ──────────────────────────────────────────────
 export async function runAiAgent(argv = []) {
+  // 启动即把系统证书库并入 Node 默认 CA —— 否则只发叶证书的 HTTPS 服务端
+  // (如远程 MCP)会在 Node 里报 UNABLE_TO_VERIFY_LEAF_SIGNATURE,而浏览器正常。
+  // 见 systemCa.js;Node < 24 静默跳过,仍由报错提示引导用户设 env var。
+  enableSystemCAs()
+
   const cfg = await config.loadConfig()
   const locale = cfg.locale || 'zh-CN'
   const t = makeStrings(locale)

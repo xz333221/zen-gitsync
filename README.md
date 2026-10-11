@@ -550,8 +550,10 @@ process), one with only a `url` over **Streamable HTTP** (`"type": "http"`, plus
 things like `Authorization`; `Mcp-Session-Id` is echoed back and the session is closed with
 `DELETE` on exit). HTTPS endpoints are verified against Node's bundled root CAs rather than the
 OS store, so a server that ships only its leaf certificate fails with
-`UNABLE_TO_VERIFY_LEAF_SIGNATURE` while browsers are perfectly happy — start the agent with
-`NODE_EXTRA_CA_CERTS=<ca file>`, or on Node ≥ 22.15 with `NODE_OPTIONS=--use-system-ca`.
+`UNABLE_TO_VERIFY_LEAF_SIGNATURE` while browsers are perfectly happy. On Node ≥ 24 `g ai` merges
+the OS trust store into Node's default CAs at startup, so those endpoints just work; on older Node
+start the agent with `NODE_EXTRA_CA_CERTS=<ca file>`, or on Node ≥ 22.15 with
+`NODE_OPTIONS=--use-system-ca`.
 
 In-session commands: `/help`, `/model`, `/addmodel`, `/cd <path>`, `/image [path]`, `/think`, `/tools`, `/stats`, `/new`, `/resume`, `/skills` (`/mcp` is an alias), `/clear`, `/exit` (or `/quit`).
 
@@ -1270,9 +1272,10 @@ $ g ai --model=2                # 使用第 2 个已配置的模型（序号或�
 
 `g ai` 两种 MCP 传输都支持：有 `command` 的走 **stdio**（起子进程），只有 `url` 的走
 **Streamable HTTP**（配置写 `"type": "http"`，鉴权放 `headers`，例如 `Authorization`；
-响应里的 `Mcp-Session-Id` 会回传，退出时 `DELETE` 结束会话）。HTTPS 端点按 **Node 内置根证书**
-校验、不读系统证书库 —— 站点只发叶证书时会报 `UNABLE_TO_VERIFY_LEAF_SIGNATURE`（浏览器却一切正常），
-启动前设 `NODE_EXTRA_CA_CERTS=<CA 文件>`，或 Node ≥ 22.15 时用 `NODE_OPTIONS=--use-system-ca` 即可。
+响应里的 `Mcp-Session-Id` 会回传，退出时 `DELETE` 结束会话）。HTTPS 端点默认按 **Node 内置根证书**
+校验、不读系统证书库 —— 站点只发叶证书时会报 `UNABLE_TO_VERIFY_LEAF_SIGNATURE`（浏览器却一切正常）。
+Node ≥ 24 下 `g ai` 启动时会自动把系统证书库并入 Node 默认 CA，这类站点直接可用；更老的 Node 需
+启动前设 `NODE_EXTRA_CA_CERTS=<CA 文件>`，或 Node ≥ 22.15 时用 `NODE_OPTIONS=--use-system-ca`。
 
 会话内命令：`/help`、`/model`、`/addmodel`、`/cd <路径>`、`/image [路径]`、`/think`、`/tools`、`/stats`、`/new`、`/resume`、`/skills`（`/mcp` 为别名）、`/clear`、`/exit`（或 `/quit`）。
 

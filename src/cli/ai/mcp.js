@@ -454,7 +454,8 @@ function describeHttpError(err, id) {
   if (TLS_ERROR_CODES.has(code)) {
     return `连接 "${id}" 失败:服务器证书链不被 Node 内置根证书信任(${code})。`
       + '可任选一种办法:① 启动 g ai 前设 NODE_EXTRA_CA_CERTS=<站点 CA 文件路径>;'
-      + '② Node ≥ 22.15 时用 NODE_OPTIONS=--use-system-ca 改走系统证书库;'
+      + '② Node ≥ 22.15 且 < 24 时用 NODE_OPTIONS=--use-system-ca 改走系统证书库'
+      + '(Node ≥ 24 已自动尝试并入系统证书库);'
       + '③ 让服务端补齐中间证书。';
   }
   if (message === 'fetch failed' && (code || cause?.message)) {
