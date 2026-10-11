@@ -57,6 +57,12 @@ import { registerMindmapRoutes } from './routes/mindmap.js';
 import { registerMemoryRoutes } from './routes/memory.js';
 import { registerAgentRoutes } from './routes/workbench/agentRoutes.js';
 import { createWorkspaceSnapshotter } from './routes/aiContext/wiring.js';
+// jobStore 只借两个读函数:让 MCP 能用**本进程内存**里的 job 表(完整输出),
+// 而不是退回去读 live-jobs 的截尾快照或 parse 37MB 的 jobs.json。
+import { mergedJobs, refreshJobsFromDisk } from './routes/workbench/jobStore.js';
+// MCP 服务端（Streamable HTTP）：把本工具的各板块数据暴露给外部 Agent。
+// 与 `g mcp`（stdio 入口）共用同一套工具定义与同一个协议内核，见 src/mcp/。
+import { createMcpRouter } from '../../mcp/http.js';
 import { createInstanceRegistry, getRegistryPath } from './utils/instanceRegistry.js';
 import { notifyShutdown } from './utils/instanceShutdown.js';
 import { createSavePortToFile } from './utils/createSavePortToFile.js';
@@ -509,6 +515,39 @@ async function startUIServer(noOpen = false, savePort = false) {
   // 启动动作留在生产入口 —— 与快照预热同一约定。start 后的首个 tick 就会处理
   // 「g ui 不在时错过」的任务（错过补偿），所以这里必须无条件启动。
   scheduleScheduler.start();
+
+  /**
+   * MCP 服务端（Streamable HTTP）：`POST /api/mcp` 一条 JSON-RPC。
+   *
+   * 为什么同一个能力有两个入口：stdio 那份（`g mcp`）是给"外部 Agent 主动拉起来"用的，
+   * 它跑在独立进程里、看不到本进程内存；挂在这一份上的则在 g ui 内部，上下文更完整。
+   * 两者共用 src/mcp/tools 里同一套 handler —— 不存在"哪边支持哪些工具"的分叉。
+   *
+   * cwd 用函数取：g ui 支持运行时切换当前项目（界面切换 / `--path=`），
+   * 捕获一个启动时字符串会让它永远停在最初那个目录。
+   */
+  app.use('/api/mcp', createMcpRouter({
+    getCwd: () => currentProjectPath,
+    /**
+     * 本进程内存里的 job 表(内存 ∪ 别的实例的 live ∪ 磁盘,内存优先)。
+     *
+     * 为什么值得:这是**唯一**能拿到"正在跑的任务的完整输出"的地方 ——
+     * live-jobs 落盘的是截尾快照(output 尾 32KB),jobs.json 只在终态写。
+     * 顺带让 workbench_* 那几个工具不用再 parse 一份 37MB 的 jobs.json。
+     *
+     * refreshJobsFromDisk() 必须先跑:mergedJobs 是同步的,读的是两个预填缓存
+     * (mtime 短路 + live 目录签名),不刷新就可能拿到空表或过期表。
+     */
+    getLiveJobs: async () => {
+      await refreshJobsFromDisk();
+      return Array.from(mergedJobs({ includeLive: true }).values())
+        // 剥掉 child:那是 ChildProcess 句柄,不可序列化(JSON.stringify 会成环)
+        .map(({ child, ...rest }) => rest);
+    },
+    onLog: (level, message) => {
+      if (level === 'error' || level === 'warn') logger.warn?.(`[mcp] ${message}`);
+    },
+  }));
 
   perfMark('全部 API 路由注册完成')
 

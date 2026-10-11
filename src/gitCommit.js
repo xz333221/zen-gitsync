@@ -289,6 +289,29 @@ async function main() {
     return;
   }
 
+  // MCP 服务端(g mcp):把 zen-gitsync 的各板块数据暴露给**别的** Agent。
+  //
+  // 与 `g ai` 的关系是镜像的:`g ai` 是本工具去用别的 MCP 服务(客户端,
+  // src/cli/ai/mcp.js),而 `g mcp` 是本工具自己当一个 MCP 服务(服务端,
+  // src/mcp/)。两边都走 stdio + newline-delimited JSON。
+  //
+  // 同样只认 argv[2]:`g -m mcp` 那种写法里的 "mcp" 是提交信息,不是子命令。
+  //
+  // ⚠️ `g mcp` 与 `g mcp install` 是**两条完全不同的路**,别搞混:
+  //   · `g mcp`        = stdio 协议模式,stdout 是协议通道,一句多余输出就毁掉连接
+  //   · `g mcp install`= 普通命令行,往 stdout 打印给人看的文本
+  // 所以子动作必须在进 stdio 之前分流掉。
+  if (process.argv[2] === 'mcp') {
+    if (process.argv[3] === 'install') {
+      const { runMcpInstall } = await import('./mcp/install.js');
+      await runMcpInstall(process.argv.slice(4));
+      return;
+    }
+    const { runStdioServer } = await import('./mcp/stdio.js');
+    await runStdioServer({ cwd: process.cwd() });
+    return;
+  }
+
   // 检查是否是添加脚本命令
   if (process.argv.includes('addScript')) {
     await addScriptToPackageJson();

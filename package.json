@@ -7,6 +7,7 @@
   "scripts": {
     "g:ui": "node ./src/gitCommit.js ui",
     "g:ai": "node ./src/gitCommit.js ai",
+    "g:mcp": "node ./src/gitCommit.js mcp",
     "update:g": "npm install -g zen-gitsync --registry https://registry.npmjs.org/ --prefer-online",
     "npm:login": "npm login --registry https://registry.npmjs.org/",
     "npm:publish": "npm publish --registry https://registry.npmjs.org/",
@@ -25,6 +26,7 @@
     "verify:i18n": "node scripts/verify-i18n-keys.mjs",
     "verify:i18n:orphans": "node scripts/verify-i18n-keys.mjs --orphans",
     "verify:config-concurrency": "node scripts/verify-config-concurrency.mjs",
+    "verify:mcp": "node scripts/verify-mcp-server.cjs",
     "verify:data-dir-migration": "node scripts/verify-data-dir-migration.mjs",
     "verify:config-split": "node scripts/verify-config-split.mjs",
     "verify:package-files": "node --test test/package-files.test.mjs",
@@ -149,6 +151,7 @@
   "files": [
     "src/ui/public/**",
     "src/ui/server/**",
+    "src/mcp/**",
     "src/utils/**",
     "src/memory/**",
     "src/gitCommit.js",
