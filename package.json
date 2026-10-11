@@ -30,6 +30,8 @@
     "verify:package-files": "node --test test/package-files.test.mjs",
     "verify:memory-context": "node scripts/verify-memory-context.cjs",
     "verify:memory-panel": "node scripts/verify-memory-panel.cjs",
+    "verify:provider-logo": "node scripts/verify-provider-logo.cjs",
+    "verify:provider-logo:reverse": "node scripts/verify-provider-logo.cjs --reverse",
     "verify:release:self-update": "node scripts/verify-release-self-update.mjs",
     "verify:release:self-update:reverse": "node scripts/verify-release-self-update.mjs --reverse",
     "verify:wb-agent-dispatch": "node scripts/verify-workbench-agent-dispatch.mjs",

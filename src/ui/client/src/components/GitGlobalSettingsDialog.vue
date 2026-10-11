@@ -449,7 +449,19 @@
 
             <div class="model-list">
               <div v-if="aiModels.length === 0" class="model-empty">{{ $t('@42BB9:暂未配置模型') }}</div>
-              <div v-for="m in aiModels" :key="m.id" class="model-card">
+              <div v-for="m in modelCards" :key="m.id" class="model-card">
+                <!-- 服务商 logo：与底栏「默认模型」、表单里接口地址左侧那颗是同一套图标 -->
+                <img
+                  v-if="m.logoUrl"
+                  class="model-logo"
+                  :src="m.logoUrl"
+                  alt=""
+                  width="20"
+                  height="20"
+                  @error="hideBrokenLogo"
+                />
+                <!-- 认不出的服务商（自建 / 内部端点）退成首字母砖，免得这一行左边距塌掉 -->
+                <span v-else class="model-logo model-logo--fallback" aria-hidden="true">{{ modelInitial(m.name) }}</span>
                 <div class="model-info">
                   <div class="model-name-row">
                     <span class="model-name">{{ m.name }}</span>
@@ -882,6 +894,8 @@ import { AddModelForm } from 'ai-model-form/client'
 import type { AiModelFormSaveData } from 'ai-model-form/client'
 import 'ai-model-form/dist/ai-model-form.css'
 import { MARKDOWN_THEME_OPTIONS } from '@/utils/markdownTheme'
+import { providerLogoUrlForBaseURL, type ProviderTheme } from '@/utils/providerLogo'
+import { useThemeObserver } from '@/composables/useThemeObserver'
 
 const gitStore = useGitStore()
 const localeStore = useLocaleStore()
@@ -991,6 +1005,28 @@ const tempFileTreeAutoRefresh = ref(true)
 // AI 模型配置
 const aiModels = ref<ModelInfo[]>([])
 const editingModelId = ref<string | null | undefined>(undefined) // undefined=隐藏, null=新增, string=编辑
+
+// 模型卡片左侧的服务商 logo。取的是**实际渲染中**的主题（`data-theme`），不是
+// `configStore.theme` —— 后者是 'auto' 时按系统走，单色图标会挑错目录、浅色下白底白字。
+const { theme: settingsTheme } = useThemeObserver()
+const modelCards = computed(() =>
+  aiModels.value.map((m) => ({
+    ...m,
+    logoUrl: providerLogoUrlForBaseURL(m.baseURL, settingsTheme.value as ProviderTheme),
+  }))
+)
+
+// CDN 上认不出的服务商（图 404）就把 img 藏掉，别留个破图图标。
+// 与 App.vue 底栏「默认模型」同一手法。
+function hideBrokenLogo(e: Event) {
+  const el = e.target as HTMLImageElement | null
+  if (el) el.style.display = 'none'
+}
+
+/** 认不出服务商时用的首字母砖（取模型名第一个字符）。 */
+function modelInitial(name: string | undefined | null): string {
+  return (typeof name === 'string' ? name.trim() : '').charAt(0) || '?'
+}
 
 // AI 智能体运行时（全局设置，立即持久化，与模型列表一样不走"保存"按钮）
 const aiMaxToolIterationsInput = ref(1000)
@@ -2387,6 +2423,28 @@ html.dark .label-icon {
 .model-info {
   flex: 1;
   min-width: 0;
+}
+
+/* 服务商 logo：装饰性图标（下面那行 baseURL 已经说明了是哪家），跟着卡片垂直居中。
+   认不出的服务商退成首字母砖，卡片左边距不塌、列表节奏一致。 */
+.model-logo {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+.model-logo--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-base);
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .model-name-row {

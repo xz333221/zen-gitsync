@@ -466,7 +466,7 @@ A dedicated view (robot icon in the activity bar) for chatting with the built-in
 | Tab | What's inside |
 |---|---|
 | General settings | Appearance (theme — light / dark / follow the system — and language), task execution (task executor, and the three task/chat finish notice channels — in-app toast / browser notification / sound cue), and UI options (file-list view, diff split ratio, AI diff explanation, command console, layout ratios) |
-| AI models | OpenAI-compatible endpoints — API key, base URL, model name — with several entries side by side, a default model, plus the **Agent runtime** section holding the per-turn tool-call budget |
+| AI models | OpenAI-compatible endpoints — API key, base URL, model name — with several entries side by side, a default model, and the provider's logo on every row (endpoints whose host isn't recognised fall back to an initial tile), plus the **Agent runtime** section holding the per-turn tool-call budget |
 | Git global settings | `user.name` / `user.email`, auto-set upstream, pull strategy, auto-prune remote branches, line-ending handling, the default branch for `git init` |
 | Commit settings | Standardised commit form, skip hooks (`--no-verify`), Enter-to-commit, auto-close the push modal, pull before push, auto-fill the default commit message |
 | Edit config | Raw JSON editor for the config, plus a button to open the file on disk |
@@ -1201,7 +1201,7 @@ Activity Bar 中的机器人图标视图，可直接在浏览器中与内置 AI 
 | tab | 内容 |
 |---|---|
 | 通用设置 | 外观（主题 —— 浅色 / 深色 / 跟随系统，以及界面语言）、任务执行（任务执行器，以及任务/对话完成提示的三个通道：页面提示 / 浏览器通知 / 提示音），以及界面选项（文件列表视图、文件差异分割、AI 差异说明、命令控制台、布局比例） |
-| AI 模型配置 | 兼容 OpenAI 协议的模型端点 —— API Key、baseURL、模型名，可多套并存并设置默认模型；另有 **智能体运行时** 存放单轮工具调用上限 |
+| AI 模型配置 | 兼容 OpenAI 协议的模型端点 —— API Key、baseURL、模型名，可多套并存并设置默认模型，每条按 baseURL 显示服务商 logo（认不出的自建端点退成首字母砖）；另有 **智能体运行时** 存放单轮工具调用上限 |
 | Git 全局设置 | `user.name` / `user.email`、自动设置上游、拉取策略、自动清理远程分支、换行符处理、`git init` 默认分支 |
 | 提交设置 | 标准化提交、跳过钩子检查（`--no-verify`）、回车自动提交、Push 完成自动关闭、推送前拉取更新、自动填充默认提交信息 |
 | 编辑配置 | 直接编辑配置 JSON，并可打开系统配置文件 |
