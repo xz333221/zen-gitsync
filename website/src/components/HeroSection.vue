@@ -35,7 +35,9 @@ const { stars } = useGithubStars(REPO.slug)
       <div class="hero__visual" v-reveal="240">
         <ShotFrame
           eager
-          :src="SHOTS.commit"
+          video
+          :src="SHOTS.commitVideo"
+          :poster="SHOTS.commit"
           alt="终端中输入 g 后展示 Git 状态、diff,填入提交信息回车即完成提交与推送"
         />
       </div>

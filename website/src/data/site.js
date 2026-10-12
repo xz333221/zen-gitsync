@@ -20,6 +20,8 @@ export const COMMANDS = {
 
 export const SHOTS = {
   commit: asset('shots/cli-quick-commit.png'),
+  // 首屏右侧的产品演示录屏(与 commit 同源同画面,作视频版主视觉;commit 作为 poster 兜底)
+  commitVideo: asset('shots/cli-quick-commit.mp4'),
   workbench: asset('shots/workbench-board.png'),
   agentCli: asset('shots/agent-cli.png'),
   agentGui: asset('shots/agent-gui.png'),

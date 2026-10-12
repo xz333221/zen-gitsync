@@ -18,6 +18,11 @@ const shots = {
   'mindmap.png': '07-mindmap.png',
 }
 
+// 首屏主视觉的产品演示录屏(与 cli-quick-commit.png 同画面)
+const videos = {
+  'cli-quick-commit.mp4': '01-cli-quick-commit.mp4',
+}
+
 const fonts = [
   'plus-jakarta-sans-latin.woff2',
   'plus-jakarta-sans-latin-ext.woff2',
@@ -32,6 +37,13 @@ for (const [dest, src] of Object.entries(shots)) {
   fs.copyFileSync(from, to)
   total += fs.statSync(to).size
   console.log('shot  ', dest, (fs.statSync(to).size / 1024).toFixed(0) + 'KB')
+}
+for (const [dest, src] of Object.entries(videos)) {
+  const from = path.join(root, 'docs', 'screenshots', '手写版介绍文章图片', src)
+  const to = path.join(pub, 'shots', dest)
+  fs.copyFileSync(from, to)
+  total += fs.statSync(to).size
+  console.log('video ', dest, (fs.statSync(to).size / 1024).toFixed(0) + 'KB')
 }
 for (const f of fonts) {
   const from = path.join(root, 'src', 'ui', 'client', 'public', 'fonts', f)

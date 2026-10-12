@@ -6,14 +6,28 @@ defineProps({
   eager: { type: Boolean, default: false },
   bleed: { type: Boolean, default: false },
   // 浅色画布的产品截图(例如思维导图):加深边框与投影，让它像贴在深色页面上的"一张纸"
-  paper: { type: Boolean, default: false }
+  paper: { type: Boolean, default: false },
+  // 视频版:src 指向 .mp4,自动静音循环播放;poster 用同画面的截图兜底(加载中/不自动播放时)
+  video: { type: Boolean, default: false },
+  poster: { type: String, default: '' }
 })
 </script>
 
 <template>
   <figure class="shot" :class="{ 'shot--bleed': bleed, 'shot--paper': paper }">
     <div class="shot__frame">
-      <img :src="src" :alt="alt" :loading="eager ? 'eager' : 'lazy'" decoding="async" />
+      <video
+        v-if="video"
+        :src="src"
+        :poster="poster || undefined"
+        :aria-label="alt"
+        autoplay
+        muted
+        loop
+        playsinline
+        preload="metadata"
+      ></video>
+      <img v-else :src="src" :alt="alt" :loading="eager ? 'eager' : 'lazy'" decoding="async" />
     </div>
     <figcaption v-if="caption" class="shot__cap">{{ caption }}</figcaption>
   </figure>
@@ -42,7 +56,9 @@ defineProps({
   box-shadow: var(--shadow-2);
 }
 
-.shot__frame img {
+.shot__frame img,
+.shot__frame video {
+  display: block;
   width: 100%;
   height: auto;
 }
