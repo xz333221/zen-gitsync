@@ -60,7 +60,7 @@ test('unsupported stream_options retries once without requesting usage', async (
 })
 
 // 这两条关心的都是"失败时怎么收场"，不是"重试几次" —— 一律 maxRetries: 0，
-// 否则要真等退避（最多 10 次、单次封顶 30s），一个用例就跑到分钟级。
+// 否则要真等退避（最多 10 次、单次封顶 60s），一个用例就跑到分钟级。
 // 重试本身的行为在文件末尾那组用例里单独验（那里注入 sleepFn，不真等）。
 test('truncated streams do not yield executable tool calls', async () => {
   await assert.rejects(streamChatOnce({ model, messages: [], maxRetries: 0, fetchFn: async () => response([
@@ -134,6 +134,27 @@ test('重试次数用尽后抛出最后一次的错误', async () => {
     fetchFn: async () => { calls++; return response([event({ choices: [{ delta: { content: 'x' } }] })]) },
   }), /中断/)
   assert.equal(calls, 4, '首次 + 3 次重试')
+})
+
+test('重试退避是指数放慢、分钟级封顶（2026-10-12 口径：2s 起步 / 60s 封顶）', async () => {
+  // 每次都吐半截就断（可重试），注入 sleepFn 把每次退避的时长记下来，不真等。
+  // 钉这件事是因为 429 限流场景下亚秒级重试等于白刷请求 —— 用户看到的就是
+  // 重试提示连续弹。抖动区间是 exp/2 + random(exp/2)，逐档断言落点。
+  const delays = []
+  await assert.rejects(streamChatOnce({
+    model, messages: [], maxRetries: 10,
+    fetchFn: async () => response([event({ choices: [{ delta: { content: '半截' } }] })]),
+    sleepFn: async ms => { delays.push(ms) },
+  }), /中断/)
+  assert.equal(delays.length, 10)
+  // exp = min(60s, 2s × 2^attempt)：1~2s / 2~4s / 4~8s / 8~16s / 16~32s / 之后 30~60s
+  const bands = [[1000, 2000], [2000, 4000], [4000, 8000], [8000, 16000], [16000, 32000], [30000, 60000]]
+  for (let i = 0; i < 10; i++) {
+    const [lo, hi] = bands[Math.min(i, bands.length - 1)]
+    assert.ok(delays[i] >= lo && delays[i] <= hi,
+      `第 ${i + 1} 次退避 ${delays[i]}ms 不在 [${lo}, ${hi}] —— 退避口径被改了？`)
+  }
+  assert.ok(delays[0] >= 1000, '首次重试不再亚秒级')
 })
 
 test('4xx（重试也没用）不重试，网关原话照传', async () => {

@@ -18,12 +18,17 @@ const withoutStreamUsage = new Set()
 // 判死的连接不再直接失败：交给下面这条自动重试接手，最多 MAX_LLM_RETRIES 次
 // （口径对齐 Claude Code 的 MAX_RETRIES=10）。
 //
+// **退避是分钟级的（2026-10-12 改）**：基准 2s、封顶 60s。原先 500ms/30s，打
+// 429 限流时前几次都在亚秒级重试 —— 限流窗口远长于这个间隔，等于白刷请求，
+// 用户看到的是重试提示连续弹。现在第 1 次等 1~2s（网络闪断仍能快速自愈），
+// 第 4 次起 8~16s+，第 6 次起稳定在分钟级，10 次全失败约 4~5 分钟收手。
+//
 // 外层的两个调用点（CLI 的 turn.js / Web 的 agentChat.js）通过 onRetry 拿到
 // "这次尝试吐了哪些字"的快照，据此把界面上那半截丢掉再重来。
 export const DEFAULT_IDLE_TIMEOUT_MS = 300_000
 export const MAX_LLM_RETRIES = 10
-const RETRY_BASE_DELAY_MS = 500
-const RETRY_MAX_DELAY_MS = 30_000
+const RETRY_BASE_DELAY_MS = 2_000
+const RETRY_MAX_DELAY_MS = 60_000
 
 // 值得再试一次的 HTTP 状态：限流 / 请求超时 / 服务端 5xx —— 都是"再试一次可能就好了"。
 // 其余 4xx（400 参数错、401/403 鉴权、404 模型名不对、422 校验失败）再试十次也一样，
@@ -72,7 +77,7 @@ function isRetryable(err) {
   return true
 }
 
-/** 指数退避 + 抖动；网关给了 Retry-After 就听它的（封顶，免得被一个 3600 挂住半小时）。 */
+/** 指数退避 + 抖动；网关给了 Retry-After 就听它的（封顶 2×RETRY_MAX_DELAY_MS，免得被一个 3600 挂住）。 */
 function retryDelayMs(attempt, err) {
   const exp = Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_DELAY_MS * 2 ** attempt)
   const jittered = exp / 2 + Math.random() * (exp / 2)
