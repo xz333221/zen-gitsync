@@ -28,6 +28,7 @@ const TOOL_INSTALL_PACKAGES = Object.freeze({
   claude: '@anthropic-ai/claude-code',
   codex: '@openai/codex',
   opencode: 'opencode-ai',
+  codebuddy: '@tencent-ai/codebuddy-code',
   dsh: '@deepseek-ai/dsh',
 });
 
@@ -36,6 +37,7 @@ const TOOL_DOCS_URLS = Object.freeze({
   claude: 'https://docs.anthropic.com/en/docs/claude-code/getting-started',
   codex: 'https://help.openai.com/en/articles/11096431-openai-codex-cli-getting-started',
   opencode: 'https://opencode.ai/docs',
+  codebuddy: 'https://www.codebuddy.cn/docs/cli/installation',
   kimi: 'https://moonshotai.github.io/kimi-code/en/guides/getting-started',
   zcode: 'https://zcode.z.ai/',
   dsh: 'https://github.com/deepseek-ai/deepseek-harness',
@@ -513,6 +515,27 @@ async function launchOpenCode(dirPath, { permissionMode } = {}) {
     });
   }
   return launchInTerminal(dirPath, 'opencode', cliArgs);
+}
+
+/**
+ * 用 CodeBuddy Code 打开目录（交互 TUI，2026-10-12 随执行器接入一起补）。
+ *
+ * `--port 0` 是**必须**的：CLI 每次运行都自带一个引擎服务器，默认端口写死 62443，
+ * 而 WorkBuddy 桌面版常驻占着它 —— 实测裸跑 `codebuddy`（交互也一样）直接
+ * EADDRINUSE 退出。0 = 让 OS 选空闲端口，与 headless 执行器
+ * （taskRunner.launchCodebuddyPrint）同一个口径。
+ *
+ * 登录态同样来自 ~/.codebuddy：没登录过的话 TUI 里会提示 /login 扫码。
+ */
+async function launchCodebuddy(dirPath) {
+  // CodeBuddy Code CLI - https://www.codebuddy.cn/docs/cli
+  const cliArgs = ['--port', '0'];
+  if (process.platform === 'win32') {
+    return spawnDetached('cmd.exe', ['/c', 'start', '""', 'codebuddy', ...cliArgs], {
+      cwd: dirPath
+    });
+  }
+  return launchInTerminal(dirPath, 'codebuddy', cliArgs);
 }
 
 // Run the CLI shipped with this server, even when `g` is not in PATH or points
@@ -1078,6 +1101,34 @@ export function registerFileOpenRoutes({
       }
     }));
 
+  // 用 CodeBuddy Code 打开目录
+  app.post('/api/open-directory-with-codebuddy', asyncRoute(async (req, res) => {
+      try {
+        const { path: dirPath } = req.body || {};
+        if (!dirPath) {
+          throw new HttpError(400, '目录路径不能为空');
+        }
+
+        try {
+          await fs.access(dirPath);
+        } catch (error) {
+          throw new HttpError(400, `目录不存在或不可访问: ${dirPath}`);
+        }
+
+        try {
+          await launchCodebuddy(dirPath);
+          res.json({ success: true, message: '已用 CodeBuddy Code 打开目录' });
+        } catch (error) {
+          res.status(400).json({
+            success: false,
+            error: error.message || '未检测到 CodeBuddy Code，请先安装并确保可以在终端中直接运行 codebuddy'
+          });
+        }
+      } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    }));
+
   // 用 Kimi Code 打开目录
   app.post('/api/open-directory-with-kimi', asyncRoute(async (req, res) => {
     const { path: dirPath } = req.body || {};
@@ -1243,11 +1294,14 @@ export function registerFileOpenRoutes({
 
       // dsh / kimi 的版本采集依赖 find 结果,用 then 链接保持全并行
       // (find 会跑两次——一次拿路径一次链版本——都是纯 fs/注册表查询,开销可忽略)
-      const [vscodeRes, claudeRes, codexRes, opencodeRes, kimiExecutable, zcodeExecutable, dshExecutable, kimiVersion, dshVersion] = await Promise.all([
+      // ⚠️ codebuddy 的 --version 是安全的:实测它只打印版本号就退出,不起引擎服务器
+      // (裸跑 codebuddy 才会占 62443,与 checkCmd 的 --version 用法无关)。
+      const [vscodeRes, claudeRes, codexRes, opencodeRes, codebuddyRes, kimiExecutable, zcodeExecutable, dshExecutable, kimiVersion, dshVersion] = await Promise.all([
         checkCmd('code'),
         checkCmd('claude'),
         checkCmd('codex'),
         checkCmd('opencode'),
+        checkCmd('codebuddy'),
         findKimiExecutable(),
         findZCodeExecutable(),
         findDshExecutable(),
@@ -1264,6 +1318,7 @@ export function registerFileOpenRoutes({
         claude: claudeRes.installed,
         codex: codexRes.installed,
         opencode: opencodeRes.installed,
+        codebuddy: codebuddyRes.installed,
         kimi: !!kimiExecutable,
         zcode: !!zcodeExecutable,
         dsh: !!dshExecutable,
@@ -1272,6 +1327,7 @@ export function registerFileOpenRoutes({
           claude: claudeRes.version,
           codex: codexRes.version,
           opencode: opencodeRes.version,
+          codebuddy: codebuddyRes.version,
           kimi: kimiExecutable ? kimiVersion : null,
           zcode: null, // 桌面应用,无 CLI 版本通道
           dsh: dshExecutable ? dshVersion : null,

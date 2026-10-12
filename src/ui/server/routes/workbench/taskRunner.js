@@ -15,10 +15,13 @@
 // 任务执行引擎：spawn 本地 agent CLI 跑子任务，流式收集输出，更新 job 状态。
 // 拆分自原 routes/workbench.js 1108-1564 行。
 //
-// 支持三种执行器（executor）：
-//   - claude   —— claude -p --output-format stream-json（默认，历史行为）
-//   - opencode —— opencode run --format json --auto（sst/opencode CLI，跟随其自身默认模型）
-//   - codex    —— codex exec --json（OpenAI Codex CLI，跟随其自身配置；2026-09-27 加入）
+// 支持四种执行器（executor）：
+//   - claude    —— claude -p --output-format stream-json（默认，历史行为）
+//   - opencode  —— opencode run --format json --auto（sst/opencode CLI，跟随其自身默认模型）
+//   - codex     —— codex exec --json（OpenAI Codex CLI，跟随其自身配置；2026-09-27 加入）
+//   - codebuddy —— codebuddy -p --output-format stream-json -y --port 0
+//                  （腾讯 CodeBuddy Code CLI，即 WorkBuddy 桌面版的智能体引擎；
+//                   2026-10-12 加入，协议与 claude 的 stream-json 逐字段对齐）
 //
 // 核心 API：
 //   - launchClaudeInNewWindow(cwd, prompt, resumeSessionId)  spawn claude，返回 {pid, child}
@@ -216,11 +219,32 @@ function attachPromptStdin(child, promptText, resolve, reject) {
 }
 
 // ── 执行器（executor） ──────────────────────────────────────────────────
-// 工作台任务默认由 claude CLI 执行；opencode（2026-09-20）、codex（2026-09-27）
-// 作为可选执行器。三者都用「stdin 喂 prompt + stdout 结构化 JSON 事件流」的同构形态，
-// 差异只在协议：claude 是 stream-json，opencode 是 --format json 的事件 NDJSON，
-// codex 是 exec --json 的 thread/item 事件 NDJSON。
-export const TASK_EXECUTORS = ['claude', 'opencode', 'codex'];
+// 工作台任务默认由 claude CLI 执行；opencode（2026-09-20）、codex（2026-09-27）、
+// codebuddy（2026-10-12）作为可选执行器。四者都用「stdin 喂 prompt + stdout 结构化
+// JSON 事件流」的同构形态，差异只在协议：claude / codebuddy 是 stream-json，
+// opencode 是 --format json 的事件 NDJSON，codex 是 exec --json 的 thread/item 事件 NDJSON。
+//
+// ⚠️ 这份清单与 src/config.js 的 TASK_EXECUTORS 是**同一份口径的两处书写**——
+// 历史上为此吵过（见 agentEngines.js 文件头）：config.js 那份是"配置/归一化"的
+// 真相源，本文件这份服务"运行时分发"。两边不一致的失效方式是 normalize 放行、
+// 这里查无此人 → 静默回落 claude。加第五家时两处都要改，taskRunner.*.test.js 有钉子。
+export const TASK_EXECUTORS = ['claude', 'opencode', 'codex', 'codebuddy'];
+
+/** 执行器 → launcher。runSingleSubtask 与 runExternalTurn 共用这一张表。 */
+export const EXECUTOR_LAUNCHERS = {
+  claude: launchClaudeInNewWindow,
+  opencode: launchOpencodeRun,
+  codex: launchCodexExec,
+  codebuddy: launchCodebuddyPrint,
+};
+
+/** 执行器 → NDJSON 事件处理器工厂。 */
+export const EXECUTOR_HANDLERS = {
+  claude: createClaudeEventHandler,
+  opencode: createOpencodeEventHandler,
+  codex: createCodexEventHandler,
+  codebuddy: createCodebuddyEventHandler,
+};
 
 /** 非法/缺省的 executor 一律回落 'claude'（历史行为的兼容兜底）。
  *  body.executor 来自网络，做一次 trim + 小写归一，与 config.js 同名函数同语义。 */
@@ -388,6 +412,211 @@ export function launchCodexExec(cwd, promptText, resumeSessionId) {
     }
     attachPromptStdin(child, promptText, resolve, reject);
   });
+}
+
+// ── codebuddy 执行器（2026-10-12 加入） ────────────────────────────────────
+// CodeBuddy Code CLI（`codebuddy` / `cbc`，npm 包 @tencent-ai/codebuddy-code）就是
+// WorkBuddy 桌面版内置的智能体引擎。把它接进来 = 工作台/对话面板可以直接调度
+// "WorkBuddy 同款引擎"（同一套工具集、Skills、权限模型），账号体系也是同一个
+// （都走腾讯账号；CLI 侧首次要在终端扫码登录一次，写 ~/.codebuddy）。
+//
+// ⚠️ 与桌面版**不共享配置目录**：桌面版给子进程注入 CODEBUDDY_CONFIG_DIR 指向它
+// 自己的私有目录，而 CLI 的默认目录是 ~/.codebuddy。这里显式删掉该变量
+// （见 buildCodebuddyEnv）—— CLI 固定读自己的默认目录，行为可复现，
+// 不随 g gui 被谁拉起而变。
+//
+// 实测口径（2026-10-12，CLI 2.164.0，本机与官方文档双向核对）：
+//
+//   codebuddy -p --output-format stream-json -y --port 0 [--resume <sessionId>]
+//     - prompt 从 stdin 喂（-p 无位置参数时读 stdin，与 claude 的 `-p -` 同效，
+//       顺带避开 Windows 命令行 32K 上限）
+//     - --output-format stream-json  NDJSON 事件流，**协议与 claude 逐字段对齐**
+//       （官方文档原话"对齐 Anthropic Claude Code v2.1.88"）：
+//         system/init（带 session_id / tools / model / permissionMode）
+//         assistant（message.content 里的 text / thinking / tool_use 块）
+//         user（message.content 里的 tool_result 块，回指 tool_use_id）
+//         result（终态，带 is_error / errors / usage / total_cost_usd）
+//       另有 system/status、ai-title 等 cbc 特有事件，handler 一律忽略。
+//     - -y        非交互免批准。init 事件回传 permissionMode: 'bypassPermissions'
+//                 （不给 -y 时写操作会被拦，和另三家一个性质）
+//     - --port 0  **每次 spawn 必须显式传**。CLI 每次运行会自带一个引擎服务器，
+//                 默认端口写死 62443 —— 而 WorkBuddy 桌面版常驻就占着 62443，
+//                 不传端口（或传固定值）会 EADDRINUSE 直接退出。0 = 让 OS 选空闲
+//                 端口，实测并发两个任务各起各的互不冲突。
+//     - --resume  续接会话，id 取自上一轮 init 事件的 session_id（落 job.claudeSessionId）
+//     - 不传 --model：模型跟随 CLI 自己的配置（与另三家同一口径，探测见 executorModels.js）
+//     - 不需要 --verbose：claude 的 stream-json 必须配 --verbose，cbc 不用
+//       （实测不带 --verbose 事件流完整）。
+//
+// 登录态：CLI 读 ~/.codebuddy 下的凭据。**首次使用前要先在终端跑一次
+// `codebuddy` 扫码登录**（微信），之后 headless 才能过认证；也可以用
+// CODEBUDDY_API_KEY（+可选 CODEBUDDY_BASE_URL）环境变量认证。读不到凭据时
+// 会话照常起，但模型调用返回 "Authentication required"，表现是一轮秒退的
+// error_during_execution —— 这种失败由 result 事件如实带出，不静默。
+// （另见 buildCodebuddyEnv：桌面版注入的 CODEBUDDY_CONFIG_DIR 会被删掉。）
+
+/**
+ * Windows 下把 codebuddy 解析成可直接 spawn 的目标。
+ *
+ * 三种安装形态都见过（2026-10-12）：
+ *   1. npm 全局（`npm i -g @tencent-ai/codebuddy-code`）—— PATH 上是 .cmd shim，
+ *      shim 实质是 `node <prefix>\node_modules\@tencent-ai\codebuddy-code\bin\codebuddy`。
+ *      Node 23+ 拒绝直接 spawn .cmd（EINVAL），所以像 claude 一样解析到 node + bin 脚本。
+ *   2. 原生二进制安装（install.ps1 → %USERPROFILE%\AppData\Local\codebuddy\bin）——
+ *      PATH 上直接是 codebuddy.exe，优先用（少一层 node 包装，杀进程树也更干净）。
+ *   3. 手动放 PATH 的其它形态 —— 兜底交给 PATH。
+ */
+function resolveCodebuddyExe() {
+  try {
+    const lines = execFileSync('where', ['codebuddy'], { encoding: 'utf8', windowsHide: true })
+      .split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    // 独立安装优先：PATH 上直接就是原生 exe
+    const directExe = lines.find(s => /\.exe$/i.test(s));
+    if (directExe && fs.existsSync(directExe)) return { exe: directExe, prefixArgs: [] };
+    const cmdShim = lines.find(s => /\.cmd$/i.test(s));
+    if (cmdShim) {
+      const prefix = path.dirname(cmdShim);
+      const binJs = path.join(prefix, 'node_modules', '@tencent-ai', 'codebuddy-code', 'bin', 'codebuddy');
+      if (fs.existsSync(binJs)) return { exe: process.execPath, prefixArgs: [binJs] };
+    }
+  } catch { /* fallback */ }
+  return { exe: 'codebuddy', prefixArgs: [] };
+}
+
+/**
+ * codebuddy 子进程环境。四个刻意为之的取舍：
+ *   - LANG=zh_CN.UTF-8：与另三家一致（CLI 的提示词/输出跟随 locale）。
+ *   - DISABLE_AUTOUPDATER=1：执行器场景**不允许 CLI 自我更新** —— 任务跑到一半
+ *     二进制被换掉，轻则行为漂移重则进程被杀。用户想更新自己跑 `codebuddy update`。
+ *   - CODEBUDDY_CODE_DISABLE_BACKGROUND_TASKS=1：-p 单发模式进程随首个 result
+ *     结束，收不了后台任务的跨轮回推事件（官方文档对 SDK query() 单发用法也是
+ *     这么处理的）。禁掉之后模型的 run_in_background 参数从工具 schema 里隐藏，
+ *     不会出现"派了后台任务然后永远等不到通知"。
+ *   - **删掉 CODEBUDDY_CONFIG_DIR**：WorkBuddy 桌面版会给子进程注入这个变量
+ *     （指向它自己的私有配置目录 ~/.workbuddy，2026-10-12 实测本机就是）。
+ *     g gui 若在桌面版环境里拉起，继承它 = CLI 被指到桌面版的私有目录 ——
+ *     登录态/MCP 从哪来全看桌面版心情，不可复现。删掉让 CLI 回到自己的默认
+ *     ~/.codebuddy：用户终端里 `codebuddy` 扫码登录写哪，执行器就读哪。
+ *     （代价是与桌面版不共享那份登录；换来的是确定性，见 launchCodebuddyPrint 注释。）
+ * （导出仅为回归测试可见：taskRunner.codebuddy.test.js 钉住这几个变量不能丢）
+ */
+export function buildCodebuddyEnv() {
+  const env = {
+    ...process.env,
+    LANG: 'zh_CN.UTF-8',
+    DISABLE_AUTOUPDATER: '1',
+    CODEBUDDY_CODE_DISABLE_BACKGROUND_TASKS: '1',
+  };
+  delete env.CODEBUDDY_CONFIG_DIR;
+  return env;
+}
+
+/**
+ * codebuddy 的 spawn argv（纯函数，抽出来为了能**真的跑断言**而不用 spawn 进程 ——
+ * 与 fileOpen.js 的 buildOpencodeArgs / buildCodexArgs 同一个理由。
+ *
+ * 口径见上方大注释。`--port 0` 是实测出来的必须项：CLI 自带引擎服务器占固定端口
+ * 62443，与 WorkBuddy 桌面版冲突，0 让 OS 选空闲端口（并发任务互不打架）。
+ */
+export function buildCodebuddyArgs(resumeSessionId) {
+  const args = [];
+  if (resumeSessionId) {
+    args.push('--resume', String(resumeSessionId));
+  }
+  args.push(
+    '-p',
+    '--output-format', 'stream-json',
+    '-y',
+    '--port', '0'
+  );
+  return args;
+}
+
+/** spawn codebuddy 跑一个 prompt（非交互），返回 { pid, child }（参数口径见上方注释）。 */
+export async function launchCodebuddyPrint(cwd, promptText, resumeSessionId) {
+  const args = buildCodebuddyArgs(resumeSessionId);
+  const { exe, prefixArgs } = resolveCodebuddyExe();
+  const spawnArgs = [...prefixArgs, ...args];
+  return new Promise((resolve, reject) => {
+    let child;
+    if (process.platform === 'win32') {
+      child = spawn(exe, spawnArgs, {
+        cwd,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: false,
+        env: buildCodebuddyEnv()
+      });
+    } else {
+      child = spawn(exe, spawnArgs, {
+        cwd,
+        detached: true,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: buildCodebuddyEnv()
+      });
+    }
+    attachPromptStdin(child, promptText, resolve, reject);
+  });
+}
+
+/**
+ * codebuddy stream-json 事件处理器。
+ *
+ * **协议与 claude 逐字段对齐**（2026-10-12 实测：init/assistant/user/result 四种
+ * 事件、content 块的 text/thinking/tool_use、user 事件里的 tool_result 回指，
+ * 全部同构；工具调用同样是"先 tool_use(running)、后 user(tool_result)"两条）。
+ * 所以这里刻意**另写一份**而不是直接复用 createClaudeEventHandler：
+ * 对齐是实测结论、不是合同 —— cbc 还多出 system/status、ai-title 等自有事件，
+ * 将来协议分叉时在这里修，不会顺带改坏 claude 那条链路（本仓库对"同一份口径
+ * 多处实现"的失效方式有惨痛记忆：不报错，只是悄悄少一半数据）。
+ *
+ * 已知被忽略的事件：system/status、system/task_*（后台任务，已被
+ * CODEBUDDY_CODE_DISABLE_BACKGROUND_TASKS 禁用）、ai-title、result。
+ * （导出仅为回归测试可见：taskRunner.codebuddy.test.js）
+ */
+export function createCodebuddyEventHandler(job, appendOutput, appendThinking, toolCalls) {
+  const tracker = toolCalls || createToolCallTracker(job);
+  return (evt) => {
+    if (!evt || typeof evt !== 'object') return;
+    // init：session_id 落 job.claudeSessionId（--resume 续接用）
+    if (evt.type === 'system' && evt.subtype === 'init' && typeof evt.session_id === 'string') {
+      if (!job.claudeSessionId || job.claudeSessionId !== evt.session_id) {
+        job.claudeSessionId = evt.session_id;
+        publish('job:update', job);
+      }
+      return;
+    }
+    // 工具结果：与 claude 完全同构 —— user 事件的 content 是块数组，
+    // 里面才是 tool_result（用户自己那条 prompt 的 content 是字符串，不会走到这）
+    if (evt.type === 'user') {
+      const ublocks = evt.message?.content;
+      if (Array.isArray(ublocks)) {
+        for (const b of ublocks) {
+          if (b && b.type === 'tool_result' && b.tool_use_id) {
+            const text = extractToolText(b.content);
+            tracker.record({
+              id: b.tool_use_id,
+              status: b.is_error ? 'error' : 'done',
+              output: text,
+              error: b.is_error ? (text || '工具执行失败') : ''
+            });
+          }
+        }
+      }
+      return;
+    }
+    if (evt.type !== 'assistant') return;
+    const blocks = evt.message?.content;
+    if (!Array.isArray(blocks)) return;
+    for (const b of blocks) {
+      if (b.type === 'text' && typeof b.text === 'string') {
+        appendOutput(b.text);
+      } else if (b.type === 'thinking' && typeof b.thinking === 'string') {
+        appendThinking(b.thinking);
+      } else if (b.type === 'tool_use') {
+        tracker.record({ id: b.id, name: b.name, input: b.input, status: 'running' });
+      }
+    }
+  };
 }
 
 // ── 工具调用（tool_use）收集 ──────────────────────────────────────────────
@@ -901,10 +1130,10 @@ export function createCodexEventHandler(job, appendOutput, appendThinking, toolC
  * @param {object} [options]
  * @param {string|null} [options.resumeSessionId]
  *        续接历史会话:claude 走 --resume <id>，opencode 走 --session <id>，
- *        codex 走 exec resume <thread_id>。
- *        id 来自上一轮 stream 事件捕获的会话标识(三者都记在 job.claudeSessionId)。
+ *        codex 走 exec resume <thread_id>，codebuddy 走 --resume <session_id>。
+ *        id 来自上一轮 stream 事件捕获的会话标识(四家都记在 job.claudeSessionId)。
  * @param {string} [options.executor]
- *        执行器 'claude' | 'opencode' | 'codex'。缺省回落 'claude'；路由层负责把
+ *        执行器 'claude' | 'opencode' | 'codex' | 'codebuddy'。缺省回落 'claude'；路由层负责把
  *        "body 指定 > 配置默认"先解析好再传进来。
  * @returns {Promise<'done'|'cancelled'|'error'>} 本次运行的终态
  */
@@ -990,8 +1219,8 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
     // 路由层用它保证"用同一个 CLI 续同一个会话"。
     agent: executor,
     // 续接历史会话时先填上,首条协议事件回来后再用真值覆盖(通常等同)。
-    // 字段名保留 claudeSessionId:claude 的 session_id 和 opencode 的 sessionID
-    // 都存这里,语义是"该执行器的会话续接标识"。
+    // 字段名保留 claudeSessionId:claude 的 session_id / opencode 的 sessionID /
+    // codebuddy 的 session_id 都存这里,语义是"该执行器的会话续接标识"。
     claudeSessionId: resumeSessionId,
     // 工具调用流水（{id,name,argsPreview,arguments,result,status,error}[]）。
     // 先给个空数组，前端拿到的 job:update 就有了稳定形态，不用到处判 undefined。
@@ -1013,11 +1242,9 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
   let toolTracker = null;
 
   try {
-    const launcher = executor === 'opencode'
-      ? launchOpencodeRun
-      : executor === 'codex'
-        ? launchCodexExec
-        : launchClaudeInNewWindow;
+    // 查表而不是 if 链：加执行器只改 EXECUTOR_LAUNCHERS 一张表（四家以后 if 链
+    // 已经长得该收了）。查无此人理论上不可能 —— normalizeTaskExecutor 刚夹过一遍。
+    const launcher = EXECUTOR_LAUNCHERS[executor] || launchClaudeInNewWindow;
     const { pid, child } = await launcher(repoPath || process.cwd(), prompt, resumeSessionId);
     job.pid = pid;
     // 保存 child 引用，供 cancel 接口调用 kill
@@ -1074,11 +1301,8 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
       publish('job:toolcalls', { id: job.id, updates });
     });
 
-    const handleEvent = executor === 'opencode'
-      ? createOpencodeEventHandler(job, appendOutput, appendThinking, toolTracker)
-      : executor === 'codex'
-        ? createCodexEventHandler(job, appendOutput, appendThinking, toolTracker)
-        : createClaudeEventHandler(job, appendOutput, appendThinking, toolTracker);
+    const makeHandler = EXECUTOR_HANDLERS[executor] || createClaudeEventHandler;
+    const handleEvent = makeHandler(job, appendOutput, appendThinking, toolTracker);
 
     const handleLine = (line, channel) => {
       const trimmed = line.trim();

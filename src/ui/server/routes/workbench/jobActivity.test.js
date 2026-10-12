@@ -181,6 +181,7 @@ test('jobAgent：认识的执行器原样返回', () => {
   assert.equal(jobAgent({ agent: 'claude' }), 'claude');
   assert.equal(jobAgent({ agent: 'opencode' }), 'opencode');
   assert.equal(jobAgent({ agent: 'codex' }), 'codex');
+  assert.equal(jobAgent({ agent: 'codebuddy' }), 'codebuddy');
 });
 
 test('jobAgent：大小写与首尾空白归一后再认（jobs.json 会被手工编辑）', () => {

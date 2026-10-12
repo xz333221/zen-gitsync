@@ -11,8 +11,9 @@
 //     随机端口，origin 一变 localStorage 就是另一个桶 —— "记住上次"从来没生效过。
 //     同仓其他 UI 状态（视图模式 / 分割比例）早就为此迁到了 config.json 的 ui 字段。
 //   - 任务续聊不走这里：续哪个执行器由上一轮 job.agent 决定（服务端强制），
-//     否则 claude 的 --resume、opencode 的 --session、codex 的 exec resume 会互不认对方的会话 id
-export type TaskExecutorId = 'claude' | 'opencode' | 'codex'
+//     否则 claude 的 --resume、opencode 的 --session、codex 的 exec resume、
+//     codebuddy 的 --resume 会互不认对方的会话 id
+export type TaskExecutorId = 'claude' | 'opencode' | 'codex' | 'codebuddy'
 
 export interface TaskExecutorOption {
   id: TaskExecutorId
@@ -24,6 +25,9 @@ export const TASK_EXECUTOR_OPTIONS: TaskExecutorOption[] = [
   { id: 'claude', name: 'Claude Code' },
   { id: 'opencode', name: 'OpenCode' },
   { id: 'codex', name: 'Codex' },
+  // CodeBuddy Code = 腾讯 CodeBuddy CLI（npm @tencent-ai/codebuddy-code），
+  // 也就是 WorkBuddy 桌面版内置的智能体引擎（2026-10-12 接入）
+  { id: 'codebuddy', name: 'CodeBuddy Code' },
 ]
 
 // ── 执行器当前配置的模型（展示口径）─────────────────────────────────────────

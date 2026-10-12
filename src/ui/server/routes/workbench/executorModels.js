@@ -25,7 +25,7 @@
 //
 // 这里把「读三个配置文件」这件事收口成一个模块，让前端能在选择器里直接显示。
 //
-// ── 三家配置文件的形状（这是本模块存在的全部理由）────────────────────────
+// ── 四家配置文件的形状（这是本模块存在的全部理由）────────────────────────
 //
 //   claude   ~/.claude/settings.json         JSON。模型在 env 里，且有**别名两层**：
 //            ANTHROPIC_DEFAULT_SONNET_MODEL 是 CLI 认识的名字
@@ -47,6 +47,10 @@
 //            ~/.local/state/opencode/model.json 的 recent[0]（TUI 最近使用），
 //            variant（截图里那个蓝色的 max）在同文件的顶层 variant 表里。
 //            两处都没有才算"没指定"，返回值里用 source 区分（config / state）。
+//
+//   codebuddy ~/.codebuddy/settings.json      JSON。顶层 `model` 字符串
+//            （--settings '{"model":"..."}' 的落盘处；没写过就是没配，
+//             CLI 用自己的内置默认 —— 那种情况下这里如实报 null）。
 //
 // ── 三条必须守住的底线 ──────────────────────────────────────────────────────
 //
@@ -257,25 +261,42 @@ function detectOpencode(cfgJson, stateJson) {
   return detectOpencodeConfig(cfgJson) || detectOpencodeState(stateJson);
 }
 
+/**
+ * codebuddy：~/.codebuddy/settings.json 的顶层 model。
+ *
+ * 与另三家一个重要差别：codebuddy **没有"第二处"**—— TUI 里选的模型会写回
+ * settings.json（`codebuddy config set -g model <id>`），不存在 opencode 那种
+ * "选择躺在 state 里、配置是空的"分裂。所以读一个文件就够。
+ * 没配 → null：CLI 有自己的内置默认（init 事件里能看到，如 fast-model），
+ * 但那是 CLI 的默认而不是用户的设置，按本模块的底线不猜、不报。
+ */
+function detectCodebuddy(json) {
+  const raw = json && json.model;
+  if (typeof raw === 'string' && raw.trim()) {
+    return { model: raw.trim(), display: null, provider: null, source: 'config' };
+  }
+  return null;
+}
+
 function escapeRe(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
- * 探测三个执行器当前配置的模型。
+ * 探测四个执行器当前配置的模型。
  *
  * @param {object} [opts]
  * @param {string} [opts.homeDir] 测试沙箱用（默认 os.homedir()）
- * @returns {Promise<{ claude: object|null, codex: object|null, opencode: object|null }>}
+ * @returns {Promise<{ claude: object|null, codex: object|null, opencode: object|null, codebuddy: object|null }>}
  *          每项 `{ model, display, provider, source }`；该执行器没配模型时为 null。
  *          source = 'config'（配置文件里写死的）| 'state'（CLI 自己记的"上次用的"）。
  *
- * 三路并发、互不阻塞：任何一个配置文件读失败都只让**它自己**变成 null。
+ * 四路并发、互不阻塞：任何一个配置文件读失败都只让**它自己**变成 null。
  */
 export async function detectExecutorModels({ homeDir } = {}) {
   const home = homeDir || os.homedir();
 
-  const [claudeRaw, codexRaw, opencodeJsonRaw, opencodeJsoncRaw, opencodeStateRaw] = await Promise.all([
+  const [claudeRaw, codexRaw, opencodeJsonRaw, opencodeJsoncRaw, opencodeStateRaw, codebuddyRaw] = await Promise.all([
     readTextOrNull(path.join(home, '.claude', 'settings.json')),
     readTextOrNull(path.join(home, '.codex', 'config.toml')),
     // .json 优先（标准名），.jsonc 兜底。opencode 两个都认。
@@ -283,6 +304,8 @@ export async function detectExecutorModels({ homeDir } = {}) {
     readTextOrNull(path.join(home, '.config', 'opencode', 'opencode.jsonc')),
     // TUI 的"最近使用"（不写回配置文件，见 detectOpencodeState 的注释）
     readTextOrNull(path.join(home, '.local', 'state', 'opencode', 'model.json')),
+    // CodeBuddy Code CLI（与 WorkBuddy 桌面版共用的配置目录）
+    readTextOrNull(path.join(home, '.codebuddy', 'settings.json')),
   ]);
 
   const pickJson = (raw) => {
@@ -295,6 +318,7 @@ export async function detectExecutorModels({ homeDir } = {}) {
   // 于是注释里写的"jsonc 兜底"是死代码 —— 只写了 .jsonc 的机器永远显示未配置。
   const opencodeCfg = pickJson(opencodeJsonRaw) || pickJson(opencodeJsoncRaw);
   const opencodeState = pickJson(opencodeStateRaw);
+  const codebuddyCfg = pickJson(codebuddyRaw);
 
   return {
     claude: claudeCfg && typeof claudeCfg.env === 'object' && claudeCfg.env
@@ -302,6 +326,7 @@ export async function detectExecutorModels({ homeDir } = {}) {
       : null,
     codex: codexRaw ? detectCodex(codexRaw) : null,
     opencode: detectOpencode(opencodeCfg, opencodeState),
+    codebuddy: detectCodebuddy(codebuddyCfg),
   };
 }
 

@@ -2,13 +2,13 @@
  * 「这个执行器现在实际在用什么模型」在界面上看得见的验证。
  *
  * 为什么要有这个：工作台派任务**一律不传 --model**，模型完全跟随 claude / codex /
- * opencode 各自的配置文件。这条设计本身是对的，但副作用是界面上一个模型都看不到 ——
- * 用户想确认"这活到底是哪个模型跑的"只能去翻三个不同格式的配置文件。这次把
- * "读三个配置文件"收口成一个只读接口（server: routes/workbench/executorModels.js）
+ * opencode / codebuddy 各自的配置文件。这条设计本身是对的，但副作用是界面上一个模型都看不到 ——
+ * 用户想确认"这活到底是哪个模型跑的"只能去翻四个不同格式的配置文件。这次把
+ * "读配置文件"收口成一个只读接口（server: routes/workbench/executorModels.js）
  * 并在三处展示。这个脚本验的就是**展示这一层**真的成立。
  *
  * 验收契约（改这块时别破坏）：
- *   A 接口本身可用：/api/workbench/executor-models 返回三个执行器的模型，
+ *   A 接口本身可用：/api/workbench/executor-models 返回四个执行器的模型，
  *     claude 这种"别名两层"的要**两个名字都在**（别名背后那个才是真花钱的模型）
  *   B 设置弹窗（通用设置）：选中执行器下方直接给出「当前模型：xxx（别名 · 服务商）」
  *   C 下拉项右侧标出该执行器的模型（主 Agent 控制台 / 工作台执行按钮 / 设置里共三处）
@@ -55,11 +55,12 @@ const CHROME = process.env.ZEN_CHROME || 'C:/Program Files/Google/Chrome/Applica
 const REVERSE = process.argv.includes('--reverse')
 
 /**
- * 注入的模型 fixture。四种形态各来一条，一个用例覆盖全部分支：
+ * 注入的模型 fixture。多种形态各来一条，一个用例覆盖全部分支：
  *   claude   —— 别名两层齐全（CLI 别名 + 背后真实模型 + 代理地址）。日常最可能命中的形态
  *   codex    —— 配置里没写模型，两处来源都没有 → 走「未在配置中指定」
  *   opencode —— **来源是 CLI 自己的 state 而不是配置文件**（TUI 里选过、
  *               没回写配置）。本机 opencode 就是这个样子，早期版本因此误报"未指定"
+ *   codebuddy —— 配置文件一处来源（~/.codebuddy/settings.json 的顶层 model）
  */
 const FIXTURE = {
   claude: { name: 'deepseek-v4.1-flash', detail: 'claude-sonnet-5[1M]', provider: 'http://127.0.0.1:15721', source: null },
@@ -70,6 +71,7 @@ const FIXTURE = {
     provider: null,
     source: 'state',
   },
+  codebuddy: { name: 'deepseek-v4-1-flash-260910', detail: null, provider: null, source: 'config' },
 }
 /** 与前端 i18n（@42BB9:未在配置中指定 / 当前模型：{model} / CLI 内最近使用）同一份口径 */
 const UNSET_TEXT = '未在配置中指定'
@@ -227,8 +229,8 @@ async function main() {
   } catch (err) {
     check('A1 接口可用：GET /api/workbench/executor-models 返回 success', false, err.message)
   }
-  check('A2 接口返回三个执行器的 key（与 TASK_EXECUTOR_OPTIONS 对齐）',
-    !!apiModels && ['claude', 'codex', 'opencode'].every(k => k in apiModels),
+  check('A2 接口返回四个执行器的 key（与 TASK_EXECUTOR_OPTIONS 对齐）',
+    !!apiModels && ['claude', 'codex', 'opencode', 'codebuddy'].every(k => k in apiModels),
     JSON.stringify(apiModels))
   // claude 的别名两层是这套机制存在的理由：只报 CLI 别名等于没报
   check('A3 claude 这类"别名两层"的形态：模型名与服务商都带出来（有则 name≠detail）',
@@ -289,14 +291,14 @@ async function main() {
         body: JSON.stringify({ success: true, checkedAt: new Date().toISOString(), models: FIXTURE }),
       })
     })
-    // 三个执行器都判"已安装"：否则下拉项被置灰、picker 还会自作主张回落到别的值
+    // 四个执行器都判"已安装"：否则下拉项被置灰、picker 还会自作主张回落到别的值
     await page.route('**/api/check-tools*', (route) => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
           success: true, platform: 'win32',
-          vscode: true, claude: true, codex: true, opencode: true, kimi: false, zcode: false, dsh: false,
+          vscode: true, claude: true, codex: true, opencode: true, codebuddy: true, kimi: false, zcode: false, dsh: false,
           installers: {}, versions: {},
         }),
       })
@@ -415,6 +417,14 @@ async function main() {
       `../tmp-verify-wb-executor-models-settings-opencode${REVERSE ? '-reverse' : ''}.png`)
     await page.locator('.el-dialog').first().screenshot({ path: lineShot })
     log('截图:', lineShot)
+
+    // G8：codebuddy 是第四家（2026-10-12 接入）—— 配置文件一处来源，
+    // 验它在下拉里选得到、那行跟着出模型名（新执行器进列表但展示链没接 = 静默少一家）。
+    // ⚠️ 必须放在 G6/G7 之后：那两条硬编码验 OpenCode 的状态，提前切走会把它们打红。
+    await pickExecutor(page, 'CodeBuddy Code')
+    line = await readSettingsExecutor(page)
+    check('G8 切到 CodeBuddy Code：那行给出它配置里的模型',
+      line.found && line.text.includes(FIXTURE.codebuddy.name), JSON.stringify(line))
 
     // 切回 claude，后面 E 组要拿它跟另外两处比对
     await pickExecutor(page, 'Claude Code')

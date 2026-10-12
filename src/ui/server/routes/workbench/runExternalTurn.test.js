@@ -127,6 +127,40 @@ test('codex:exec --json → 同一组事件（item.* 分派）', async () => {
   assert.equal(session.engineSessionId, 'th-1');
 });
 
+test('codebuddy:stream-json → 同一组事件（协议与 claude 对齐，特有事件被忽略）', async () => {
+  // 样例取自 2026-10-12 实测（CLI 2.164.0）：init 带 session_id / apiKeySource，
+  // 工具调用是"tool_use(running) → user(tool_result)"两条，另有 system/status、
+  // ai-title 两个 cbc 特有事件必须被无视。
+  const lines = [
+    JSON.stringify({ type: 'system', subtype: 'init', session_id: 'cbc-sess-1', apiKeySource: 'www.workbuddy.cn', model: 'fast-model', permissionMode: 'bypassPermissions' }),
+    JSON.stringify({ type: 'system', subtype: 'status', status: 'compacting', session_id: 'cbc-sess-1' }),
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: '读一下' }] } }),
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'tu-1', name: 'Read', input: { file_path: 'a.txt' } }] } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tu-1', content: [{ type: 'text', text: 'hello' }] }] } }),
+    JSON.stringify({ type: 'ai-title', title: '读文件' }),
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: '完了' }] } }),
+    JSON.stringify({ type: 'result', subtype: 'success', is_error: false, session_id: 'cbc-sess-1' }),
+  ];
+  const session = baseSession();
+  const c = collector();
+  await runExternalTurn({
+    session, engine: 'codebuddy', userMessage: '读 a.txt', cwd: 'D:/ws',
+    send: c.send,
+    launchers: { codebuddy: async () => ({ pid: 4242, child: fakeChild(lines) }) },
+  });
+
+  assert.equal(c.of('content').map(e => e.delta).join(''), '读一下完了');
+  const starts = c.of('tool_call_start');
+  assert.equal(starts.length, 1);
+  assert.equal(starts[0].toolCallId, 'tu-1');
+  assert.equal(starts[0].name, 'Read');
+  assert.match(String(c.of('tool_result')[0].result), /hello/);
+  assert.equal(c.of('error').length, 0);
+  assert.equal(c.of('done').length, 1);
+  // 续聊标识搬运：cbc 的 session_id → session.engineSessionId（--resume 用）
+  assert.equal(session.engineSessionId, 'cbc-sess-1');
+});
+
 test('非 JSON 行（CLI 的告警）原样贴出来，不当成事件丢掉', async () => {
   const session = baseSession();
   const c = collector();

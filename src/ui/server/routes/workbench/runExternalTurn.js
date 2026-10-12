@@ -23,18 +23,22 @@
 //
 // ⚠️ 两条不重复实现的红线（本仓库 agentParity.test.js 就是为这类分叉立的规矩）：
 //   1. **spawn 与协议解析一律复用 taskRunner.js**，绝不在这里再写一份。
-//      `createClaudeEventHandler` / `createOpencodeEventHandler` / `createCodexEventHandler`
+//      `createClaudeEventHandler` / `createOpencodeEventHandler` /
+//      `createCodexEventHandler` / `createCodebuddyEventHandler`
 //      的签名是 `(job, appendOutput, appendThinking, toolCalls)` —— 回调早已抽象好，
 //      这里只是换一组回调（推 SSE 而不是推工作台面板），所以适配层能很薄。
 //   2. **权限档不在这里决定**。taskRunner 的 launcher 已经带死了各自的档位
 //      （claude: --permission-mode bypassPermissions --dangerously-skip-permissions；
-//        opencode: --auto；codex: --dangerously-bypass-approvals-and-sandbox），
-//      与工作台任务执行保持一致。要改档位请改 launcher，别在这儿加参数。
+//        opencode: --auto；codex: --dangerously-bypass-approvals-and-sandbox；
+//        codebuddy: -y），与工作台任务执行保持一致。要改档位请改 launcher，别在这儿加参数。
 //
-// 关于 headless 权限（2026-09-28 实测，三家在非交互下的真实行为）：
+// 关于 headless 权限（2026-09-28 实测，三家在非交互下的真实行为；codebuddy 2026-10-12 补测）：
 //   claude   默认档也能跑，但不放开会挡住写操作；工作台那套是 bypassPermissions。
 //   codex    默认档是只读沙箱（写文件被拦），所以要 --dangerously-bypass-...
 //   opencode **不给 --auto 会卡死**（在等一个永远不会有人回答的交互式批准）。
+//   codebuddy 不给 -y 时写操作被拦（init 事件回传 permissionMode 可验证）；
+//             另外它每次运行自带引擎服务器，默认端口 62443 会被 WorkBuddy
+//             桌面版占着，所以 launcher 固定传 --port 0 让 OS 选空闲端口。
 //   这正是 AgentView 里没有终端、没人能点"允许"所决定的 —— 必须预设档位。
 
 import { spawn, execFile } from 'child_process';
@@ -42,27 +46,19 @@ import { logger } from './shared.js';
 import { engineLabel } from './agentEngines.js';
 import {
   createToolCallTracker,
-  createClaudeEventHandler,
-  createOpencodeEventHandler,
-  createCodexEventHandler,
-  launchClaudeInNewWindow,
-  launchOpencodeRun,
-  launchCodexExec,
+  EXECUTOR_LAUNCHERS,
+  EXECUTOR_HANDLERS,
 } from './taskRunner.js';
 
-/** 引擎 → spawn 实现。复用 taskRunner，不另写（见文件头红线 1）。 */
-export const ENGINE_LAUNCHERS = {
-  claude: launchClaudeInNewWindow,
-  opencode: launchOpencodeRun,
-  codex: launchCodexExec,
-};
+/**
+ * 引擎 → spawn 实现。直接复用 taskRunner 的运行时分发表（EXECUTOR_LAUNCHERS）——
+ * 不在这里另抄一张表：那张表已经是"执行器 → launcher"的唯一真相源，抄一份就等于
+ * 给未来某次"加了第五家只改了一处"埋雷。别名导出只为保持本模块对外的旧名字。
+ */
+export const ENGINE_LAUNCHERS = EXECUTOR_LAUNCHERS;
 
-/** 引擎 → NDJSON 事件处理器工厂。同样复用 taskRunner。 */
-export const ENGINE_HANDLERS = {
-  claude: createClaudeEventHandler,
-  opencode: createOpencodeEventHandler,
-  codex: createCodexEventHandler,
-};
+/** 引擎 → NDJSON 事件处理器工厂。同上，复用 taskRunner 的 EXECUTOR_HANDLERS。 */
+export const ENGINE_HANDLERS = EXECUTOR_HANDLERS;
 
 /** 输出片段最长保留多少字符（与前端 MAX_LOG_DISPLAY 的口径一致，防止会话文件膨胀） */
 const MAX_ACCUM = 400_000;
@@ -90,7 +86,7 @@ function killChildTree(child) {
  *
  * @param {object}   args
  * @param {object}   args.session        会话记录（会被就地更新：messages / engineSessionId）
- * @param {string}   args.engine         'claude' | 'opencode' | 'codex'
+ * @param {string}   args.engine         'claude' | 'opencode' | 'codex' | 'codebuddy'
  * @param {string}   args.userMessage    用户这一轮说的话
  * @param {string}   args.cwd            工作目录
  * @param {string}   [args.promptPrefix] 拼在用户消息**前面**的工作区状态块（见 agentRoutes）
@@ -275,8 +271,9 @@ export async function runExternalTurn({
     });
   }
 
-  // 续聊标识：三家字段名不同（claude session_id / opencode sessionID / codex thread_id），
-  // 但 taskRunner 的 handler 已经统一落到 job.claudeSessionId 上，这里只做搬运。
+  // 续聊标识：各家字段名不同（claude session_id / opencode sessionID / codex thread_id /
+  // codebuddy session_id），但 taskRunner 的 handler 已经统一落到 job.claudeSessionId 上，
+  // 这里只做搬运。
   if (job.claudeSessionId) session.engineSessionId = job.claudeSessionId;
 
   send({ type: 'done', content: aborted ? `${text}\n\n[已停止]` : text });

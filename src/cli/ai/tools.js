@@ -317,7 +317,7 @@ export const TOOL_DEFINITIONS = [
           },
           executor: {
             type: 'string',
-            enum: ['claude', 'opencode', 'codex'],
+            enum: ['claude', 'opencode', 'codex', 'codebuddy'],
             description: '用哪个本地 CLI 执行这条任务。不传则用控制台当前选中的执行器，再退到配置里的全局默认。',
           },
           auto_run: {

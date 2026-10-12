@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// 「这一条任务交给谁跑」的**全局共享**选择（claude / opencode / codex）。
+// 「这一条任务交给谁跑」的**全局共享**选择（claude / opencode / codex / codebuddy）。
 //
 // 为什么必须是 composable 而不是各自一个 ref：工作台执行按钮、看板卡片「执行」、
 // 主 Agent 控制台的派发栏与对话派发 —— 四处都要读同一份选择，且切了互相跟手。
@@ -56,6 +56,7 @@ export function useTaskExecutorSelection() {
     claude: toolsStore.claudeAvailable,
     opencode: toolsStore.opencodeAvailable,
     codex: toolsStore.codexAvailable,
+    codebuddy: toolsStore.codebuddyAvailable,
   }))
 
   /** 有没有一个能跑的 —— 决定「执行任务」按钮显不显示 */

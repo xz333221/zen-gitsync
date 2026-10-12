@@ -33,11 +33,12 @@ function stubConfig(configData: Record<string, unknown>) {
   }))
 }
 
-function setInstalled(avail: { claude?: boolean; opencode?: boolean; codex?: boolean }) {
+function setInstalled(avail: { claude?: boolean; opencode?: boolean; codex?: boolean; codebuddy?: boolean }) {
   const tools = useToolsStore()
   tools.claudeAvailable = avail.claude ?? false
   tools.opencodeAvailable = avail.opencode ?? false
   tools.codexAvailable = avail.codex ?? false
+  tools.codebuddyAvailable = avail.codebuddy ?? false
 }
 
 describe('useTaskExecutorSelection', () => {
@@ -54,6 +55,18 @@ describe('useTaskExecutorSelection', () => {
     const { active, selected } = useTaskExecutorSelection()
     expect(active.value).toBe('opencode')
     expect(selected.value).toBe('opencode')
+  })
+
+  test('codebuddy：只装了它一个时也能被选中（第四家进 availability 映射）', async () => {
+    stubConfig({ ui: { lastTaskExecutor: 'codebuddy' } })
+    const configStore = useConfigStore()
+    await configStore.loadConfig()
+    setInstalled({ codebuddy: true })
+
+    const { active, availability, hasAnyExecutor } = useTaskExecutorSelection()
+    expect(availability.value.codebuddy).toBe(true)
+    expect(active.value).toBe('codebuddy')
+    expect(hasAnyExecutor.value).toBe(true)
   })
 
   test('上次用过的没装 → 显示回落，**但不写回**（别把环境状态记成上次用过）', async () => {

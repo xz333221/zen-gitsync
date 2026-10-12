@@ -291,6 +291,7 @@ const TOOL_ACTIONS: Record<SimpleToolId, () => void | Promise<void>> = {
   vscode: onOpenInVscode,
   codex: () => onOpenInCodex(TOOL_PRIMARY_MODE.codex),
   opencode: () => onOpenInOpencode(TOOL_PRIMARY_MODE.opencode),
+  codebuddy: onOpenInCodebuddy,
   kimi: onOpenInKimi,
   zcode: onOpenInZcode,
   dsh: onOpenInDsh,
@@ -496,6 +497,16 @@ async function onOpenInOpencode(mode?: string) {
   toastOpenResult(
     await openPathWithTool('opencode', currentDirectory.value, mode),
     '@67CE7:已用 OpenCode 打开目录',
+    '@67CE7:打开失败: ',
+  );
+}
+
+// 用 CodeBuddy Code 打开当前目录（交互 TUI；服务端固定带 --port 0 避开桌面版占用的 62443）
+async function onOpenInCodebuddy() {
+  if (warnIfEmptyDirectory()) return;
+  toastOpenResult(
+    await openPathWithTool('codebuddy', currentDirectory.value),
+    '@67CE7:已用 CodeBuddy Code 打开目录',
     '@67CE7:打开失败: ',
   );
 }

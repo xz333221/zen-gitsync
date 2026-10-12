@@ -121,12 +121,14 @@ const CODEX_TOML = [
   'model = "inner-model"',
 ].join('\n')
 const OPENCODE_JSONC = '{\n  // 注释\n  "model": "anthropic/claude-x",\n}'
+const CODEBUDDY_JSON = JSON.stringify({ model: 'deepseek-v4-1-flash-260910' })
 
-test('detectExecutorModels: 三家配置齐全时各自读出模型', async () => {
+test('detectExecutorModels: 四家配置齐全时各自读出模型', async () => {
   const home = await makeHome({
     '.claude/settings.json': CLAUDE_JSON,
     '.codex/config.toml': CODEX_TOML,
     '.config/opencode/opencode.jsonc': OPENCODE_JSONC,
+    '.codebuddy/settings.json': CODEBUDDY_JSON,
   })
   const out = await detectExecutorModels({ homeDir: home })
 
@@ -141,6 +143,15 @@ test('detectExecutorModels: 三家配置齐全时各自读出模型', async () =
   assert.deepEqual(out.opencode, {
     model: 'anthropic/claude-x', display: null, provider: null, source: 'config',
   })
+  // codebuddy：一个文件一处键，没有"第二来源"（TUI 选择会写回 settings.json）
+  assert.deepEqual(out.codebuddy, {
+    model: 'deepseek-v4-1-flash-260910', display: null, provider: null, source: 'config',
+  })
+})
+
+test('detectExecutorModels: codebuddy 没配 model 时为 null（CLI 内置默认不冒名）', async () => {
+  const home = await makeHome({ '.codebuddy/settings.json': '{"theme":"dark"}' })
+  assert.equal((await detectExecutorModels({ homeDir: home })).codebuddy, null)
 })
 
 test('detectExecutorModels: 只有 .jsonc 时 opencode 仍读得到 [回归]', async () => {
@@ -254,10 +265,10 @@ test('detectExecutorModels: claude 显式 ANTHROPIC_MODEL 优先于档位别名'
   })
 })
 
-test('detectExecutorModels: 一个配置文件都没有时三项全 null 且不抛', async () => {
+test('detectExecutorModels: 一个配置文件都没有时四项全 null 且不抛', async () => {
   const home = await makeHome()
   const out = await detectExecutorModels({ homeDir: home })
-  assert.deepEqual(out, { claude: null, codex: null, opencode: null })
+  assert.deepEqual(out, { claude: null, codex: null, opencode: null, codebuddy: null })
 })
 
 test('detectExecutorModels: 配置残缺/是目录/内容不是 JSON 时只让自己变 null', async () => {
@@ -265,9 +276,10 @@ test('detectExecutorModels: 配置残缺/是目录/内容不是 JSON 时只让�
     '.claude/settings.json': '{ 这不是 JSON', // 解析失败 → null
     '.codex/config.toml': '# 只有注释，没有 model\n', // 无 model → null
     '.config/opencode/opencode.json': '{"model":""}', // 空串 → null
+    '.codebuddy/settings.json': '{"model":123}', // 非字符串 → null
   })
   const out = await detectExecutorModels({ homeDir: home })
-  assert.deepEqual(out, { claude: null, codex: null, opencode: null })
+  assert.deepEqual(out, { claude: null, codex: null, opencode: null, codebuddy: null })
 })
 
 test('detectExecutorModels: 返回值里绝不出现任何密钥', async () => {

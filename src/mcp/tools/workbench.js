@@ -284,7 +284,7 @@ export const workbenchTools = [
       properties: {
         text: { type: 'string', description: '要派给那个项目的 agent 的完整指令' },
         project_path: { type: 'string', description: '派到哪个项目目录(必须是已登记项目),不传则用控制台的默认目标' },
-        executor: { type: 'string', description: '可选,指定执行器(claude / codex / opencode / gai)' },
+        executor: { type: 'string', description: '可选,指定执行器(claude / codex / opencode / codebuddy / gai)' },
         auto_run: { type: 'boolean', description: '是否建完就立刻执行,默认跟随控制台设置' },
         use_default_prompt: { type: 'boolean', description: '是否拼上项目预设提示词,默认跟随控制台设置' },
       },

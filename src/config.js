@@ -77,9 +77,11 @@ function normalizeAiMaxToolIterations(value) {
   return int;
 }
 
-// 工作台任务执行器白名单。'claude' 是历史默认；'opencode' / 'codex' 为可选执行器
-// （opencode run --format json / codex exec --json，模型都跟随各自 CLI 的配置）。
-export const TASK_EXECUTORS = ['claude', 'opencode', 'codex'];
+// 工作台任务执行器白名单。'claude' 是历史默认；'opencode' / 'codex' / 'codebuddy'
+// 为可选执行器（opencode run --format json / codex exec --json /
+// codebuddy -p --output-format stream-json -y --port 0，模型都跟随各自 CLI 的配置）。
+// ⚠️ taskRunner.js 里有一份同名单用于运行时分发（见那里的注释），加执行器两处都要改。
+export const TASK_EXECUTORS = ['claude', 'opencode', 'codex', 'codebuddy'];
 
 /**
  * 规范化任务执行器。非法值返回 null（交给调用方取默认），不抛错 ——
@@ -294,7 +296,7 @@ const defaultConfig = {
   // 见 workbench/chatPrompts.js）。空串 = 不注入。
   // 归一化见 normalizeAgentDefaultPrompt。
   agentDefaultPrompt: '',
-  // 工作台任务执行器（claude | opencode | codex）。全局配置，跨项目共享。
+  // 工作台任务执行器（claude | opencode | codex | codebuddy）。全局配置，跨项目共享。
   // 决定「执行任务 / 执行子任务 / 从此处开始 / 简单任务续聊」这条链路
   // 默认 spawn 哪个本地 CLI；执行入口可以按次覆盖（见 workbench 执行路由）。
   taskExecutor: 'claude',
@@ -330,7 +332,7 @@ const defaultConfig = {
     // 白名单式的默认空数组：以后新增工具默认就固定显示，不需要回头改默认值。
     // 未勾选（= 落在本数组里）的工具连同未安装的一起收进顶栏右侧「更多」菜单。
     headerToolsHidden: [],
-    // 工作台任务执行器「上次用过/选过的那个」（claude | opencode | codex），null = 还没选过，
+    // 工作台任务执行器「上次用过/选过的那个」（claude | opencode | codex | codebuddy），null = 还没选过，
     // 回落顶层 taskExecutor（设置里配的默认值）。两者**故意分开**：后者是"配置的默认"，
     // 前者是"上次用的"，语义不同，合并就再也分不清哪个是用户主动配的。
     // 2026-09-30: 原先记在 localStorage（键 zen-gitsync-task-executor），而 GUI 每次启动都换一个

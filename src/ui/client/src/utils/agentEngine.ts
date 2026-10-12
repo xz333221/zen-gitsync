@@ -2,17 +2,17 @@
 //
 // 口径（2026-09-28 与用户对齐）：
 //   - 内置 g ai 是默认项，排第一
-//   - 外部三家（Claude Code / OpenCode / Codex）与工作台是**同一批 CLI**，
+//   - 外部四家（Claude Code / OpenCode / Codex / CodeBuddy Code）与工作台是**同一批 CLI**，
 //     所以 id/名字一律从 utils/taskExecutor.ts 派生，**不在这里再写一份**。
 //     本仓库为"同一份清单抄两处"吃过亏（见 server 侧 agentParity.test.js 的注释），
-//     加第四家时应当只改 taskExecutor.ts 一处。
+//     加第五家时应当只改 taskExecutor.ts 一处。
 //   - 选择记在 localStorage（与工作台的临时切换同一取舍：比"只在内存"多活一次刷新，
 //     又不污染 config.json —— 文件里那份始终代表工作台的默认执行器）
 //
 // ⚠️ 与工作台**不同**的一条：工作台可以每次派发都临时换执行器；
-//    这里一旦会话开了头就锁死引擎，中途只能新建会话。原因是三家的续聊标识互不通用
-//    （claude --resume / opencode --session / codex exec resume），且历史消息格式不同。
-//    服务端也做了同样的拦截（ENGINE_LOCKED），前端这里只是提前把 UI 置灰。
+//    这里一旦会话开了头就锁死引擎，中途只能新建会话。原因是各家的续聊标识互不通用
+//    （claude --resume / opencode --session / codex exec resume / codebuddy --resume），
+//    且历史消息格式不同。服务端也做了同样的拦截（ENGINE_LOCKED），前端这里只是提前把 UI 置灰。
 //
 // ── 关于内置引擎的图标（2026-09-28 改的口径，改前先读）────────────────
 // 初版刻意让 g ai **不带图标**（"不给 AI 功能贴装饰性图标"）。用户看过下拉后指出：
@@ -24,7 +24,7 @@
 //
 // 图标怎么渲染也分两路，与顶栏 DirectorySelector 完全一致：
 //   · 内置 g ai → sprite，`<svg-icon icon-class="g-ai">`（BUILTIN_ENGINE_ICON）
-//   · 外部三家 → 品牌彩色 SVG，`<TaskExecutorIcon>`（utils/taskExecutor.ts 那一批）
+//   · 外部四家 → 品牌彩色 SVG，`<TaskExecutorIcon>`（utils/taskExecutor.ts 那一批）
 
 import { TASK_EXECUTOR_OPTIONS, isTaskExecutorId, type TaskExecutorId } from './taskExecutor'
 

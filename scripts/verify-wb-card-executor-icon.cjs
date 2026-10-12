@@ -1,7 +1,7 @@
 /**
  * 看板卡片标出「这条是哪个执行器跑的」的验证。
  *
- * 为什么要有这个：执行器从 1 个变成 3 个（claude / opencode / codex）之后，
+ * 为什么要有这个：执行器从 1 个变成 4 个（claude / opencode / codex / codebuddy）之后，
  * 卡片上「已运行 6 分 48 秒 · 工具 52 次」只说了"跑了多久"，没说"谁在跑"。
  * 用户看板上同时挂着 Claude、Codex 跑的任务时，分不清哪张是哪张。
  *
@@ -63,13 +63,13 @@ const sha12 = (s) => crypto.createHash('sha1').update(s, 'utf8').digest('hex').s
 
 /** 执行器 id → 图标内容指纹（前 12 位） */
 const ICON_SHA = Object.fromEntries(
-  [['claude', 'claudecode-color.svg'], ['opencode', 'opencode.svg'], ['codex', 'codex.svg']].map(([id, file]) => [
+  [['claude', 'claudecode-color.svg'], ['opencode', 'opencode.svg'], ['codex', 'codex.svg'], ['codebuddy', 'codebuddy.svg']].map(([id, file]) => [
     id,
     sha12(normIcon(fs.readFileSync(path.resolve(__dirname, '../src/ui/client/src/assets/icons/svg', file), 'utf8'))),
   ])
 )
 /** 产品名（与前端 utils/taskExecutor 的 TASK_EXECUTOR_OPTIONS 同一份口径） */
-const PRODUCT_NAME = { claude: 'Claude Code', opencode: 'OpenCode', codex: 'Codex' }
+const PRODUCT_NAME = { claude: 'Claude Code', opencode: 'OpenCode', codex: 'Codex', codebuddy: 'CodeBuddy Code' }
 
 /**
  * 浏览器里读到的 src（data URL）→ 归一后的内容指纹（口径与上面同一份）。
@@ -139,15 +139,17 @@ function syntheticTasks({ decorate, now }) {
     status: 'done', agent, startedAt: at(30), endedAt: at(20), output,
   })
   const cases = [
-    // 三个执行器每个都来一条跑着的：claude 是回落值，只验它等于没验到映射；
-    // 三条都验才能证明"这个 id 画这张图"这张表整张是对的
+    // 四个执行器每个都来一条跑着的：claude 是回落值，只验它等于没验到映射；
+    // 全验才能证明"这个 id 画这张图"这张表整张是对的
     ['run-claude', '【合成】Claude 正在跑：活动区标出 claude', running('run-claude', 'claude')],
     ['run-opencode', '【合成】OpenCode 正在跑：活动区标出 opencode', running('run-opencode', 'opencode')],
     ['run-codex', '【合成】Codex 正在跑：活动区标出 codex', running('run-codex', 'codex')],
+    ['run-codebuddy', '【合成】CodeBuddy 正在跑：活动区标出 codebuddy', running('run-codebuddy', 'codebuddy')],
     // 跑完的：走的是另一条链路（lastJobAgent 而不是 live.agent）
     ['done-claude', '【合成】Claude 跑完的：引文开头标出 claude', done('done-claude', 'claude', '已经好了，要 push 吗？')],
     ['done-opencode', '【合成】OpenCode 跑完的：引文开头标出 opencode', done('done-opencode', 'opencode', '改完了，要不要 push？')],
     ['done-codex', '【合成】Codex 跑完的：引文开头标出 codex', done('done-codex', 'codex', 'Codex 这边也改完了。')],
+    ['done-codebuddy', '【合成】CodeBuddy 跑完的：引文开头标出 codebuddy', done('done-codebuddy', 'codebuddy', 'CodeBuddy 也看完了。')],
     // 认不出 / 从没跑过：一个图标都不许有
     ['legacy', '【合成】老记录没写 agent：不画图标', done('legacy', undefined, '这条是加 agent 字段之前跑的')],
     ['bogus', '【合成】agent 写了个不认识的：不画图标', done('bogus', 'gemini', '执行器名字对不上，宁可空着')],
@@ -200,8 +202,8 @@ async function main() {
 
   const tasks = boardTasks.concat(syntheticTasks({ decorate: registry.decorateTaskForBoard, now }))
   const pick = (id) => tasks.find(t => t.id === `synth-${id}`)
-  // 三个执行器 × 跑着 / 跑完 六条，每条都是同一套断言的输入
-  const AGENT_CASES = ['claude', 'opencode', 'codex']
+  // 四个执行器 × 跑着 / 跑完 八条，每条都是同一套断言的输入
+  const AGENT_CASES = ['claude', 'opencode', 'codex', 'codebuddy']
   const running = Object.fromEntries(AGENT_CASES.map(a => [a, pick(`run-${a}`)]))
   const finished = Object.fromEntries(AGENT_CASES.map(a => [a, pick(`done-${a}`)]))
   const legacy = pick('legacy')
@@ -209,10 +211,10 @@ async function main() {
   const virgin = pick('virgin')
 
   // 前端拿到的必须是服务端算好的那个执行器（两侧同源，这里先把期望值记下来）
-  check('F2 服务端：正在跑的三条 live.agent 与执行器一一对应',
+  check('F2 服务端：正在跑的各条 live.agent 与执行器一一对应',
     AGENT_CASES.every(a => running[a].live?.agent === a),
     AGENT_CASES.map(a => `${a}=${running[a].live?.agent}`).join(' '))
-  check('F3 服务端：跑完的三条 lastJobAgent 与执行器一一对应；认不出的两种都是空串',
+  check('F3 服务端：跑完的各条 lastJobAgent 与执行器一一对应；认不出的两种都是空串',
     AGENT_CASES.every(a => finished[a].lastJobAgent === a) && legacy.lastJobAgent === '' && bogus.lastJobAgent === '',
     `${AGENT_CASES.map(a => finished[a].lastJobAgent).join('/')} + ${legacy.lastJobAgent || '空'}/${bogus.lastJobAgent || '空'}`)
 
@@ -224,6 +226,10 @@ async function main() {
   const page = await (await browser.newContext({ viewport: { width: 2000, height: 1274 } })).newPage()
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()) })
   page.on('pageerror', (e) => pageErrors.push(String(e)))
+  // 失败的响应带 URL 记下来：console 的 "Failed to load resource" 不带 URL，
+  // 分不清是图标 404（要算缺陷）还是 LLM 配额 500（环境噪音，要放行）
+  const badResponses = []
+  page.on('response', (r) => { if (r.status() >= 400) badResponses.push(`${r.status()} ${r.url()}`) })
 
   let shot = null
   try {
@@ -315,9 +321,9 @@ async function main() {
       // 跑着的时候不该同时出现引文（两段相似的话会让人以为是两条消息）
       check(`A[${a}] 与「最后回复」互斥：跑着时没有引文图标`, !card.quoteAgent && card.hasLive)
       if (a === 'codex') {
-        // 尺寸与描边只挑一条量（三条共用同一份 CSS，量三遍是同一个断言写三遍）
+        // 尺寸与描边只挑一条量（四条共用同一份 CSS，量四遍是同一个断言写四遍）
         const pxOf = (v) => parseFloat(String(v || '0'))
-        check('F4 图标是 12px（三个品牌标都是实心小色块，跟 11px 正文字号走会糊）',
+        check('F4 图标是 12px（各品牌标都是实心小色块，跟 11px 正文字号走会糊）',
           pxOf(card.liveAgent.width) === 12, card.liveAgent.width)
         check('F5 图标不描边（品牌标原图自带留白，套一圈方框反而像图标坏了）',
           pxOf(card.liveAgent.border) === 0, card.liveAgent.border)
@@ -414,8 +420,22 @@ async function main() {
     const listLegacy = await readRow(legacy.title)
     check('E4 认不出执行器的那条在列表行里同样不画图标', listLegacy.icons === 0, `icons=${listLegacy.icons}`)
 
-    check('H1 页面无 console / page 错误', consoleErrors.length === 0 && pageErrors.length === 0,
-      [...consoleErrors, ...pageErrors].slice(0, 3).join(' | '))
+    // 页面真实的 JS 报错（异常、警告）照样算。
+    // 放行 /api/project-startup/suggestions 的 500：默认 Git 视图的
+    // ProjectStartupAiPanel 会打 LLM，配额耗尽就 500 —— 环境噪音，与本探针无关
+    // （2026-10-12 实测复现；verify-wb-executor-models.cjs 的 H1 同一条排除）。
+    // console 的 "Failed to load resource" 不带 URL，只有在 response 层确实见到
+    // suggestions 500 时才连它的 console 孪生一起放行；别的失败响应（图标 404 之类）
+    // 照算缺陷 —— 只放行这一个端点。
+    const envNoise = badResponses.filter(u => /project-startup\/suggestions/.test(u))
+    const realBad = badResponses.filter(u => !/project-startup\/suggestions/.test(u))
+    const realConsole = envNoise.length > 0
+      ? consoleErrors.filter(t => !/Failed to load resource/i.test(t))
+      : consoleErrors
+    check('H1 页面无 console / page 错误',
+      realConsole.length === 0 && pageErrors.length === 0 && realBad.length === 0,
+      [...realConsole, ...pageErrors, ...realBad].slice(0, 3).join(' | ')
+        + (envNoise.length ? `（放行环境噪音 ${envNoise.length} 条：LLM 配额 500）` : ''))
   } finally {
     // 只关自己起的这个浏览器实例（按 CDP，不用 taskkill /IM —— 那会连带关掉用户的浏览器）
     await browser.close()

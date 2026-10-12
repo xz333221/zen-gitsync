@@ -1273,7 +1273,7 @@ const selectedTaskQueue = computed(() =>
           </el-dropdown>
           <div v-else class="wb-no-claude-hint" role="status">
             <el-icon class="wb-no-claude-hint__icon"><Warning /></el-icon>
-            <span class="wb-no-claude-hint__text">{{ $t('@WORKBENCH:未检测到本地 claude / opencode,无法执行任务') }}</span>
+            <span class="wb-no-claude-hint__text">{{ $t('@WORKBENCH:未检测到本地可用的 CLI 执行器，无法执行任务') }}</span>
             <a
               class="wb-no-claude-hint__link"
               href="https://docs.claude.com/en/docs/claude-code/setup"
