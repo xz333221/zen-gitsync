@@ -1138,6 +1138,19 @@ export function registerConfigRoutes({
         }
         updates.agentPresetPrompts = normalized
       }
+      // g ai 智能体的默认提示词（全局配置）：和 g ai 对话时每轮拼进系统提示词。
+      // **空串是合法值**（= 清除），所以判空用 !== undefined；非字符串整体拒绝（400），
+      // 与 normalizeAgentDefaultPrompt 的语义一致。
+      if (body.agentDefaultPrompt !== undefined) {
+        const normalized = configManager.normalizeAgentDefaultPrompt(body.agentDefaultPrompt)
+        if (normalized === null) {
+          return res.status(400).json({
+            success: false,
+            error: 'agentDefaultPrompt 非法: 需要字符串'
+          })
+        }
+        updates.agentDefaultPrompt = normalized
+      }
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ success: false, error: '缺少可保存的参数' })
       }

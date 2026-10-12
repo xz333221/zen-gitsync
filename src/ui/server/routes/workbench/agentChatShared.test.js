@@ -12,7 +12,7 @@
 // configManager / agentSessionStore 会去读真实的 ~/.zen-gitsync。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -61,7 +61,7 @@ const longSession = () => {
 // streamFn：传输层现在默认会自动重试（最多 10 次、指数退避，见 cli/ai/transport.js）。
 // 这一组用例关心的是"失败时怎么收场"，不是"重试几次" —— 真等退避会让一个用例跑到分钟级。
 // 所以统一注入 maxRetries: 0 的那一份；重试自身的口径在 cli/ai/runtime.test.js 里逐条钉。
-async function runWeb({ session, userMessage, respond, locale = 'zh-CN', signal, onEvent, resume = false, streamFn }) {
+async function runWeb({ session, userMessage, respond, locale = 'zh-CN', signal, onEvent, resume = false, streamFn, promptSection }) {
   const { runAgentTurn } = await import('./agentChat.js')
   const { streamChatOnce } = await import('../../../../cli/ai/transport.js')
   const events = []
@@ -75,6 +75,8 @@ async function runWeb({ session, userMessage, respond, locale = 'zh-CN', signal,
       send: e => { events.push(e); onEvent?.(e) },
       resume,
       streamFn: streamFn ?? (opts => streamChatOnce({ ...opts, maxRetries: 0 })),
+      // 不传 = 让 runAgentTurn 自己读沙箱里的配置（要验默认取数时就别传）
+      ...(promptSection === undefined ? {} : { promptSection }),
     })
     return { sent, events, result }
   } finally {
@@ -403,4 +405,80 @@ test('对中途失败的一轮点「重试」：工具结果留在尾巴上，�
 
   assert.deepEqual(sent.messages.map(m => m.role), ['system', 'user', 'assistant', 'tool'])
   assert.equal(sent.messages[3].content, 'file contents', '已经跑完的工具结果必须原样带上')
+})
+
+// ── 用户固定提示词（g ai 默认提示词 + 派发提示词）────────────────
+// 智能体视图「设置」Tab 配的两块提示词，和 g ai 对话时每轮都要注入。
+// 这是**纯 prompt 注入**的能力：没有按钮、没有状态、界面上看不出对错 ——
+// 改 agentChat.js / chatPrompts.js 的人（哪怕只是把一段挪个位置）会无声地把它弄掉。
+// 所以这里跑真实的 runAgentTurn，把发出去的请求体抓下来逐条钉住。
+//
+// 沙箱里写真实文件（config.json / orchestrator.json）：这一层要验的正是
+// "默认取数真的接到了配置上"，用注入口反而绕过了要验的那一段。
+// 每个用例 finally 里删干净 —— 同文件其它用例断言的是精确的 messages 列表，
+// 残留一份提示词就会让它们莫名其妙地红。
+
+const DATA_DIR = path.join(SANDBOX, '.zen-gitsync')
+
+function writeSandboxFile(name, obj) {
+  mkdirSync(DATA_DIR, { recursive: true })
+  writeFileSync(path.join(DATA_DIR, name), JSON.stringify(obj, null, 2))
+}
+
+function clearSandboxFile(name) {
+  rmSync(path.join(DATA_DIR, name), { force: true })
+}
+
+test('两块提示词都注入请求副本：g ai 默认提示词 + 派发提示词（含项目级）', async () => {
+  const { canonicalProjectPath } = await import('./projectRegistry.js')
+  const projectKey = canonicalProjectPath(process.cwd())
+  try {
+    writeSandboxFile('config.json', { agentDefaultPrompt: '【g ai 默认提示词】回答用中文' })
+    writeSandboxFile('orchestrator.json', {
+      version: 1,
+      active: true,
+      defaultPrompt: '【全局派发提示词】改完就提交',
+      projectPrompts: { [projectKey]: { path: process.cwd(), prompt: '【本项目派发提示词】包管理器用 pnpm' } },
+    })
+
+    const session = newSession('ag-sandbox-user-prompt', withSystem())
+    const { sent } = await runWeb({ session, userMessage: 'hello', respond: okStream })
+
+    const sys = sent.messages.find(m => m.role === 'system')
+    assert.match(sys.content, /【g ai 默认提示词】回答用中文/, 'g ai 默认提示词必须进请求')
+    assert.match(sys.content, /【全局派发提示词】改完就提交/, '全局派发提示词必须进请求')
+    assert.match(sys.content, /【本项目派发提示词】包管理器用 pnpm/,
+      '项目级那条要按本轮 cwd 生效（与派发时"按落点项目解析"同一口径）')
+    // 规则在前、现场在后：固定提示词是每轮都成立的约束，不该排在工作区快照后面
+    assert.ok(sys.content.indexOf('【g ai 默认提示词】') < sys.content.indexOf('【全局派发提示词】'),
+      'g ai 那段排在派发那段之前')
+    // 落盘口径：会话里那条 system 一个字节都不许变 —— 否则改设置后老会话永远带着旧规则
+    assert.equal(session.messages[0].content, 'rules', '注入只作用于请求副本，不写回 session.messages')
+  } finally {
+    clearSandboxFile('config.json')
+    clearSandboxFile('orchestrator.json')
+  }
+})
+
+test('没配就不注入（连一节标题都不出现）—— 这也是其它用例能断言精确 messages 的前提', async () => {
+  const session = newSession('ag-sandbox-user-prompt-empty', withSystem())
+
+  const { sent } = await runWeb({ session, userMessage: 'hello', respond: okStream })
+
+  assert.deepEqual(sent.messages.map(m => m.content), ['rules', 'hi', 'hello'])
+})
+
+test('调用方显式传 promptSection 时不再自己读配置（定时任务 / agentRoutes 走这条路）', async () => {
+  try {
+    // 磁盘上有一份提示词，但调用方传了 ''：意思是"这一轮确定不带"，不是"没传、你去读"
+    writeSandboxFile('config.json', { agentDefaultPrompt: '【不该出现】' })
+    const session = newSession('ag-sandbox-user-prompt-explicit', withSystem())
+
+    const { sent } = await runWeb({ session, userMessage: 'hello', respond: okStream, promptSection: '' })
+
+    assert.doesNotMatch(sent.messages[0].content, /【不该出现】/)
+    assert.deepEqual(sent.messages.map(m => m.content), ['rules', 'hi', 'hello'])
+  } finally {
+    clearSandboxFile('config.json')
+  }
 })

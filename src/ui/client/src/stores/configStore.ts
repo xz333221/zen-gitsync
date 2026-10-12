@@ -214,6 +214,10 @@ export const useConfigStore = defineStore('config', () => {
   // 空数组 = 使用内置默认（utils/agentPresets 的 builtinAgentPresets，随界面语言）；
   // 非空 = 用户自定义全量。后端 loadConfig 已归一化，这里只收合法数组。
   const agentPresetPrompts = ref<AgentPresetPrompt[]>([])
+  // g ai 智能体的默认提示词（全局配置，跨项目共享，'' = 不注入）。
+  // 和 g ai 对话时每一轮都会拼进系统提示词（服务端 chatPrompts.js 现读现拼，
+  // 不落进会话历史 —— 所以改完这里下一次发消息就生效，不用新开会话）。
+  const agentDefaultPrompt = ref('')
   // 后端解析后的请求预算（GET /api/config/getConfig 的派生字段 + 保存回执，见
   // routes/config.js）。超长输入预警读它 —— 解析公式只在后端一处（resolveRequestBudget），
   // 前端绝不重算，避免"界面按旧线报警、服务端按新线截断"的口径分叉。
@@ -546,6 +550,10 @@ export const useConfigStore = defineStore('config', () => {
       // 加载工作台任务执行器默认值（后端已规范化为 claude | opencode | codex）
       if (isTaskExecutorId(configData.taskExecutor)) {
         taskExecutor.value = configData.taskExecutor
+      }
+      // g ai 默认提示词：后端保证是字符串（'' = 没设），这里只防字段缺失
+      if (typeof configData.agentDefaultPrompt === 'string') {
+        agentDefaultPrompt.value = configData.agentDefaultPrompt
       }
       // 任务/对话结束提示的三个通道开关（老配置里没有这些字段 → 保持上面的默认值，
       // 旧总开关 notifyOnTaskDone 的迁移在后端 resolveNotifySwitches 里做完了）
@@ -1577,9 +1585,9 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
-  // 保存 AI 智能体运行时设置（单轮最大工具调用次数 / 单轮请求上下文预算 / 预设提示词）。
-  // 各键可选：只传要改的那个，其它不动（后端同样"没传的不动"）。
-  async function saveAiSettings(settings: { aiMaxToolIterations?: number; aiMaxRequestTokens?: number; agentPresetPrompts?: AgentPresetPrompt[] }): Promise<boolean> {
+  // 保存 AI 智能体运行时设置（单轮最大工具调用次数 / 单轮请求上下文预算 / 预设提示词 /
+  // g ai 默认提示词）。各键可选：只传要改的那个，其它不动（后端同样"没传的不动"）。
+  async function saveAiSettings(settings: { aiMaxToolIterations?: number; aiMaxRequestTokens?: number; agentPresetPrompts?: AgentPresetPrompt[]; agentDefaultPrompt?: string }): Promise<boolean> {
     try {
       const response = await fetch('/api/config/save-ai-settings', {
         method: 'POST',
@@ -1589,6 +1597,8 @@ export const useConfigStore = defineStore('config', () => {
           ...(settings.aiMaxRequestTokens !== undefined ? { aiMaxRequestTokens: settings.aiMaxRequestTokens } : {}),
           // 空数组也发（= 恢复内置默认），所以判断 undefined 而不是 length —— 与后端同一语义
           ...(settings.agentPresetPrompts !== undefined ? { agentPresetPrompts: settings.agentPresetPrompts } : {}),
+          // 空串也发（= 清除），同一套判断
+          ...(settings.agentDefaultPrompt !== undefined ? { agentDefaultPrompt: settings.agentDefaultPrompt } : {}),
         })
       })
       const result = await response.json()
@@ -1613,6 +1623,10 @@ export const useConfigStore = defineStore('config', () => {
         // 空数组也照收 —— 它是"已恢复内置默认"的有效状态
         if (Array.isArray(result.agentPresetPrompts)) {
           agentPresetPrompts.value = result.agentPresetPrompts
+        }
+        // g ai 默认提示词同样以回执为准（服务端会截断到上限），空串照收 = 已清除
+        if (typeof result.agentDefaultPrompt === 'string') {
+          agentDefaultPrompt.value = result.agentDefaultPrompt
         }
         return true
       } else {
@@ -1700,6 +1714,7 @@ export const useConfigStore = defineStore('config', () => {
     aiMaxToolIterations,
     aiMaxRequestTokens,
     agentPresetPrompts,
+    agentDefaultPrompt,
     aiRequestBudget,
     taskExecutor,
     resolvedTaskExecutor,

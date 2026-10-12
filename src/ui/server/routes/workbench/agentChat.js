@@ -59,6 +59,9 @@ import { streamChatOnce } from '../../../../cli/ai/transport.js';
 import { checkDangerousCommand } from '../../../../cli/ai/safety.js';
 import { guardCommand } from '../../../../cli/ai/platformGuard.js';
 import configManager from '../../../../config.js';
+// 用户固定提示词（g ai 默认提示词 + 派发提示词）的取数与拼装。与外部 CLI 引擎那条
+// 链路共用同一份（见 runExternalTurn 的调用点），免得两块提示词在两处各拼一遍。
+import { resolveChatPromptSection } from './chatPrompts.js';
 
 // 单轮工具调用循环数的兜底值(防失控);实际值取全局配置 aiMaxToolIterations,
 // 与 CLI 侧 src/cli/ai/agent.js 共用同一个配置项。
@@ -342,6 +345,10 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 //   - requestBudget: { maxChars, maxMessages, maxUserChars }  每轮请求的上下文预算
 //        （解析自全局配置 aiMaxRequestChars，见 cli/ai/context.js 的 resolveRequestBudget）。
 //        不传时 prepareRequestMessages 走默认值，行为与改造前一致。
+//   - promptSection: 用户固定提示词（g ai 默认提示词 + 派发提示词，见 chatPrompts.js）。
+//        **不传（undefined）= 自己现读**：这样定时任务那条链路（scheduler.js 直接调
+//        本函数）不必重复接一次线。显式传 '' = 本轮确定不带（调用方已经解析过）。
+//        只进请求副本，不落 session.messages —— 改设置立刻生效，历史会话不被腌进旧规则。
 //   - resume: true 时**不再压入 user 消息**，直接拿着会话现有的尾巴继续跑。
 //        用于"重试上一轮"：失败那轮留下的 user + 工具结果都还在，再发一遍 user
 //        会让模型看到两条同样的请求 + 已经跑完的工具结果。
@@ -350,7 +357,7 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 //        生产调用点一律不传 —— 传了就等于换了一份传输实现。
 //
 // 返回: { aborted: boolean }
-export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, dispatchTask, getContextBlock, requestBudget = null, resume = false, streamFn = streamChatOnce }) {
+export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, dispatchTask, getContextBlock, requestBudget = null, resume = false, streamFn = streamChatOnce, promptSection }) {
   const ctx = { cwd, locale, onChild, askUser, listProjects, dispatchTask };
 
   // 确保 session.messages 存在
@@ -400,6 +407,21 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
 
   const maxIterations = await resolveMaxToolIterations();
 
+  // 用户固定提示词（g ai 默认提示词 + 派发提示词）：整轮只解析一次 —— 和快照同理，
+  // 它在这一轮里不会变，而工具循环每轮都要重拼一次请求。
+  // 调用方已经解析过（agentRoutes 为了外部引擎那条链路先解了一次）时不重复读文件；
+  // 显式传 '' 同样尊重 —— 那是"确定没有"，不是"没传"。
+  let userPromptSection = promptSection;
+  if (userPromptSection === undefined) {
+    try {
+      userPromptSection = await resolveChatPromptSection({ cwd, locale });
+    } catch (err) {
+      // 取不到就当没配：这是锦上添花，不能因为它挂掉就让用户这条消息发不出去
+      logger.warn(`[agentChat] 取用户固定提示词失败,本轮跳过注入: ${err?.message || err}`);
+      userPromptSection = '';
+    }
+  }
+
   // 预算缺省时在**这里**解析一次，与 prepareRequestMessages 的派生口径一致
   // （不能让它自己兜默认：那样 measureContextUsage 拿到的分母会和实际裁剪用的分母
   //   可能不同，UI 上的进度条就会说谎）。
@@ -411,9 +433,9 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
     // 只作用于副本,session.messages 保持完整(与 CLI 的磁盘口径一致)。
     // 预算来自 requestBudget(全局配置 aiMaxRequestTokens 的解析结果)。
     const messages = prepareRequestMessages(session.messages, { locale, ...budget });
-    // 请求级上下文：工作区状态快照 + 常用目录状态 + 当前打开的文档 + 本轮附件路径
-    // （只改副本，不落 session.messages，下一轮不重复累积）
-    injectRequestContext(messages, { cwd, openFilePath, attachments, locale, workspaceBlock, dirStatusBlock });
+    // 请求级上下文：用户固定提示词 + 工作区状态快照 + 常用目录状态 + 当前打开的文档
+    // + 本轮附件路径（只改副本，不落 session.messages，下一轮不重复累积）
+    injectRequestContext(messages, { cwd, openFilePath, attachments, locale, workspaceBlock, dirStatusBlock, promptSection: userPromptSection });
 
     // 上下文占用：在**请求发出去之前**量一次，发给 UI 画圆环。
     // 为什么必须在发之前：provider 的真实 usage（input_tokens）要等响应回来才有，
@@ -584,21 +606,23 @@ function summarizeArgs(name, args) {
   }
 }
 
-// ── 请求级上下文注入（工作区状态 / 常用目录状态 / 文件空间对话 / 本轮附件） ──
-// 把"工作区各板块的状态摘要""常用目录那批目录的 Git 状态""用户当前打开的文件"与
-// "本轮附件的落盘路径"追加到**请求副本**的 system 消息末尾：只影响这一次请求，
-// session.messages 与磁盘历史保持原样，下一轮也不会重复累积。
+// ── 请求级上下文注入（用户固定提示词 / 工作区状态 / 常用目录状态 / 文件空间对话 / 本轮附件） ──
+// 把"用户配的两块固定提示词""工作区各板块的状态摘要""常用目录那批目录的 Git 状态"
+// "用户当前打开的文件"与"本轮附件的落盘路径"追加到**请求副本**的 system 消息末尾：
+// 只影响这一次请求，session.messages 与磁盘历史保持原样，下一轮也不会重复累积。
 //
 // ⚠️ 工作区快照**必须走这条副本路径，不能塞进 session.messages 里那条 system 消息**。
 // 那条只在首轮 push 一次（见上面 `session.messages.length === 0` 的判断）并会落盘，
 // 快照进去就等于永久停在"会话创建那天"——git 分支、任务进度全会是过期的，
 // 而且这种错不会报错、只会让模型理直气壮地给出错答案。有单测钉住这一点。
 // 常用目录状态同理，而且更严重：它说的是"这一刻"的领先/落后，几小时后必然不同。
+// 用户固定提示词同理，但理由换一条：**改设置要立刻生效**，而且它属于"每轮都在的规则"，
+// 腌进历史会话等于让用户回看时看到一份过期规则（详见 chatPrompts.js 文件头）。
 //
 // 附件为什么只给路径、不给内容：见 utils/agentAttachments.js 的头注释 —— 非图片附件
 // 由服务端落盘，模型自己用 read / grep 按需取，比把几百 KB 文本内联进消息省得多。
 // 快照块同理,只给摘要与目录路径,板块正文由模型按需读。
-export function injectRequestContext(messages, { cwd, openFilePath, attachments = [], locale, workspaceBlock = '', dirStatusBlock = '' }) {
+export function injectRequestContext(messages, { cwd, openFilePath, attachments = [], locale, workspaceBlock = '', dirStatusBlock = '', promptSection = '' }) {
   if (!Array.isArray(messages)) return;
   const en = String(locale || '').startsWith('en');
 
@@ -644,9 +668,17 @@ export function injectRequestContext(messages, { cwd, openFilePath, attachments 
       : `用户本轮附带了 ${files.length} 个文件，已保存到以下绝对路径：\n${lines.join('\n')}\n需要时用工具读取（内容没有内联在这里），不要臆测。`);
   }
 
-  if (parts.length === 0) return;
+  if (parts.length === 0 && !(typeof promptSection === 'string' && promptSection.trim())) return;
 
-  const note = `\n\n# ${en ? 'Current context' : '当前上下文'}\n${parts.join('\n\n')}`;
+  // 用户固定提示词单独一节，且排在"当前上下文"**前面**：它是每轮都成立的规则，
+  // 而当前上下文是这一刻的快照 —— 规则在前、现场在后，读起来才是"先约束后事实"。
+  let note = '';
+  if (typeof promptSection === 'string' && promptSection.trim()) {
+    note += `\n\n# ${en ? 'Standing instructions' : '用户固定提示词'}\n${promptSection.trim()}`;
+  }
+  if (parts.length > 0) {
+    note += `\n\n# ${en ? 'Current context' : '当前上下文'}\n${parts.join('\n\n')}`;
+  }
   const sys = messages.find(m => m && m.role === 'system' && typeof m.content === 'string');
   if (sys) sys.content += note;
   else messages.unshift({ role: 'system', content: note.trim() });

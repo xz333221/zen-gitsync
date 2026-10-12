@@ -32,6 +32,8 @@ import { registerAgentMarketplaceRoutes } from './agentMarketplace.js';
 import { createProjectListProvider } from './projectTool.js';
 import { createDispatcher } from './dispatchInstruction.js';
 import { createWorkspaceSnapshotter } from '../aiContext/wiring.js';
+// 用户固定提示词（g ai 默认提示词 + 派发提示词）的解析 —— 两条引擎链路共用同一份
+import { resolveChatPromptSection } from './chatPrompts.js';
 // 「同一会话同一时刻只允许一个生成中的轮次」的闸，与定时任务调度器共享
 // （见 sessionGate.js —— 拆出去是为了让调度器复用同一份判定口径）。
 import { isSessionBusy, acquireSession, releaseSession } from './sessionGate.js';
@@ -548,6 +550,18 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
         }
       }
 
+      // 用户固定提示词（g ai 默认提示词 + 派发提示词，见 chatPrompts.js）。
+      // 在这里解析**一次**、两条引擎链路共用：内置引擎走请求副本（runAgentTurn 的
+      // promptSection），外部 CLI 引擎没有副本可注入，只能拼进 prompt 前缀。
+      // 两处各解析一次的话，改设置后两条链路生效时机就会分叉。
+      // 取不到就当没配 —— 它是锦上添花，不该让用户这条消息发不出去。
+      let promptSection = '';
+      try {
+        promptSection = await resolveChatPromptSection({ cwd, locale });
+      } catch (err) {
+        logger.warn(`[agent/chat] 取用户固定提示词失败,本轮跳过注入: ${err?.message || err}`);
+      }
+
       // 推 meta
       send({
         type: 'meta',
@@ -598,6 +612,11 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
         // 这段前缀只作用在本轮 prompt 上，不会写进项目里的任何文件）
         if (dirStatusBlock) {
           promptPrefix = promptPrefix ? `${dirStatusBlock}\n\n${promptPrefix}` : dirStatusBlock;
+        }
+        // 用户固定提示词排在最前：它是每轮都成立的规则，工作区快照是这一刻的现场。
+        // 外部引擎那条链路的 system 提示词是 CLI 自己的，进不去 —— 只能靠这个前缀。
+        if (promptSection) {
+          promptPrefix = promptPrefix ? `${promptSection}\n\n${promptPrefix}` : promptSection;
         }
         // 图片附件转成文件路径交给 CLI（它们收路径不收 base64）。走同一套落盘校验。
         const imageAttachments = images.map((u, i) => ({ name: `pasted-${i + 1}.png`, dataUrl: u }));
@@ -654,7 +673,10 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
           // 与 CLI turn.js 同一条口径。
           requestBudget,
           // 重试上一轮：不再压 user 消息，接着会话现有的尾巴跑
-          resume
+          resume,
+          // 用户固定提示词（上面已解析）。显式传 —— 不传的话 runAgentTurn 会自己再读一遍
+          // 配置文件，同一轮里读两次同一份配置纯属浪费
+          promptSection
         });
       }
 

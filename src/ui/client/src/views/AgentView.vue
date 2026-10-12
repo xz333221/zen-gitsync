@@ -15,9 +15,10 @@
   -->
 
 <!--
-  智能体视图：顶部 Tab 切换「对话 / Skill 广场 / MCP 广场」。
+  智能体视图：顶部 Tab 切换「对话 / 定时任务 / Skill 广场 / MCP 广场 / 设置」。
   - 对话：左侧会话列表 + 右侧使用 zen-ai-chat-ui 的 ChatContainer 渲染对话
   - 两个广场：按来源展示可安装的 Skill / MCP，装到当前项目或 g ai 智能体
+  - 设置：提示词设置（g ai 默认提示词 + 派发任务的提示词，见 AgentPromptSettings.vue）
   - SSE 流式：thinking + content + tool_call + tool_result
   - 会话持久化：后端自动保存到 ~/.zen-gitsync/agent-sessions/
 -->
@@ -25,7 +26,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { $t } from '@/lang/static'
 import { ElIcon } from 'element-plus'
-import { Loading, ChatDotRound, Goods, Connection, Timer } from '@element-plus/icons-vue'
+import { Loading, ChatDotRound, Goods, Connection, Timer, Setting } from '@element-plus/icons-vue'
 import { ChatContainer, ConversationList } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { useConfigStore } from '@/stores/configStore'
@@ -36,6 +37,7 @@ import { agentEngineName, type AgentEngineId } from '@/utils/agentEngine'
 import { useNarrowPane } from '@/composables/useNarrowPane'
 import MarketplacePanel from '@/components/MarketplacePanel.vue'
 import SchedulePanel from '@/components/SchedulePanel.vue'
+import AgentPromptSettings from '@/components/AgentPromptSettings.vue'
 import AgentEngineSelector from '@/components/AgentEngineSelector.vue'
 import CopySessionButton from '@/components/CopySessionButton.vue'
 
@@ -49,9 +51,9 @@ const { narrow } = useNarrowPane(rootRef)
 const chatPage = ref<'list' | 'chat'>('chat')
 
 // ── 顶部 Tab ─────────────────────────────────────────────
-// 会话列表只在「对话」Tab 显示 —— 广场/定时任务占满宽度更好浏览;
+// 会话列表只在「对话」Tab 显示 —— 广场/定时任务/设置占满宽度更好浏览;
 // 两个广场共用一个 MarketplacePanel 实例,切类型时组件内部自己重拉数据。
-type AgentTab = 'chat' | 'schedule' | 'skill' | 'mcp'
+type AgentTab = 'chat' | 'schedule' | 'skill' | 'mcp' | 'settings'
 const activeTab = ref<AgentTab>('chat')
 const marketplaceType = computed(() => (activeTab.value === 'mcp' ? 'mcp' : 'skill'))
 const tabs = computed(() => [
@@ -59,6 +61,9 @@ const tabs = computed(() => [
   { id: 'schedule' as const, label: $t('@AGENT:定时任务'), icon: Timer },
   { id: 'skill' as const, label: $t('@AGENT:Skill 广场'), icon: Goods },
   { id: 'mcp' as const, label: $t('@AGENT:MCP 广场'), icon: Connection },
+  // 设置放最后：它是配置项，不是日常入口。里面目前只有提示词设置
+  //（两块：g ai 默认提示词 + 派发任务的提示词，见 AgentPromptSettings.vue）
+  { id: 'settings' as const, label: $t('@AGENT:设置'), icon: Setting },
 ])
 
 const {
@@ -403,7 +408,10 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
         />
 
         <!-- ── Skill 广场 / MCP 广场 ── -->
-        <MarketplacePanel v-else :type="marketplaceType" />
+        <MarketplacePanel v-else-if="activeTab === 'skill' || activeTab === 'mcp'" :type="marketplaceType" />
+
+        <!-- ── 设置（提示词设置）── -->
+        <AgentPromptSettings v-else />
       </div>
     </main>
   </div>

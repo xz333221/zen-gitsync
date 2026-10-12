@@ -354,8 +354,49 @@ test('预设提示词：空数组合法写盘(恢复内置默认)；非法值不
   assert.deepEqual((await readRawConfig()).agentPresetPrompts, [], '半截条目同样不落盘')
 })
 
+// ========== agentDefaultPrompt(g ai 智能体的默认提示词)顶层全局键 ==========
+
+test('g ai 默认提示词的默认值是空串(不注入)', async () => {
+  await writeRawConfig({ defaultCommitMessage: 'test', projects: {} })
+  const cfg = await configMod.default.loadConfig()
+  assert.equal(cfg.agentDefaultPrompt, '', '未配置时是空串，注入侧据此完全跳过')
+})
+
+test('g ai 默认提示词存成顶层全局键，且不漏进项目配置', async () => {
+  // 与 agentPresetPrompts 同一个坑：saveConfig 的 ...projectConfig 展开会把没解构出来的
+  // 键写进 raw.projects[key]。这里钉住它必须走顶层。
+  await writeRawConfig({ defaultCommitMessage: 'test', projects: {} })
+  await saveConfig({ defaultCommitMessage: 'test', agentDefaultPrompt: '回答用中文' })
+  const raw = await readRawConfig()
+  assert.equal(raw.agentDefaultPrompt, '回答用中文', '应写在 config.json 顶层')
+  const polluted = Object.entries(raw.projects || {})
+    .filter(([, p]) => p && typeof p === 'object' && 'agentDefaultPrompt' in p)
+    .map(([k]) => k)
+  assert.deepEqual(polluted, [], `不该出现在项目配置里: ${polluted.join(', ')}`)
+})
+
+test('g ai 默认提示词：空串合法写盘(清除)；非字符串不落盘保留磁盘旧值', async () => {
+  await saveConfig({ defaultCommitMessage: 'test', agentDefaultPrompt: '先跑测试' })
+  // 空串 = 清除 —— 必须真的写盘，不能因为"空"被当成未提供跳过
+  await saveConfig({ defaultCommitMessage: 'test', agentDefaultPrompt: '' })
+  assert.equal((await readRawConfig()).agentDefaultPrompt, '', '空串要真的写盘')
+  assert.equal((await configMod.default.loadConfig()).agentDefaultPrompt, '', '读回来也是空串(合法态)')
+
+  // 非法值不落盘：磁盘上仍是上一次的合法值
+  await saveConfig({ defaultCommitMessage: 'test', agentDefaultPrompt: '写回来' })
+  for (const bad of [42, [], { text: 'x' }, true]) {
+    await saveConfig({ defaultCommitMessage: 'test', agentDefaultPrompt: bad })
+    assert.equal((await readRawConfig()).agentDefaultPrompt, '写回来', `非字符串不该覆盖磁盘上的合法值: ${JSON.stringify(bad)}`)
+  }
+})
+
+test('g ai 默认提示词超长截断到 4000(手改配置写爆时兜底)', async () => {
+  await saveConfig({ defaultCommitMessage: 'test', agentDefaultPrompt: 'x'.repeat(5000) })
+  assert.equal((await readRawConfig()).agentDefaultPrompt.length, 4000)
+})
+
+// src/ui/server 是 `import config from '../../config.js'`，拿的是**默认导出的对象字面量**；
 test('默认导出对象必须包含路由要用的规范化函数（漏加 = undefined 调用 → 路由 500）', () => {
-  // src/ui/server 是 `import config from '../../config.js'`，拿的是**默认导出的对象字面量**；
   // 只在命名导出里加函数是不够的。2026-09-29 加提示音开关时正是漏了这一步：
   // 路由里 configManager.normalizeNotifySoundOnTaskDone(...) 变成 undefined 调用，
   // 被 try/catch 兜成 500，前端只看到"保存失败"，查了半天。
@@ -364,7 +405,8 @@ test('默认导出对象必须包含路由要用的规范化函数（漏加 = un
     'normalizeAiMaxToolIterations',
     'normalizeTaskExecutor',
     'normalizeNotifySwitch',
-    'normalizeAgentPresetPrompts'
+    'normalizeAgentPresetPrompts',
+    'normalizeAgentDefaultPrompt'
   ]) {
     assert.equal(typeof configMod.default[name], 'function', `默认导出缺少 ${name}`)
   }
