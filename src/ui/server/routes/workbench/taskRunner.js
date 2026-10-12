@@ -420,10 +420,11 @@ export function launchCodexExec(cwd, promptText, resumeSessionId) {
 // "WorkBuddy 同款引擎"（同一套工具集、Skills、权限模型），账号体系也是同一个
 // （都走腾讯账号；CLI 侧首次要在终端扫码登录一次，写 ~/.codebuddy）。
 //
-// ⚠️ 与桌面版**不共享配置目录**：桌面版给子进程注入 CODEBUDDY_CONFIG_DIR 指向它
-// 自己的私有目录，而 CLI 的默认目录是 ~/.codebuddy。这里显式删掉该变量
-// （见 buildCodebuddyEnv）—— CLI 固定读自己的默认目录，行为可复现，
-// 不随 g gui 被谁拉起而变。
+// ⚠️ 与桌面版**不共享任何运行时身份**：桌面版给它自己的子进程注入一整套变量
+// （CODEBUDDY_HOST=workbuddy-desktop / CONFIG_DIR / MCP_CONFIG / 会话追踪 id…），
+// 这套变量继承过来会让 CLI 以"桌面版子进程"身份运行 —— 实测直接认证失败。
+// 全部在 buildCodebuddyEnv 里剥掉，CLI 固定以独立模式读自己的 ~/.codebuddy，
+// 行为可复现，不随 g gui 被谁拉起而变。
 //
 // 实测口径（2026-10-12，CLI 2.164.0，本机与官方文档双向核对）：
 //
@@ -484,6 +485,67 @@ function resolveCodebuddyExe() {
 }
 
 /**
+ * WorkBuddy 桌面版注入给**它自己子进程**的环境变量，一个都不能让 codebuddy 子进程继承。
+ *
+ * ★ 两个实测确认的认证杀手（2026-10-12 逐变量二分 + CLI 日志取证）：
+ *   1. `CODEBUDDY_HOST=workbuddy-desktop` —— 带上它，CLI 认为自己是"桌面版引擎
+ *      的子进程"，转而去找桌面版凭据（`auth/workbuddy-desktop.info`，其解密密钥
+ *      只存在于桌面版运行时），拿不到就报 "Authentication required"（日志：
+ *      AtRestEncryption missing-key → AuthRefresh failed）。而用户明明在
+ *      ~/.codebuddy 登录过。
+ *   2. `CODEBUDDY_FORCE_LITE_WB_BUNDLE=1`（+配套 FORCE_HEADLESS_BUNDLE）——
+ *      bin/codebuddy 里**专为桌面版宿主准备的 bundle 分流通道**（CLI 源码注释
+ *      原话："宿主（workbuddy-server 起 sidecar / prewarm）在 spawn cbc 前设
+ *      CODEBUDDY_FORCE_LITE_WB_BUNDLE=1，直接命中 codebuddy-lite-wb.js"）。
+ *      命中后跑的是 lite-wb 裁剪包，强绑定桌面版身份，同样认证失败
+ *      （日志 ProcessExit 调用栈落在 codebuddy-lite-wb.mjs）。
+ *
+ * 剥离策略：**前缀级 + 认证白名单**。桌面版实测注入 54 个 CODEBUDDY_* 变量
+ * （外加 WORKBUDDY_* / CLIENT_INFO_* / ACC_* / TENCENT_DOCS_LOCAL_* 各家族），
+ * 逐个人肉枚举是在打地鼠 —— FORCE_* 这对杀手就是枚举清单时代漏掉的。
+ *
+ * 判据（为什么这些前缀可以整族剥、为什么"全环境白名单"方向又是错的）：
+ *   看"用户在自己的终端里跑 codebuddy 时环境里有没有它"。桌面版在拉起 g gui
+ *   或它的 sidecar 时注入的这几族变量，用户正常场景**全部不存在**；剥掉它们
+ *   只是把子进程环境对齐到"用户终端里的 codebuddy"，不引入任何新偏差。
+ *   而 DB_* / pw / IMG_LIB 这类用户自己永久设置的变量不在这里剥。
+ *   （反向的"只保留必需变量"白名单同样错：HTTP(S)_PROXY / NODE_EXTRA_CA_CERTS
+ *   这类网络变量是合法继承项，一刀切会把用户的代理环境也切没。）
+ */
+const CODEBUDDY_DESKTOP_ENV_PREFIXES = Object.freeze([
+  'CODEBUDDY_',          // 运行时开关全家（认证白名单见 CODEBUDDY_ENV_KEEP）
+  'WORKBUDDY_',          // 桌面版自家命名空间（含 PAC_RPC_TOKEN 等内部令牌）
+  'CLIENT_INFO_',        // 桌面版客户端身份（PRODUCT_NAME=WorkBuddy / MACHINE_ID / UA 后缀）
+  'ACC_',                // 产品配置注入（ACC_PRODUCT_CONFIG_PATH → workbuddy 产品 json）
+  'TENCENT_DOCS_LOCAL_', // 腾讯文档本地 MCP 地址注入
+]);
+
+/**
+ * 前缀剥离里**必须放行**的例外：官方文档的 headless 认证通道。
+ * 用户在终端里显式设置它们属于正当配置，g gui 继承用户环境 = 继承用户意图。
+ * 只放行有文档背书的这两个（其余几百个 CODEBUDDY_* 开关一律剥，理由见上）。
+ */
+const CODEBUDDY_ENV_KEEP = Object.freeze([
+  'CODEBUDDY_API_KEY',
+  'CODEBUDDY_BASE_URL',
+]);
+
+/**
+ * 不属于任何前缀、但同样只在桌面版会话里出现的单键（逐个人工核对过）。
+ * 归入同一份剥离清单，测试里逐键钉住。
+ */
+const CODEBUDDY_DESKTOP_ENV_KEYS = Object.freeze([
+  // 遥测 / 链路追踪：会把子会话的 trace 挂到桌面版那次会话下
+  'BAGGAGE', 'TRACEPARENT',
+  // 桌面版遥测 SDK 标记
+  'GALILEO_ENABLE', 'GALILEO_SDK_READY',
+  // 桌面版沙箱中心管道 / 网关服务地址（SERVER__PORT 与 SERVICE_PROXY_URL 同端口同源）
+  'SANDBOX_CENTER_IPC_ADDRESS', 'SERVER__HOST', 'SERVER__PORT',
+  // 桌面版运行时路径与 Electron 标记（EXEPATH=桌面版 PortableGit；GENIE_TRASH_DIR=桌面版垃圾箱）
+  'EXEPATH', 'GENIE_TRASH_DIR', 'ELECTRON_RUN_AS_NODE', 'ORIGINAL_XDG_CURRENT_DESKTOP',
+]);
+
+/**
  * codebuddy 子进程环境。四个刻意为之的取舍：
  *   - LANG=zh_CN.UTF-8：与另三家一致（CLI 的提示词/输出跟随 locale）。
  *   - DISABLE_AUTOUPDATER=1：执行器场景**不允许 CLI 自我更新** —— 任务跑到一半
@@ -492,22 +554,23 @@ function resolveCodebuddyExe() {
  *     结束，收不了后台任务的跨轮回推事件（官方文档对 SDK query() 单发用法也是
  *     这么处理的）。禁掉之后模型的 run_in_background 参数从工具 schema 里隐藏，
  *     不会出现"派了后台任务然后永远等不到通知"。
- *   - **删掉 CODEBUDDY_CONFIG_DIR**：WorkBuddy 桌面版会给子进程注入这个变量
- *     （指向它自己的私有配置目录 ~/.workbuddy，2026-10-12 实测本机就是）。
- *     g gui 若在桌面版环境里拉起，继承它 = CLI 被指到桌面版的私有目录 ——
- *     登录态/MCP 从哪来全看桌面版心情，不可复现。删掉让 CLI 回到自己的默认
- *     ~/.codebuddy：用户终端里 `codebuddy` 扫码登录写哪，执行器就读哪。
- *     （代价是与桌面版不共享那份登录；换来的是确定性，见 launchCodebuddyPrint 注释。）
- * （导出仅为回归测试可见：taskRunner.codebuddy.test.js 钉住这几个变量不能丢）
+ *   - **剥掉桌面版注入的前缀族**（见上方注释的两个杀手 —— 不剥 CODEBUDDY_HOST
+ *     或 CODEBUDDY_FORCE_LITE_WB_BUNDLE 都会直接认证失败，2026-10-12 实测）。
+ * （导出仅为回归测试可见：taskRunner.codebuddy.test.js 钉住剥/留两侧的边界）
  */
 export function buildCodebuddyEnv() {
-  const env = {
-    ...process.env,
-    LANG: 'zh_CN.UTF-8',
-    DISABLE_AUTOUPDATER: '1',
-    CODEBUDDY_CODE_DISABLE_BACKGROUND_TASKS: '1',
-  };
-  delete env.CODEBUDDY_CONFIG_DIR;
+  const env = { ...process.env };
+  const keep = new Set(CODEBUDDY_ENV_KEEP);
+  for (const key of Object.keys(env)) {
+    if (keep.has(key)) continue;
+    if (CODEBUDDY_DESKTOP_ENV_KEYS.includes(key)) { delete env[key]; continue; }
+    if (CODEBUDDY_DESKTOP_ENV_PREFIXES.some((p) => key.startsWith(p))) delete env[key];
+  }
+  // 自己的三项在**剥离之后**设置：CODEBUDDY_CODE_DISABLE_BACKGROUND_TASKS 本身
+  // 命中 CODEBUDDY_ 前缀，若像从前那样先合并进来会被剥离循环顺手删掉。
+  env.LANG = 'zh_CN.UTF-8';
+  env.DISABLE_AUTOUPDATER = '1';
+  env.CODEBUDDY_CODE_DISABLE_BACKGROUND_TASKS = '1';
   return env;
 }
 

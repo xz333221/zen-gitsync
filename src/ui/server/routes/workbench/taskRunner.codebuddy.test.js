@@ -20,7 +20,11 @@
 //   2. spawn argv：-p + stream-json + -y + **--port 0**（避开桌面版占用的 62443）
 //      + 续聊时 --resume <id>；**不出现** --verbose（cbc 不需要，claude 才需要）
 //   3. 子进程环境：DISABLE_AUTOUPDATER / CODEBUDDY_CODE_DISABLE_BACKGROUND_TASKS
-//      必须带上（丢了不会报错，只会某天任务跑到一半被自动更新换掉二进制）
+//      必须带上（丢了不会报错，只会某天任务跑到一半被自动更新换掉二进制）；
+//      桌面版注入的五个前缀族 + 单键必须剥掉 —— CODEBUDDY_HOST 与
+//      CODEBUDDY_FORCE_LITE_WB_BUNDLE 是 2026-10-12 实测的两个认证杀手
+//      （后者命中桌面版专属 lite-wb bundle 分流）；官方认证通道
+//      CODEBUDDY_API_KEY / CODEBUDDY_BASE_URL 必须放行
 //   4. 事件映射：init → session_id；assistant 的 text/thinking/tool_use 分派；
 //      user 里的 tool_result 回指；cbc 特有的 system/status、ai-title、result 一律忽略
 //   5. 工具调用是"先 tool_use(running)、后 user(tool_result)"两条，不是一次性终态
@@ -101,13 +105,78 @@ test('buildCodebuddyArgs：有续聊 id 时 --resume 在前', () => {
   assert.ok(args.includes('-p'));
 });
 
-test('buildCodebuddyEnv：禁自动更新 + 禁后台任务 + LANG，不隔离配置目录', () => {
-  const env = buildCodebuddyEnv();
-  assert.equal(env.DISABLE_AUTOUPDATER, '1');
-  assert.equal(env.CODEBUDDY_CODE_DISABLE_BACKGROUND_TASKS, '1');
-  assert.equal(env.LANG, 'zh_CN.UTF-8');
-  // 刻意不设 CODEBUDDY_CONFIG_DIR：与桌面版共用 ~/.codebuddy 才能拿到登录态/MCP/Skills
-  assert.equal(env.CODEBUDDY_CONFIG_DIR, undefined);
+test('buildCodebuddyEnv：禁自动更新 + 禁后台任务 + LANG，前缀级剥掉桌面版注入变量', () => {
+  // 模拟"g gui 在 WorkBuddy 终端里被拉起"：父进程带着桌面版整套注入变量。
+  // 覆盖五个前缀族 + 单键，每族挑代表；逐键断言剥离不留死角。
+  const had = {};
+  const pollution = {
+    // ★ 两个实测认证杀手
+    CODEBUDDY_HOST: 'workbuddy-desktop',
+    CODEBUDDY_FORCE_LITE_WB_BUNDLE: '1',
+    CODEBUDDY_FORCE_HEADLESS_BUNDLE: '1',
+    // 其余 CODEBUDDY_* 家族代表（认证辅助 / 网关 / 设备指纹 / 配置目录 / 会话追踪）
+    CODEBUDDY_API_KEY_HELPER_DISABLED: '1',
+    CODEBUDDY_GATEWAY_PASSWORD: 'secret',
+    CODEBUDDY_QIMEI36: 'device-fp',
+    CODEBUDDY_CONFIG_DIR: 'C:\\Users\\xuze\\.workbuddy',
+    CODEBUDDY_MCP_CONFIG: '{"mcpServers":{}}',
+    CODEBUDDY_SESSION_ID: 'some-session',
+    CODEBUDDY_CURRENT_MODEL_ID: 'some-model',
+    // WORKBUDDY_* / CLIENT_INFO_* / ACC_* / TENCENT_DOCS_LOCAL_* 族代表
+    WORKBUDDY_PAC_RPC_TOKEN: 'secret',
+    WORKBUDDY_PRODUCT_NAME: 'WorkBuddy',
+    CLIENT_INFO_PRODUCT_NAME: 'WorkBuddy',
+    CLIENT_INFO_MACHINE_ID: 'machine-id',
+    ACC_PRODUCT_CONFIG_PATH: 'C:\\Temp\\acc-product-config-v3.json',
+    TENCENT_DOCS_LOCAL_MCP: 'http://127.0.0.1:39099/mcp',
+    TENCENT_DOCS_LOCAL_SERVER: 'http://127.0.0.1:39099',
+    // 单键族：遥测追踪 / 沙箱 / 网关 / 运行时路径
+    BAGGAGE: 'codebuddy.session_id=xxx',
+    TRACEPARENT: '00-abc-def-01',
+    SANDBOX_CENTER_IPC_ADDRESS: '\\\\.\\pipe\\WorkBuddy_SandboxCenter_x',
+    SERVER__PORT: '52710',
+    EXEPATH: 'C:\\Users\\xuze\\AppData\\Local\\Programs\\WorkBuddy\\resources\\vendor\\PortableGit\\bin',
+    ELECTRON_RUN_AS_NODE: '1',
+    // 反例：用户合法认证通道（官方文档 headless 认证）必须保留
+    CODEBUDDY_API_KEY: 'user-key',
+    CODEBUDDY_BASE_URL: 'https://example.com/api',
+    // 反例：用户自己永久设置的变量不在剥离范围
+    DB_HOST: '192.168.3.44',
+  };
+  for (const [k, v] of Object.entries(pollution)) { had[k] = process.env[k]; process.env[k] = v; }
+  try {
+    const env = buildCodebuddyEnv();
+    // ★ 两个杀手必须剥掉：带上任一 CLI 会跑桌面版 bundle / 找桌面版凭据 → Authentication
+    //   required（2026-10-12 逐变量二分 + 日志取证）。这两条测试就是那道防线。
+    assert.equal(env.CODEBUDDY_HOST, undefined);
+    assert.equal(env.CODEBUDDY_FORCE_LITE_WB_BUNDLE, undefined);
+    assert.equal(env.CODEBUDDY_FORCE_HEADLESS_BUNDLE, undefined);
+    for (const k of ['CODEBUDDY_API_KEY_HELPER_DISABLED', 'CODEBUDDY_GATEWAY_PASSWORD',
+      'CODEBUDDY_QIMEI36', 'CODEBUDDY_CONFIG_DIR', 'CODEBUDDY_MCP_CONFIG',
+      'CODEBUDDY_SESSION_ID', 'CODEBUDDY_CURRENT_MODEL_ID']) {
+      assert.equal(env[k], undefined, `${k} 应被 CODEBUDDY_ 前缀剥掉`);
+    }
+    for (const k of ['WORKBUDDY_PAC_RPC_TOKEN', 'WORKBUDDY_PRODUCT_NAME',
+      'CLIENT_INFO_PRODUCT_NAME', 'CLIENT_INFO_MACHINE_ID', 'ACC_PRODUCT_CONFIG_PATH',
+      'TENCENT_DOCS_LOCAL_MCP', 'TENCENT_DOCS_LOCAL_SERVER',
+      'BAGGAGE', 'TRACEPARENT', 'SANDBOX_CENTER_IPC_ADDRESS', 'SERVER__PORT',
+      'EXEPATH', 'ELECTRON_RUN_AS_NODE']) {
+      assert.equal(env[k], undefined, `${k} 应被剥掉`);
+    }
+    // 用户合法认证通道放行（白名单）
+    assert.equal(env.CODEBUDDY_API_KEY, 'user-key');
+    assert.equal(env.CODEBUDDY_BASE_URL, 'https://example.com/api');
+    // 用户自己的变量不受影响
+    assert.equal(env.DB_HOST, '192.168.3.44');
+    // 自己的三个设定仍在（且顺序上是在剥离之后设置的 —— 先设会被前缀规则误伤）
+    assert.equal(env.DISABLE_AUTOUPDATER, '1');
+    assert.equal(env.CODEBUDDY_CODE_DISABLE_BACKGROUND_TASKS, '1');
+    assert.equal(env.LANG, 'zh_CN.UTF-8');
+  } finally {
+    for (const [k, v] of Object.entries(had)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  }
 });
 
 test('codebuddy 事件：init 落 session_id，text/thinking/tool_use 分派', () => {
