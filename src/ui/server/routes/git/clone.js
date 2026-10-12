@@ -33,6 +33,7 @@ import { HttpError } from '../../utils/asyncRoute.js'
 import { assertGitRemoteUrl } from '../../utils/gitArgs.js'
 import { rememberRepo } from '../../utils/localRepoScan.js'
 import { augmentEnvPath } from '../../../../utils/shellPath.js'
+import { repoNameFromUrl } from '../../../../utils/gitRepoName.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -40,19 +41,10 @@ const execFileAsync = promisify(execFile)
 const CLONE_TIMEOUT_MS = 180_000
 const MAX_BUFFER = 10 * 1024 * 1024
 
-/**
- * 从远程地址里取出仓库目录名(clone 出来的子目录就用它)。
- *   git@github.com:owner/repo.git     → repo
- *   https://gitee.com/owner/repo.git  → repo
- *   https://github.com/owner/repo/    → repo
- * 取不出来返回空串,调用方兜底成 repository。
- */
-export function repoNameFromUrl(url) {
-  const s = String(url || '').trim().replace(/\/+$/, '')
-  if (!s) return ''
-  const tail = s.split(/[/:]/).filter(Boolean).pop() || ''
-  return tail.replace(/\.git$/i, '')
-}
+// repoNameFromUrl 的实现已挪到 utils/gitRepoName.js —— g ai 的 run_command 后处理
+// 也要用它推导 git clone 的落点，两份同规则实现迟早分叉。这里保留 re-export，
+// 既有调用点（clone.test.js）不必改。
+export { repoNameFromUrl }
 
 /**
  * 校验父目录:必须是**已存在的目录**的绝对路径。

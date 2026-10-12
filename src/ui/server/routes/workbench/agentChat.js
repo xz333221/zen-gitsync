@@ -347,6 +347,9 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 //   - askUser: (args, meta) => Promise<string>  等待用户回答
 //   - listProjects: (args) => Promise<string>  list_projects 工具的数据源
 //     (由 agentRoutes 注入:最近目录/tasks.json/看板统计只有 GUI 侧拿得到)
+//   - registerProject: (dir) => Promise<void>  register_project 工具的实现,以及
+//     run_command 里"建了仓库就顺手登记进常用目录"那一步的落点(同一个注入、同一个
+//     效果)。不注入 = 没有登记能力(CLI 与测试环境),对应工具回一句可照做的说明。
 //   - dispatchTask: (payload) => Promise<string>  dispatch_task 工具的实现 —— 派发一条
 //     工作台任务。同样由 agentRoutes 注入，但**只在主 Agent 控制台发起的对话里**注入
 //     （别的入口不注入 = 那个入口没有派发能力，工具会回一句可照做的 unavailable）
@@ -371,8 +374,8 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 // 分流、摘要注进请求副本（agentParity.test.js 有守卫）。
 //
 // 返回: { aborted: boolean }
-export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, dispatchTask, getContextBlock, requestBudget = null, resume = false, streamFn = streamChatOnce, promptSection }) {
-  const ctx = { cwd, locale, onChild, askUser, listProjects, dispatchTask };
+export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, registerProject, dispatchTask, getContextBlock, requestBudget = null, resume = false, streamFn = streamChatOnce, promptSection }) {
+  const ctx = { cwd, locale, onChild, askUser, listProjects, registerProject, dispatchTask };
 
   // 确保 session.messages 存在
   if (!Array.isArray(session.messages)) session.messages = [];

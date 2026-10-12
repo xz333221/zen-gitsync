@@ -201,6 +201,21 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
   // 不给它加缓存:agent 一轮里最多问一两次,而"项目状态"本来就要现读才准。
   const listProjects = createProjectListProvider({ configManager, getCurrentProjectPath });
 
+  // 把目录登记进「常用目录」(config.json 的 recentDirectories)。register_project 工具
+  // 与 run_command 里"建了仓库就顺手登记"那一步共用它 —— 智能体建/克隆完新项目,
+  // 用户下次在「切换工作目录」弹窗里就能直接看到,不必重启 GUI 或自己翻路径。
+  //
+  // 失败只 warn 不外抛:登记是锦上添花,不能让一条命令/一次工具调用因为写配置失败而报错。
+  const registerProject = (configManager && typeof configManager.saveRecentDirectory === 'function')
+    ? async (dir) => {
+      try {
+        await configManager.saveRecentDirectory(dir);
+      } catch (err) {
+        logger.warn(`[agent] 登记常用目录失败 ${dir}: ${err?.message || err}`);
+      }
+    }
+    : undefined;
+
   // dispatch_task 的实现 —— 与 POST /api/workbench/orchestrator/dispatch 共用**同一份**
   // 派发实现（见 dispatchInstruction.js 的文件头）：落点怎么判、预设提示词附加哪一级、
   // 指令流水记什么、执行器怎么回落，只有一套。这里只是把同一套依赖再绑一次
@@ -231,6 +246,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
     configManager,
     getCurrentProjectPath,
     listProjects,
+    registerProject,
     dispatchTask: scheduleDispatchTask,
     getContextBlock,
   });
@@ -743,6 +759,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
           }),
           dispatchTask,
           listProjects,
+          registerProject,
           getContextBlock,
           // 每轮请求的上下文预算（解析结果）。agentChat 拿它调 prepareRequestMessages，
           // 与 CLI turn.js 同一条口径。

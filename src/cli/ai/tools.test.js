@@ -19,7 +19,7 @@ import assert from 'node:assert/strict'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { TOOL_DEFINITIONS, executeTool, resolveCommandTimeout, normalizePlanSteps, isPlanToolName, splitToolOutput, toolMessageContent } from './tools.js'
+import { TOOL_DEFINITIONS, executeTool, resolveCommandTimeout, normalizePlanSteps, isPlanToolName, splitToolOutput, toolMessageContent, detectRepoCreateTargets } from './tools.js'
 
 // 1×1 红色 PNG。用真字节而不是造一个空文件:checkImageFile 只校验扩展名与体积,
 // 但"读出来能还原成原图"这件事值得顺手钉一下(imageToDataUrl 会把内容 base64)。
@@ -504,4 +504,73 @@ test('read_image 与 read_file 的描述互指 —— 模型选错工具时能�
   assert.ok(readImage, 'TOOL_DEFINITIONS 里必须有 read_image')
   assert.match(readFile.function.description, /read_image/)
   assert.match(readImage.function.description, /read_file/)
+})
+
+// ========== 建仓库后自动登记「常用目录」 ==========
+// g ai 帮用户建/克隆了新项目之后，新目录本该出现在「常用目录」里（否则用户还得
+// 自己去界面里找路径）。这一步在工具层兜底：命令文本里出现 git clone / git init /
+// gh repo create --clone 就登记落点。register_project 是通用兜底（脚手架建的目录）。
+
+test('detectRepoCreateTargets：只认"建仓库"的命令，抽出落点', () => {
+  const base = path.resolve(os.tmpdir(), 'ws-root')
+  const rel = (list) => list.map(p => path.relative(base, p) || '.').sort()
+
+  // 克隆：给了目标目录用它；没给就按仓库名猜（与 /api/clone 同一规则）
+  assert.deepEqual(rel(detectRepoCreateTargets('git clone https://github.com/o/demo.git', base)), ['demo'])
+  assert.deepEqual(rel(detectRepoCreateTargets('git clone git@gitee.com:o/x.git custom', base)), ['custom'])
+  // init：没给目录就是 cwd；`git -C` / `cd` 链按它们解析
+  assert.deepEqual(rel(detectRepoCreateTargets('git init', base)), ['.'])
+  assert.deepEqual(rel(detectRepoCreateTargets('mkdir p && cd p && git init', base)), ['.', 'p'])
+  assert.deepEqual(rel(detectRepoCreateTargets('git -C sub init', base)), ['sub'])
+  // gh repo create：只有 --clone 才在本地建出目录
+  assert.deepEqual(rel(detectRepoCreateTargets('gh repo create o/n --clone', base)), ['n'])
+  assert.deepEqual(rel(detectRepoCreateTargets('gh repo create o/n --public', base)), [])
+  // 不是建仓库的命令：一个都不给（不能因为智能体"逛"过某个仓库就登记它）
+  assert.deepEqual(detectRepoCreateTargets('git status', base), [])
+  assert.deepEqual(detectRepoCreateTargets('npm run build', base), [])
+})
+
+test('run_command 建了仓库后把落点交给注入的登记实现', async () => {
+  const repo = path.join(tmpDir, 'auto-registered-repo')
+  await fs.mkdir(path.join(repo, '.git'), { recursive: true })
+  const seen = []
+  // 命令文本里含 `git init` 即命中识别；这条用例不真跑 git（只验链路），
+  // 所以造一个假的 .git 目录 —— isGitRepoRoot 只 stat 它，不调 git。
+  const out = await executeTool('run_command', { command: 'echo git init', cwd: repo }, {
+    ...ctx, registerProject: async (dir) => { seen.push(dir) },
+  })
+  assert.match(out, /exit 0/)
+  assert.deepEqual(seen, [repo])
+  await fs.rm(repo, { recursive: true, force: true })
+})
+
+test('run_command 普通命令不登记任何目录', async () => {
+  const repo = path.join(tmpDir, 'not-a-create-cmd')
+  await fs.mkdir(path.join(repo, '.git'), { recursive: true })
+  const seen = []
+  await executeTool('run_command', { command: 'echo hello', cwd: repo }, {
+    ...ctx, registerProject: async (dir) => { seen.push(dir) },
+  })
+  assert.deepEqual(seen, [])
+  await fs.rm(repo, { recursive: true, force: true })
+})
+
+test('register_project 把已存在的目录交给注入的实现', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'g-ai-reg-'))
+  const seen = []
+  const out = await executeTool('register_project', { path: dir }, {
+    ...ctx, registerProject: async (d) => { seen.push(d) },
+  })
+  assert.deepEqual(seen, [dir])
+  assert.match(out, /常用目录/)
+  await fs.rm(dir, { recursive: true, force: true })
+})
+
+test('register_project：目录不存在 / 未注入实现 / 空路径都给可照做的错误', async () => {
+  const withImpl = { ...ctx, registerProject: async () => {} }
+  const missing = path.join(os.tmpdir(), `g-ai-reg-missing-${Date.now()}`)
+  assert.match(await executeTool('register_project', { path: missing }, withImpl), /目录不存在/)
+  assert.match(await executeTool('register_project', {}, withImpl), /path 不能为空/)
+  // CLI 下没有「常用目录」这个概念 —— 要回一句说明，而不是崩掉
+  assert.match(await executeTool('register_project', { path: tmpDir }, ctx), /只在 g ui/)
 })

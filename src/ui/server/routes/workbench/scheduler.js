@@ -64,6 +64,7 @@ export const MAX_RUN_MS = 60 * 60_000;
  * @param {object} deps.configManager           读全局模型配置（与对话链路同源）
  * @param {() => string} [deps.getCurrentProjectPath]
  * @param {Function} [deps.listProjects]        list_projects 工具的实现（GUI 侧注入）
+ * @param {Function} [deps.registerProject]     register_project / 建仓库后登记常用目录的实现
  * @param {Function} [deps.dispatchTask]        dispatch_task 工具的实现（已绑定默认参数）
  * @param {Function} [deps.getContextBlock]     工作区状态快照
  * @param {Function} [deps.runTurn]             执行一轮对话（默认 runAgentTurn；测试注入替身）
@@ -74,6 +75,7 @@ export function createScheduler({
   configManager,
   getCurrentProjectPath,
   listProjects,
+  registerProject,
   dispatchTask,
   getContextBlock,
   runTurn = runAgentTurn,
@@ -221,6 +223,7 @@ export function createScheduler({
             + '请基于已有信息自行判断并继续；如果这一步必须由人决定，跳过它，'
             + '并在最终答复里明确说明需要用户确认什么。',
           listProjects,
+          registerProject,
           dispatchTask,
           getContextBlock,
           requestBudget,

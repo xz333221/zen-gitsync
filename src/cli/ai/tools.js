@@ -37,6 +37,8 @@ import { trackChild } from '../cleanup.js'
 import { checkDangerousCommand } from './safety.js'
 import { guardCommand } from './platformGuard.js'
 import { augmentEnvPath, isCommandNotFound, pathValueOf } from '../../utils/shellPath.js'
+// 从远程地址推导仓库目录名 —— 与 GUI 的 /api/clone 共用同一份规则(见 utils/gitRepoName.js)
+import { repoNameFromUrl } from '../../utils/gitRepoName.js'
 import { checkImageFile, imageToDataUrl, formatBytes, isImagePath, SUPPORTED_IMAGE_EXTS } from './images.js'
 // 定时任务库：CLI 与 GUI 共享同一份文件（~/.zen-gitsync/schedules.json）。
 // 本工具只负责登记/管理，真正的到点执行由 g ui 服务端的调度器完成。
@@ -220,6 +222,24 @@ export const TOOL_DEFINITIONS = [
           },
         },
         required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'register_project',
+      description: '把一个目录登记进用户的「常用目录」—— 就是 g ui「切换工作目录」弹窗里那份清单(首屏「最近项目」面板是同一份数据)。'
+        + '什么时候用:你**刚创建或克隆了一个新项目**(git init / git clone / 各种脚手架新建出来的目录)之后,顺手把它登记进去 —— '
+        + '用户下次就能在界面上一键切过去,不用自己去翻路径。'
+        + '路径必须是**已存在**的目录(绝对路径);重复登记同一个目录没有副作用(会挪到最前)。'
+        + '只在 g ui(GUI 界面)的内置智能体里可用;命令行 g ai 没有「常用目录」这个概念,不用调用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: '要登记的项目目录(绝对路径,必须已存在)' },
+        },
+        required: ['path'],
       },
     },
   },
@@ -493,6 +513,98 @@ function execCommand(command, options) {
 }
 
 // ──────────────────────────────────────────────
+// 「建了仓库」的识别：run_command 之后把新项目顺手登记进常用目录
+// ──────────────────────────────────────────────
+//
+// 为什么要在**命令文本**上做这件事(而不是只靠模型记得调 register_project):
+// g ai 帮用户建项目(git clone / git init)之后,新目录理应出现在「常用目录」里,
+// 否则用户还得自己去界面里再找一遍路径 —— 而这步本来就该由动手的人顺手做掉。
+// 登记常用目录是"顺手做的事",指望每一轮模型都记得并不可靠;这两条命令又足够典型
+// (克隆 / 初始化仓库是"建项目"最常见的两步),所以在工具层兜一道。
+// register_project 工具是通用兜底:脚手架(npm create / npx create-vite …)建出来的
+// 目录这里认不出来,模型可以显式补一记。
+const REPO_CREATE_HINT_RE = /(?:^|[\s;&|()])(?:git\s+(?:-C\s+\S+\s+)?(?:clone|init)\b|gh\s+repo\s+create\b)/i
+
+/** 按空白切参数,保留引号里的整体(`"a b"` 算一个 token) */
+function tokenizeArgs(text) {
+  return String(text || '').match(/"[^"]*"|'[^']*'|\S+/g) || []
+}
+
+/** 去掉 token 两端成对的引号 */
+function unquoteToken(token) {
+  const t = String(token || '')
+  const pair = t.length >= 2
+    && ((t[0] === '"' && t.endsWith('"')) || (t[0] === "'" && t.endsWith("'")))
+  return pair ? t.slice(1, -1) : t
+}
+
+/**
+ * 从一条疑似"建仓库"的命令里抽出**可能新建的仓库目录**(绝对路径)。
+ * 纯字符串解析,**不做存在性判断** —— 调用方自己 fs.stat 确认落到了磁盘上。
+ * 认不出来返回空数组(宁可漏登记,也不要凭空登记一个不存在的路径)。
+ *
+ * 覆盖三种写法:
+ *   git clone <url> [<dir>]   —— 没给 dir 时按仓库名猜(与 /api/clone 同一规则)
+ *   git init [<dir>]          —— 没给 dir 时就是 cwd
+ *   gh repo create … --clone  —— 本地子目录名取仓库名
+ * 外加命令里出现过的 `cd <dir>` / `git -C <dir>`:链式相对 cd(`cd a && cd b`)不精确,
+ * 但 `mkdir x && cd x && git init` 这类常见写法能命中。
+ */
+export function detectRepoCreateTargets(command, cwd) {
+  const cmd = String(command || '')
+  if (!REPO_CREATE_HINT_RE.test(cmd)) return []
+  const base = path.resolve(cwd || process.cwd())
+  const abs = (p) => (path.isAbsolute(p) ? path.normalize(p) : path.resolve(base, p))
+  const out = new Set()
+  let m
+
+  // `cd [ /d ] <dir>`（Windows 的 `cd /d` 也认）：后续 clone/init 的相对落点按它解析
+  const cdRe = /(?:^|[\s;&|()])cd(?:\s+\/d)?\s+("[^"]*"|'[^']*'|[^\s;&|()]+)/gi
+  while ((m = cdRe.exec(cmd))) out.add(abs(unquoteToken(m[1])))
+
+  const gitRe = /(?:^|[\s;&|()])git(?:\s+-C\s+("[^"]*"|'[^']*'|[^\s;&|()]+))?\s+(clone|init)\b([^\n;&|]*)/gi
+  while ((m = gitRe.exec(cmd))) {
+    const cDir = m[1] ? unquoteToken(m[1]) : ''      // git -C <dir>
+    if (cDir) out.add(abs(cDir))
+    const positionals = tokenizeArgs(m[3]).filter(t => !t.startsWith('-'))
+    if (m[2].toLowerCase() === 'clone') {
+      const [url, dir] = positionals
+      if (dir) out.add(abs(unquoteToken(dir)))
+      else {
+        const name = url ? repoNameFromUrl(unquoteToken(url)) : ''
+        if (name) out.add(abs(name))
+      }
+    } else {
+      // init 的落点：显式目录 > `git -C <dir>` > cwd
+      out.add(abs(unquoteToken(positionals[0] || cDir || '.')))
+    }
+  }
+
+  // gh repo create [owner/]name …：只有 --clone(且不是从本地 --source 建)才会建出目录
+  const ghRe = /(?:^|[\s;&|()])gh\s+repo\s+create\b([^\n;&|]*)/gi
+  while ((m = ghRe.exec(cmd))) {
+    const rest = m[1]
+    if (!/(?:^|\s)--clone(?:[=\s]|$)/.test(rest)) continue
+    if (/(?:^|\s)--source(?:[=\s]|$)/.test(rest)) continue
+    const name = tokenizeArgs(rest).filter(t => !t.startsWith('-'))[0] || ''
+    const leaf = unquoteToken(name).split('/').filter(Boolean).pop() || ''
+    if (leaf) out.add(abs(leaf))
+  }
+
+  return Array.from(out)
+}
+
+/** 目录是不是一个 Git 仓库的根(普通仓库里 .git 是目录;worktree/submodule 里是文件) */
+async function isGitRepoRoot(dir) {
+  try {
+    await fs.stat(path.join(dir, '.git'))
+    return true
+  } catch {
+    return false
+  }
+}
+
+// ──────────────────────────────────────────────
 // 各工具实现
 // ──────────────────────────────────────────────
 
@@ -551,6 +663,19 @@ async function toolRunCommand(args, ctx) {
     if (pathValueOf(retryEnv) !== pathValueOf(firstEnv)) {
       const retry = await execCommand(command, { ...execOptions, env: retryEnv })
       if (!isCommandNotFound(retry.stderr, retry.errorMessage)) result = retry
+    }
+  }
+
+  // 命令成功建出了仓库 → 顺手登记进常用目录(见 detectRepoCreateTargets 的注释)。
+  // 只在 GUI 注入了 registerProject 时生效;CLI 没有「常用目录」这个概念,静默跳过。
+  // 整段包在 try 里:登记失败绝不能影响命令本身的结果。
+  if (result.code === 0 && typeof ctx.registerProject === 'function') {
+    try {
+      for (const dir of detectRepoCreateTargets(command, cwd)) {
+        if (await isGitRepoRoot(dir)) await ctx.registerProject(dir)
+      }
+    } catch {
+      // 锦上添花,失败就跳过
     }
   }
 
@@ -807,6 +932,27 @@ async function toolListProjects(args, ctx) {
   return ctx.listProjects({ refresh: args.refresh === true })
 }
 
+// register_project 的实现同样由 GUI 侧注入(ctx.registerProject)—— 最近目录是
+// configManager 的东西,CLI/Web 共用的本模块只该知道"有这么个工具"。
+// 与 list_projects 同一手法:没有实现时给一句能照着做的话,而不是崩掉。
+async function toolRegisterProject(args, ctx) {
+  if (typeof ctx.registerProject !== 'function') {
+    return '错误: register_project 只在 g ui(GUI 界面)的内置智能体里可用。'
+      + '命令行 g ai 下没有「常用目录」这个概念,无需调用。'
+  }
+  const raw = String(args.path || '').trim()
+  if (!raw) return '错误: path 不能为空'
+  const dir = resolvePath(ctx, raw)
+  try {
+    const st = await fs.stat(dir)
+    if (!st.isDirectory()) return `错误: ${dir} 不是目录,未登记。`
+  } catch {
+    return `错误: 目录不存在: ${dir}(未登记)。`
+  }
+  await ctx.registerProject(dir)
+  return `已把「${dir}」加入常用目录。`
+}
+
 async function toolAskUser(args, ctx) {
   const question = String(args.question || '').trim()
   if (!question) return 'Error: ask_user requires a non-empty question.'
@@ -1003,6 +1149,7 @@ const TOOL_HANDLERS = {
   list_files: toolListFiles,
   search_text: toolSearchText,
   list_projects: toolListProjects,
+  register_project: toolRegisterProject,
   update_plan: toolUpdatePlan,
   ask_user: toolAskUser,
   dispatch_task: toolDispatchTask,
@@ -1018,7 +1165,11 @@ const TOOL_HANDLERS = {
  *
  * @param {string} name - 工具名
  * @param {object} args - 已解析的参数对象
- * @param {{ cwd: string, onChild?: (child: object) => void }} ctx
+ * @param {{ cwd: string, onChild?: (child: object) => void,
+ *   listProjects?: (args: object) => Promise<string>,
+ *   registerProject?: (dir: string) => Promise<void> }} ctx
+ *   listProjects / registerProject 都由 GUI 侧注入(GUI 才有最近目录);
+ *   CLI 下缺省 undefined,对应工具会回一句可照做的说明。
  * @returns {Promise<string | { text: string, images: string[] }>}
  */
 export async function executeTool(name, args, ctx) {
