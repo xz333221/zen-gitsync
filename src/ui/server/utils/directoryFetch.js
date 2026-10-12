@@ -27,9 +27,14 @@
 //
 // 绝不能停在交互式凭据提示上（这是批量动作，卡一个仓库就卡掉整轮刷新）:
 //   - GIT_TERMINAL_PROMPT=0  让 git 直接失败，而不是在终端上等人输密码
+//   - GCM_INTERACTIVE=never  关掉 Git Credential Manager 的 GUI 弹窗。
+//     ⚠️ 单靠 GIT_TERMINAL_PROMPT 挡不住 GCM：它只管「终端里问」，GCM 的
+//     「Connect to GitHub」窗口由 GCM 自己决定弹不弹（2026-10-12 实测 GCM 2.9.1：
+//     windowsHide + 非交互 spawn 照样弹窗，fetch 挂到超时；加上这个变量后
+//     1.1s 内以 'user interactivity has been disabled' 失败返回）。
 //   - GIT_SSH_COMMAND 注入 BatchMode=yes，让 ssh 的 passphrase 也变成明确报错；
 //     用户自己设过 GIT_SSH_COMMAND 就不动他的（那可能是他的跳板机/密钥配置）
-//   两者叠加的效果是：需要认证又没存凭据的仓库会**快速失败**并回报一句人话，
+//   三者叠加的效果是：需要认证又没存凭据的仓库会**快速失败**并回报一句人话，
 //   而不是留下一个永远不返回的进程。
 //
 // 不做的事:
@@ -101,12 +106,20 @@ export function firstErrorLine(text, maxLen = ERROR_LINE_MAX) {
  *
  * GIT_CONFIG_PARAMETERS 与目录状态探测保持一致（关闭路径转义，否则中文/空格
  * 路径在报错里会变成 \xxx 八进制，用户没法对着看）。
+ *
+ * GCM_INTERACTIVE 与文件头「绝不能停在交互式凭据提示上」一节对应：
+ * GIT_TERMINAL_PROMPT=0 只管「终端里问」，挡不住 GCM 的 GUI 弹窗（实测后台
+ * spawn 也会弹「Connect to GitHub」并挂住整条 fetch）；这个变量关掉 GCM 的
+ * 全部交互（语义等价 credential.interactive=never，GCM 2.x 直接读）。
  */
 export function buildFetchEnv(baseEnv = process.env) {
   const env = {
     ...baseEnv,
     GIT_CONFIG_PARAMETERS: "'core.quotepath=false'",
     GIT_TERMINAL_PROMPT: '0',
+    // 无条件覆盖：这是后台批量动作，宁可「快速失败 + 一句人话」也不要任何 UI。
+    // 用户要登录 GCM 会在自己的前台操作（push/pull）里遇到弹窗，不靠刷新徽标。
+    GCM_INTERACTIVE: 'never',
   };
   if (!baseEnv.GIT_SSH_COMMAND) env.GIT_SSH_COMMAND = 'ssh -oBatchMode=yes';
   return env;

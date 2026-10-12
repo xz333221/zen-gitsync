@@ -53,12 +53,17 @@ const asRemote = p => p.replace(/\\/g, '/');
 test('buildFetchEnv: 关掉交互式凭据提示,且不覆盖用户自己的 GIT_SSH_COMMAND', () => {
   const withOwn = buildFetchEnv({ PATH: '/usr/bin', GIT_SSH_COMMAND: 'ssh -i /my/key' });
   assert.equal(withOwn.GIT_TERMINAL_PROMPT, '0', '批量刷新绝不能停在终端等输密码');
+  assert.equal(withOwn.GCM_INTERACTIVE, 'never', 'GCM 的 GUI 弹窗不受 GIT_TERMINAL_PROMPT 约束,必须单独关(实测会弹「Connect to GitHub」并挂住整条 fetch)');
   assert.equal(withOwn.GIT_SSH_COMMAND, 'ssh -i /my/key', '用户自己的 ssh 配置不能被顶掉');
   assert.equal(withOwn.PATH, '/usr/bin', '原有环境变量要带过去');
   assert.match(withOwn.GIT_CONFIG_PARAMETERS, /core\.quotepath=false/);
 
   const injected = buildFetchEnv({ PATH: '/usr/bin' });
   assert.match(injected.GIT_SSH_COMMAND, /BatchMode=yes/, 'ssh 的 passphrase 提示也要变成明确报错');
+
+  // 后台批量动作无条件禁交互:外部哪怕传了 always 也要顶掉(否则启动自动刷新会弹窗)
+  const override = buildFetchEnv({ GCM_INTERACTIVE: 'always' });
+  assert.equal(override.GCM_INTERACTIVE, 'never');
 });
 
 test('isNotARepoMessage: 认得 git 的两种措辞', () => {
