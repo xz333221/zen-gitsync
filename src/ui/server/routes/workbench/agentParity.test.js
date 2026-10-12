@@ -181,3 +181,19 @@ test('两个入口都把推理内容写进 assistant 历史消息', () => {
     assert.match(code, /reasoning_content/, `${label} 没有把推理内容写进 assistant 历史消息`);
   }
 });
+
+test('两个入口都把扩展工具叠加进请求,并按 owns() 分流', () => {
+  // 2026-10-12：Web 侧曾经**完全不加载**扩展层 —— MCP 广场显示"已安装"，
+  // 对话框里却没有那些工具（agent 只能自己读 mcp.json 按 HTTP 直调）。
+  // 失效方式和这个文件的其它分叉一样：不报错，只是两个入口表现不一样。
+  // 所以钉住两个入口都要有：extraTools（叠加进请求）+ owns（按名字分流）。
+  // 只认代码行，注释里的提及不算。
+  for (const { label, file } of ENTRY_POINTS) {
+    const code = readFileSync(file, 'utf8')
+      .split(/\r?\n/)
+      .filter(line => !/^\s*(\/\/|\*|\/\*)/.test(line))
+      .join('\n');
+    assert.match(code, /extraTools/, `${label} 没有把扩展工具叠加进请求（extraTools）`);
+    assert.match(code, /owns/, `${label} 没有按 owns() 分流扩展工具`);
+  }
+});

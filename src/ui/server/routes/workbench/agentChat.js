@@ -62,6 +62,9 @@ import configManager from '../../../../config.js';
 // 用户固定提示词（g ai 默认提示词 + 派发提示词）的取数与拼装。与外部 CLI 引擎那条
 // 链路共用同一份（见 runExternalTurn 的调用点），免得两块提示词在两处各拼一遍。
 import { resolveChatPromptSection } from './chatPrompts.js';
+// 扩展层（Skill 清单 + MCP 工具）按 cwd 的加载缓存。CLI 在 agent.js 启动时加载；
+// Web 会话长命，没有"进程重启"这个自然边界，改成按 cwd 缓存 + 广场安装时失效。
+import { getWebExtensions } from './agentExtensions.js';
 
 // 单轮工具调用循环数的兜底值(防失控);实际值取全局配置 aiMaxToolIterations,
 // 与 CLI 侧 src/cli/ai/agent.js 共用同一个配置项。
@@ -356,6 +359,10 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 //        （单测要整体关掉自动重试，真等退避会让一个用例跑成分钟级），
 //        生产调用点一律不传 —— 传了就等于换了一份传输实现。
 //
+// 扩展层（Skill + MCP）不在参数里：按 cwd 从 agentExtensions.js 的进程内缓存取，
+// 整轮一次。三条路径都与 CLI turn.js 对齐 —— 工具表叠 extraTools、调用按 owns()
+// 分流、摘要注进请求副本（agentParity.test.js 有守卫）。
+//
 // 返回: { aborted: boolean }
 export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, dispatchTask, getContextBlock, requestBudget = null, resume = false, streamFn = streamChatOnce, promptSection }) {
   const ctx = { cwd, locale, onChild, askUser, listProjects, dispatchTask };
@@ -427,6 +434,28 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
   //   可能不同，UI 上的进度条就会说谎）。
   const budget = requestBudget || resolveRequestBudget();
 
+  // 扩展层（Skill 清单 + MCP 工具）：按 cwd 进程内缓存，整轮只取一次。
+  // CLI 把 promptSuffix bake 进首条 system 消息（进程启动时）；Web 会话是长命的
+  // （可以活好几天，期间用户随时可能在广场装新的），所以这里每轮从缓存取、
+  // 摘要注进**请求副本** —— 装完立刻生效、老会话也吃得到，也不把当时的清单腌进
+  // 磁盘历史（口径同工作区快照：只进副本，不落 session.messages）。
+  // 加载失败已在 agentExtensions.js 里降级成空扩展，这里不会抛。
+  const extensions = await getWebExtensions({ cwd, locale });
+
+  // MCP 工具按名字分流，口径与 CLI turn.js 逐字对齐：名字属于扩展就走扩展
+  // （McpManager.call 内部已把失败翻成错误字符串，不会抛进循环），扩展返回
+  // null/undefined（加载后被换掉等边角）时回落内置工具。没装扩展时 owns() 恒为
+  // false，等价于直接调内置工具，零开销。
+  const executeOne = extensions
+    ? async (name, args, toolCtx) => {
+        if (extensions.owns?.(name)) {
+          const output = await extensions.execute(name, args, toolCtx);
+          if (output !== null && output !== undefined) return output;
+        }
+        return executeTool(name, args, toolCtx);
+      }
+    : executeTool;
+
   for (let iter = 0; iter < maxIterations; iter++) {
     // 每轮都从完整会话记录重新构建一次请求副本:条数/token 双预算 → 被丢掉的旧消息
     // 摘录成一条梗概 → 旧图片降级 → provider 兼容消毒。
@@ -434,8 +463,8 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
     // 预算来自 requestBudget(全局配置 aiMaxRequestTokens 的解析结果)。
     const messages = prepareRequestMessages(session.messages, { locale, ...budget });
     // 请求级上下文：用户固定提示词 + 工作区状态快照 + 常用目录状态 + 当前打开的文档
-    // + 本轮附件路径（只改副本，不落 session.messages，下一轮不重复累积）
-    injectRequestContext(messages, { cwd, openFilePath, attachments, locale, workspaceBlock, dirStatusBlock, promptSection: userPromptSection });
+    // + 本轮附件路径 + 扩展层摘要（只改副本，不落 session.messages，下一轮不重复累积）
+    injectRequestContext(messages, { cwd, openFilePath, attachments, locale, workspaceBlock, dirStatusBlock, promptSection: userPromptSection, extensionSection: extensionPromptSuffix(extensions, locale) });
 
     // 上下文占用：在**请求发出去之前**量一次，发给 UI 画圆环。
     // 为什么必须在发之前：provider 的真实 usage（input_tokens）要等响应回来才有，
@@ -454,6 +483,9 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
         model,
         messages,
         signal,
+        // 内置工具是底座;extraTools 是本轮 cwd 的 MCP 工具叠加(transport 里合并,
+        // 为空时回落纯内置表)。CLI turn.js 同一个参数,两边口径一致。
+        extraTools: extensions?.tools,
         // 整轮对话（含后续工具调用产生的每一轮请求）复用同一个会话 ID
         sessionId: session.sessionId,
         onToken: ({ thinking, content }) => {
@@ -562,7 +594,7 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
           signal,
         });
       }
-      const output = await executeTool(name, args, toolCtx);
+      const output = await executeOne(name, args, toolCtx);
       // read_image 会返回 { text, images }。前端只吃文本(result 是字符串,
       // 直接把对象丢过去会渲染成 "[object Object]"),图片进会话历史里的
       // 多模态 tool 消息 —— 模型看得见图,用户看到的是"已读取图片 xxx.png"。
@@ -576,6 +608,16 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
   // 达到最大迭代次数
   send({ type: 'done', content: `已达单轮最大工具调用次数(${maxIterations})，本轮结束。如需继续请再发一条消息。` });
   return { aborted: false };
+}
+
+// 扩展层摘要（Skill 清单 + MCP 连接状态）。取不到就当没有 —— 它是增量能力，
+// 不该因为摘要拼不出来影响整轮对话。口径与 CLI 的 extensionSuffix 同一份文本。
+function extensionPromptSuffix(extensions, locale) {
+  try {
+    return extensions?.promptSuffix?.(locale) || '';
+  } catch {
+    return '';
+  }
 }
 
 // 工具参数简短摘要(给前端展示)
@@ -606,10 +648,11 @@ function summarizeArgs(name, args) {
   }
 }
 
-// ── 请求级上下文注入（用户固定提示词 / 工作区状态 / 常用目录状态 / 文件空间对话 / 本轮附件） ──
+// ── 请求级上下文注入（用户固定提示词 / 工作区状态 / 常用目录状态 / 文件空间对话 / 本轮附件 / 扩展层摘要） ──
 // 把"用户配的两块固定提示词""工作区各板块的状态摘要""常用目录那批目录的 Git 状态"
-// "用户当前打开的文件"与"本轮附件的落盘路径"追加到**请求副本**的 system 消息末尾：
-// 只影响这一次请求，session.messages 与磁盘历史保持原样，下一轮也不会重复累积。
+// "用户当前打开的文件""本轮附件的落盘路径"与"扩展层摘要（Skill + MCP）"追加到
+// **请求副本**的 system 消息末尾：只影响这一次请求，session.messages 与磁盘历史保持
+// 原样，下一轮也不会重复累积。
 //
 // ⚠️ 工作区快照**必须走这条副本路径，不能塞进 session.messages 里那条 system 消息**。
 // 那条只在首轮 push 一次（见上面 `session.messages.length === 0` 的判断）并会落盘，
@@ -618,11 +661,13 @@ function summarizeArgs(name, args) {
 // 常用目录状态同理，而且更严重：它说的是"这一刻"的领先/落后，几小时后必然不同。
 // 用户固定提示词同理，但理由换一条：**改设置要立刻生效**，而且它属于"每轮都在的规则"，
 // 腌进历史会话等于让用户回看时看到一份过期规则（详见 chatPrompts.js 文件头）。
+// 扩展层摘要同理，而且它还多一条：Web 会话长命，bake 进去等于"这个会话再也吃不到
+// 新装的 MCP/Skill"——CLI 每启动一个进程重算一次所以没这个问题，Web 必须每轮注副本。
 //
 // 附件为什么只给路径、不给内容：见 utils/agentAttachments.js 的头注释 —— 非图片附件
 // 由服务端落盘，模型自己用 read / grep 按需取，比把几百 KB 文本内联进消息省得多。
 // 快照块同理,只给摘要与目录路径,板块正文由模型按需读。
-export function injectRequestContext(messages, { cwd, openFilePath, attachments = [], locale, workspaceBlock = '', dirStatusBlock = '', promptSection = '' }) {
+export function injectRequestContext(messages, { cwd, openFilePath, attachments = [], locale, workspaceBlock = '', dirStatusBlock = '', promptSection = '', extensionSection = '' }) {
   if (!Array.isArray(messages)) return;
   const en = String(locale || '').startsWith('en');
 
@@ -668,7 +713,14 @@ export function injectRequestContext(messages, { cwd, openFilePath, attachments 
       : `用户本轮附带了 ${files.length} 个文件，已保存到以下绝对路径：\n${lines.join('\n')}\n需要时用工具读取（内容没有内联在这里），不要臆测。`);
   }
 
-  if (parts.length === 0 && !(typeof promptSection === 'string' && promptSection.trim())) return;
+  // ④ 扩展层摘要（Skill 清单 + MCP 连接状态）排在最后：与 CLI 一致 ——
+  //    扩展是"增量能力"，不该插在权限/环境/规则中间打断阅读。
+  //    promptSuffix 自带 `# 已安装的 Skill` / `# 已接入的 MCP 服务` 标题，
+  //    且明说"这些外部工具已挂到你的工具列表里"，正好接住基础提示词里那句
+  //    "可用工具只有上面列出的 N 个"（N=内置数）—— 两边不打架。
+  const hasExtensionSection = typeof extensionSection === 'string' && extensionSection.trim();
+
+  if (parts.length === 0 && !(typeof promptSection === 'string' && promptSection.trim()) && !hasExtensionSection) return;
 
   // 用户固定提示词单独一节，且排在"当前上下文"**前面**：它是每轮都成立的规则，
   // 而当前上下文是这一刻的快照 —— 规则在前、现场在后，读起来才是"先约束后事实"。
@@ -678,6 +730,9 @@ export function injectRequestContext(messages, { cwd, openFilePath, attachments 
   }
   if (parts.length > 0) {
     note += `\n\n# ${en ? 'Current context' : '当前上下文'}\n${parts.join('\n\n')}`;
+  }
+  if (hasExtensionSection) {
+    note += `\n\n${extensionSection.trim()}`;
   }
   const sys = messages.find(m => m && m.role === 'system' && typeof m.content === 'string');
   if (sys) sys.content += note;

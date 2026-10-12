@@ -763,6 +763,14 @@ async function startUIServer(noOpen = false, savePort = false) {
       // 2) 清心跳 + 反注册实例
       try { clearInterval(heartbeatTimer); } catch (_) {}
       try { await instanceRegistry.unregister(process.pid); } catch (_) {}
+      // 2a) 关掉智能体对话加载的 MCP 连接（stdio 子进程 + HTTP 会话）。
+      //     它们不在 runningProcesses 里（走的是 cli/cleanup.js 的 trackChild），
+      //     上面的 drain 兜不到 —— 不关的话 Ctrl+C 后会留下一堆 npx 孤儿子进程。
+      //     动态 import：模块只在用过扩展层的进程里才需要，别进静态 import 图。
+      try {
+        const { closeWebExtensions } = await import('./routes/workbench/agentExtensions.js');
+        await closeWebExtensions();
+      } catch (_) {}
       // 2b) 清掉自己那份「运行中 job」广播文件（live-jobs/<pid>.json）。
       //     不清也不会留下幽灵「进行中」——别的实例读的时候发现 owner pid 没了会跳过并
       //     顺手删掉，这里只是让 Ctrl+C 这种常见路径当场干净。动态 import：模块早就在

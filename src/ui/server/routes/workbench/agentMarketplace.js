@@ -44,6 +44,10 @@ import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import open from 'open';
 import { asyncRoute, HttpError } from '../../utils/asyncRoute.js';
+import { logger } from './shared.js';
+// 装/卸之后让 Web 端扩展缓存失效：否则刚装的 MCP/Skill 要等 g gui 重启
+// 才在智能体对话里生效（"广场显示已安装、对话框里没有工具"就是这么来的）。
+import { invalidateWebExtensions } from './agentExtensions.js';
 import { AI_SKILLS_DIR, AI_MCP_FILE, projectSkillsDir, projectMcpFile } from '../../../../paths.js';
 
 const execFileAsync = promisify(execFile);
@@ -1097,6 +1101,11 @@ export function registerAgentMarketplaceRoutes({ app, getCurrentProjectPath }) {
 
     // 装完立刻让缓存失效,避免刚装的条目在列表里还是"未安装"
     cache.clear();
+    // 同一用意再往下一层:Web 智能体对话的扩展缓存也要失效,否则新装的
+    // MCP/Skill 要等 g gui 重启才在对话里出现。全局安装影响所有目录 → 全量失效;
+    // 项目安装只影响该目录。关旧连接是异步的,不拖慢这个响应,失败只记账。
+    invalidateWebExtensions(target === 'project' ? cwd : undefined)
+      .catch((err) => logger.warn(`[agentMarketplace] 扩展缓存失效失败: ${err?.message || err}`));
     res.json({ success: true, target, cwd, item: installed });
   }));
 
@@ -1135,6 +1144,9 @@ export function registerAgentMarketplaceRoutes({ app, getCurrentProjectPath }) {
     const id = decodeURIComponent(String(req.params.id || ''));
     const result = await uninstall({ type, id, target, cwd });
     cache.clear();
+    // 与安装同一用意:卸完也让对话侧的扩展缓存失效(口径见 install 路由里的注释)
+    invalidateWebExtensions(target === 'project' ? cwd : undefined)
+      .catch((err) => logger.warn(`[agentMarketplace] 扩展缓存失效失败: ${err?.message || err}`));
     res.json({ success: true, ...result });
   }));
 }
