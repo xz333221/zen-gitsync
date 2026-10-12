@@ -64,4 +64,65 @@ describe('MarkdownPreview', () => {
       'data:image/png;base64,AAAA'
     ])
   })
+
+  test('theme prop scopes the theme to this instance instead of the global one', () => {
+    // 不传 theme：跟全局那套走，根节点不带实例级类名
+    expect(mountPreview('正文').classes()).not.toContain('md-preview--scoped-github')
+
+    const scoped = mount(MarkdownPreview, {
+      props: { content: '正文', theme: 'github-dark' },
+      global: { stubs: { MindMap: true } }
+    })
+    expect(scoped.classes()).toContain('md-preview--scoped-github-dark')
+
+    // 注入的样式把选择器抬成两段类名（特异性 0-2-0 > 全局那套 0-1-0），
+    // 且不留裸的 .md-preview 选择器，否则会反过来盖掉全局主题
+    const style = document.getElementById('flowdash-md-preview-scoped-github-dark')
+    expect(style).not.toBeNull()
+    expect(style!.textContent).toContain('.md-preview.md-preview--scoped-github-dark')
+    expect(style!.textContent).not.toMatch(/\.md-preview\s*[,{]/)
+  })
+
+  test('two scoped themes never collide (each carries its own class)', () => {
+    // 类名里带主题名，两套实例级样式表的选择器只匹配自己的节点。
+    // 曾经共用一个类名：两套特异性相同 → 后进 <head> 的那套通吃，
+    // 于是"深色→浅色→深色"来回切之后深色下会读到浅色那套。
+    const dark = mount(MarkdownPreview, {
+      props: { content: '正文', theme: 'github-dark' },
+      global: { stubs: { MindMap: true } }
+    })
+    const light = mount(MarkdownPreview, {
+      props: { content: '正文', theme: 'github' },
+      global: { stubs: { MindMap: true } }
+    })
+
+    expect(dark.classes()).toContain('md-preview--scoped-github-dark')
+    expect(dark.classes()).not.toContain('md-preview--scoped-github')
+    expect(light.classes()).toContain('md-preview--scoped-github')
+    expect(light.classes()).not.toContain('md-preview--scoped-github-dark')
+
+    const darkStyle = document.getElementById('flowdash-md-preview-scoped-github-dark')
+    const lightStyle = document.getElementById('flowdash-md-preview-scoped-github')
+    expect(darkStyle!.textContent).toContain('.md-preview.md-preview--scoped-github-dark')
+    expect(darkStyle!.textContent).not.toContain('.md-preview.md-preview--scoped-github ')
+    expect(lightStyle!.textContent).toContain('.md-preview.md-preview--scoped-github ')
+    expect(lightStyle!.textContent).not.toContain('--scoped-github-dark')
+  })
+
+  test('an unknown theme name falls back to the default theme class', () => {
+    const wrapper = mount(MarkdownPreview, {
+      props: { content: '正文', theme: 'not-a-real-theme' },
+      global: { stubs: { MindMap: true } }
+    })
+    // 类名必须与实际注入的样式表一致，否则会出现"标了 scoped 却还是全局配色"
+    expect(wrapper.classes()).toContain('md-preview--scoped-github')
+  })
+
+  test('a blank theme prop keeps the global theme', () => {
+    const wrapper = mount(MarkdownPreview, {
+      props: { content: '正文', theme: '' },
+      global: { stubs: { MindMap: true } }
+    })
+    expect(wrapper.classes().some((c) => c.startsWith('md-preview--scoped-'))).toBe(false)
+  })
 })

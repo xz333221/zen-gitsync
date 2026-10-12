@@ -40,6 +40,7 @@ describe('AiDiffSummary', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
+    document.documentElement.removeAttribute('data-theme')
   })
 
   function mountSummary(props: Record<string, unknown>) {
@@ -47,7 +48,10 @@ describe('AiDiffSummary', () => {
       props: props as any,
       global: {
         stubs: {
-          MarkdownPreview: { props: ['content'], template: '<div>{{ content }}</div>' },
+          MarkdownPreview: {
+            props: ['content', 'theme'],
+            template: '<div class="md-stub" :data-theme="theme">{{ content }}</div>'
+          },
           ElIcon: { template: '<i><slot /></i>' },
           // 透传 title,让测试能按语义选中按钮(头部按钮顺序会变,按索引选会悄悄点错)
           ElButton: {
@@ -117,5 +121,23 @@ describe('AiDiffSummary', () => {
     expect(calls[0].body.bypassCache).toBeUndefined()
     expect(calls[1].body.bypassCache).toBe(true)
     wrapper.unmount()
+  })
+
+  // 说明区是嵌在差异面板里的 UI，配色必须跟应用亮暗走 —— 用户给文档选的 markdown
+  // 主题默认是白底的 github，深色面板里直接用它就会嵌一块纯白。
+  test('markdown 主题跟随应用亮暗，不跟用户的文档主题', async () => {
+    document.documentElement.removeAttribute('data-theme')
+    const light = mountSummary({ source: 'worktree', scope: 'overall' })
+    await vi.advanceTimersByTimeAsync(400)
+    await Promise.resolve()
+    expect(light.find('.md-stub').attributes('data-theme')).toBe('github')
+    light.unmount()
+
+    document.documentElement.setAttribute('data-theme', 'dark')
+    const dark = mountSummary({ source: 'worktree', scope: 'overall' })
+    await vi.advanceTimersByTimeAsync(400)
+    await Promise.resolve()
+    expect(dark.find('.md-stub').attributes('data-theme')).toBe('github-dark')
+    dark.unmount()
   })
 })

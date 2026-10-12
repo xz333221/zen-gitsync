@@ -22,10 +22,11 @@
  * - 排版与配色统一由 flowdash-md-preview 的主题提供（见 utils/markdownTheme.ts，
  *   全应用只注入一套），本组件不再自带排版样式，避免与主题打架
  */
-import { computed, ref } from 'vue'
+import { computed, ref, watchEffect } from 'vue'
 import { render as renderMarkdown } from 'flowdash-md-preview'
 import { MindMap, markdownToMindMap } from 'flow-mindmap'
 import { getRawFileUrl } from '@/utils/fileKind'
+import { ensureScopedMarkdownTheme, scopedMarkdownClass } from '@/utils/markdownTheme'
 import 'flow-mindmap/style.css'
 
 interface Props {
@@ -38,9 +39,24 @@ interface Props {
    * /api/editor/raw 端点（浏览器按当前页面 URL 解析相对路径必然 404）。
    */
   basePath?: string
+  /**
+   * 主题预设名。给了它，这块预览走**实例级**配色（见 markdownTheme.ts 的
+   * ensureScopedMarkdownTheme），不再跟用户选的全局 markdown 主题走。
+   *
+   * 用途：嵌在应用面板里的预览（如 AI 差异说明）应当跟随**应用亮暗** ——
+   * 全局主题默认是白底的 `github`，深色应用里嵌一块白底会非常突兀。
+   */
+  theme?: string
 }
 
-const props = withDefaults(defineProps<Props>(), { allowHtml: true })
+const props = withDefaults(defineProps<Props>(), { allowHtml: true, theme: '' })
+
+/** 实例级主题的类名（空串 = 不传 theme，走全局那套）；类名与注入的样式表一一对应 */
+const scopedClass = computed(() => props.theme.trim() ? scopedMarkdownClass(props.theme) : '')
+
+watchEffect(() => {
+  if (scopedClass.value) ensureScopedMarkdownTheme(props.theme)
+})
 
 type Segment =
   | { type: 'html'; html: string }
@@ -172,7 +188,11 @@ defineExpose({ getRenderedElement: () => rootRef.value })
 </script>
 
 <template>
-  <div ref="rootRef" class="md-preview">
+  <div
+    ref="rootRef"
+    class="md-preview"
+    :class="scopedClass"
+  >
     <template v-for="(seg, idx) in segments" :key="idx">
       <div
         v-if="seg.type === 'html'"

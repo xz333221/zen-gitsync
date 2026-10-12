@@ -19,6 +19,8 @@ import { ArrowDown, ArrowUp, FullScreen, Loading, Memo, Refresh, Warning } from 
 import MarkdownPreview from '@/components/MarkdownPreview.vue'
 import { $t } from '@/lang/static'
 import { useConfigStore } from '@stores/configStore'
+import { useThemeObserver } from '@/composables/useThemeObserver'
+import { APP_MARKDOWN_THEME } from '@/utils/markdownTheme'
 import CommonDialog from '@/components/CommonDialog.vue'
 
 type SummaryScope = 'file' | 'overall'
@@ -55,6 +57,12 @@ const props = withDefaults(defineProps<Props>(), {
 const configStore = useConfigStore()
 const hasModel = computed(() => Array.isArray(configStore.models) && configStore.models.length > 0)
 const locale = computed(() => (configStore.locale || '').startsWith('en') ? 'en' : 'zh')
+/**
+ * 这块说明是嵌在差异面板里的 UI，不是文档预览 —— 它的 markdown 配色跟**应用亮暗**走，
+ * 不跟用户在设置里给文档选的 markdown 主题走（那套默认白底，深色面板里会嵌一块白）。
+ */
+const { theme: appTheme } = useThemeObserver()
+const summaryMarkdownTheme = computed(() => APP_MARKDOWN_THEME[appTheme.value])
 const modelKey = computed(() => {
   const models = Array.isArray(configStore.models) ? configStore.models : []
   const model = models.find(item => item.isDefault) || models[0]
@@ -274,7 +282,7 @@ const context = computed(() => {
     </header>
 
     <div v-show="!collapsed" class="summary-body">
-      <MarkdownPreview v-if="state.text" :content="state.text" :allow-html="false" />
+      <MarkdownPreview v-if="state.text" :content="state.text" :allow-html="false" :theme="summaryMarkdownTheme" />
       <div v-else-if="state.status === 'loading'" class="summary-placeholder is-loading">
         {{ $t('@DIFFAI:正在生成差异说明...') }}
       </div>
@@ -305,7 +313,7 @@ const context = computed(() => {
     >
       <div class="dialog-context" v-if="context">{{ context }}</div>
       <div class="dialog-body">
-        <MarkdownPreview v-if="state.text" :content="state.text" :allow-html="false" />
+        <MarkdownPreview v-if="state.text" :content="state.text" :allow-html="false" :theme="summaryMarkdownTheme" />
         <div v-else-if="state.status === 'loading'" class="summary-placeholder is-loading">
           {{ $t('@DIFFAI:正在生成差异说明...') }}
         </div>
@@ -386,7 +394,10 @@ const context = computed(() => {
   font-size: var(--font-size-sm);
 }
 
-.summary-body :deep(.md-preview) { padding: 0; }
+/* 主题会给 .md-preview 铺自己的底色（github 白 / github-dark #0d1117）。
+   这里把它让掉：说明区是嵌在面板里的一段文字，底色该由面板（--bg-container 等）决定，
+   否则深色下会看到"面板一块深色 + 里面再一块更深"的夹心。padding 同理，由外层给。 */
+.summary-body :deep(.md-preview) { padding: 0; background: transparent; }
 .summary-body :deep(.md-preview p:last-child),
 .summary-body :deep(.md-preview ul:last-child),
 .summary-body :deep(.md-preview ol:last-child) { margin-bottom: 0; }
@@ -428,7 +439,7 @@ const context = computed(() => {
   line-height: var(--line-height-normal);
 }
 
-.dialog-body :deep(.md-preview) { padding: 0; }
+.dialog-body :deep(.md-preview) { padding: 0; background: transparent; }
 
 @media (max-width: 720px) {
   .summary-context { display: none; }

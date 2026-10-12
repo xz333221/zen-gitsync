@@ -648,3 +648,32 @@ background: rgba(64, 158, 255, 0.18);   /* .is-active:hover */
 | `dark-glow` | 1 | |
 
 分类：`slop` 37 / `quality` 17。集中在 `ActivityBar.vue`(6)、`OrchestratorConsole.vue`(4)、`App.vue`(3)、`CommandConsole.vue`(3)、`main.css`(3)、`EditorView.vue`(3)。
+
+## 补记（2026-10-12）：AI 差异说明区在深色下的白底
+
+用户报「黑色主题下这块的 UI 还是白底的」——「文件差异」弹窗左栏底部两块 AI 说明（`.ai-diff-summary`）。
+
+**根因不在写死的 `#fff`，而在取色的来源。** `MarkdownPreview` 的配色来自**全局注入的 markdown
+主题**（`utils/markdownTheme.ts` → `flowdash-md-preview` 的主题预设），那是用户给「文档预览」选的
+皮肤，默认 `github` = `background: #ffffff`，跟应用亮暗完全无关。
+
+**分界线（这条比修法重要）：**「文档预览」（文件空间里打开 .md、设置页的主题卡片）跟用户的
+markdown 主题走 —— 那是文档自己的样子；「嵌在应用面板里的预览」（AI 差异说明）是界面的一部分，
+必须跟**应用亮暗**走。别一刀切地把全局 markdown 主题改成跟随应用。
+
+**修法：** `MarkdownPreview` 新增 `theme` prop，走**实例级**主题样式 —— 把主题 CSS 的选择器从
+`.md-preview` 抬成 `.md-preview.md-preview--scoped-<主题名>`（特异性 0-2-0 > 全局那套 0-1-0），
+`.summary-body` / `.dialog-body` 再把 `:deep(.md-preview)` 的底色让给面板（`background: transparent`）。
+`AiDiffSummary` 用 `APP_MARKDOWN_THEME`（`light → github` / `dark → github-dark`）+ `useThemeObserver`
+取当前亮暗。
+
+**踩到的坑：** 实例级类名一开始不带主题名，两套主题的选择器特异性相同 → 谁后进 `<head>` 谁赢，
+浅色→深色切一次之后深色下永远读到浅色那套（实测正文色还是 `#1f2328`、对比度 1.02:1）。
+类名带上主题名后各匹配各的节点。
+
+| 深色（旧：全局 markdown 主题 = github 白底） | 深色（新：跟随应用亮暗 = github-dark） |
+|---|---|
+| ![深色下的白底说明区](./ai-diff-dark-before.png) | ![深色下跟随主题的说明区](./ai-diff-dark-after.png) |
+
+回归网：`npm run verify:ai-diff-theme`（26 条：源码契约 + 两套主题实测底色/字色/对比度 + 弹窗那条渲染路径）
+与 `npm run verify:ai-diff-theme:reverse`（把旧的白底写法注回去，D2/D3/D4/D6 必须变红）。

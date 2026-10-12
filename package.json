@@ -25,6 +25,8 @@
     "test:watch": "node scripts/run-tests.cjs --watch",
     "verify:i18n": "node scripts/verify-i18n-keys.mjs",
     "verify:i18n:orphans": "node scripts/verify-i18n-keys.mjs --orphans",
+    "verify:ai-diff-theme": "node scripts/verify-ai-diff-theme.cjs",
+    "verify:ai-diff-theme:reverse": "node scripts/verify-ai-diff-theme.cjs --reverse",
     "verify:config-concurrency": "node scripts/verify-config-concurrency.mjs",
     "verify:mcp": "node scripts/verify-mcp-server.cjs",
     "verify:data-dir-migration": "node scripts/verify-data-dir-migration.mjs",
