@@ -548,10 +548,20 @@ export function registerWorkbenchRoutes({
   app.post('/api/workbench/jobs/:id/continue', asyncRoute(async (req, res) => {
     const userMessage = String(req.body?.userMessage || '').trim();
     if (!userMessage) throw new HttpError(400, 'userMessage 不能为空');
-    const prevJob = jobs.get(req.params.id);
+    // 内存里没有就退回「磁盘历史 ∪ 别的实例正在跑」——续接要用到的三样东西
+    // (claudeSessionId / agent / taskId)全在持久化记录里，**不依赖本进程的 child 句柄**
+    // （那是 §14 取消路径非有不可的东西，所以那条 404 是对的，这条不是）。
+    // 只认内存的话：在 A 窗口跑完、到 B 窗口接着聊，B 的看板明明列着这条记录，
+    // 一发送却弹 "job 不存在" —— 2026-10-12 用户实测就是这个（本机同时开着 4 个实例）。
+    // 与 GET /jobs/:id、/jobs/:id/image 同一个口径。
+    await refreshJobsFromDisk();
+    const prevJob = jobs.get(req.params.id) || mergedJobs().get(req.params.id);
     if (!prevJob) throw new HttpError(404, 'job 不存在');
     if (prevJob.status === 'running' || prevJob.status === 'pending') {
-      throw new HttpError(400, '上一轮还在执行,请等结束后再续接');
+      // 这一轮在**别的**实例里跑着：本进程停不了也接不上，别让用户以为是"上一轮"没结束
+      throw new HttpError(400, jobs.has(prevJob.id)
+        ? '上一轮还在执行,请等结束后再续接'
+        : '这个任务正在另一个 g ui 实例里执行，请等它结束后再续接');
     }
     if (!prevJob.claudeSessionId) {
       throw new HttpError(400, '无法续接:会话标识未捕获');
@@ -559,10 +569,12 @@ export function registerWorkbenchRoutes({
     const data = await readJson(TASKS_FILE, { tasks: [] });
     const task = (data.tasks || []).find(t => t.id === prevJob.taskId);
     if (!task) throw new HttpError(404, '所属任务不存在');
-    // 计算续接轮次号
+    // 计算续接轮次号。**必须走合并表**：轮次是跨实例共享的编号，只看本进程内存的话，
+    // 另一个实例已经续过 #1 了，这边还会再发一个 #1 出去（两条 subId 撞车，前端按 subId
+    // 归组时那两轮会混在一起）。
     const subIdPrefix = `${task.id}__simple`;
     let maxRound = 0;
-    for (const j of jobs.values()) {
+    for (const j of mergedJobs().values()) {
       if (j.taskId !== task.id) continue;
       if (j.subId === subIdPrefix) continue;
       const m = j.subId && j.subId.match(/__simple__r(\d+)$/);

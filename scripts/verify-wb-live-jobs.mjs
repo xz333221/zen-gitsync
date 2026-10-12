@@ -335,6 +335,50 @@ await sleep(1500)
     catch { return { ok: true } }
   }, 8000, 300)
   check(ghostGone.ok, `G4 owner 已死的 live 文件应被自愈删除`)
+
+  // ── G7 跨实例续接:在 A 上跑完的那条,到 B 上接着聊不能弹 "job 不存在" ────
+  // 背景(2026-10-12 用户实测):看板上的 job 列表是「内存 ∪ 别的实例正在跑 ∪ 磁盘历史」
+  // 合并出来的,所以**每个窗口都看得到**那条跑完的记录;但续接路由原来只查了本进程内存
+  // —— 于是"在 A 窗口跑完、在 B 窗口发下一句"必弹 "job 不存在"(记录明明就在眼前,
+  // 本机同时开着 4 个实例时尤其容易撞上)。
+  // 续接要的 claudeSessionId / agent / taskId 全在持久化记录里,不需要 child 句柄
+  // (那是 §14 取消路径非有不可的东西),所以这里要求 B 能接着跑,且新一轮在 A 也看得见。
+  const jobsInA = await fetchJson(baseA, '/api/workbench/jobs')
+  const ranInA = (jobsInA.body?.jobs || []).find(j => j.taskId === TASK_REAL && j.claudeSessionId)
+  check(
+    !!ranInA,
+    `G7 应能在 A 的 job 列表里找到 G6 那一轮(带会话标识),实际 ${JSON.stringify((jobsInA.body?.jobs || []).map(j => j.id))}`
+  )
+
+  const contRes = await fetch(`${baseB}/api/workbench/jobs/${ranInA?.id}/continue`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ userMessage: 'G7 跨实例续接' }),
+  })
+  const contBody = await contRes.json().catch(() => null)
+  check(
+    contRes.status === 200,
+    `G7 在 B 上续接 A 跑完的 job 应 200,实际 ${contRes.status} ${JSON.stringify(contBody)}`
+  )
+
+  // 新一轮必须真的跑起来,而且 A 的 job 列表里也要有它(合并表,与 G2 同一条口径)
+  const roundInA = await waitFor(async () => {
+    const { body } = await fetchJson(baseA, '/api/workbench/jobs')
+    const j = (body?.jobs || []).find(x => x.subId === `${TASK_REAL}__simple__r1`)
+    return { ok: !!j, value: j ? { id: j.id, status: j.status } : null }
+  }, 25000, 300)
+  check(
+    roundInA.ok,
+    `G7 续接出来的 ${TASK_REAL}__simple__r1 应出现在 A 的 job 列表里,实际 ${JSON.stringify(roundInA.value)}`
+  )
+
+  // 反向对照:真不存在的 id 仍然必须 404 —— 别把"查不到"一起放过去
+  const bogus = await fetch(`${baseB}/api/workbench/jobs/no-such-job-id/continue`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ userMessage: 'x' }),
+  })
+  check(bogus.status === 404, `G7 反向:不存在的 job id 续接应 404,实际 ${bogus.status}`)
 } catch (err) {
   failures.push(`异常: ${err.message}`)
 } finally {
