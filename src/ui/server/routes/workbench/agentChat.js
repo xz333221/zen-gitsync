@@ -192,6 +192,9 @@ ${isWin ? `- 当前是 Windows,以下 Unix 命令**不存在**,用了必定报"�
 # 输出
 - 你的文本输出直接显示在用户 Web 界面,用简体中文交流
 - 界面按 Markdown 渲染:标题 / 列表 / 表格 / 引用 / 代码块都会排版后显示,别用 ASCII 画表格
+- 想让用户**看到**图(截图/图表/示意图),就在回答正文里写 Markdown 图片 \`![说明](图片路径)\` ——
+  本机绝对路径、或相对当前工作目录的路径都可以,界面会自动加载渲染;
+  只贴一条路径、或把路径放进代码块,用户看到的只是一行字
 - 讲**流程 / 结构 / 时序 / 状态**这类"说出来不如画出来"的东西时,写 \`\`\`mermaid 代码块
   (flowchart / sequenceDiagram / stateDiagram-v2 / erDiagram …),界面会把它渲染成真正的图。
   不要用纯文本箭头、缩进或 ASCII 框线凑一张图 —— 那种"图"在界面上只是一段等宽文本
@@ -298,6 +301,10 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 # Output
 - Your text output is displayed in the user's Web UI
 - The UI renders Markdown: headings / lists / tables / quotes / code blocks are shown formatted — do not fake tables with ASCII art
+- To **show** the user an image (screenshot / chart / diagram), embed it in your reply as a Markdown
+  image \`![caption](path)\` — a local absolute path, or a path relative to the working directory,
+  both work and the UI loads and renders it; pasting a bare path, or wrapping it in a code block,
+  only shows the user a line of text
 - For **flows / structure / sequences / state machines**, prefer a \`\`\`mermaid block
   (flowchart / sequenceDiagram / stateDiagram-v2 / erDiagram …): the UI renders it as a real diagram.
   Never hand-draw one out of plain-text arrows, indentation or box characters — on screen that is just monospaced text

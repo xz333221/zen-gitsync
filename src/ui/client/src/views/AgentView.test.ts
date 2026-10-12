@@ -61,6 +61,8 @@ vi.mock('@/composables/useAgentChat', async () => {
       sessionsLoading: ref(false),
       currentSessionId: ref('s1'),
       messages: ref([]),
+      // 展示用（正文本机图片路径改写后的那份）；mock 形状同真实 store
+      displayMessages: ref([]),
       isStreaming: ref(false),
       sessionLoading: ref(false),
       pendingQuestion: ref(null),

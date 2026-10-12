@@ -320,6 +320,9 @@ ${isWin ? `- 当前是 Windows cmd.exe,以下 Unix 命令**不存在**,用了必
 
 # 输出
 - 你的文本输出直接显示在用户终端,用简体中文交流
+- 想让用户**看到**图(截图/图表/示意图),就在回答正文里写 Markdown 图片 \`![说明](图片路径)\` ——
+  本机绝对路径、或相对当前工作目录的路径都可以,界面会自动加载渲染;
+  只贴一条路径、或把路径放进代码块,用户看到的只是一行字
 - 完成任务后用一两句话汇报结果,不要复述过程细节`
   }
   return `You are "g ai" — the terminal coding agent built into the zen-gitsync CLI. You use tools to perform coding tasks on the user's real machine.
@@ -423,6 +426,10 @@ ${isWin ? `- This is Windows cmd.exe. The following Unix commands do NOT exist h
 
 # Output
 - Your text output goes straight to the user's terminal; reply in English
+- To **show** the user an image (screenshot / chart / diagram), embed it in your reply as a Markdown
+  image \`![caption](path)\` — a local absolute path, or a path relative to the working directory,
+  both work and the UI loads and renders it; pasting a bare path, or wrapping it in a code block,
+  only shows the user a line of text
 - Report results in one or two sentences; do not narrate the process`
 }
 

@@ -96,6 +96,9 @@ const {
   sessionsLoading,
   currentSessionId,
   messages,
+  // 展示用：正文里嵌的本机图片路径已改写成会话图片端点（见 useAgentChat 的注释）。
+  // 「复制会话」那边仍传原始 messages —— 导出要的是模型写的原文，不是端点 URL。
+  displayMessages,
   isStreaming,
   questionPanel,
   answeringQuestion,
@@ -284,7 +287,7 @@ onMounted(() => {
         <ChatContainer
           ref="chatRef"
           :show-input="false"
-          :messages="messages"
+          :messages="displayMessages"
           :assistant-name="AGENT_ASSISTANT_NAME"
           :assistant-avatar="AGENT_ASSISTANT_AVATAR"
           :theme="chatTheme"

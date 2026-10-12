@@ -16,23 +16,22 @@
 //
 // ── 为什么需要这一层 ──────────────────────────────────────────────────────
 //
-// 执行器（claude / opencode / codex）在本机干活，"展示一张图"对它来说最自然的写法
-// 就是把刚截的图 / 刚读的 png 的路径贴进正文。而对话流是 markdown 渲染：
-// `<img src="c:\ws\repo\docs\a.png">` 在浏览器里**永远是裂图** —— 那个地址不在页面
-// 够得到的范围内。用户实测（2026-09-30）：让 Agent"展示一张图片"，它把截图 Read 进
-// 上下文、描述得挺准，屏幕上却只有一行字。
+// 智能体是在本机干活的，"展示一张图"对它来说最自然的写法就是把刚截的图 / 刚读的
+// png 的路径贴进正文。而对话流是 markdown 渲染：`<img src="c:\ws\repo\docs\a.png">`
+// 在浏览器里**永远是裂图** —— 那个地址不在页面够得到的范围内。用户实测（2026-09-30）：
+// 让 Agent"展示一张图片"，它把截图 Read 进上下文、描述得挺准，屏幕上却只有一行字。
 //
-// 服务端为此开了 `GET /api/workbench/jobs/:id/image?path=…`（权限 = 该 job 所属
-// 仓库内的图片文件，判定见 workbench/jobImage.js）。这里负责把路径翻译成那个 URL。
-//
-// 两个视图（WorkbenchView 的任务对话流、JobLogDetails 执行日志详情）共用这一份 ——
-// 与 jobToolCalls.ts / jobUserPrompt.ts 同一个理由：同一份映射写两遍，迟早变成
-// "一处能看图、另一处还是裂图"。
+// 服务端为此开了两个端点（权限都是"某个根目录内的图片文件"）：
+//   · 任务对话 `GET /api/workbench/jobs/:id/image?path=…`（jobImage.js）
+//   · 主 Agent 对话 `GET /api/agent/sessions/:id/image?path=…`（agentRoutes.js）
+// 这里负责把路径翻译成那两个 URL。两条链路的正文来源不同（job 输出 / agent 会话
+// 消息），但重写规则必须同一份 —— 写两遍迟早变成"一处能看图、另一处还是裂图"。
 //
 // ── 边界（都是有意的）────────────────────────────────────────────────────
 //
 //   · **只认 markdown 图片语法**。裸路径不转 —— 让 Agent 主动声明"这里要放图"，
-//     比我们猜哪一行是图更可控；提示词里已经把写法告诉它了（workbench/envContext.js）。
+//     比我们猜哪一行是图更可控；提示词里已经把写法告诉它了（workbench/envContext.js
+//     与 agent.js / agentChat.js 的「输出」段）。
 //   · **代码围栏里的不转**。模型常用围栏贴"路径长这样"的示例 / 日志，把示例里的
 //     `![](c:\a.png)` 改写成 API URL，会让它自己的说明文字对不上。
 //   · http(s) / data: / blob: / 站内绝对路径（`/assets/…`）一个都不动 —— 那些本来
@@ -88,14 +87,22 @@ export function jobImageUrl(jobId: string, path: string): string {
   return `/api/workbench/jobs/${encodeURIComponent(jobId)}/image?path=${encodeURIComponent(path)}`;
 }
 
+/**
+ * 主 Agent 对话的正文图片端点：按**会话自己的 cwd** 解析（服务端读会话记录拿根，
+ * 判定见 agentRoutes.js 的 GET /api/agent/sessions/:id/image）。
+ */
+export function sessionImageUrl(sessionId: string, path: string): string {
+  return `/api/agent/sessions/${encodeURIComponent(sessionId)}/image?path=${encodeURIComponent(path)}`;
+}
+
 /** 单行内的重写（围栏外的行才会走到这里） */
-function rewriteLine(line: string, jobId: string): string {
+function rewriteLine(line: string, buildUrl: (src: string) => string): string {
   if (!line.includes('![')) return line; // 快路径：绝大多数行没有图片语法
   return line.replace(MD_IMAGE_RE, (whole, alt: string, angled?: string, bare?: string, title?: string) => {
     const src = (angled ?? bare ?? '').trim();
     if (!isLocalImageSrc(src)) return whole;
     // title（`![a](x.png "说明")`）原样留着：它跟图片本身一样是模型写的内容
-    return `![${alt}](${jobImageUrl(jobId, src)}${title || ''})`;
+    return `![${alt}](${buildUrl(src)}${title || ''})`;
   });
 }
 
@@ -105,12 +112,13 @@ function rewriteLine(line: string, jobId: string): string {
  * 逐行处理（顺带跳过代码围栏）：流式输出时正文每天都在变，这个函数会被高频调用，
  * 先按行切一次再对含 `![` 的行做正则，代价可以忽略。
  *
- * @param text  正文（Markdown 原文）
- * @param jobId 所属执行记录 id；缺了就不改 —— 拼不出端点的图只会变成 404 链接
+ * @param text     正文（Markdown 原文）
+ * @param buildUrl 路径 → 端点 URL；缺了（调用方没给 id）就不改 —— 拼不出端点的图
+ *                  只会变成 404 链接
  */
-export function resolveLocalImages(text: string, jobId?: string | null): string {
+function rewriteLocalImageText(text: string, buildUrl: ((src: string) => string) | null | undefined): string {
   const src = typeof text === 'string' ? text : '';
-  if (!src || !jobId) return src;
+  if (!src || !buildUrl) return src;
   if (!src.includes('![')) return src;
 
   const lines = src.split('\n');
@@ -126,7 +134,27 @@ export function resolveLocalImages(text: string, jobId?: string | null): string 
       out.push(line);
       continue;
     }
-    out.push(fence === null ? rewriteLine(line, jobId) : line);
+    out.push(fence === null ? rewriteLine(line, buildUrl) : line);
   }
   return out.join('\n');
+}
+
+/**
+ * 任务对话的正文图片改写（WorkbenchView 任务对话流 / JobLogDetails 执行日志详情）。
+ *
+ * @param text  正文（Markdown 原文）
+ * @param jobId 所属执行记录 id；缺了就不改
+ */
+export function resolveLocalImages(text: string, jobId?: string | null): string {
+  return rewriteLocalImageText(text, jobId ? (src) => jobImageUrl(jobId, src) : null);
+}
+
+/**
+ * 主 Agent 对话的正文图片改写（智能体页 / 编辑器面板 / 文件空间面板 / 最近目录对话）。
+ *
+ * @param text      正文（Markdown 原文）
+ * @param sessionId 会话 id；缺了就不改（新会话还没落盘时拼不出端点）
+ */
+export function resolveAgentImages(text: string, sessionId?: string | null): string {
+  return rewriteLocalImageText(text, sessionId ? (src) => sessionImageUrl(sessionId, src) : null);
 }

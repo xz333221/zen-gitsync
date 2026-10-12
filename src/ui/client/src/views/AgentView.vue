@@ -71,6 +71,9 @@ const {
   sessionsLoading,
   currentSessionId,
   messages,
+  // 展示用：正文里嵌的本机图片路径已改写成会话图片端点（见 useAgentChat 的注释）。
+  // 「复制会话」那边仍传原始 messages —— 导出要的是模型写的原文，不是端点 URL。
+  displayMessages,
   isStreaming,
   sessionLoading,
   loadSessions,
@@ -367,7 +370,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
               <ChatContainer
                 v-else
                 ref="chatContainerRef"
-                :messages="messages"
+                :messages="displayMessages"
                 :preset-questions="presetQuestions"
                 :welcome-title="$t('@AGENT:智能体助手')"
                 :welcome-description="$t('@AGENT:我可以帮你阅读代码、执行命令、修改文件。选择下方话题或直接输入你的问题。')"

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, readFileSync } from 'node:fs';
+import { PassThrough } from 'node:stream';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -475,4 +476,143 @@ test('dispatch_task：开了 allowDispatch 才注入，且工具结果说清落�
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+// ── 正文内嵌图片端点（2026-10-12） ────────────────────────────────────────
+//
+// 模型"展示一张图"的写法是在正文里贴一条本机路径，而对话流是 markdown 渲染 ——
+// 浏览器里那条地址永远是裂图。前端把路径重写成
+// GET /api/agent/sessions/:id/image?path=...（utils/localImageSrc.ts 的
+// resolveAgentImages），这里守服务端那一半：
+//   · 根 = 会话自己的 cwd；没有 cwd 的老会话退回当前项目路径
+//   · 后缀白名单 / root 内 / 防穿越（jobImage.js 的纯函数，与任务对话端点同一份）
+//   · realpath 双校验、单文件上限、nosniff + CSP 响应头
+const { agentSessionStore } = await import('./agentSessionStore.js');
+
+/**
+ * 最小 res：PassThrough 是真流（stream.pipe 直接可用），外加路由用到的
+ * set / status / json。字节经 'data' 收齐，收尾等 'finish'。
+ */
+function makeImageRes() {
+  const chunks = [];
+  const headers = {};
+  const res = new PassThrough();
+  res.headers = headers;
+  res.statusCode = 200;
+  res.jsonBody = undefined;
+  res.set = (k, v) => { headers[String(k).toLowerCase()] = v; };
+  res.status = (code) => { res.statusCode = code; return res; };
+  res.json = (v) => { res.jsonBody = v; res.end(); };
+  res.on('data', (c) => chunks.push(Buffer.from(c)));
+  res.bodyText = () => Buffer.concat(chunks).toString('utf-8');
+  return res;
+}
+
+const IMAGE_FINISH = (res) => new Promise((resolve) => res.on('finish', resolve));
+
+/** 注册路由并取出图片端点的 handler（fake app 只认这一条） */
+function captureImageHandler(projectPath) {
+  let handler;
+  const app = {
+    get(route, h) { if (route === '/api/agent/sessions/:sessionId/image') handler = h; },
+    post() {}, put() {}, delete() {}
+  };
+  registerAgentRoutes({
+    app,
+    getCurrentProjectPath: () => projectPath,
+    configManager: null,
+    snapshotter: STUB_SNAPSHOTTER
+  });
+  return handler;
+}
+
+const PNG_BYTES = Buffer.from('not-a-real-png-but-ext-is-whitelisted');
+
+test('会话图片端点：按会话 cwd 读盘，响应带 nosniff + CSP', async () => {
+  const repo = mkdtempSync(path.join(SANDBOX, 'img-repo-'));
+  mkdirSync(path.join(repo, 'docs'), { recursive: true });
+  writeFileSync(path.join(repo, 'docs', 'a.png'), PNG_BYTES);
+
+  const sessionId = 'ag-imgtest-0001';
+  await agentSessionStore.write(sessionId, { sessionId, cwd: repo, messages: [] });
+
+  const handler = captureImageHandler(path.resolve('active-project'));
+  const res = makeImageRes();
+  const finished = IMAGE_FINISH(res);
+  await handler({ params: { sessionId }, query: { path: 'docs/a.png' } }, res);
+  await finished;
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.headers['content-type'], 'image/png');
+  assert.equal(res.headers['x-content-type-options'], 'nosniff');
+  assert.match(res.headers['content-security-policy'], /sandbox/);
+  assert.equal(res.bodyText(), PNG_BYTES.toString('utf-8'));
+});
+
+test('会话图片端点：绝对路径也认，但必须落在会话 cwd 内', async () => {
+  const repo = mkdtempSync(path.join(SANDBOX, 'img-repo2-'));
+  writeFileSync(path.join(repo, 'a.png'), PNG_BYTES);
+  const outside = path.join(SANDBOX, 'outside-a.png');
+  writeFileSync(outside, PNG_BYTES);
+
+  const sessionId = 'ag-imgtest-0002';
+  await agentSessionStore.write(sessionId, { sessionId, cwd: repo, messages: [] });
+  const handler = captureImageHandler(path.resolve('active-project'));
+
+  // cwd 内的绝对路径 → 200
+  const ok = makeImageRes();
+  const okFinished = IMAGE_FINISH(ok);
+  await handler({ params: { sessionId }, query: { path: path.join(repo, 'a.png') } }, ok);
+  await okFinished;
+  assert.equal(ok.statusCode, 200);
+  assert.equal(ok.bodyText(), PNG_BYTES.toString('utf-8'));
+
+  // cwd 外的绝对路径 → 403（`..` 穿越与盘符外路径都走这条）
+  const bad = makeImageRes();
+  const badFinished = IMAGE_FINISH(bad);
+  await handler({ params: { sessionId }, query: { path: outside } }, bad);
+  await badFinished;
+  assert.equal(bad.statusCode, 403);
+  assert.match(bad.jsonBody.error, /仓库内/);
+});
+
+test('会话图片端点：坏后缀 415、文件不存在 404、会话不存在 404', async () => {
+  const repo = mkdtempSync(path.join(SANDBOX, 'img-repo3-'));
+  writeFileSync(path.join(repo, 'notes.txt'), 'hello');
+  const sessionId = 'ag-imgtest-0003';
+  await agentSessionStore.write(sessionId, { sessionId, cwd: repo, messages: [] });
+  const handler = captureImageHandler(path.resolve('active-project'));
+
+  const call = async (params, query) => {
+    const res = makeImageRes();
+    const finished = IMAGE_FINISH(res);
+    await handler({ params, query }, res);
+    await finished;
+    return res;
+  };
+
+  const badExt = await call({ sessionId }, { path: 'notes.txt' });
+  assert.equal(badExt.statusCode, 415);
+
+  const missing = await call({ sessionId }, { path: 'docs/a.png' });
+  assert.equal(missing.statusCode, 404);
+
+  const noSession = await call({ sessionId: 'ag-imgtest-9999' }, { path: 'a.png' });
+  assert.equal(noSession.statusCode, 404);
+});
+
+test('没有 cwd 的老会话：根退回当前项目路径（与列表可见性的包容口径一致）', async () => {
+  const proj = mkdtempSync(path.join(SANDBOX, 'img-proj-'));
+  writeFileSync(path.join(proj, 'b.png'), PNG_BYTES);
+  const sessionId = 'ag-imgtest-0004';
+  await agentSessionStore.write(sessionId, { sessionId, cwd: '', messages: [] });
+
+  const handler = captureImageHandler(proj);
+  const res = makeImageRes();
+  const finished = IMAGE_FINISH(res);
+  await handler({ params: { sessionId }, query: { path: 'b.png' } }, res);
+  await finished;
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.headers['content-type'], 'image/png');
 });

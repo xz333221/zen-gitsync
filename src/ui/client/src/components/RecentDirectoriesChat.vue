@@ -57,6 +57,8 @@ const chatTheme = computed<'light' | 'dark'>(() => (theme.value === 'dark' ? 'da
 // 独立实例：与智能体视图的「对话」Tab、文件空间面板互不影响(同一套 useAgentChat,各自一份 runs)
 const {
   messages,
+  // 展示用：正文里嵌的本机图片路径已改写成会话图片端点（见 useAgentChat 的注释）
+  displayMessages,
   isStreaming,
   questionPanel,
   answeringQuestion,
@@ -170,7 +172,7 @@ onBeforeUnmount(() => {
       </button>
     </div>
     <ChatContainer
-      :messages="messages"
+      :messages="displayMessages"
       :assistant-name="AGENT_ASSISTANT_NAME"
       :theme="chatTheme"
       :generating="isStreaming"

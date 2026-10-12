@@ -25,6 +25,10 @@ import {
   isAgentEngineId,
   type AgentEngineId,
 } from '@/utils/agentEngine'
+// 正文内嵌图片：模型写 `![](c:\…\a.png)` 这类本机路径时，浏览器直接裂图 ——
+// 改写成会话图片端点 URL 才能真显示（规则与任务对话的 resolveLocalImages 同一份，
+// 见 utils/localImageSrc.ts；服务端端点在 agentRoutes.js）。
+import { resolveAgentImages } from '@/utils/localImageSrc'
 
 // ── 附件口径 ──────────────────────────────────────────────
 // 图片走多模态（转 dataURL 随请求发给模型）；**非图片只在服务端落盘，把绝对路径写进
@@ -501,6 +505,36 @@ export function useAgentChat() {
     currentSessionId.value ? runs.get(currentSessionId.value) ?? null : null
   )
   const messages = computed<ChatMessage[]>(() => activeRun.value?.messages ?? [])
+  /**
+   * 喂给 ChatContainer 的**展示用**消息列表：正文里嵌的本机图片路径改写成
+   * `/api/agent/sessions/:id/image?path=…`（服务端按会话 cwd 读盘，见 agentRoutes.js）。
+   *
+   * 为什么单开一份而不改 `messages` 本体：
+   *   · `messages` 是会话的原始内容，「复制会话」导出（CopySessionButton →
+   *     agentSessionExport）要的正是模型写的原文 —— 端点 URL 离开本应用就是死链，
+   *     还把原路径搞丢了；
+   *   · 历史回放（loadSession → convertSessionToMessages）与实时流式（content 增量）
+   *     走的是同一个 computed，两边自动都覆盖，不用在流式处理器里再插一刀 ——
+   *     那里还挂着 attemptMark 断点回退（按 content 长度切片），不能动。
+   *
+   * 没有 sessionId（新会话还没落盘）时原样返回：那之后端点为空的图只会是 404，
+   * 等 meta 事件带来真实 id，computed 依赖变化自然补上。
+   */
+  const displayMessages = computed<ChatMessage[]>(() => {
+    const list = messages.value
+    const sessionId = activeRun.value?.sessionId ?? null
+    if (!sessionId) return list
+    let changed = false
+    const out = list.map((m) => {
+      // 快路径：绝大多数消息没有图片语法，原对象复用（不触发下游重渲染）
+      if (!m.content || !m.content.includes('![')) return m
+      const content = resolveAgentImages(m.content, sessionId)
+      if (content === m.content) return m
+      changed = true
+      return { ...m, content }
+    })
+    return changed ? out : list
+  })
   const isStreaming = computed(() => activeRun.value?.isStreaming ?? false)
   // 上下文占用：随会话走（切换会话时进度条跟着切，不留在上一个会话的数字上）
   const contextUsage = computed<AgentContextUsage | null>(() => activeRun.value?.contextUsage ?? null)
@@ -1457,6 +1491,8 @@ export function useAgentChat() {
     sessionsLoading,
     currentSessionId,
     messages,
+    // 展示用（正文本机图片路径已改写成会话图片端点）；「复制会话」导出请用上面的 messages
+    displayMessages,
     isStreaming,
     sessionLoading,
     pendingQuestion,

@@ -1149,3 +1149,99 @@ describe('useAgentChat 生成中排队', () => {
     expect(chatBodies[1].attachments?.[0]?.name).toBe('note.txt')
   })
 })
+
+// ── displayMessages：正文本机图片改写（2026-10-12）───────────────────────
+//
+// 模型"展示一张图"最自然的写法是在正文里贴一条本机路径（`![说明](c:\ws\a.png)`），
+// 而对话流是 markdown 渲染 —— 浏览器里那条地址永远是裂图。displayMessages 负责把
+// 这类路径改写成 `/api/agent/sessions/:id/image?path=…`（服务端按会话 cwd 读盘）。
+// 这里守三件事：
+//   ① 历史回放与实时流式都覆盖（两条路径汇在同一个 computed 上）；
+//   ② `messages` 保持模型原文不动 —— 「复制会话」导出要的是原文，端点 URL
+//      离开本应用就是死链，还会把原路径搞丢；
+//   ③ 新会话还没落盘（没有 sessionId）时不改写 —— 端点拼不出来，不如留着原路径。
+describe('useAgentChat displayMessages：正文图片改写', () => {
+  let chatStreams: SseStream[]
+
+  beforeEach(() => {
+    chatStreams = []
+    notice.calls = []
+    notice.questions = 0
+    setActivePinia(createPinia())
+    const store = useConfigStore()
+    store.setCurrentDirectory('C:/proj')
+    vi.stubGlobal('FileReader', FakeFileReader)
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.startsWith('/api/agent/sessions?')) {
+        return json({ success: true, sessions: [sessionMeta('A', '会话 A')] })
+      }
+      if (url === '/api/agent/sessions/A') {
+        return json({
+          success: true,
+          session: {
+            ...sessionMeta('A', '会话 A'),
+            version: 1,
+            messages: [
+              { role: 'user', content: '给我看看刚才那张截图' },
+              { role: 'assistant', content: '看这张：\n\n![浅色主题](c:\\ws\\repo\\docs\\a.png)' }
+            ]
+          }
+        })
+      }
+      if (url === '/api/agent/chat') {
+        const s = makeSseStream()
+        chatStreams.push(s)
+        return new Response(s.stream as unknown as BodyInit, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' }
+        })
+      }
+      return json({ success: true })
+    }))
+  })
+
+  test('历史回放：本机路径改写成会话端点；原始 messages 保持模型原文', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const raw = chat.messages.value.find(m => m.role === 'assistant')
+    // 原文一个字符不动（复制会话导出走的是这份）
+    expect(raw?.content).toBe('看这张：\n\n![浅色主题](c:\\ws\\repo\\docs\\a.png)')
+
+    const shown = chat.displayMessages.value.find(m => m.role === 'assistant')
+    expect(shown?.content).toBe(
+      '看这张：\n\n![浅色主题](/api/agent/sessions/A/image?path=c%3A%5Cws%5Crepo%5Cdocs%5Ca.png)'
+    )
+    // 没有图片语法的消息原对象复用（快路径，不触发下游无谓重渲染）
+    const user = chat.displayMessages.value.find(m => m.role === 'user')
+    expect(user).toBe(chat.messages.value.find(m => m.role === 'user'))
+  })
+
+  test('实时流式：meta 带来 sessionId 后自动补上改写（停止前也看得到图）', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+
+    const promise = chat.sendMessage('看图')
+    await flush()
+    expect(chatStreams).toHaveLength(1)
+
+    // 新会话还没落盘：没有 sessionId 拼不出端点，原样留着
+    chatStreams[0].send({ type: 'content', delta: '![a](c:\\ws\\a.png)' })
+    await flush()
+    expect(chat.displayMessages.value[chat.displayMessages.value.length - 1]?.content).toBe('![a](c:\\ws\\a.png)')
+
+    // meta 到达 → run 迁到真实 sessionId → computed 依赖变化，改写自动补上
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    await flush()
+    expect(chat.displayMessages.value[chat.displayMessages.value.length - 1]?.content)
+      .toBe('![a](/api/agent/sessions/A/image?path=c%3A%5Cws%5Ca.png)')
+    // 流式累加的那份仍然是原文（attemptMark 断点回退按它的长度切片，不能动）
+    expect(chat.messages.value[chat.messages.value.length - 1]?.content).toBe('![a](c:\\ws\\a.png)')
+
+    chatStreams[0].send({ type: 'done', content: '![a](c:\\ws\\a.png)' })
+    chatStreams[0].close()
+    await promise
+  })
+})

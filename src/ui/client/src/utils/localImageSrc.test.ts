@@ -19,7 +19,7 @@
 // 示例一起改写掉。所以下面的用例一半在守"该转的转"，一半在守"不该动的一个字符都别动"。
 
 import { describe, expect, test } from 'vitest'
-import { isLocalImageSrc, jobImageUrl, resolveLocalImages } from './localImageSrc'
+import { isLocalImageSrc, jobImageUrl, sessionImageUrl, resolveLocalImages, resolveAgentImages } from './localImageSrc'
 
 const JOB = 'mu1234abcd'
 const url = (p: string) => `/api/workbench/jobs/${JOB}/image?path=${encodeURIComponent(p)}`
@@ -127,5 +127,61 @@ describe('resolveLocalImages：重写正文里的本机图片', () => {
 
   test('jobImageUrl 对 id 与路径都做编码（路径里的 & 不会截断查询串）', () => {
     expect(jobImageUrl('a b', 'c:\\x&y.png')).toBe('/api/workbench/jobs/a%20b/image?path=c%3A%5Cx%26y.png')
+  })
+})
+
+// ── 主 Agent 对话（2026-10-12）────────────────────────────────────────────
+//
+// 同一套重写规则、只换端点：任务对话按 job 所属仓库解析（jobImage.js），
+// 主 Agent 对话按会话自己的 cwd 解析（agentRoutes.js 的
+// GET /api/agent/sessions/:id/image）。规则分叉的后果是"一处能看图、
+// 另一处裂图"，所以两边共用 localImageSrc.ts 的同一份实现。
+
+const SESSION = 'ag-013d0f-abc123'
+const agentUrl = (p: string) => `/api/agent/sessions/${SESSION}/image?path=${encodeURIComponent(p)}`
+
+describe('resolveAgentImages：主 Agent 对话的正文图片改写', () => {
+  test('本机路径 → 会话图片端点（各种写法与任务对话同一套规则）', () => {
+    expect(resolveAgentImages('![浅色主题](c:\\ws\\repo\\docs\\a.png)', SESSION))
+      .toBe(`![浅色主题](${agentUrl('c:\\ws\\repo\\docs\\a.png')})`)
+    expect(resolveAgentImages('![a](docs/a.png)', SESSION)).toBe(`![a](${agentUrl('docs/a.png')})`)
+    expect(resolveAgentImages('![a](file:///C:/ws/a.png)', SESSION)).toBe(`![a](${agentUrl('file:///C:/ws/a.png')})`)
+    expect(resolveAgentImages('![a](<c:\\my dir\\a.png>)', SESSION)).toBe(`![a](${agentUrl('c:\\my dir\\a.png')})`)
+    expect(resolveAgentImages('![a](c:\\ws\\a.png "截图")', SESSION)).toBe(`![a](${agentUrl('c:\\ws\\a.png')} "截图")`)
+  })
+
+  test('一行里的多张图都转', () => {
+    expect(resolveAgentImages('![a](c:\\1.png) 和 ![b](c:\\2.png)', SESSION))
+      .toBe(`![a](${agentUrl('c:\\1.png')}) 和 ![b](${agentUrl('c:\\2.png')})`)
+  })
+
+  test('该不动的一个字符都别动（外部链接 / data / 站内路径 / 围栏 / 裸链接）', () => {
+    const text = [
+      '![a](https://example.com/a.png)',
+      '![b](data:image/png;base64,AAAA)',
+      '![c](/assets/a.png)',
+      '```markdown',
+      '![示例](c:\\ws\\a.png)',
+      '```',
+      '[打开截图](c:\\ws\\a.png)'
+    ].join('\n')
+    expect(resolveAgentImages(text, SESSION)).toBe(text)
+  })
+
+  test('没有 sessionId（新会话还没落盘）时不改：端点拼不出来，留着原路径至少看得见', () => {
+    const text = '![a](c:\\ws\\a.png)'
+    expect(resolveAgentImages(text, '')).toBe(text)
+    expect(resolveAgentImages(text, null)).toBe(text)
+    expect(resolveAgentImages(text, undefined)).toBe(text)
+  })
+
+  test('空文本 / 无图片语法的长文本原样返回（快路径）', () => {
+    expect(resolveAgentImages('', SESSION)).toBe('')
+    const plain = '一句普通的回答，没有任何图片。\n第二行。'
+    expect(resolveAgentImages(plain, SESSION)).toBe(plain)
+  })
+
+  test('sessionImageUrl 对 id 与路径都做编码', () => {
+    expect(sessionImageUrl('a b', 'c:\\x&y.png')).toBe('/api/agent/sessions/a%20b/image?path=c%3A%5Cx%26y.png')
   })
 })
