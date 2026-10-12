@@ -1,0 +1,21 @@
+{
+  "name": "zen-gitsync-website",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "zen-gitsync 官方网站(Vue 3 + Vite)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173",
+    "sync:assets": "node scripts/sync-shots.mjs"
+  },
+  "dependencies": {
+    "@phosphor-icons/vue": "^2.2.1",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.0",
+    "vite": "^7.0.0"
+  }
+}
