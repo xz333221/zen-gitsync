@@ -471,6 +471,16 @@ export function useAgentChat() {
   // 等某次刷新在服务端列表里看到它再交回给服务端数据（见 mergeGeneratingSessions）
   const pendingPersistIds = new Set<string>()
 
+  // 用户显式打开过、但服务端列表**不会**返回的会话。两种来路：
+  //   · 定时任务面板的「查看会话」按 id 直接打开，而这条会话的 cwd 属于别的项目
+  //     （列表接口按项目过滤，服务端永远不返回它）；
+  //   · 列表还是打开页面时那份，这条会话是之后才落盘的（调度器在后台跑的）。
+  // 两种情况下左栏都没有它，用户看到的是"对话打开了、左边没有这一条、也没有高亮"，
+  // 还会连带两处误判：isEngineLocked 认不出它已落盘、切项目时的清理判断把它当成陌生会话。
+  // 键 = sessionId；值记着**在哪个项目下打开的** —— 离开那个项目就不再补（与左栏按项目
+  // 隔离同一口径，切项目时的旧行为不变）。
+  const pinnedSessions = new Map<string, { meta: SessionMeta; cwd: string }>()
+
   // ── 运行时状态存取 ─────────────────────────────────────
   function createRun(key: string): SessionRun {
     return {
@@ -696,6 +706,56 @@ export function useAgentChat() {
     return merged
   }
 
+  // ── 打开过、但服务端列表里没有的会话（见 pinnedSessions）─────
+
+  /** 列表排序：与服务端同一口径（updatedAt 倒序），补进来的条目才落在它该在的位置 */
+  function byUpdatedDesc(a: SessionMeta, b: SessionMeta): number {
+    return (b.updatedAt || '').localeCompare(a.updatedAt || '')
+  }
+
+  /**
+   * 把"服务端列表里没有"的这条会话补进左栏（loadSession 成功后调）。
+   * 已经在列表里的直接返回 —— 服务端那份是权威，不拿刚读到的会话去覆盖它。
+   */
+  function rememberOpenedSession(session: AgentSession) {
+    if (!session?.sessionId) return
+    if (sessions.value.some(s => s.sessionId === session.sessionId)) return
+    const meta: SessionMeta = {
+      sessionId: session.sessionId,
+      title: session.title || $t('@AGENT:无标题'),
+      source: session.source || 'web',
+      cwd: session.cwd || '',
+      model: session.model || '',
+      engine: session.engine,
+      createdAt: session.createdAt || '',
+      updatedAt: session.updatedAt || '',
+      messageCount: Array.isArray(session.messages) ? session.messages.length : 0,
+      size: 0
+    }
+    // 存的就是上面这个对象（列表里那份是它的响应式代理）—— 重命名改的是同一个 title，
+    // 不需要再往这里同步一遍。
+    pinnedSessions.set(session.sessionId, { meta, cwd: configStore.currentDirectory || '' })
+    sessions.value = [...sessions.value, meta].sort(byUpdatedDesc)
+  }
+
+  /**
+   * 刷新列表之后把补过的条目接回去。两种情况下就地撤掉：
+   * 服务端已经给了这条（补只是为了撑到它落进列表）、或者当前项目已经不是打开它的那个了。
+   */
+  function restorePinnedSessions() {
+    if (pinnedSessions.size === 0) return
+    const cwd = configStore.currentDirectory || ''
+    const extra: SessionMeta[] = []
+    for (const [id, pin] of [...pinnedSessions]) {
+      if (pin.cwd !== cwd || sessions.value.some(s => s.sessionId === id)) {
+        pinnedSessions.delete(id)
+        continue
+      }
+      extra.push(pin.meta)
+    }
+    if (extra.length) sessions.value = [...sessions.value, ...extra].sort(byUpdatedDesc)
+  }
+
   async function loadSessions() {
     const requestNonce = ++sessionsRequestNonce
     const cwd = configStore.currentDirectory || ''
@@ -715,6 +775,7 @@ export function useAgentChat() {
       }
       const server = Array.isArray(res.sessions) ? res.sessions : []
       sessions.value = mergeGeneratingSessions(server)
+      restorePinnedSessions()
     } catch (err: any) {
       if (requestNonce !== sessionsRequestNonce) return
       ElMessage.error($t('@AGENT:加载会话列表失败') + ': ' + (err?.message || err))
@@ -780,6 +841,8 @@ export function useAgentChat() {
       run.sessionId = sessionId
       run.messages = convertSessionToMessages(res.session)
       if (res.session?.title) run.title = res.session.title
+      // 服务端列表里没有这条（跨项目 / 列表还没刷新）→ 补进左栏，别出现"打开了却不在列表里"
+      rememberOpenedSession(res.session)
     } catch (err: any) {
       ElMessage.error($t('@AGENT:加载会话失败') + ': ' + (err?.message || err))
     } finally {
@@ -809,6 +872,8 @@ export function useAgentChat() {
         return
       }
       sessions.value = sessions.value.filter(s => s.sessionId !== sessionId)
+      // 补进列表的那条也要一起忘掉，否则下一次刷新（定时任务跑完就会触发一次）把它又接回来
+      pinnedSessions.delete(sessionId)
       if (currentSessionId.value === sessionId) {
         currentSessionId.value = null
       }

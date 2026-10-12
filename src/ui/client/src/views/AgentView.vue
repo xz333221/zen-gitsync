@@ -23,7 +23,7 @@
   - 会话持久化：后端自动保存到 ~/.zen-gitsync/agent-sessions/
 -->
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { $t } from '@/lang/static'
 import { ElIcon } from 'element-plus'
 import { Loading, ChatDotRound, Goods, Connection, Timer, Setting } from '@element-plus/icons-vue'
@@ -33,6 +33,7 @@ import { useConfigStore } from '@/stores/configStore'
 import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
 import { buildConversationItems, agentConversationLabels, agentQuestionLabels, agentQueueLabels, AGENT_ASSISTANT_NAME, AGENT_ASSISTANT_AVATAR, MESSAGE_RAIL_CONFIG, MESSAGE_META_CONFIG } from '@/utils/agentConversations'
 import { resolveAgentPresets } from '@/utils/agentPresets'
+import { subscribeScheduleEvents } from '@/utils/scheduleApi'
 import { agentEngineName, type AgentEngineId } from '@/utils/agentEngine'
 import { useNarrowPane } from '@/composables/useNarrowPane'
 import MarketplacePanel from '@/components/MarketplacePanel.vue'
@@ -246,6 +247,22 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
     newSession()
   }
 }, { immediate: true })
+
+// ── 定时任务跑完 → 顺手刷新会话列表 ────────────────────────
+// 调度器在后台把这一轮写进任务的会话（专属会话续写；sessionMode=new 则每次新建一条），
+// 前端这边一条通知都没有 —— 左栏会一直停在打开页面时那份，用户得手动刷新才看得见新会话。
+// 复用定时任务面板那个事件源（/api/schedules/events），跑完就重拉一次。
+// 只认 task_finished：task_started 那一刻会话还没落盘，拉了也是旧数据。
+let disposeScheduleEvents: (() => void) | null = null
+onMounted(() => {
+  disposeScheduleEvents = subscribeScheduleEvents((evt) => {
+    if (evt.type === 'task_finished') loadSessions().catch(() => {})
+  })
+})
+onBeforeUnmount(() => {
+  disposeScheduleEvents?.()
+  disposeScheduleEvents = null
+})
 </script>
 
 <template>

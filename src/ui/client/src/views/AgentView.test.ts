@@ -119,6 +119,20 @@ vi.mock('@/components/SchedulePanel.vue', () => ({
   },
 }))
 
+// 定时任务事件源：只留一个能被用例手动触发的回调（真实实现在 utils/scheduleApi.test.ts 里守）。
+// 其余导出保持真实，免得别处 import 到 undefined。
+const sched = vi.hoisted(() => ({ handler: null as null | ((evt: any) => void), disposed: 0 }))
+vi.mock('@/utils/scheduleApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/scheduleApi')>()
+  return {
+    ...actual,
+    subscribeScheduleEvents: (onEvent: (evt: any) => void) => {
+      sched.handler = onEvent
+      return () => { sched.disposed += 1 }
+    },
+  }
+})
+
 // configStore 可变桩：预设提示词用例要按例切换 agentPresetPrompts。
 // （computed 读的是普通对象字段，直接赋值不会触发响应式 —— 用例改完值重新 mount 即可。）
 const configState = vi.hoisted(() => ({
@@ -153,6 +167,8 @@ beforeEach(() => {
   agent.isEngineLocked.value = false
   agent.pickEngine.mockClear()
   configState.agentPresetPrompts = []
+  sched.handler = null
+  sched.disposed = 0
 })
 
 describe('AgentView 窄屏折行', () => {
@@ -254,6 +270,27 @@ describe('AgentView 窄屏折行', () => {
     await scheduleTab!.trigger('click')
     expect(w.find('.stub-schedule').exists()).toBe(true)
     expect(w.find('.agent-engine').exists()).toBe(false)
+  })
+})
+
+// ── 定时任务跑完 → 会话列表联动 ──────────────────────────────
+// 调度器在后台把这一轮写进任务的会话（专属会话续写 / sessionMode=new 每次新建一条），
+// 前端一条通知都没有：左栏会一直停在打开页面时那份，用户得手动刷新才看得见新会话。
+describe('AgentView 定时任务联动会话列表', () => {
+  it('task_finished 自动重拉会话列表；开跑那一刻不拉（会话还没落盘）', async () => {
+    const w = mountView()
+    expect(sched.handler).toBeTruthy()
+    agent.loadSessions.mockClear()
+
+    sched.handler!({ type: 'task_started', taskId: 'sch-1' })
+    expect(agent.loadSessions).not.toHaveBeenCalled()
+
+    sched.handler!({ type: 'task_finished', taskId: 'sch-1', status: 'ok' })
+    expect(agent.loadSessions).toHaveBeenCalledTimes(1)
+
+    // 组件卸载要退订，否则每进一次智能体页就多挂一个 EventSource
+    w.unmount()
+    expect(sched.disposed).toBe(1)
   })
 })
 

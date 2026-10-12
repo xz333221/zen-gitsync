@@ -20,7 +20,7 @@
 
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useConfigStore } from '@/stores/configStore'
 import { useAgentActivityStore } from '@/stores/agentActivity'
 import { convertSessionToMessages, useAgentChat } from './useAgentChat'
@@ -317,6 +317,75 @@ describe('useAgentChat parallel sessions', () => {
     const n1 = chat.sessions.value.filter((s) => s.sessionId === 'N1')
     expect(n1).toHaveLength(1)
     expect(n1[0].title).toBe('服务端标题')
+  })
+
+  // ── 定时任务「查看会话」：按 id 打开的会话，列表里未必有 ──────────
+  // 这条会话的 cwd 属于别的项目 —— 列表接口按当前项目过滤，服务端永远不会返回它。
+  function stubFetchWithForeignSession() {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.startsWith('/api/agent/sessions?')) {
+        return json({ success: true, sessions: [sessionMeta('A', '会话 A'), sessionMeta('B', '会话 B')] })
+      }
+      if (url === '/api/agent/sessions/X') {
+        return json({
+          success: true,
+          session: {
+            ...sessionMeta('X', '每日拉代码'),
+            cwd: 'C:/other-proj',
+            engine: 'gai',
+            version: 1,
+            messages: [],
+          },
+        })
+      }
+      return json({ success: true })
+    }))
+  }
+
+  test('打开列表里没有的会话（定时任务「查看会话」）→ 左栏立刻有这一条，刷新也不会弄丢', async () => {
+    stubFetchWithForeignSession()
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    expect(chat.sessions.value.map((s) => s.sessionId)).toEqual(['A', 'B'])
+
+    await chat.loadSession('X')
+    expect(chat.sessions.value.map((s) => s.sessionId)).toContain('X')
+    expect(chat.sessions.value.find((s) => s.sessionId === 'X')?.title).toBe('每日拉代码')
+    // 引擎选择器要认出它已经落盘，否则会放行中途换引擎（服务端再拦一次，用户白点）
+    expect(chat.isEngineLocked.value).toBe(true)
+
+    // 定时任务跑完会触发一次刷新：服务端还是不返回它，但左栏不能把它弄丢
+    await chat.loadSessions()
+    expect(chat.sessions.value.map((s) => s.sessionId)).toContain('X')
+  })
+
+  test('换到别的项目后不再补那条会话（左栏仍按项目隔离）', async () => {
+    stubFetchWithForeignSession()
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('X')
+    expect(chat.sessions.value.map((s) => s.sessionId)).toContain('X')
+
+    useConfigStore().setCurrentDirectory('D:/other')
+    await chat.loadSessions()
+    expect(chat.sessions.value.map((s) => s.sessionId)).not.toContain('X')
+  })
+
+  test('删掉补进列表的那条会话后，下一次刷新不能把它又接回来', async () => {
+    stubFetchWithForeignSession()
+    const confirm = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as any)
+    try {
+      const chat = useAgentChat()
+      await chat.loadSessions()
+      await chat.loadSession('X')
+      await chat.deleteSession('X')
+      expect(chat.sessions.value.map((s) => s.sessionId)).not.toContain('X')
+
+      await chat.loadSessions()
+      expect(chat.sessions.value.map((s) => s.sessionId)).not.toContain('X')
+    } finally {
+      confirm.mockRestore()
+    }
   })
 
   // 复用同一套 fetch/SSE mock:命令执行中的 tool_output 要能在运行期间看到,
