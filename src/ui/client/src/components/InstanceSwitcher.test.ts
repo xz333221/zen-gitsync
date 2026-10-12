@@ -16,13 +16,16 @@
 // 覆盖:当前实例行「端口徽章 + 关闭按钮」并存(不重叠的结构前提)、
 //       关闭当前/其他实例的确认流程分支、取消确认不关闭、空列表不渲染、
 //       关闭当前实例时 window.close 被拦截的兜底遮罩(ISSW-13/14)、
-//       以及 CSS 并排布局守卫。
+//       以及 CSS 布局守卫(ISSW-09~11)。
 //
-// 为什么要有 CSS 守卫(ISSW-07~10):
+// 为什么要有 CSS 守卫(ISSW-09~11):
 //   2026-09-05 修过一次 bug —— .instance-close 是 position:absolute 叠在端口徽章
 //   槽位上,而「当前实例」又被设成常驻 opacity:1,端口却只在 hover 才淡出,
 //   于是默认状态下两个元素抢同一槽位而重叠。jsdom 不做 CSS 布局计算,
 //   DOM 结构在 bug 前后完全一样,所以这个 bug 只能从样式源码层面守住。
+//   2026-10-06(d2e275a4) 换掉了当时的修复形态:「当前行例外」(× 常驻 + 并排布局)
+//   被废除,当前行回归与其余行一致的 hover 换显。守卫已随实现同步(ISSW-09~11):
+//   显现规则存在 / 端口淡出与 × 显现成对 / 旧例外不许回来。
 
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ElMessageBox } from 'element-plus'
@@ -347,6 +350,9 @@ describe('InstanceSwitcher.vue CSS 布局守卫', () => {
   }) as Record<string, string>
   const src = Object.values(rawModules)[0] ?? ''
   const styleBlock = src.slice(src.indexOf('<style'))
+  // 剥注释再断言：解释性注释里会引用选择器名（"改前这里有一整套……"），
+  // 不剥的话正/反两种断言都可能被注释文本绊倒
+  const styleNoComments = styleBlock.replace(/\/\*[\s\S]*?\*\//g, '')
 
   // 取出某条规则的花括号内容。
   // 注意:源码里这些规则都裹在 :global(...) 里,选择器与 `{` 之间还隔着一个 `)`。
@@ -356,22 +362,44 @@ describe('InstanceSwitcher.vue CSS 布局守卫', () => {
     return m ? m[1] : null
   }
 
-  test('ISSW-09: 当前行关闭按钮是 position:static(不再绝对定位叠在端口上)', () => {
-    const body = ruleBody('.instance-menu-item--current .instance-close')
-    expect(body, '未找到 --current .instance-close 规则').toBeTruthy()
-    expect(body).toMatch(/position:\s*static/)
+  // 与 ruleBody 的区别：规则组可能由多行 :global(...) 选择器逗号连接、
+  // 只有最后一个才接 `{`（如 :hover 与 :focus-within 成对的两行），
+  // 所以从选择器出现处向后找第一个 `{`，而不是要求它紧跟 `)`。
+  // ⚠️ 选择器后必须加边界前瞻（`)` / `,` / `{`）：反样本训练抓出来的 ——
+  // 不加的话把 "…instance-close" 改名成 "…instance-close-ZZ)" 也会被前缀命中，
+  // 等于"规则已失效"却测试照过（假绿）。
+  function ruleBodyAfter(selector: string): string | null {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const m = styleNoComments.match(new RegExp(escaped + '(?=\\s*[),{])[\\s\\S]*?\\{([^}]*)\\}'))
+    return m ? m[1] : null
+  }
+
+  test('ISSW-09: 当前行 × 与其余行一致 —— 默认隐藏、hover/focus 才显现(disabled 行须有独立补充规则)', () => {
+    // 2026-10-06(d2e275a4) 起:当前行不再「常驻 ×」,改为与其余行一致的 hover 换显。
+    // 组件注释里标了 ⚠️:当前行是 disabled,通用规则写的是 :not(.is-disabled):hover,
+    // 它吃不到 —— 必须补一份不带 :not() 的 --current 专属规则,否则永远不显现。
+    const hover = ruleBodyAfter('--current:hover .instance-close')
+    const focus = ruleBodyAfter('--current:focus-within .instance-close')
+    expect(hover, '未找到 --current:hover .instance-close 规则').toBeTruthy()
+    expect(focus, '未找到 --current:focus-within .instance-close 规则(键盘可达性)').toBeTruthy()
+    expect(hover).toMatch(/opacity:\s*1/)
+    expect(hover).toMatch(/pointer-events:\s*auto/)
   })
 
-  test('ISSW-10: 当前行 action 容器是 inline-flex 并排布局且带 gap', () => {
-    const body = ruleBody('.instance-menu-item--current .instance-action')
-    expect(body, '未找到 --current .instance-action 规则').toBeTruthy()
-    expect(body).toMatch(/inline-flex/)
-    expect(body).toMatch(/gap:\s*\d/)
+  test('ISSW-10: 当前行 hover 时端口徽章淡出 —— 与 × 显现成对(只删其一会留空档或重现重叠)', () => {
+    // 组件注释:「写在一起是因为它们永远是成对出现——只淡出不显现会留下一个空档」。
+    // 这条守的是防重叠 bug 在新机制下的形态:同槽位两个元素,任何时刻最多一个可见。
+    const dim = ruleBodyAfter('--current:hover .port-badge')
+    expect(dim, '未找到 --current:hover .port-badge 规则').toBeTruthy()
+    expect(dim).toMatch(/opacity:\s*0/)
   })
 
-  test('ISSW-11: 回归防线 —— 不再有「当前行 hover/focus 时淡出端口」的规则', () => {
-    expect(styleBlock).not.toMatch(/--current:hover\s+\.port-badge/)
-    expect(styleBlock).not.toMatch(/--current:focus-within\s+\.port-badge/)
+  test('ISSW-11: 回归防线 —— 旧「当前行常驻例外」不许回来(第一行不许再特殊化)', () => {
+    // 旧例外(已被 d2e275a4 废除):--current 行的 × 走 position:static 常驻、
+    // action 走 inline-flex 并排 —— 结局是"6 行里只有第一行的 × 常驻",看着像 bug。
+    // 若有人加回这类「当前行专属的静态规则」,测试当场红。
+    expect(styleNoComments).not.toMatch(/--current \.instance-close[\s\S]{0,120}?\{/)
+    expect(styleNoComments).not.toMatch(/--current \.instance-action[\s\S]{0,120}?\{/)
   })
 
   test('ISSW-12: 当前行端口徽章不被设为 opacity:0', () => {
