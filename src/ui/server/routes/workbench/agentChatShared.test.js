@@ -12,7 +12,7 @@
 // configManager / agentSessionStore 会去读真实的 ~/.zen-gitsync。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -266,6 +266,8 @@ test('400 且正文提到 tool/function 时提示换模型,而不是甩网关 JS
 //   · argsPreview —— 收起态那一行副标题，故意截到 200 字。
 // 计划类工具的 steps 也在 arguments 里（不再单独开一条透传路径）。
 test('tool_call_start 每种工具都带完整 arguments,argsPreview 仍是截断摘要', async () => {
+  // 桩的 write_file 落点：沙箱里（见 round 里的说明）。用完删掉，不留 tmp 垃圾。
+  const stubWritePath = path.join(SANDBOX, 'stub-write-target.js')
   const planArgs = JSON.stringify({
     steps: [
       { content: '读代码', status: 'completed' },
@@ -277,7 +279,12 @@ test('tool_call_start 每种工具都带完整 arguments,argsPreview 仍是截�
     sse([event({
       choices: [{ delta: { tool_calls: [
         { index: 0, id: 'p1', function: { name: 'update_plan', arguments: planArgs } },
-        { index: 1, id: 'p2', function: { name: 'write_file', arguments: JSON.stringify({ path: 'a.js', content: 'x'.repeat(50) }) } }
+        // ⚠️ 这个桩会走**真实** executeTool 落盘（这一层跑的是真 runAgentTurn，
+        // 不是解析 Mock）—— 路径必须指到沙箱。曾经这里写的是相对路径 'a.js'：
+        // resolvePath 按 process.cwd() 解析，于是每次跑测试都在当前目录留一个
+        // 50 字节的 a.js（仓库根跑留根目录、routes/workbench 跑留那里），
+        // 全组用例还都是绿的，只能靠 git status 发现。
+        { index: 1, id: 'p2', function: { name: 'write_file', arguments: JSON.stringify({ path: stubWritePath, content: 'x'.repeat(50) }) } }
       ] } }, { finish_reason: 'tool_calls' }],
     }), 'data: [DONE]\n\n']),
     okStream(),
@@ -285,29 +292,35 @@ test('tool_call_start 每种工具都带完整 arguments,argsPreview 仍是截�
   let turn = 0
   const session = newSession('ag-sandbox-plan', withSystem())
 
-  const { events } = await runWeb({
-    session,
-    userMessage: '把这个功能做出来',
-    respond: () => round[turn++] || okStream(),
-  })
+  try {
+    const { events } = await runWeb({
+      session,
+      userMessage: '把这个功能做出来',
+      respond: () => round[turn++] || okStream(),
+    })
 
-  const starts = events.filter(e => e.type === 'tool_call_start')
-  assert.equal(starts.length, 2)
-  const planStart = starts.find(e => e.name === 'update_plan')
-  const writeStart = starts.find(e => e.name === 'write_file')
+    const starts = events.filter(e => e.type === 'tool_call_start')
+    assert.equal(starts.length, 2)
+    const planStart = starts.find(e => e.name === 'update_plan')
+    const writeStart = starts.find(e => e.name === 'write_file')
 
-  // 计划：全文必须一字不差地带到前端（前端靠它渲染清单）
-  assert.equal(planStart.arguments, planArgs)
-  assert.match(planStart.argsPreview, /1\/2|1 完成/)
-  // 其他工具：展开态同样要看到原文，不再只给摘要
-  assert.equal(writeStart.arguments, JSON.stringify({ path: 'a.js', content: 'x'.repeat(50) }))
-  assert.ok(writeStart.argsPreview.length < writeStart.arguments.length, '摘要仍应是截断过的')
+    // 计划：全文必须一字不差地带到前端（前端靠它渲染清单）
+    assert.equal(planStart.arguments, planArgs)
+    assert.match(planStart.argsPreview, /1\/2|1 完成/)
+    // 其他工具：展开态同样要看到原文，不再只给摘要
+    assert.equal(writeStart.arguments, JSON.stringify({ path: stubWritePath, content: 'x'.repeat(50) }))
+    assert.ok(writeStart.argsPreview.length < writeStart.arguments.length, '摘要仍应是截断过的')
+    // 顺带证明桩调用真的执行了、且只落在沙箱（这条红了 = 有人把路径改成会污染仓库的）
+    assert.ok(existsSync(stubWritePath), '桩的 write_file 应真实落在沙箱里')
 
-  const planResult = events.find(e => e.type === 'tool_result' && e.name === 'update_plan')
-  assert.match(planResult.result, /计划已更新/)
-  // 计划也要进会话记录 —— 重新打开会话时前端靠历史里的 arguments 复原清单
-  const assistantWithPlan = session.messages.find(m => m.role === 'assistant' && m.tool_calls?.some(t => t.function.name === 'update_plan'))
-  assert.equal(assistantWithPlan.tool_calls[0].function.arguments, planArgs)
+    const planResult = events.find(e => e.type === 'tool_result' && e.name === 'update_plan')
+    assert.match(planResult.result, /计划已更新/)
+    // 计划也要进会话记录 —— 重新打开会话时前端靠历史里的 arguments 复原清单
+    const assistantWithPlan = session.messages.find(m => m.role === 'assistant' && m.tool_calls?.some(t => t.function.name === 'update_plan'))
+    assert.equal(assistantWithPlan.tool_calls[0].function.arguments, planArgs)
+  } finally {
+    rmSync(stubWritePath, { force: true })
+  }
 })
 
 // ── 重试与续跑（2026-10-09）────────────────────────────────────
