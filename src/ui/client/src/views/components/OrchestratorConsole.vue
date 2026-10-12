@@ -1384,10 +1384,14 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   font-weight: 600;
   box-shadow: var(--shadow-sm);
 }
-/* 2026-10-11：暗色下 --color-primary-dark（#2563eb）没被 dark-theme 覆盖，
-   落在 10% primary 淡底上就是深蓝压深底，扫过去像没选中（用户截图实测）。
-   换 primary-light（#60a5fa），与 dark-theme.scss 里下拉选中项同一档对比度（≈5:1）。 */
-html.dark .oc__mode-btn.is-active { color: var(--color-primary-light); }
+/* 2026-10-12：上一版写的是 `html.dark` —— 死选择器。本项目深色挂的是
+   `<html data-theme="dark">` 属性（configStore.applyTheme），不是 .dark class，
+   所以那条覆盖从未命中；用户二次截图实测选中档只有 1.70:1（深蓝压深底）。
+   修正选择器后，primary-light（#60a5fa）在这块底上实测也只有 3.76:1 ——
+   选中底是「10% primary + 6% 白（bg-panel-dark）」叠出来的，比 commit-hash 那类
+   深底亮一档，需要再亮一档的字色：blue-300 #93c5fd 实测 4.87:1，过 WCAG AA
+   （与 --gradient-progress 的收尾色同一档）。 */
+[data-theme="dark"] .oc__mode-btn.is-active { color: #93c5fd; }
 .oc__mode-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
 /* 对话模式：整块对话面吃满"活动流 + 项目概览 + 派发栏"让出来的那块高度 */

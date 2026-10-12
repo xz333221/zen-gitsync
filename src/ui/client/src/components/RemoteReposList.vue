@@ -1325,10 +1325,10 @@ onBeforeUnmount(() => {
 /* 外壳沿用「最近项目」面板的形态(卡片化 + 标题行 + 内部滚动),
    两个 Tab 之间切换时视觉不跳。 */
 /* 组头是 sticky 的,而 scoped 样式给子元素加的 data 属性会挡住
-   `html.dark .repo-card__avatar` 这类选择器 —— 深色下的字母块配色写在
+   `[data-theme="dark"] .repo-card__avatar` 这类选择器 —— 深色下的字母块配色写在
    :global 里,靠 .repo-list 这个根类限定作用域,不会漏到别的面板。 */
-:global(html.dark .repo-list .repo-card__avatar),
-:global(html.dark .repo-list .repo-group__avatar) {
+:global([data-theme="dark"] .repo-list .repo-card__avatar),
+:global([data-theme="dark"] .repo-list .repo-group__avatar) {
   color: hsl(var(--avatar-hue, 217) 80% 74%);
   background: color-mix(in srgb, hsl(var(--avatar-hue, 217) 65% 62%) 22%, transparent);
 }
@@ -1903,7 +1903,7 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, hsl(var(--avatar-hue, 217) 70% 52%) 14%, transparent);
 }
 /* 深色下的配色见文件顶部 <style> 里的 :global 规则(scoped 的 data 属性
-   会挡住 `html.dark .repo-card__avatar` 这种跨层选择器) */
+   会挡住 `[data-theme="dark"] .repo-card__avatar` 这种跨层选择器) */
 .repo-card__avatar {
   width: 36px;
   height: 36px;

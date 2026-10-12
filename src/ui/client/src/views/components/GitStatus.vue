@@ -2265,12 +2265,12 @@ defineExpose({
   flex: 1;
 }
 
-html.dark .no-remote-tip {
+[data-theme="dark"] .no-remote-tip {
   background: linear-gradient(135deg, rgba(230, 162, 60, 0.1) 0%, rgba(230, 162, 60, 0.04) 100%);
   border-color: rgba(230, 162, 60, 0.35);
 }
 
-html.dark .no-remote-tip:hover {
+[data-theme="dark"] .no-remote-tip:hover {
   border-color: rgba(230, 162, 60, 0.5);
   box-shadow: var(--shadow-md);
 }
@@ -2328,12 +2328,12 @@ html.dark .no-remote-tip:hover {
 }
 
 /* 深色主题适配 */
-html.dark .upstream-tip {
+[data-theme="dark"] .upstream-tip {
   background: linear-gradient(135deg, var(--tint-primary-08) 0%, var(--tint-primary-04) 100%);
   border-color: var(--tint-primary-22);
 }
 
-html.dark .upstream-tip:hover {
+[data-theme="dark"] .upstream-tip:hover {
   border-color: var(--tint-primary-35);
   box-shadow: var(--shadow-md);
 }
@@ -2389,7 +2389,7 @@ html.dark .upstream-tip:hover {
   gap: var(--spacing-sm);
 }
 
-html.dark .selection-mode-banner {
+[data-theme="dark"] .selection-mode-banner {
   background: linear-gradient(135deg, var(--tint-primary-16) 0%, var(--tint-primary-08) 100%);
   border-color: var(--tint-primary-35);
 }
@@ -2457,18 +2457,18 @@ html.dark .selection-mode-banner {
   overflow-y: auto;
 }
 
-html.dark .pull-error-pre {
+[data-theme="dark"] .pull-error-pre {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.1);
 }
 
-html.dark .pull-error-type.is-warning {
+[data-theme="dark"] .pull-error-type.is-warning {
   background: rgba(250, 173, 20, 0.12);
   border-color: rgba(250, 173, 20, 0.3);
   color: var(--action-amber-bright);
 }
 
-html.dark .pull-error-type.is-error {
+[data-theme="dark"] .pull-error-type.is-error {
   background: rgba(245, 108, 108, 0.12);
   border-color: rgba(245, 108, 108, 0.3);
   color: #f87171;
@@ -2476,7 +2476,7 @@ html.dark .pull-error-type.is-error {
 
 /* —— "初始化并提交"的规模确认框 ——
    颜色一律走变量(--text-secondary / --bg-code / --border-console 在暗色主题里
-   都有对应的 -dark 映射),所以这里不需要再写 html.dark 覆盖。 */
+   都有对应的 -dark 映射),所以这里不需要再写 [data-theme="dark"] 覆盖。 */
 .init-scope-body {
   display: flex;
   flex-direction: column;

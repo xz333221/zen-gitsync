@@ -2166,27 +2166,27 @@ async function openSystemConfigFile() {
 }
 
 /* 深色主题适配 */
-html.dark .info-card {
+[data-theme="dark"] .info-card {
   background: linear-gradient(135deg, var(--tint-primary-12) 0%, var(--tint-primary-06) 100%);
   border-color: var(--tint-primary-22);
 }
 
-html.dark .info-card:hover {
+[data-theme="dark"] .info-card:hover {
   border-color: var(--tint-primary-35);
   box-shadow: var(--shadow-md);
 }
 
-html.dark .basic-info-section {
+[data-theme="dark"] .basic-info-section {
   background: rgba(255, 255, 255, 0.03);
   border-color: rgba(255, 255, 255, 0.1);
 }
 
-html.dark .basic-info-section:hover {
+[data-theme="dark"] .basic-info-section:hover {
   border-color: var(--tint-primary-30);
   box-shadow: var(--shadow-md);
 }
 
-html.dark .label-icon {
+[data-theme="dark"] .label-icon {
   color: rgba(255, 255, 255, 0.5);
 }
 
