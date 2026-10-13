@@ -2,7 +2,7 @@
 //
 // 口径（2026-09-28 与用户对齐）：
 //   - 内置 g ai 是默认项，排第一
-//   - 外部四家（Claude Code / OpenCode / Codex / CodeBuddy Code）与工作台是**同一批 CLI**，
+//   - 外部五家（Claude Code / OpenCode / Codex / CodeBuddy Code / Pi Agent）与工作台是**同一批 CLI**，
 //     所以 id/名字一律从 utils/taskExecutor.ts 派生，**不在这里再写一份**。
 //     本仓库为"同一份清单抄两处"吃过亏（见 server 侧 agentParity.test.js 的注释），
 //     加第五家时应当只改 taskExecutor.ts 一处。
@@ -11,8 +11,9 @@
 //
 // ⚠️ 与工作台**不同**的一条：工作台可以每次派发都临时换执行器；
 //    这里一旦会话开了头就锁死引擎，中途只能新建会话。原因是各家的续聊标识互不通用
-//    （claude --resume / opencode --session / codex exec resume / codebuddy --resume），
-//    且历史消息格式不同。服务端也做了同样的拦截（ENGINE_LOCKED），前端这里只是提前把 UI 置灰。
+//    （claude --resume / opencode --session / codex exec resume / codebuddy --resume /
+//     pi --session），且历史消息格式不同。服务端也做了同样的拦截（ENGINE_LOCKED），
+//    前端这里只是提前把 UI 置灰。
 //
 // ── 关于内置引擎的图标（2026-09-28 改的口径，改前先读）────────────────
 // 初版刻意让 g ai **不带图标**（"不给 AI 功能贴装饰性图标"）。用户看过下拉后指出：
@@ -20,11 +21,11 @@
 // 于是改为复用仓库里早就有的 g ai 产品标识（assets/icons/svg/g-ai.svg，
 // 走 sprite，与顶栏"用 g ai 打开当前目录"按钮同一个 icon-class）。
 // 这不违反原来那条口径：那条针对的是**给"AI 功能"贴的装饰性小图标**（魔法棒 / 闪光），
-// 而这里是"四个引擎各自的身份标识"，三缺一才是问题。
+// 而这里是"五个引擎各自的身份标识"，三缺一才是问题。
 //
 // 图标怎么渲染也分两路，与顶栏 DirectorySelector 完全一致：
 //   · 内置 g ai → sprite，`<svg-icon icon-class="g-ai">`（BUILTIN_ENGINE_ICON）
-//   · 外部四家 → 品牌彩色 SVG，`<TaskExecutorIcon>`（utils/taskExecutor.ts 那一批）
+//   · 外部五家 → 品牌彩色 SVG，`<TaskExecutorIcon>`（utils/taskExecutor.ts 那一批）
 
 import { TASK_EXECUTOR_OPTIONS, isTaskExecutorId, type TaskExecutorId } from './taskExecutor'
 

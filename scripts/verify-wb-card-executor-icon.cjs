@@ -1,13 +1,13 @@
 /**
  * 看板卡片标出「这条是哪个执行器跑的」的验证。
  *
- * 为什么要有这个：执行器从 1 个变成 4 个（claude / opencode / codex / codebuddy）之后，
+ * 为什么要有这个：执行器从 1 个变成 5 个（claude / opencode / codex / codebuddy / pi）之后，
  * 卡片上「已运行 6 分 48 秒 · 工具 52 次」只说了"跑了多久"，没说"谁在跑"。
  * 用户看板上同时挂着 Claude、Codex 跑的任务时，分不清哪张是哪张。
  *
  * 验收契约（改这块时别破坏）：
  *   A 正在跑的任务：活动区那一行有品牌图标，src 指向**这个执行器自己的**图
- *     （不是随便一张 —— 三个执行器三个图标，画错比不画更糟）
+ *     （不是随便一张 —— 五个执行器五张图标，画错比不画更糟）
  *   B 跑完的任务：图标挂在「最后回复」引文的开头（那句收尾的话是它说的）
  *   C 认不出执行器时不画图标 —— 老记录没写 agent 字段，以及写了不等于瞎猜一个品牌
  *   D 从没跑过的任务：卡片上一个图标都没有
@@ -25,7 +25,7 @@
  *   tasks.json / jobs.json / live-jobs/*.json），再把结果从 HTTP 那一段接过去。
  *   于是链路是：新后端代码 + 真实数据 → 前端渲染，只少了一次网络跳。
  *   另外补几条合成任务，覆盖真实数据里不一定存在的分支
- *   （三个执行器各一条 / 认不出 / 从没跑过）。
+ *   （五个执行器各一条 / 认不出 / 从没跑过）。
  *
  * 前置：dev server 已启动（vite 5544）；后端 5545 活着（提供其余接口的真实响应）。
  * 用法：node scripts/verify-wb-card-executor-icon.cjs
@@ -63,13 +63,13 @@ const sha12 = (s) => crypto.createHash('sha1').update(s, 'utf8').digest('hex').s
 
 /** 执行器 id → 图标内容指纹（前 12 位） */
 const ICON_SHA = Object.fromEntries(
-  [['claude', 'claudecode-color.svg'], ['opencode', 'opencode.svg'], ['codex', 'codex.svg'], ['codebuddy', 'codebuddy.svg']].map(([id, file]) => [
+  [['claude', 'claudecode-color.svg'], ['opencode', 'opencode.svg'], ['codex', 'codex.svg'], ['codebuddy', 'codebuddy.svg'], ['pi', 'pi.svg']].map(([id, file]) => [
     id,
     sha12(normIcon(fs.readFileSync(path.resolve(__dirname, '../src/ui/client/src/assets/icons/svg', file), 'utf8'))),
   ])
 )
 /** 产品名（与前端 utils/taskExecutor 的 TASK_EXECUTOR_OPTIONS 同一份口径） */
-const PRODUCT_NAME = { claude: 'Claude Code', opencode: 'OpenCode', codex: 'Codex', codebuddy: 'CodeBuddy Code' }
+const PRODUCT_NAME = { claude: 'Claude Code', opencode: 'OpenCode', codex: 'Codex', codebuddy: 'CodeBuddy Code', pi: 'Pi Agent' }
 
 /**
  * 浏览器里读到的 src（data URL）→ 归一后的内容指纹（口径与上面同一份）。
@@ -145,11 +145,13 @@ function syntheticTasks({ decorate, now }) {
     ['run-opencode', '【合成】OpenCode 正在跑：活动区标出 opencode', running('run-opencode', 'opencode')],
     ['run-codex', '【合成】Codex 正在跑：活动区标出 codex', running('run-codex', 'codex')],
     ['run-codebuddy', '【合成】CodeBuddy 正在跑：活动区标出 codebuddy', running('run-codebuddy', 'codebuddy')],
+    ['run-pi', '【合成】Pi Agent 正在跑：活动区标出 pi', running('run-pi', 'pi')],
     // 跑完的：走的是另一条链路（lastJobAgent 而不是 live.agent）
     ['done-claude', '【合成】Claude 跑完的：引文开头标出 claude', done('done-claude', 'claude', '已经好了，要 push 吗？')],
     ['done-opencode', '【合成】OpenCode 跑完的：引文开头标出 opencode', done('done-opencode', 'opencode', '改完了，要不要 push？')],
     ['done-codex', '【合成】Codex 跑完的：引文开头标出 codex', done('done-codex', 'codex', 'Codex 这边也改完了。')],
     ['done-codebuddy', '【合成】CodeBuddy 跑完的：引文开头标出 codebuddy', done('done-codebuddy', 'codebuddy', 'CodeBuddy 也看完了。')],
+    ['done-pi', '【合成】Pi Agent 跑完的：引文开头标出 pi', done('done-pi', 'pi', 'Pi 也看完了。')],
     // 认不出 / 从没跑过：一个图标都不许有
     ['legacy', '【合成】老记录没写 agent：不画图标', done('legacy', undefined, '这条是加 agent 字段之前跑的')],
     ['bogus', '【合成】agent 写了个不认识的：不画图标', done('bogus', 'gemini', '执行器名字对不上，宁可空着')],
@@ -202,8 +204,8 @@ async function main() {
 
   const tasks = boardTasks.concat(syntheticTasks({ decorate: registry.decorateTaskForBoard, now }))
   const pick = (id) => tasks.find(t => t.id === `synth-${id}`)
-  // 四个执行器 × 跑着 / 跑完 八条，每条都是同一套断言的输入
-  const AGENT_CASES = ['claude', 'opencode', 'codex', 'codebuddy']
+  // 五个执行器 × 跑着 / 跑完 十条，每条都是同一套断言的输入
+  const AGENT_CASES = ['claude', 'opencode', 'codex', 'codebuddy', 'pi']
   const running = Object.fromEntries(AGENT_CASES.map(a => [a, pick(`run-${a}`)]))
   const finished = Object.fromEntries(AGENT_CASES.map(a => [a, pick(`done-${a}`)]))
   const legacy = pick('legacy')

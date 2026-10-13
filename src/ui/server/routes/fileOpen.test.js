@@ -64,7 +64,7 @@ test('findDshExecutable: Windows 上返回 string 或 null,且非 null 时路径
 
 test('getToolInstallers: npm 包工具的升级变体带 @latest', () => {
   const installers = getToolInstallers('win32', () => true)
-  for (const tool of ['claude', 'codex', 'opencode', 'codebuddy', 'dsh']) {
+  for (const tool of ['claude', 'codex', 'opencode', 'codebuddy', 'pi', 'dsh']) {
     const inst = installers[tool]
     assert.match(inst.updateCommand, /@latest$/, `${tool}.updateCommand 应带 @latest`)
     assert.ok(inst.updateExecutable, `${tool}.updateExecutable 缺失`)

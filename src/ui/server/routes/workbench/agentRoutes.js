@@ -532,7 +532,8 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
         }
         // 引擎在会话**建立时就锁死**，中途不许换。
         // 为什么：各家 CLI 的续聊标识互不通用（claude --resume / opencode --session /
-        // codex exec resume / codebuddy --resume 的 id 也互不认），而且历史消息格式不同
+        // codex exec resume / codebuddy --resume / pi --session 的 id 也互不认），
+        // 而且历史消息格式不同
         // （我们存的是 OpenAI chat completions 形状，喂给 claude 没有意义）。允许中途
         // 切换的表现是"看起来切了，上下文却串了"—— 与工作台 taskExecutor.ts 注释里那条
         // "续哪个执行器由上一轮 job.agent 决定"同源。
@@ -558,10 +559,11 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
           source: 'web',
           cwd: currentProjectCwd,
           model: '',
-          // 引擎：gai（内置，默认）| claude | opencode | codex | codebuddy
+          // 引擎：gai（内置，默认）| claude | opencode | codex | codebuddy | pi
           engine: normalizeAgentEngine(req.body?.engine),
           // 外部 CLI 自己的续聊标识（claude session_id / opencode sessionID /
-          // codex thread_id / codebuddy session_id）。g ai 用不到，留着空串。
+          // codex thread_id / codebuddy session_id / pi 的 session header id）。
+          // g ai 用不到，留着空串。
           engineSessionId: '',
           createdAt: nowIso(),
           updatedAt: nowIso(),
@@ -694,7 +696,9 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
       if (useExternal) {
         // 外部 CLI 引擎：CLI 自己跑循环，服务端只做 spawn + 事件翻译。
         // 工作区状态块走 prompt 前缀（见 runExternalTurn 文件头：往项目里写
-        // AGENTS.md/CLAUDE.md 会弄脏用户工作区，且三家读取口径实测不一致）。
+        // AGENTS.md/CLAUDE.md 会弄脏用户工作区，且各家读取口径实测不一致
+        // （claude 只读 CLAUDE.md、codex 只读 AGENTS.md、opencode 两个都不读、
+        //   pi 两个都读 —— 见 runExternalTurn 文件头）。
         let promptPrefix = '';
         if (typeof getContextBlock === 'function') {
           try { promptPrefix = await getContextBlock({ locale }); } catch (err) { logger.warn(`[agent] 外部引擎状态块获取失败: ${err?.message || err}`); }

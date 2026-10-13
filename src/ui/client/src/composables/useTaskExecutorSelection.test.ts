@@ -33,12 +33,13 @@ function stubConfig(configData: Record<string, unknown>) {
   }))
 }
 
-function setInstalled(avail: { claude?: boolean; opencode?: boolean; codex?: boolean; codebuddy?: boolean }) {
+function setInstalled(avail: { claude?: boolean; opencode?: boolean; codex?: boolean; codebuddy?: boolean; pi?: boolean }) {
   const tools = useToolsStore()
   tools.claudeAvailable = avail.claude ?? false
   tools.opencodeAvailable = avail.opencode ?? false
   tools.codexAvailable = avail.codex ?? false
   tools.codebuddyAvailable = avail.codebuddy ?? false
+  tools.piAvailable = avail.pi ?? false
 }
 
 describe('useTaskExecutorSelection', () => {
@@ -66,6 +67,18 @@ describe('useTaskExecutorSelection', () => {
     const { active, availability, hasAnyExecutor } = useTaskExecutorSelection()
     expect(availability.value.codebuddy).toBe(true)
     expect(active.value).toBe('codebuddy')
+    expect(hasAnyExecutor.value).toBe(true)
+  })
+
+  test('pi：只装了它一个时也能被选中（第五家进 availability 映射）', async () => {
+    stubConfig({ ui: { lastTaskExecutor: 'pi' } })
+    const configStore = useConfigStore()
+    await configStore.loadConfig()
+    setInstalled({ pi: true })
+
+    const { active, availability, hasAnyExecutor } = useTaskExecutorSelection()
+    expect(availability.value.pi).toBe(true)
+    expect(active.value).toBe('pi')
     expect(hasAnyExecutor.value).toBe(true)
   })
 

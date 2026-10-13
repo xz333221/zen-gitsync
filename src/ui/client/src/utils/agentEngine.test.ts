@@ -1,6 +1,6 @@
 // agentEngine.ts 单测。
 //
-// 最要紧的一条同上：外部三家必须从 taskExecutor.ts 派生，不许在这里再抄一份 id/名字。
+// 最要紧的一条同上：外部几家必须从 taskExecutor.ts 派生，不许在这里再抄一份 id/名字。
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
   AGENT_ENGINE_OPTIONS,
@@ -20,7 +20,7 @@ describe('agentEngine 注册表', () => {
     expect(AGENT_ENGINE_OPTIONS[0].name).toBe(BUILTIN_ENGINE_NAME)
   })
 
-  it('外部三家从 TASK_EXECUTOR_OPTIONS 派生，不另写清单', () => {
+  it('外部几家从 TASK_EXECUTOR_OPTIONS 派生，不另写清单', () => {
     const externals = AGENT_ENGINE_OPTIONS.filter(o => o.id !== 'gai')
     expect(externals.map(o => o.id)).toEqual(TASK_EXECUTOR_OPTIONS.map(o => o.id))
     expect(externals.map(o => o.name)).toEqual(TASK_EXECUTOR_OPTIONS.map(o => o.name))
@@ -39,7 +39,7 @@ describe('agentEngine 注册表', () => {
     expect(BUILTIN_ENGINE_ICON).toBe('g-ai')
   })
 
-  it('每个引擎都能定位到一张图标：内置查 sprite，外部三家在任务执行器清单里', () => {
+  it('每个引擎都能定位到一张图标：内置查 sprite，外部几家在任务执行器清单里', () => {
     for (const opt of AGENT_ENGINE_OPTIONS) {
       if (isExternalAgentEngine(opt.id)) {
         expect(TASK_EXECUTOR_OPTIONS.some(o => o.id === opt.id)).toBe(true)

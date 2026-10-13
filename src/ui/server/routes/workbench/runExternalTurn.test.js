@@ -1,12 +1,13 @@
 // 外部引擎一轮对话的适配器单测。
 //
-// 这里**故意不 mock 事件处理器** —— 用的是 taskRunner 里真的那三个
-// （createClaudeEventHandler / createOpencodeEventHandler / createCodexEventHandler），
-// 只把 spawn 换成假的子进程喂固定的 NDJSON。这样测的是"三家协议 → SSE 事件"这条真链路：
+// 这里**故意不 mock 事件处理器** —— 用的是 taskRunner 里真的那几个
+// （createClaudeEventHandler / createOpencodeEventHandler / createCodexEventHandler /
+//   createCodebuddyEventHandler / createPiEventHandler），
+// 只把 spawn 换成假的子进程喂固定的 NDJSON。这样测的是"各家协议 → SSE 事件"这条真链路：
 // mock 掉处理器就只能测到我自己写的胶水，而那恰恰是最不容易错的部分。
 //
 // 每个引擎的样例 NDJSON 都取自实测（见 taskRunner 各 handler 的头部注释与
-// taskRunner.opencode.test.js / taskRunner.codex.test.js 的 fixture 口径）。
+// taskRunner.*.test.js 的 fixture 口径）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
@@ -159,6 +160,47 @@ test('codebuddy:stream-json → 同一组事件（协议与 claude 对齐，特�
   assert.equal(c.of('done').length, 1);
   // 续聊标识搬运：cbc 的 session_id → session.engineSessionId（--resume 用）
   assert.equal(session.engineSessionId, 'cbc-sess-1');
+});
+
+test('pi:--mode json → 同一组事件（自有 JSONL 协议，大事件被忽略）', async () => {
+  // 样例取自 2026-10-13 实测（CLI v1.2.0 + mock provider 真跑一轮）：
+  // 首条 session header 带会话 id；正文走 message_update 的 text_delta；
+  // 工具是 tool_execution_start/end 平铺两条；message_start 里那条 system
+  // prompt 有几万字节，必须被 handler 无视（否则淹没有用输出）。
+  const lines = [
+    JSON.stringify({ type: 'session', version: 3, id: 'pi-sess-1', timestamp: '2026-10-13T04:06:14.099Z', cwd: 'D:/ws' }),
+    JSON.stringify({ type: 'agent_start' }),
+    JSON.stringify({ type: 'turn_start' }),
+    JSON.stringify({ type: 'message_start', message: { role: 'system', content: '', sections: { preamble: 'You are an expert coding assistant…' } } }),
+    JSON.stringify({ type: 'message_start', message: { role: 'user', content: [{ type: 'text', text: 'run echo' }] } }),
+    JSON.stringify({ type: 'message_update', usage: {}, assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: '让我跑个命令。' } }),
+    JSON.stringify({ type: 'message_update', usage: {}, assistantMessageEvent: { type: 'toolcall_start', contentIndex: 1, id: 'call_1', toolName: 'bash' } }),
+    JSON.stringify({ type: 'message_update', usage: {}, assistantMessageEvent: { type: 'toolcall_delta', contentIndex: 1, delta: '{"command":"echo mock-output"}' } }),
+    JSON.stringify({ type: 'tool_execution_start', toolCallId: 'call_1', toolName: 'bash', args: { command: 'echo mock-output' } }),
+    JSON.stringify({ type: 'tool_execution_end', toolCallId: 'call_1', toolName: 'bash', result: { content: [{ type: 'text', text: 'mock-output\n' }], details: {} }, isError: false, durationMs: 54 }),
+    JSON.stringify({ type: 'message_update', usage: {}, assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: '跑完了' } }),
+    JSON.stringify({ type: 'turn_end', message: { role: 'assistant' }, toolResults: [] }),
+    JSON.stringify({ type: 'agent_end', messages: [], willRetry: false }),
+    JSON.stringify({ type: 'agent_settled', aborted: false }),
+  ];
+  const session = baseSession();
+  const c = collector();
+  await runExternalTurn({
+    session, engine: 'pi', userMessage: 'run echo', cwd: 'D:/ws',
+    send: c.send,
+    launchers: { pi: async () => ({ pid: 4242, child: fakeChild(lines) }) },
+  });
+
+  assert.equal(c.of('content').map(e => e.delta).join(''), '让我跑个命令。跑完了');
+  const starts = c.of('tool_call_start');
+  assert.equal(starts.length, 1);
+  assert.equal(starts[0].toolCallId, 'call_1');
+  assert.equal(starts[0].name, 'bash');
+  assert.match(String(c.of('tool_result')[0].result), /mock-output/);
+  assert.equal(c.of('error').length, 0);
+  assert.equal(c.of('done').length, 1);
+  // 续聊标识搬运：pi 的 session header id → session.engineSessionId（--session 用）
+  assert.equal(session.engineSessionId, 'pi-sess-1');
 });
 
 test('非 JSON 行（CLI 的告警）原样贴出来，不当成事件丢掉', async () => {

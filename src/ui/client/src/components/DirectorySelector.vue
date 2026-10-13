@@ -292,6 +292,7 @@ const TOOL_ACTIONS: Record<SimpleToolId, () => void | Promise<void>> = {
   codex: () => onOpenInCodex(TOOL_PRIMARY_MODE.codex),
   opencode: () => onOpenInOpencode(TOOL_PRIMARY_MODE.opencode),
   codebuddy: onOpenInCodebuddy,
+  pi: onOpenInPi,
   kimi: onOpenInKimi,
   zcode: onOpenInZcode,
   dsh: onOpenInDsh,
@@ -507,6 +508,15 @@ async function onOpenInCodebuddy() {
   toastOpenResult(
     await openPathWithTool('codebuddy', currentDirectory.value),
     '@67CE7:已用 CodeBuddy Code 打开目录',
+    '@67CE7:打开失败: ',
+  );
+}
+
+async function onOpenInPi() {
+  if (warnIfEmptyDirectory()) return;
+  toastOpenResult(
+    await openPathWithTool('pi', currentDirectory.value),
+    '@67CE7:已用 Pi Agent 打开目录',
     '@67CE7:打开失败: ',
   );
 }

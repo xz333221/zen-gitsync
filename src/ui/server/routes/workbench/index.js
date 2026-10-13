@@ -1672,7 +1672,7 @@ export function registerWorkbenchRoutes({
    * 无参数、服务端不算缓存：三个文件都很小，每次实读比让前端踩脏缓存划算；
    * 前端那边（stores/toolsStore）自己按分钟级 TTL + 并发去重压请求频率。
    * 返回值里某项为 null = 那个 CLI 没在配置里写模型，前端照实显示「未在配置中指定」。
-   * key 恒为 claude / codex / opencode / codebuddy 四个，与 TASK_EXECUTOR_OPTIONS 对齐。
+   * key 恒为 claude / codex / opencode / codebuddy / pi 五个，与 TASK_EXECUTOR_OPTIONS 对齐。
    */
   app.get('/api/workbench/executor-models', asyncRoute(async (_req, res) => {
     const detected = await detectExecutorModels();

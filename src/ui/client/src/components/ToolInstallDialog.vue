@@ -32,6 +32,7 @@ const toolNames: Record<ToolId, string> = {
   codex: 'Codex CLI',
   opencode: 'OpenCode',
   codebuddy: 'CodeBuddy Code',
+  pi: 'Pi Agent',
   kimi: 'Kimi Code',
   zcode: 'ZCode',
   dsh: 'DeepSeek Harness',

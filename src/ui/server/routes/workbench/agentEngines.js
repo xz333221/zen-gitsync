@@ -19,13 +19,15 @@
 //   gai ── 内置。**服务端**跑循环：LLM 流式 + 服务端执行工具（src/cli/ai/tools.js），
 //          前端只渲染事件。默认引擎，历史行为。
 //
-//   claude / opencode / codex / codebuddy ── 外部 CLI。**CLI 自己**跑循环：它有自己的工具集、
+//   claude / opencode / codex / codebuddy / pi ── 外部 CLI。**CLI 自己**跑循环：它有自己的工具集、
 //          自己的系统提示词、自己的权限模型。服务端退化成一根管子 —— spawn 出来、
 //          把它的 NDJSON 翻译成同一组 SSE 事件。见 runExternalTurn.js。
 //          （codebuddy = 腾讯 CodeBuddy Code CLI，即 WorkBuddy 桌面版的引擎，
-//           2026-10-12 加入；协议与 claude 的 stream-json 对齐。）
+//           2026-10-12 加入；协议与 claude 的 stream-json 对齐。
+//           pi = earendil-works 开源终端编程 Agent，2026-10-13 加入；
+//           自有 JSONL 协议，无权限系统，详见 taskRunner.js 的 pi 段。）
 //
-// ⚠️ 这儿**不新写一份 id 清单**：外部四家直接复用 config.js 的 TASK_EXECUTORS。
+// ⚠️ 这儿**不新写一份 id 清单**：外部五家直接复用 config.js 的 TASK_EXECUTORS。
 //   本仓库为"同一份口径在多个地方各写一遍"吃过亏（见 agentParity.test.js 的注释：
 //   提示词四处、路径归一三处，分叉的失效方式是「不报错，两个入口表现不一样」）。
 //   工作台那份是任务执行器，这里是对话引擎，但**底层是同一批 CLI**，加第五家时
@@ -53,6 +55,7 @@ export const ENGINE_LABELS = {
   opencode: 'OpenCode',
   codex: 'Codex',
   codebuddy: 'CodeBuddy Code',
+  pi: 'Pi Agent',
 };
 
 export function isAgentEngine(value) {

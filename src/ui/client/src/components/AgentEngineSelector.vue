@@ -65,7 +65,8 @@ import { computed, ref } from 'vue'
 import { $t } from '@/lang/static'
 import { ElIcon, ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus'
 import { ArrowDown, Check } from '@element-plus/icons-vue'
-import { useToolsStore, type ToolId } from '@/stores/toolsStore'
+import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection'
+import type { ToolId } from '@/stores/toolsStore'
 import {
   AGENT_ENGINE_OPTIONS,
   BUILTIN_ENGINE_ICON,
@@ -87,16 +88,20 @@ const props = defineProps<{
 
 const emit = defineEmits<{ (e: 'select', id: AgentEngineId): void }>()
 
-const toolsStore = useToolsStore()
+const { availability: executorAvailability } = useTaskExecutorSelection()
 
 const engineName = computed(() => agentEngineName(props.engine))
 
-/** 未安装的项在下拉里置灰并标「未安装」——与工作台 OrchestratorConsole 同一口径（同一个 toolsStore） */
+/**
+ * 未安装的项在下拉里置灰并标「未安装」——与工作台 OrchestratorConsole 同一口径
+ * （同一个 toolsStore）。**从 useTaskExecutorSelection 派生而不是本地再抄一张表**：
+ * 2026-10-12 接入 codebuddy 时这里漏改过一份（本地表停在三家，装了也显示"未安装"），
+ * 本组件头注释里"免得同一套可用性映射抄第二遍"说的就是它。加执行器只改
+ * taskExecutor.ts + toolsStore 两处，这里自动跟上。
+ */
 const engineAvailability = computed<Record<string, boolean>>(() => ({
   gai: true,
-  claude: toolsStore.claudeAvailable,
-  opencode: toolsStore.opencodeAvailable,
-  codex: toolsStore.codexAvailable,
+  ...executorAvailability.value,
 }))
 
 // 未安装的引擎点了不是静默失败，而是直接开安装弹窗（与工作台同一条路径）。
@@ -120,7 +125,7 @@ function onCommand(id: AgentEngineId) {
 
 <style scoped lang="scss">
 /* 刻意扁平 —— 只有图标 + 引擎名 + caret，没有底色没有边框装饰；未安装的项在菜单里标出来。
-   四个引擎都带自己的图标（内置 g ai 用 sprite 的 g-ai，与顶栏同一个）。 */
+   五个引擎都带自己的图标（内置 g ai 用 sprite 的 g-ai，与顶栏同一个）。 */
 .agent-engine {
   vertical-align: middle;
 }

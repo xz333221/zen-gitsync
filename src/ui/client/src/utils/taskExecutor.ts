@@ -12,8 +12,8 @@
 //     同仓其他 UI 状态（视图模式 / 分割比例）早就为此迁到了 config.json 的 ui 字段。
 //   - 任务续聊不走这里：续哪个执行器由上一轮 job.agent 决定（服务端强制），
 //     否则 claude 的 --resume、opencode 的 --session、codex 的 exec resume、
-//     codebuddy 的 --resume 会互不认对方的会话 id
-export type TaskExecutorId = 'claude' | 'opencode' | 'codex' | 'codebuddy'
+//     codebuddy 的 --resume、pi 的 --session 会互不认对方的会话 id
+export type TaskExecutorId = 'claude' | 'opencode' | 'codex' | 'codebuddy' | 'pi'
 
 export interface TaskExecutorOption {
   id: TaskExecutorId
@@ -28,6 +28,9 @@ export const TASK_EXECUTOR_OPTIONS: TaskExecutorOption[] = [
   // CodeBuddy Code = 腾讯 CodeBuddy CLI（npm @tencent-ai/codebuddy-code），
   // 也就是 WorkBuddy 桌面版内置的智能体引擎（2026-10-12 接入）
   { id: 'codebuddy', name: 'CodeBuddy Code' },
+  // Pi Agent = earendil-works 开源终端编程 Agent（npm @earendil-works/pi-coding-agent，
+  // pi.dev；2026-10-13 接入）。BYOK 多 provider，无权限系统，续聊走 --session
+  { id: 'pi', name: 'Pi Agent' },
 ]
 
 // ── 执行器当前配置的模型（展示口径）─────────────────────────────────────────
@@ -38,7 +41,7 @@ export const TASK_EXECUTOR_OPTIONS: TaskExecutorOption[] = [
 
 /**
  * 某个执行器当前配置的模型。字段来自服务端只读探测
- * （src/ui/server/routes/workbench/executorModels.js，读三个 CLI 的配置文件）。
+ * （src/ui/server/routes/workbench/executorModels.js，读五个 CLI 的配置文件）。
  */
 export interface ExecutorModelInfo {
   /**

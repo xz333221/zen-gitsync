@@ -15,18 +15,22 @@
 // 任务执行引擎：spawn 本地 agent CLI 跑子任务，流式收集输出，更新 job 状态。
 // 拆分自原 routes/workbench.js 1108-1564 行。
 //
-// 支持四种执行器（executor）：
+// 支持五种执行器（executor）：
 //   - claude    —— claude -p --output-format stream-json（默认，历史行为）
 //   - opencode  —— opencode run --format json --auto（sst/opencode CLI，跟随其自身默认模型）
 //   - codex     —— codex exec --json（OpenAI Codex CLI，跟随其自身配置；2026-09-27 加入）
 //   - codebuddy —— codebuddy -p --output-format stream-json -y --port 0
 //                  （腾讯 CodeBuddy Code CLI，即 WorkBuddy 桌面版的智能体引擎；
 //                   2026-10-12 加入，协议与 claude 的 stream-json 逐字段对齐）
+//   - pi        —— pi --mode json -a [--session <id>]
+//                  （earendil-works 开源终端编程 Agent，npm @earendil-works/pi-coding-agent；
+//                   2026-10-13 加入，**自有 JSONL 协议**，见该段注释）
 //
 // 核心 API：
 //   - launchClaudeInNewWindow(cwd, prompt, resumeSessionId)  spawn claude，返回 {pid, child}
 //   - launchOpencodeRun(cwd, prompt, resumeSessionId)        spawn opencode，返回 {pid, child}
 //   - launchCodexExec(cwd, prompt, resumeSessionId)          spawn codex，返回 {pid, child}
+//   - launchPiPrint(cwd, prompt, resumeSessionId)            spawn pi，返回 {pid, child}
 //   - normalizeTaskExecutor(value)                           非法值回落 'claude'
 //   - runSingleSubtask(task, sub, repoPath, branch, opts)    跑一次任务（sub 是运行载体，见下）
 //   - waitProcessExit(pid)                                   polling 等进程退出
@@ -220,15 +224,16 @@ function attachPromptStdin(child, promptText, resolve, reject) {
 
 // ── 执行器（executor） ──────────────────────────────────────────────────
 // 工作台任务默认由 claude CLI 执行；opencode（2026-09-20）、codex（2026-09-27）、
-// codebuddy（2026-10-12）作为可选执行器。四者都用「stdin 喂 prompt + stdout 结构化
-// JSON 事件流」的同构形态，差异只在协议：claude / codebuddy 是 stream-json，
-// opencode 是 --format json 的事件 NDJSON，codex 是 exec --json 的 thread/item 事件 NDJSON。
+// codebuddy（2026-10-12）、pi（2026-10-13）作为可选执行器。五者都用「stdin 喂 prompt +
+// stdout 结构化 JSON 事件流」的同构形态，差异只在协议：claude / codebuddy 是 stream-json，
+// opencode 是 --format json 的事件 NDJSON，codex 是 exec --json 的 thread/item 事件 NDJSON，
+// pi 是 --mode json 的自有 JSONL（session/turn/message/tool_execution，与另四家都不同）。
 //
 // ⚠️ 这份清单与 src/config.js 的 TASK_EXECUTORS 是**同一份口径的两处书写**——
 // 历史上为此吵过（见 agentEngines.js 文件头）：config.js 那份是"配置/归一化"的
 // 真相源，本文件这份服务"运行时分发"。两边不一致的失效方式是 normalize 放行、
 // 这里查无此人 → 静默回落 claude。加第五家时两处都要改，taskRunner.*.test.js 有钉子。
-export const TASK_EXECUTORS = ['claude', 'opencode', 'codex', 'codebuddy'];
+export const TASK_EXECUTORS = ['claude', 'opencode', 'codex', 'codebuddy', 'pi'];
 
 /** 执行器 → launcher。runSingleSubtask 与 runExternalTurn 共用这一张表。 */
 export const EXECUTOR_LAUNCHERS = {
@@ -236,6 +241,7 @@ export const EXECUTOR_LAUNCHERS = {
   opencode: launchOpencodeRun,
   codex: launchCodexExec,
   codebuddy: launchCodebuddyPrint,
+  pi: launchPiPrint,
 };
 
 /** 执行器 → NDJSON 事件处理器工厂。 */
@@ -244,6 +250,7 @@ export const EXECUTOR_HANDLERS = {
   opencode: createOpencodeEventHandler,
   codex: createCodexEventHandler,
   codebuddy: createCodebuddyEventHandler,
+  pi: createPiEventHandler,
 };
 
 /** 非法/缺省的 executor 一律回落 'claude'（历史行为的兼容兜底）。
@@ -679,6 +686,241 @@ export function createCodebuddyEventHandler(job, appendOutput, appendThinking, t
         tracker.record({ id: b.id, name: b.name, input: b.input, status: 'running' });
       }
     }
+  };
+}
+
+// ── pi 执行器（2026-10-13 加入） ──────────────────────────────────────────
+// Pi = earendil-works 的开源终端编程 Agent（npm @earendil-works/pi-coding-agent，
+// pi.dev，MIT）。内置四把工具 read/bash/edit/write，模型 BYOK（20+ provider，
+// /login 也支持 Claude Pro/Max、ChatGPT Plus/Pro、Copilot 订阅）。
+//
+// 与另四家的三点本质差异（2026-10-13 按官方文档 + 本机 v1.2.0 实测双向核对）：
+//
+//   1. **没有权限系统**。官方原话"Pi does not include a built-in permission
+//      system"—— 所以不存在 claude 的 --dangerously-skip-permissions /
+//      codebuddy 的 -y 那样的档位参数，headless 下没有"等人点允许"卡死的问题。
+//      但项目本地配置（.pi/settings.json、.pi/mcp.json）默认不被信任，
+//      传 `-a`（--approve）显式信任本轮进程 —— 用户在终端里首跑也会被问一次，
+//      无人值守场景替他答"信任"（与另四家"必须预设档位"同一条理由）。
+//
+//   2. **自有 JSONL 协议**（--mode json），不是 claude 的 stream-json：
+//        首条   {"type":"session","id":"<uuid>",...}      会话标识（续接用）
+//        message_update → assistantMessageEvent.text_delta / thinking_delta  增量
+//        tool_execution_start / tool_execution_end                         工具生命周期
+//        agent_* / turn_* / message_start|end / compaction_* / auto_retry_*  其余忽略
+//      实测事件形状见 taskRunner.pi.test.js 的钉子（全部来自真实 CLI 输出）。
+//
+//   3. **续聊是 --session <id>，不是 --resume**。后者的官方定义是"打开会话
+//      选择器"（交互 TUI），headless 下会卡住。--session 按精确 id 打开，
+//      且**只在当前项目（cwd）里找** —— 实测跨项目会弹"Fork this session?"
+//      交互提示然后 abort。本执行器每轮 cwd 都是同一个 repoPath，天然同项目。
+//
+//   pi --mode json -a [--session <sessionId>]
+//     - prompt 从 stdin 喂（官方文档"Piped stdin → Prepend its contents to
+//       the first prompt"，与 claude 的 -p 无位置参数同效，顺带避开 Windows
+//       命令行 32K 上限）
+//     - 不传 --model：模型跟随 CLI 自己的配置（与另四家同一口径；
+//       探测见 executorModels.js 的 ~/.pi/agent/settings.json defaultModel）
+//
+// 登录态：/login（订阅）或 provider API key（ANTHROPIC_API_KEY 等，凭据落
+// ~/.pi/agent）。**读不到凭据时 CLI 照常起、退出码 1、错误文本走 stderr**
+// （实测）—— 协议里没有 error 事件，所以这种"起步就失败"只体现在 output 里
+// 的 stderr 文本；跑到一半的 provider 错误才有 message_update 的 error 事件
+// （handler 会置 job.agentError，见下）。
+//
+// ⚠️ 本机未安装 pi 时 spawn 报 ENOENT，与另四家一致（前端 availability 会
+// 先把没装的执行器置灰，见 toolsStore）。
+
+/**
+ * Windows 下把 pi 解析成可直接 spawn 的目标。
+ *
+ * 两种安装形态都见过：
+ *   1. npm 全局（`npm i -g @earendil-works/pi-coding-agent`）—— PATH 上是
+ *      pi.cmd shim，实质是 `node <prefix>\node_modules\@earendil-works\
+ *      pi-coding-agent\dist\bundle\cli.js`（bin 字段实测指向 dist/bundle/cli.js，
+ *      不是 bin/pi —— 每个包的布局都不一样，别照抄 codebuddy 的路径）。
+ *      Node 23+ 拒绝直接 spawn .cmd（EINVAL），所以解析到 node + bundle 脚本。
+ *   2. 官方安装脚本（pi.dev/install.ps1 → 独立二进制）—— PATH 上直接是
+ *      pi.exe，优先用（少一层 node 包装，杀进程树也更干净）。
+ */
+function resolvePiExe() {
+  try {
+    const lines = execFileSync('where', ['pi'], { encoding: 'utf8', windowsHide: true })
+      .split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    // 独立安装优先：PATH 上直接就是原生 exe
+    const directExe = lines.find(s => /\.exe$/i.test(s));
+    if (directExe && fs.existsSync(directExe)) return { exe: directExe, prefixArgs: [] };
+    const cmdShim = lines.find(s => /\.cmd$/i.test(s));
+    if (cmdShim) {
+      const prefix = path.dirname(cmdShim);
+      const binJs = path.join(prefix, 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'bundle', 'cli.js');
+      if (fs.existsSync(binJs)) return { exe: process.execPath, prefixArgs: [binJs] };
+    }
+  } catch { /* fallback */ }
+  return { exe: 'pi', prefixArgs: [] };
+}
+
+/**
+ * pi 子进程环境。四个刻意为之的取舍：
+ *   - LANG=zh_CN.UTF-8：与另四家一致（CLI 的提示词/输出跟随 locale）。
+ *   - PI_SKIP_VERSION_CHECK=1：禁掉启动时对 pi.dev 的版本检查请求 —— 执行器
+ *     场景多一次海外网络往返只会拖慢启动，CDN 不稳时可能整个卡住（与 codebuddy
+ *     的 DISABLE_AUTOUPDATER 同性质；pi 的更新本来就是手动的 `pi update`）。
+ *   - PI_TELEMETRY=0：关归属遥测。任务是在用户机器上代表用户跑的，
+ *     把用量归属到"某次安装"没有意义。
+ *   - 剥掉继承来的 PI_* 会话标记（PI_SESSION_ID / PI_SESSION_FILE /
+ *     PI_CODING_AGENT / AI_AGENT）：g gui 若是在某个 pi 会话的 bash 工具里
+ *     被拉起的，这些变量会继承过来 —— 官方环境变量文档明确警告嵌套 pi 会
+ *     暴露父会话的过期元数据。pi 自己会给子进程设新值，剥掉不会缺东西。
+ * （导出仅为回归测试可见：taskRunner.pi.test.js）
+ */
+export function buildPiEnv() {
+  const env = { ...process.env };
+  for (const key of ['PI_SESSION_ID', 'PI_SESSION_FILE', 'PI_CODING_AGENT', 'AI_AGENT']) {
+    delete env[key];
+  }
+  env.LANG = 'zh_CN.UTF-8';
+  env.PI_SKIP_VERSION_CHECK = '1';
+  env.PI_TELEMETRY = '0';
+  return env;
+}
+
+/**
+ * pi 的 spawn argv（纯函数，抽出来为了能**真的跑断言**而不用 spawn 进程 ——
+ * 与另四家的 buildXxxArgs 同一个理由）。
+ *
+ * 口径见上方大注释。`-a` 信任项目本地配置；`--session` 只在有续接 id 时传
+ * （别传空串——空串会被当成"打开空 id"）。
+ */
+export function buildPiArgs(resumeSessionId) {
+  const args = [];
+  if (resumeSessionId) {
+    args.push('--session', String(resumeSessionId));
+  }
+  args.push(
+    '--mode', 'json',
+    '-a'
+  );
+  return args;
+}
+
+/** spawn pi 跑一个 prompt（非交互），返回 { pid, child }（参数口径见上方注释）。 */
+export async function launchPiPrint(cwd, promptText, resumeSessionId) {
+  const args = buildPiArgs(resumeSessionId);
+  const { exe, prefixArgs } = resolvePiExe();
+  const spawnArgs = [...prefixArgs, ...args];
+  return new Promise((resolve, reject) => {
+    let child;
+    if (process.platform === 'win32') {
+      child = spawn(exe, spawnArgs, {
+        cwd,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: false,
+        env: buildPiEnv()
+      });
+    } else {
+      child = spawn(exe, spawnArgs, {
+        cwd,
+        detached: true,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: buildPiEnv()
+      });
+    }
+    attachPromptStdin(child, promptText, resolve, reject);
+  });
+}
+
+/**
+ * pi --mode json 事件处理器（协议官方参考 packages/coding-agent/docs/json.md，
+ * 事件形状 2026-10-13 用本机 v1.2.0 + mock provider 实测核对）。
+ *
+ * 与 createCodebuddyEventHandler 的关系：**刻意再写一份**而不是复用 claude 的
+ * stream-json handler —— pi 的协议与 claude 一处都对不上：会话标识在首条
+ * session header（不是 system/init）、正文走 message_update 的嵌套
+ * assistantMessageEvent（不是 assistant.message.content 块）、工具调用是
+ * tool_execution_start/end 平铺事件（不是 tool_use + user(tool_result) 两条）。
+ * 将来协议分叉时在这里修，不会顺带改坏 claude 那条链路（本仓库对"同一份口径
+ * 多处实现"的失效方式有惨痛记忆：不报错，只是悄悄少一半数据）。
+ *
+ * 事件分派：
+ *   session               → 会话 id 落 job.claudeSessionId（--session 续接用）
+ *   message_update        → assistantMessageEvent.text_delta / thinking_delta 增量；
+ *                           type === 'error' 是 provider 流错误 → job.agentError
+ *   tool_execution_start  → tracker running（args 是完整解析值，不用拼 delta）
+ *   tool_execution_end    → tracker 终态（result.content 块数组 → extractToolText）
+ *   auto_retry_end{success:false} / compaction_end{errorMessage}
+ *                         → 终局失败 → job.agentError
+ *   其余（agent_* / turn_* / message_start|end / queue_* / compaction_* 成功路径/
+ *   tool_execution_update 的 partialResult）一律忽略 —— 正文已由 text_delta
+ *   增量覆盖，message_end 只是权威副本（重复）；工具中间输出外部 CLI 给不出
+ *   （与 runExternalTurn 不发 tool_output 同一条理由）。
+ * （导出仅为回归测试可见：taskRunner.pi.test.js）
+ */
+export function createPiEventHandler(job, appendOutput, appendThinking, toolCalls) {
+  const tracker = toolCalls || createToolCallTracker(job);
+  const markError = (msg) => {
+    const text = typeof msg === 'string' && msg.trim() ? msg.trim() : 'pi 执行出错';
+    // 与另四家同一条口径：只记第一条（后续事件可能是同一次失败的余波）
+    if (!job.agentError) job.agentError = text;
+  };
+  return (evt) => {
+    if (!evt || typeof evt !== 'object') return;
+    // 首条 session header：会话 id（续接 --session 用）。重复推送只认第一条。
+    if (evt.type === 'session' && typeof evt.id === 'string') {
+      if (!job.claudeSessionId || job.claudeSessionId !== evt.id) {
+        job.claudeSessionId = evt.id;
+        publish('job:update', job);
+      }
+      return;
+    }
+    if (evt.type === 'message_update') {
+      const sub = evt.assistantMessageEvent;
+      if (!sub || typeof sub !== 'object') return;
+      if (sub.type === 'text_delta' && typeof sub.delta === 'string') {
+        appendOutput(sub.delta);
+      } else if (sub.type === 'thinking_delta' && typeof sub.delta === 'string') {
+        appendThinking(sub.delta);
+      } else if (sub.type === 'error') {
+        // provider 流中途出错（reason 如 'aborted'/'error'，error 带消息）
+        markError(sub.error?.message || sub.error || sub.reason);
+      }
+      // text_start/text_end/toolcall_*：增量已覆盖（toolcall 的完整形态在
+      // tool_execution_start 里），start/end 不重复处理
+      return;
+    }
+    if (evt.type === 'tool_execution_start' && typeof evt.toolCallId === 'string') {
+      tracker.record({
+        id: evt.toolCallId,
+        name: evt.toolName || 'tool',
+        input: evt.args,
+        status: 'running'
+      });
+      return;
+    }
+    if (evt.type === 'tool_execution_end' && typeof evt.toolCallId === 'string') {
+      // result 形如 { content: [{type:'text',text}], details } —— 与 claude 的
+      // tool_result.content 同形状，extractToolText 直接吃
+      const text = extractToolText(evt.result?.content ?? evt.result);
+      tracker.record({
+        id: evt.toolCallId,
+        status: evt.isError ? 'error' : 'done',
+        output: text,
+        error: evt.isError ? (text || '工具执行失败') : ''
+      });
+      return;
+    }
+    if (evt.type === 'auto_retry_end' && evt.success === false) {
+      // 自动重试耗尽：finalError 是终局消息
+      markError(evt.finalError);
+      return;
+    }
+    if (evt.type === 'compaction_end' && evt.errorMessage) {
+      // 压缩失败且不会重试（aborted=false 且无 result）
+      markError(evt.errorMessage);
+      return;
+    }
+    // 其余事件忽略（含 agent_settled 的 aborted —— 那是"被中止"，
+    // 由 taskRunner 的 cancelledJobs 口径处理，不在这里判失败）
   };
 }
 
@@ -1193,10 +1435,11 @@ export function createCodexEventHandler(job, appendOutput, appendThinking, toolC
  * @param {object} [options]
  * @param {string|null} [options.resumeSessionId]
  *        续接历史会话:claude 走 --resume <id>，opencode 走 --session <id>，
- *        codex 走 exec resume <thread_id>，codebuddy 走 --resume <session_id>。
- *        id 来自上一轮 stream 事件捕获的会话标识(四家都记在 job.claudeSessionId)。
+ *        codex 走 exec resume <thread_id>，codebuddy 走 --resume <session_id>，
+ *        pi 走 --session <id>（只在同一 cwd 的项目里找，见 pi 段注释）。
+ *        id 来自上一轮 stream 事件捕获的会话标识(五家都记在 job.claudeSessionId)。
  * @param {string} [options.executor]
- *        执行器 'claude' | 'opencode' | 'codex' | 'codebuddy'。缺省回落 'claude'；路由层负责把
+ *        执行器 'claude' | 'opencode' | 'codex' | 'codebuddy' | 'pi'。缺省回落 'claude'；路由层负责把
  *        "body 指定 > 配置默认"先解析好再传进来。
  * @returns {Promise<'done'|'cancelled'|'error'>} 本次运行的终态
  */
@@ -1283,7 +1526,8 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
     agent: executor,
     // 续接历史会话时先填上,首条协议事件回来后再用真值覆盖(通常等同)。
     // 字段名保留 claudeSessionId:claude 的 session_id / opencode 的 sessionID /
-    // codebuddy 的 session_id 都存这里,语义是"该执行器的会话续接标识"。
+    // codebuddy 的 session_id / pi 的 session header id 都存这里,
+    // 语义是"该执行器的会话续接标识"。
     claudeSessionId: resumeSessionId,
     // 工具调用流水（{id,name,argsPreview,arguments,result,status,error}[]）。
     // 先给个空数组，前端拿到的 job:update 就有了稳定形态，不用到处判 undefined。
@@ -1305,7 +1549,7 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
   let toolTracker = null;
 
   try {
-    // 查表而不是 if 链：加执行器只改 EXECUTOR_LAUNCHERS 一张表（四家以后 if 链
+    // 查表而不是 if 链：加执行器只改 EXECUTOR_LAUNCHERS 一张表（五家以后 if 链
     // 已经长得该收了）。查无此人理论上不可能 —— normalizeTaskExecutor 刚夹过一遍。
     const launcher = EXECUTOR_LAUNCHERS[executor] || launchClaudeInNewWindow;
     const { pid, child } = await launcher(repoPath || process.cwd(), prompt, resumeSessionId);

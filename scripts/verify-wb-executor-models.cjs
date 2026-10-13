@@ -8,7 +8,7 @@
  * 并在三处展示。这个脚本验的就是**展示这一层**真的成立。
  *
  * 验收契约（改这块时别破坏）：
- *   A 接口本身可用：/api/workbench/executor-models 返回四个执行器的模型，
+ *   A 接口本身可用：/api/workbench/executor-models 返回五个执行器的模型，
  *     claude 这种"别名两层"的要**两个名字都在**（别名背后那个才是真花钱的模型）
  *   B 设置弹窗（通用设置）：选中执行器下方直接给出「当前模型：xxx（别名 · 服务商）」
  *   C 下拉项右侧标出该执行器的模型（主 Agent 控制台 / 工作台执行按钮 / 设置里共三处）
@@ -61,6 +61,8 @@ const REVERSE = process.argv.includes('--reverse')
  *   opencode —— **来源是 CLI 自己的 state 而不是配置文件**（TUI 里选过、
  *               没回写配置）。本机 opencode 就是这个样子，早期版本因此误报"未指定"
  *   codebuddy —— 配置文件一处来源（~/.codebuddy/settings.json 的顶层 model）
+ *   pi       —— 配置文件一处来源（~/.pi/agent/settings.json 的顶层 defaultModel，
+ *               2026-10-13 接入；键名与另几家都不同，官方 settings 文档）
  */
 const FIXTURE = {
   claude: { name: 'deepseek-v4.1-flash', detail: 'claude-sonnet-5[1M]', provider: 'http://127.0.0.1:15721', source: null },
@@ -72,6 +74,7 @@ const FIXTURE = {
     source: 'state',
   },
   codebuddy: { name: 'deepseek-v4-1-flash-260910', detail: null, provider: null, source: 'config' },
+  pi: { name: 'deepseek/deepseek-v4-flash', detail: null, provider: null, source: 'config' },
 }
 /** 与前端 i18n（@42BB9:未在配置中指定 / 当前模型：{model} / CLI 内最近使用）同一份口径 */
 const UNSET_TEXT = '未在配置中指定'
@@ -186,6 +189,9 @@ const readSettingsOptions = (page) => page.evaluate(() => {
       modelTitle: el.querySelector('.executor-option__model')
         ? el.querySelector('.executor-option__model').getAttribute('title')
         : null,
+      // 未安装时 el-option 整行 disabled（availability 的正常行为）——
+      // G9 据此决定"点击那半条断言"跑不跑（本机没装 pi 时点不动，不是缺陷）
+      disabled: !!el.closest('.el-select-dropdown__item')?.classList.contains('is-disabled'),
     })),
   }
 })
@@ -425,6 +431,29 @@ async function main() {
     line = await readSettingsExecutor(page)
     check('G8 切到 CodeBuddy Code：那行给出它配置里的模型',
       line.found && line.text.includes(FIXTURE.codebuddy.name), JSON.stringify(line))
+
+    // G9：pi 是第五家（2026-10-13 接入）—— 同一条理由：进列表 ≠ 展示链接了。
+    // 它的键名是 defaultModel 不是 model（官方 settings 文档），探测走另一条路。
+    // 分两层验：**选项 + 模型文案必查**（未安装也渲染，见 GitGlobalSettingsDialog
+    // 的模板）；**点击 + 那行模型只在装机后跑** —— 未安装时 el-option 是 disabled
+    // （availability 的正常行为，本机没装 pi），点不动不是缺陷。
+    await executorSelect(page).click()
+    await sleep(450)
+    opts = await readSettingsOptions(page)
+    const piOpt = opts.options.find(o => o.text.includes('Pi Agent'))
+    check('G9 Pi Agent 在执行器下拉里，且模型文案跟着出（展示链接了）',
+      !!piOpt && piOpt.model === FIXTURE.pi.name, JSON.stringify(piOpt))
+    if (piOpt && !piOpt.disabled) {
+      await visibleSelectDropdown(page).locator('.el-select-dropdown__item')
+        .filter({ hasText: 'Pi Agent' }).first().click()
+      await sleep(500)
+      line = await readSettingsExecutor(page)
+      check('G9b 切到 Pi Agent：那行给出它配置里的模型',
+        line.found && line.text.includes(FIXTURE.pi.name), JSON.stringify(line))
+    } else {
+      log('本机没装 pi（选项 disabled）：跳过点击那半条，装机后自然生效')
+    }
+    // 下拉保持展开：G3 的 pickExecutor 对已展开的 select 会跳过 trigger 点击
 
     // 切回 claude，后面 E 组要拿它跟另外两处比对
     await pickExecutor(page, 'Claude Code')

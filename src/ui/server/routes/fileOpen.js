@@ -29,6 +29,10 @@ const TOOL_INSTALL_PACKAGES = Object.freeze({
   codex: '@openai/codex',
   opencode: 'opencode-ai',
   codebuddy: '@tencent-ai/codebuddy-code',
+  // Pi（earendil-works 开源终端编程 Agent，2026-10-13 随执行器接入一起补）。
+  // npm 安装不带 postinstall（官方推荐 --ignore-scripts），但安装器走的是
+  // `npm install -g` 原样命令，不为它单开一个变体 —— 多一个变体多一条要维护的路。
+  pi: '@earendil-works/pi-coding-agent',
   dsh: '@deepseek-ai/dsh',
 });
 
@@ -38,6 +42,7 @@ const TOOL_DOCS_URLS = Object.freeze({
   codex: 'https://help.openai.com/en/articles/11096431-openai-codex-cli-getting-started',
   opencode: 'https://opencode.ai/docs',
   codebuddy: 'https://www.codebuddy.cn/docs/cli/installation',
+  pi: 'https://pi.dev',
   kimi: 'https://moonshotai.github.io/kimi-code/en/guides/getting-started',
   zcode: 'https://zcode.z.ai/',
   dsh: 'https://github.com/deepseek-ai/deepseek-harness',
@@ -536,6 +541,23 @@ async function launchCodebuddy(dirPath) {
     });
   }
   return launchInTerminal(dirPath, 'codebuddy', cliArgs);
+}
+
+/**
+ * 用 Pi 打开目录（交互 TUI，2026-10-13 随执行器接入一起补）。
+ *
+ * 与 codebuddy 的差别：pi **没有**引擎服务器、不占固定端口，所以裸起即可
+ * （没有 --port 0 那一出）。登录态在 TUI 里 /login（订阅或 provider API key），
+ * 凭据落 ~/.pi/agent。
+ */
+async function launchPi(dirPath) {
+  // Pi CLI - https://pi.dev
+  if (process.platform === 'win32') {
+    return spawnDetached('cmd.exe', ['/c', 'start', '""', 'pi'], {
+      cwd: dirPath
+    });
+  }
+  return launchInTerminal(dirPath, 'pi', []);
 }
 
 // Run the CLI shipped with this server, even when `g` is not in PATH or points
@@ -1129,6 +1151,34 @@ export function registerFileOpenRoutes({
       }
     }));
 
+  // 用 Pi 打开目录
+  app.post('/api/open-directory-with-pi', asyncRoute(async (req, res) => {
+      try {
+        const { path: dirPath } = req.body || {};
+        if (!dirPath) {
+          throw new HttpError(400, '目录路径不能为空');
+        }
+
+        try {
+          await fs.access(dirPath);
+        } catch (error) {
+          throw new HttpError(400, `目录不存在或不可访问: ${dirPath}`);
+        }
+
+        try {
+          await launchPi(dirPath);
+          res.json({ success: true, message: '已用 Pi 打开目录' });
+        } catch (error) {
+          res.status(400).json({
+            success: false,
+            error: error.message || '未检测到 Pi，请先安装并确保可以在终端中直接运行 pi'
+          });
+        }
+      } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    }));
+
   // 用 Kimi Code 打开目录
   app.post('/api/open-directory-with-kimi', asyncRoute(async (req, res) => {
     const { path: dirPath } = req.body || {};
@@ -1296,12 +1346,13 @@ export function registerFileOpenRoutes({
       // (find 会跑两次——一次拿路径一次链版本——都是纯 fs/注册表查询,开销可忽略)
       // ⚠️ codebuddy 的 --version 是安全的:实测它只打印版本号就退出,不起引擎服务器
       // (裸跑 codebuddy 才会占 62443,与 checkCmd 的 --version 用法无关)。
-      const [vscodeRes, claudeRes, codexRes, opencodeRes, codebuddyRes, kimiExecutable, zcodeExecutable, dshExecutable, kimiVersion, dshVersion] = await Promise.all([
+      const [vscodeRes, claudeRes, codexRes, opencodeRes, codebuddyRes, piRes, kimiExecutable, zcodeExecutable, dshExecutable, kimiVersion, dshVersion] = await Promise.all([
         checkCmd('code'),
         checkCmd('claude'),
         checkCmd('codex'),
         checkCmd('opencode'),
         checkCmd('codebuddy'),
+        checkCmd('pi'),
         findKimiExecutable(),
         findZCodeExecutable(),
         findDshExecutable(),
@@ -1319,6 +1370,7 @@ export function registerFileOpenRoutes({
         codex: codexRes.installed,
         opencode: opencodeRes.installed,
         codebuddy: codebuddyRes.installed,
+        pi: piRes.installed,
         kimi: !!kimiExecutable,
         zcode: !!zcodeExecutable,
         dsh: !!dshExecutable,
@@ -1328,6 +1380,7 @@ export function registerFileOpenRoutes({
           codex: codexRes.version,
           opencode: opencodeRes.version,
           codebuddy: codebuddyRes.version,
+          pi: piRes.version,
           kimi: kimiExecutable ? kimiVersion : null,
           zcode: null, // 桌面应用,无 CLI 版本通道
           dsh: dshExecutable ? dshVersion : null,

@@ -24,21 +24,26 @@
 // ⚠️ 两条不重复实现的红线（本仓库 agentParity.test.js 就是为这类分叉立的规矩）：
 //   1. **spawn 与协议解析一律复用 taskRunner.js**，绝不在这里再写一份。
 //      `createClaudeEventHandler` / `createOpencodeEventHandler` /
-//      `createCodexEventHandler` / `createCodebuddyEventHandler`
+//      `createCodexEventHandler` / `createCodebuddyEventHandler` /
+//      `createPiEventHandler`
 //      的签名是 `(job, appendOutput, appendThinking, toolCalls)` —— 回调早已抽象好，
 //      这里只是换一组回调（推 SSE 而不是推工作台面板），所以适配层能很薄。
 //   2. **权限档不在这里决定**。taskRunner 的 launcher 已经带死了各自的档位
 //      （claude: --permission-mode bypassPermissions --dangerously-skip-permissions；
 //        opencode: --auto；codex: --dangerously-bypass-approvals-and-sandbox；
-//        codebuddy: -y），与工作台任务执行保持一致。要改档位请改 launcher，别在这儿加参数。
+//        codebuddy: -y；pi: -a —— 它没有权限系统，-a 是"信任项目本地配置"）。
+//      与工作台任务执行保持一致。要改档位请改 launcher，别在这儿加参数。
 //
-// 关于 headless 权限（2026-09-28 实测，三家在非交互下的真实行为；codebuddy 2026-10-12 补测）：
+// 关于 headless 权限（2026-09-28 实测，三家在非交互下的真实行为；codebuddy 2026-10-12 补测；
+// pi 2026-10-13 核对官方文档）：
 //   claude   默认档也能跑，但不放开会挡住写操作；工作台那套是 bypassPermissions。
 //   codex    默认档是只读沙箱（写文件被拦），所以要 --dangerously-bypass-...
 //   opencode **不给 --auto 会卡死**（在等一个永远不会有人回答的交互式批准）。
 //   codebuddy 不给 -y 时写操作被拦（init 事件回传 permissionMode 可验证）；
 //             另外它每次运行自带引擎服务器，默认端口 62443 会被 WorkBuddy
 //             桌面版占着，所以 launcher 固定传 --port 0 让 OS 选空闲端口。
+//   pi       **没有权限系统**（官方原话），不存在"等人点允许"卡死的问题；
+//             但项目本地 .pi/ 配置默认不被信任，launcher 传 -a 显式信任。
 //   这正是 AgentView 里没有终端、没人能点"允许"所决定的 —— 必须预设档位。
 
 import { spawn, execFile } from 'child_process';
@@ -86,7 +91,7 @@ function killChildTree(child) {
  *
  * @param {object}   args
  * @param {object}   args.session        会话记录（会被就地更新：messages / engineSessionId）
- * @param {string}   args.engine         'claude' | 'opencode' | 'codex' | 'codebuddy'
+ * @param {string}   args.engine         'claude' | 'opencode' | 'codex' | 'codebuddy' | 'pi'
  * @param {string}   args.userMessage    用户这一轮说的话
  * @param {string}   args.cwd            工作目录
  * @param {string}   [args.promptPrefix] 拼在用户消息**前面**的工作区状态块（见 agentRoutes）
@@ -134,7 +139,7 @@ export async function runExternalTurn({
   // 工作区状态块拼在**用户消息前面**：外部 CLI 都只认自己的约定文件，
   // 而往项目里写 AGENTS.md / CLAUDE.md 会弄脏用户的工作区（三个引擎实测也不一致：
   // claude 只读 CLAUDE.md、codex 只读 AGENTS.md、opencode 两个都不读）。
-  // 所以统一走 prompt 前缀 —— 一份实现喂三家，且不碰用户的仓库。
+  // 所以统一走 prompt 前缀 —— 一份实现喂五家，且不碰用户的仓库。
   const prompt = `${promptPrefix ? `${promptPrefix}\n\n---\n\n` : ''}${userMessage || ''}${attachBlock}`;
 
   let child;
@@ -272,8 +277,8 @@ export async function runExternalTurn({
   }
 
   // 续聊标识：各家字段名不同（claude session_id / opencode sessionID / codex thread_id /
-  // codebuddy session_id），但 taskRunner 的 handler 已经统一落到 job.claudeSessionId 上，
-  // 这里只做搬运。
+  // codebuddy session_id / pi 的 session header id），但 taskRunner 的 handler 已经统一落到
+  // job.claudeSessionId 上，这里只做搬运。
   if (job.claudeSessionId) session.engineSessionId = job.claudeSessionId;
 
   send({ type: 'done', content: aborted ? `${text}\n\n[已停止]` : text });

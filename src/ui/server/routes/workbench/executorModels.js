@@ -23,9 +23,9 @@
 // 毫无关系（agentRoutes.js 里对外部引擎刻意把 session.model 置空也是同一个原因）。
 // 于是用户想确认"这活到底是哪个模型跑的"只能去翻三个不同格式的配置文件。
 //
-// 这里把「读三个配置文件」这件事收口成一个模块，让前端能在选择器里直接显示。
+// 这里把「读五个配置文件」这件事收口成一个模块，让前端能在选择器里直接显示。
 //
-// ── 四家配置文件的形状（这是本模块存在的全部理由）────────────────────────
+// ── 五家配置文件的形状（这是本模块存在的全部理由）────────────────────────
 //
 //   claude   ~/.claude/settings.json         JSON。模型在 env 里，且有**别名两层**：
 //            ANTHROPIC_DEFAULT_SONNET_MODEL 是 CLI 认识的名字
@@ -51,6 +51,11 @@
 //   codebuddy ~/.codebuddy/settings.json      JSON。顶层 `model` 字符串
 //            （--settings '{"model":"..."}' 的落盘处；没写过就是没配，
 //             CLI 用自己的内置默认 —— 那种情况下这里如实报 null）。
+//
+//   pi       ~/.pi/agent/settings.json         JSON。顶层 `defaultModel` 字符串
+//            （官方 settings 文档的 "Startup model ID"，形如 provider/model）。
+//            配置目录可被 PI_CODING_AGENT_DIR 覆盖（官方环境变量文档），
+//            设了就按它的读 —— 否则会把"配了模型"报成"没配"，界面撒谎。
 //
 // ── 三条必须守住的底线 ──────────────────────────────────────────────────────
 //
@@ -278,25 +283,49 @@ function detectCodebuddy(json) {
   return null;
 }
 
+/**
+ * pi：~/.pi/agent/settings.json 的顶层 defaultModel（官方 settings 文档：
+ * "Startup model ID"）。配置目录可被 PI_CODING_AGENT_DIR 覆盖 —— 设了就按
+ * 它的读（相对路径按 home 解析），否则界面会把"配了模型"报成"没配"。
+ *
+ * 与 codebuddy 一样**没有"第二处"**：pi 的 /model 选择会写回 settings.json
+ * （pi config 的口径），不存在 opencode 那种"选择躺在 state 里"的分裂。
+ * 没配 → null：CLI 启动时自己选（catalog 里的默认），按本模块的底线不猜。
+ */
+function detectPi(json) {
+  const raw = json && json.defaultModel;
+  if (typeof raw === 'string' && raw.trim()) {
+    return { model: raw.trim(), display: null, provider: null, source: 'config' };
+  }
+  return null;
+}
+
+/** pi 的 settings.json 路径：默认 ~/.pi/agent，PI_CODING_AGENT_DIR 可覆盖（官方环境变量） */
+function piSettingsPath(home, env = process.env) {
+  const override = typeof env.PI_CODING_AGENT_DIR === 'string' ? env.PI_CODING_AGENT_DIR.trim() : '';
+  const dir = override ? path.resolve(home, override) : path.join(home, '.pi', 'agent');
+  return path.join(dir, 'settings.json');
+}
+
 function escapeRe(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
- * 探测四个执行器当前配置的模型。
+ * 探测五个执行器当前配置的模型。
  *
  * @param {object} [opts]
  * @param {string} [opts.homeDir] 测试沙箱用（默认 os.homedir()）
- * @returns {Promise<{ claude: object|null, codex: object|null, opencode: object|null, codebuddy: object|null }>}
+ * @returns {Promise<{ claude: object|null, codex: object|null, opencode: object|null, codebuddy: object|null, pi: object|null }>}
  *          每项 `{ model, display, provider, source }`；该执行器没配模型时为 null。
  *          source = 'config'（配置文件里写死的）| 'state'（CLI 自己记的"上次用的"）。
  *
- * 四路并发、互不阻塞：任何一个配置文件读失败都只让**它自己**变成 null。
+ * 五路并发、互不阻塞：任何一个配置文件读失败都只让**它自己**变成 null。
  */
 export async function detectExecutorModels({ homeDir } = {}) {
   const home = homeDir || os.homedir();
 
-  const [claudeRaw, codexRaw, opencodeJsonRaw, opencodeJsoncRaw, opencodeStateRaw, codebuddyRaw] = await Promise.all([
+  const [claudeRaw, codexRaw, opencodeJsonRaw, opencodeJsoncRaw, opencodeStateRaw, codebuddyRaw, piRaw] = await Promise.all([
     readTextOrNull(path.join(home, '.claude', 'settings.json')),
     readTextOrNull(path.join(home, '.codex', 'config.toml')),
     // .json 优先（标准名），.jsonc 兜底。opencode 两个都认。
@@ -306,6 +335,8 @@ export async function detectExecutorModels({ homeDir } = {}) {
     readTextOrNull(path.join(home, '.local', 'state', 'opencode', 'model.json')),
     // CodeBuddy Code CLI（与 WorkBuddy 桌面版共用的配置目录）
     readTextOrNull(path.join(home, '.codebuddy', 'settings.json')),
+    // Pi CLI（配置目录可被 PI_CODING_AGENT_DIR 覆盖，见 detectPi/piSettingsPath）
+    readTextOrNull(piSettingsPath(home)),
   ]);
 
   const pickJson = (raw) => {
@@ -319,6 +350,7 @@ export async function detectExecutorModels({ homeDir } = {}) {
   const opencodeCfg = pickJson(opencodeJsonRaw) || pickJson(opencodeJsoncRaw);
   const opencodeState = pickJson(opencodeStateRaw);
   const codebuddyCfg = pickJson(codebuddyRaw);
+  const piCfg = pickJson(piRaw);
 
   return {
     claude: claudeCfg && typeof claudeCfg.env === 'object' && claudeCfg.env
@@ -327,6 +359,7 @@ export async function detectExecutorModels({ homeDir } = {}) {
     codex: codexRaw ? detectCodex(codexRaw) : null,
     opencode: detectOpencode(opencodeCfg, opencodeState),
     codebuddy: detectCodebuddy(codebuddyCfg),
+    pi: detectPi(piCfg),
   };
 }
 
