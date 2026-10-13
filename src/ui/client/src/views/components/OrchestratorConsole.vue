@@ -778,6 +778,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
       allow-dispatch
       :dispatch-use-default-prompt="useDefaultPrompt"
       :title="$t('@WORKBENCH:g ai 对话')"
+      :git-branch="selectedProject?.git?.branch ?? null"
     />
 
     <!-- 进度报告：主 Agent 隔一会儿读一遍正在跑的 job，写一段"现在到哪一步了"。

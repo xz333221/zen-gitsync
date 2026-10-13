@@ -77,6 +77,11 @@ const props = defineProps<{
   dispatchUseDefaultPrompt?: boolean
   /** 输入框占位文案 */
   placeholder?: string
+  /**
+   * 当前项目的 git 分支名，喂给输入框工具条的展示片（WorkBuddy 式布局）。
+   * 不传则不渲染那片 —— 库不自己读 git，分支由宿主给。
+   */
+  gitBranch?: string | null
 }>()
 
 /**
@@ -128,6 +133,16 @@ function onEngineSelect(id: AgentEngineId) {
   if (isEngineLocked.value) return
   pickEngine(id)
 }
+
+/**
+ * 输入框工具条上展示的模型名：设置里标了「默认」的那一条（与 App.vue 底栏同一口径）。
+ * 读不到就留空 —— 工具条那一片不渲染，不显示"未知"占位。
+ */
+const inputModelName = computed(() => {
+  const m = configStore.models.find((x: any) => x.isDefault)
+  if (!m) return ''
+  return m.name || m.model || ''
+})
 
 /**
  * 「这个引擎不会派发」的提示。
@@ -328,6 +343,8 @@ onMounted(() => {
           :placeholder="placeholder || (isStreaming ? $t('@AGENT:生成中，发送后会排队，等本轮跑完自动接上…') : $t('@AGENT:输入消息，Enter 发送'))"
           :upload-config="{ accept: AGENT_UPLOAD_ACCEPT }"
           :context-usage="inputContextUsage"
+          :git-branch="props.gitBranch || undefined"
+          :model="inputModelName || undefined"
           @send="onSend"
           @stop="stop"
           @unqueue="removeQueuedMessage"
@@ -439,11 +456,16 @@ onMounted(() => {
 }
 .acs__body.is-wide .acs__convs { grid-area: list; }
 .acs__body.is-wide .acs__chat { grid-area: chat; }
-/* 常驻输入框条：留白与渐变对齐库的 .acu-chat-footer */
+/* 常驻输入框条：留白对齐库的 .acu-chat-footer */
 .acs__composer {
   grid-area: composer;
   padding: var(--acu-space-3) var(--acu-space-4) var(--acu-space-4);
-  background: linear-gradient(to top, var(--acu-bg) 70%, transparent);
+  /* 2026-10-13：原来和库的 footer 一样是 `linear-gradient(to top, var(--acu-bg) 70%, transparent)`。
+     库内那条是视觉 no-op（footer 是 .acu-chat 同色底的子元素），但输入框拆到
+     ChatContainer 外面后，这里是 grid 兄弟节点 —— 渐变透明端会露出 .oc 面板底色，
+     输入框上方凭空多一条异色带（深色主题下是一条灰蓝色渐变带，用户截图报"很奇怪"）。
+     两条路都不讨好，改成纯色，与聊天区连成同一张画布。 */
+  background: var(--acu-bg);
 }
 /* 排队条带换成本项目「待处理」档的语义色 —— 与任务对话里那条 .wb-chat-queue 同一副面孔。
    库给 --acu-queue-* 四个变量就是留给宿主做这件事的，所以这里只映射颜色，不碰它的 class。 */
