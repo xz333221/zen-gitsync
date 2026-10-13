@@ -160,7 +160,7 @@ test('detectExecutorModels: codebuddy 没配 model 时为 null（CLI 内置默�
   assert.equal((await detectExecutorModels({ homeDir: home })).codebuddy, null)
 })
 
-test('detectExecutorModels: pi 没配 defaultModel 时为 null（不猜 CLI 自己的选择）', async () => {
+test('detectExecutorModels: pi 没配 defaultModel 且没有会话记录时为 null（不猜）', async () => {
   const home = await makeHome({ '.pi/agent/settings.json': '{"theme":"dark"}' })
   assert.equal((await detectExecutorModels({ homeDir: home })).pi, null)
 })
@@ -259,6 +259,181 @@ test('detectExecutorModels: state 里没有 recent / 缺字段时仍是 null（�
 test('detectExecutorModels: 两处都没有 model 才是真的"未在配置中指定"', async () => {
   const home = await makeHome({ '.config/opencode/opencode.json': '{"model":""}' })
   assert.equal((await detectExecutorModels({ homeDir: home })).opencode, null)
+})
+
+// ── pi 的第二处来源：会话记录 ────────────────────────────────────────────────
+//
+// pi 的 ~/.pi/agent/settings.json 只在用户显式「设为默认」时才写 defaultModel
+// （setModel 的 persist 分支），日常直接开 pi 的人那份文件是空的（本机就是：
+// 里面只有 lastChangelogVersion）。此时 pi 走自己的回落链（CLI 参数 →
+// --models 范围 → 会话恢复 → 配置默认 → **第一个有凭据的模型**），而"到底落了
+// 哪个"只写在会话 jsonl 的 model_change 记录里。
+// 只读配置文件的话，界面会对一个**正在跑的模型**说「未在配置中指定」——
+// 用户会去翻配置，配置里确实没有，白折腾一场（2026-10-13 用户报的就是这个）。
+// 这组用例钉住"配置文件优先、没有则退回会话记录"，以及**取最新会话的最后一条**。
+
+/** 一条 model_change 记录（形状来自真实 CLI 输出，见 taskRunner.pi.test.js） */
+const piModelChange = (provider, modelId) => ({
+  type: 'model_change', id: 'x', parentId: null,
+  timestamp: '2026-10-13T09:36:32.779Z', provider, modelId,
+})
+/** 把若干行拼成 jsonl；字符串行原样放进去（用来造坏行） */
+const jsonl = (lines) => lines.map(l => (typeof l === 'string' ? l : JSON.stringify(l))).join('\n') + '\n'
+/** 会话文件路径：目录按 cwd 编码分，文件名是 <UTC ISO 时间戳>_<uuid>.jsonl */
+const piSession = (stamp, id, lines) => ({
+  [`.pi/agent/sessions/--D--ws-demo--/${stamp}_${id}.jsonl`]: jsonl(lines),
+})
+
+test('detectExecutorModels: pi 配置里没写 defaultModel 时，退回会话记录里的模型', async () => {
+  const home = await makeHome({
+    // 本机真实情形：settings.json 里只有 lastChangelogVersion
+    '.pi/agent/settings.json': '{"lastChangelogVersion":"1.2.0"}',
+    ...piSession('2026-10-13T09-36-32-719Z', 'aaa', [
+      { type: 'session', id: 'aaa', cwd: 'd:\\ws\\demo' },
+      piModelChange('cc-switch-open-code-go', 'deepseek-v4.1-flash'),
+      { type: 'message', message: { role: 'user', content: '你好' } },
+    ]),
+  })
+  const out = await detectExecutorModels({ homeDir: home })
+  assert.deepEqual(out.pi, {
+    model: 'deepseek-v4.1-flash',
+    display: null,
+    provider: 'cc-switch-open-code-go',
+    source: 'state', // 与 opencode 同源：CLI 自己记的"最近使用"，不是用户配的默认值
+  })
+})
+
+test('detectExecutorModels: pi 配置里写了 defaultModel 就以它为准（会话只是兜底）', async () => {
+  const home = await makeHome({
+    '.pi/agent/settings.json': JSON.stringify({
+      defaultProvider: 'anthropic',
+      defaultModel: 'claude-x',
+    }),
+    ...piSession('2026-10-13T09-36-32-719Z', 'aaa', [
+      piModelChange('cc-switch-open-code-go', 'deepseek-v4.1-flash'),
+    ]),
+  })
+  const out = await detectExecutorModels({ homeDir: home })
+  assert.deepEqual(out.pi, {
+    model: 'claude-x',
+    display: null,
+    provider: 'anthropic', // defaultProvider 是"这个模型打给谁"，与 claude 的 base_url 同一个位置
+    source: 'config',
+  })
+})
+
+test('detectExecutorModels: pi 取**最新**那个会话文件，旧会话不算', async () => {
+  const home = await makeHome({
+    // 文件名前缀是 UTC ISO 时间戳 → 字典序即时间序（探测器就是按字符串比的）
+    ...piSession('2026-10-13T09-33-31-743Z', 'old', [piModelChange('p-old', 'm-old')]),
+    ...piSession('2026-10-13T09-36-32-719Z', 'new', [piModelChange('p-new', 'm-new')]),
+  })
+  assert.equal((await detectExecutorModels({ homeDir: home })).pi?.model, 'm-new')
+})
+
+test('detectExecutorModels: pi 的会话目录按 cwd 分，跨目录也挑最新的那个', async () => {
+  const home = await makeHome({
+    '.pi/agent/sessions/--D--ws-other--/2026-10-12T01-00-00-000Z_x.jsonl':
+      jsonl([piModelChange('p-other', 'm-other')]),
+    '.pi/agent/sessions/--D--ws-demo--/2026-10-13T09-36-32-719Z_y.jsonl':
+      jsonl([piModelChange('p-demo', 'm-demo')]),
+  })
+  assert.equal((await detectExecutorModels({ homeDir: home })).pi?.model, 'm-demo')
+})
+
+test('detectExecutorModels: pi 同一会话里 TUI 换过模型时，取**最后**一条 model_change', async () => {
+  const home = await makeHome(piSession('2026-10-13T09-36-32-719Z', 'aaa', [
+    piModelChange('p', 'started-with'),
+    { type: 'message', message: { role: 'user', content: '换个模型' } },
+    piModelChange('p', 'switched-to'),
+    { type: 'message', message: { role: 'assistant', content: '好' } },
+  ]))
+  assert.equal((await detectExecutorModels({ homeDir: home })).pi?.model, 'switched-to')
+})
+
+test('detectExecutorModels: pi 会话文件很长时，头部与尾部两端都要扫（拼接顺序不能反）', async () => {
+  // 文件远大于扫描窗口（512KB）：起步用的模型在头部、切过去的在尾部。
+  // 只扫尾部会漏掉"从没换过模型"的会话；只扫头部会把**开头**那个当成最近用的。
+  const filler = Array.from({ length: 9000 }, (_, i) => ({
+    type: 'message', id: `f${i}`, message: { role: 'assistant', content: 'x'.repeat(200) },
+  }))
+  const home = await makeHome(piSession('2026-10-13T09-36-32-719Z', 'big', [
+    piModelChange('p', 'at-the-top'),
+    ...filler,
+    piModelChange('p', 'at-the-bottom'),
+  ]))
+  assert.equal((await detectExecutorModels({ homeDir: home })).pi?.model, 'at-the-bottom')
+
+  // 对照：同一形状但尾部没有 model_change（从没换过）→ 回落到头部那条，而不是 null
+  const home2 = await makeHome(piSession('2026-10-13T09-36-32-719Z', 'big', [
+    piModelChange('p', 'only-at-the-top'),
+    ...filler,
+  ]))
+  assert.equal((await detectExecutorModels({ homeDir: home2 })).pi?.model, 'only-at-the-top')
+})
+
+test('detectExecutorModels: 会话大小在 1~2 个扫描窗口之间时，尾部那段也要读到', async () => {
+  // 回归：判"要不要读两段"曾写成 `tailStart < headLen`，于是 1~2 个窗口大的会话
+  // （头尾两段重叠）被误判成"一个窗口装得下"，只返回头部 —— 模型恰好换在文件末尾
+  // 的会话就永远报开头那个。这里造一个 ~700KB 的会话（512KB < size < 1024KB）钉住它。
+  const filler = Array.from({ length: 660 }, (_, i) => ({
+    type: 'message', id: `f${i}`, message: { role: 'assistant', content: 'x'.repeat(1000) },
+  }))
+  const home = await makeHome(piSession('2026-10-13T09-36-32-719Z', 'mid', [
+    piModelChange('p', 'at-the-top'),
+    ...filler,
+    piModelChange('p', 'at-the-bottom'),
+  ]))
+  const size = (await fs.stat(path.join(home, '.pi/agent/sessions/--D--ws-demo--',
+    '2026-10-13T09-36-32-719Z_mid.jsonl'))).size
+  assert.ok(size > 512 * 1024 && size < 1024 * 1024, `夹具大小应在 1~2 个窗口之间，实际 ${size}`)
+  assert.equal((await detectExecutorModels({ homeDir: home })).pi?.model, 'at-the-bottom')
+})
+
+test('detectExecutorModels: pi 会话里没有可用的 model_change 时仍是 null（不猜）', async () => {
+  // 空目录 / 没有 .jsonl / 全是坏行 / modelId 非字符串 —— 一律当"没读到"
+  const empty = await makeHome({ '.pi/agent/sessions/--D--ws-demo--/.keep': '' })
+  assert.equal((await detectExecutorModels({ homeDir: empty })).pi, null)
+
+  const junk = await makeHome(piSession('2026-10-13T09-36-32-719Z', 'aaa', [
+    '{ 这不是 JSON',
+    JSON.stringify({ type: 'model_change', provider: 'p' }), // 缺 modelId
+    JSON.stringify({ type: 'model_change', provider: 'p', modelId: '   ' }), // 全空白
+    JSON.stringify({ type: 'message', modelId: 'looks-like-one' }), // 不是 model_change
+  ]))
+  assert.equal((await detectExecutorModels({ homeDir: junk })).pi, null)
+})
+
+test('detectExecutorModels: pi 会话记录里的对话内容绝不进返回值', async () => {
+  const home = await makeHome(piSession('2026-10-13T09-36-32-719Z', 'aaa', [
+    piModelChange('p', 'm'),
+    { type: 'message', message: { role: 'user', content: 'sk-should-never-leak' } },
+    { type: 'session', apiKey: 'tok-should-never-leak' },
+  ]))
+  const serialized = JSON.stringify(await detectExecutorModels({ homeDir: home }))
+  assert.equal(serialized.includes('sk-should-never-leak'), false)
+  assert.equal(serialized.includes('tok-should-never-leak'), false)
+  assert.equal(serialized.includes('should-never-leak'), false)
+})
+
+test('detectExecutorModels: PI_CODING_AGENT_DIR 换掉配置目录时，settings 与会话都跟着走', async () => {
+  // 官方环境变量（pi 的 config.js getAgentDir）。设了却还读 ~/.pi/agent 的话，
+  // 会把"配了模型"报成"没配" —— 界面撒谎。
+  const home = await makeHome({
+    '.pi/agent/settings.json': '{"theme":"dark"}', // 旧目录：不该被读到
+    'custom-pi/settings.json': '{"defaultModel":"from-custom-dir"}',
+    'custom-pi/sessions/--D--ws-demo--/2026-10-13T09-36-32-719Z_a.jsonl':
+      jsonl([piModelChange('p', 'm-from-custom-dir')]),
+  })
+  const prev = process.env.PI_CODING_AGENT_DIR
+  process.env.PI_CODING_AGENT_DIR = path.join(home, 'custom-pi')
+  try {
+    const out = await detectExecutorModels({ homeDir: home })
+    assert.equal(out.pi?.model, 'from-custom-dir')
+  } finally {
+    if (prev === undefined) delete process.env.PI_CODING_AGENT_DIR
+    else process.env.PI_CODING_AGENT_DIR = prev
+  }
 })
 
 test('detectExecutorModels: claude 显式 ANTHROPIC_MODEL 优先于档位别名', async () => {

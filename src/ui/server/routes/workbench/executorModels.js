@@ -23,7 +23,7 @@
 // 毫无关系（agentRoutes.js 里对外部引擎刻意把 session.model 置空也是同一个原因）。
 // 于是用户想确认"这活到底是哪个模型跑的"只能去翻三个不同格式的配置文件。
 //
-// 这里把「读五个配置文件」这件事收口成一个模块，让前端能在选择器里直接显示。
+// 这里把「读五个 CLI 的配置 / 状态」这件事收口成一个模块，让前端能在选择器里直接显示。
 //
 // ── 五家配置文件的形状（这是本模块存在的全部理由）────────────────────────
 //
@@ -53,9 +53,15 @@
 //             CLI 用自己的内置默认 —— 那种情况下这里如实报 null）。
 //
 //   pi       ~/.pi/agent/settings.json         JSON。顶层 `defaultModel` 字符串
-//            （官方 settings 文档的 "Startup model ID"，形如 provider/model）。
-//            配置目录可被 PI_CODING_AGENT_DIR 覆盖（官方环境变量文档），
+//            （官方 settings 文档的 "Startup Model ID"），`defaultProvider` 是它的
+//            另一半。配置目录可被 PI_CODING_AGENT_DIR 覆盖（官方环境变量文档），
 //            设了就按它的读 —— 否则会把"配了模型"报成"没配"，界面撒谎。
+//            ⚠️ **这份文件经常是空的** —— pi 只在用户显式「设为默认」时才写
+//            defaultModel（setModel 的 persist 分支），日常直接开 pi 的人那里
+//            只有 lastChangelogVersion。所以还要读**第二处**：会话记录
+//            ~/.pi/agent/sessions/<cwd>/<时间戳>_<uuid>.jsonl 里最后一条
+//            model_change —— pi 每次开会话、每次切模型都追加一条，那才是
+//            "CLI 内最近使用"的真值（与 opencode 的 state 同性质，用 source 区分）。
 //
 // ── 三条必须守住的底线 ──────────────────────────────────────────────────────
 //
@@ -284,27 +290,159 @@ function detectCodebuddy(json) {
 }
 
 /**
- * pi：~/.pi/agent/settings.json 的顶层 defaultModel（官方 settings 文档：
- * "Startup model ID"）。配置目录可被 PI_CODING_AGENT_DIR 覆盖 —— 设了就按
- * 它的读（相对路径按 home 解析），否则界面会把"配了模型"报成"没配"。
+ * pi 的配置目录：默认 ~/.pi/agent，PI_CODING_AGENT_DIR 可覆盖（官方环境变量文档）。
  *
- * 与 codebuddy 一样**没有"第二处"**：pi 的 /model 选择会写回 settings.json
- * （pi config 的口径），不存在 opencode 那种"选择躺在 state 里"的分裂。
- * 没配 → null：CLI 启动时自己选（catalog 里的默认），按本模块的底线不猜。
+ * 相对路径按 home 解析 —— 官方是拿它当路径直接用（相对 cwd），而本模块在
+ * 「无 cwd 的全局探测」上下文里跑（见 detectExecutorModels 的签名），
+ * 只能拿 home 兜底；绝对路径（实际用法）不受影响。
  */
-function detectPi(json) {
-  const raw = json && json.defaultModel;
-  if (typeof raw === 'string' && raw.trim()) {
-    return { model: raw.trim(), display: null, provider: null, source: 'config' };
-  }
-  return null;
+function piAgentDir(home, env = process.env) {
+  const override = typeof env.PI_CODING_AGENT_DIR === 'string' ? env.PI_CODING_AGENT_DIR.trim() : '';
+  return override ? path.resolve(home, override) : path.join(home, '.pi', 'agent');
 }
 
-/** pi 的 settings.json 路径：默认 ~/.pi/agent，PI_CODING_AGENT_DIR 可覆盖（官方环境变量） */
-function piSettingsPath(home, env = process.env) {
-  const override = typeof env.PI_CODING_AGENT_DIR === 'string' ? env.PI_CODING_AGENT_DIR.trim() : '';
-  const dir = override ? path.resolve(home, override) : path.join(home, '.pi', 'agent');
-  return path.join(dir, 'settings.json');
+/**
+ * 会话 jsonl 的扫描窗口。模型切换记在**文件尾部**（最近那次），会话开头的
+ * model_change 记在**头部**（这个会话起步用的模型）—— 两头各扫一段就覆盖了
+ * 真实形态，不必把可能几 MB 的会话整个读进内存。
+ */
+const PI_SESSION_WINDOW_BYTES = 512 * 1024;
+
+/**
+ * 从一段 jsonl 文本里取**最后一条** model_change。
+ *
+ * 只认 modelId / provider 两个字段并**只返回这两个** —— 会话记录里有用户的
+ * 全部对话内容，任何原文都不许进返回值（同"不泄露密钥"那条底线）。
+ * 被窗口边界截断的行 JSON.parse 会失败，跳过即可（model_change 行很短，
+ * 实际不会被截断）。
+ */
+function lastModelChange(text) {
+  let found = null;
+  for (const line of String(text).split('\n')) {
+    // 便宜的前置过滤：会话里绝大多数行是消息，先按子串筛掉，省一次 JSON.parse
+    if (!line.includes('"model_change"')) continue;
+    try {
+      const rec = JSON.parse(line);
+      if (!rec || rec.type !== 'model_change') continue;
+      if (typeof rec.modelId !== 'string' || !rec.modelId.trim()) continue;
+      found = {
+        model: rec.modelId.trim(),
+        provider: typeof rec.provider === 'string' && rec.provider.trim() ? rec.provider.trim() : null,
+      };
+    } catch { /* 窗口边界上被截断的行 */ }
+  }
+  return found;
+}
+
+/**
+ * 读文件的两端：头部 + 尾部各至多 PI_SESSION_WINDOW_BYTES。
+ *
+ * 拼接顺序是 头 → 尾，**不能反**：调用方只取"最后一条" model_change，
+ * 反过来拼就会把会话开头那个模型当成最近用的。
+ *
+ * ⚠️ 判"要不要读两段"的条件是 `tailStart === 0`（文件小到一个窗口就装得下），
+ * **不能**写成 `tailStart < headLen` —— 那会把 1～2 个窗口大的文件误判成"装得下"，
+ * 只返回头部，把尾部那次切模型整个漏掉（本仓库踩过：模型换在文件末尾才看不见）。
+ * 1～2 个窗口时两段重叠一段也无所谓，同一行解析两遍结果一样。
+ *
+ * 中间那条 '\n' 是保险：头部最后一行可能被切成半行，直接拼会跟尾部第一行
+ * （同样是被切过的半行）黏成一行 —— 分开至少保证不会拼出一个假记录。
+ */
+async function readTextWindow(file) {
+  let handle;
+  try {
+    handle = await fs.open(file, 'r');
+  } catch {
+    return null;
+  }
+  try {
+    const { size } = await handle.stat();
+    const headLen = Math.min(size, PI_SESSION_WINDOW_BYTES);
+    const head = Buffer.alloc(headLen);
+    if (headLen) await handle.read(head, 0, headLen, 0);
+    const tailStart = Math.max(0, size - PI_SESSION_WINDOW_BYTES);
+    if (tailStart === 0) return head.toString('utf8');
+    const tailLen = size - tailStart;
+    const tail = Buffer.alloc(tailLen);
+    if (tailLen) await handle.read(tail, 0, tailLen, tailStart);
+    return head.toString('utf8') + '\n' + tail.toString('utf8');
+  } catch {
+    return null;
+  } finally {
+    await handle.close().catch(() => {});
+  }
+}
+
+/**
+ * pi 的「第二处来源」：**最新那个会话记录里最后一条 model_change**。
+ *
+ * 为什么必须有这一处 —— 与 opencode 同一个理由，只是 pi 的"state"落在会话文件里：
+ * ~/.pi/agent/settings.json 的 defaultModel 只在用户显式「设为默认」时才写，
+ * 日常直接开 pi 的人那份文件是空的；此时 pi 走自己的回落链（官方 findInitialModel：
+ * CLI 参数 → --models 范围 → 会话恢复 → 配置默认 → **第一个有凭据的模型**），
+ * 而"到底落了哪个"只写在会话 jsonl 里。只读配置文件的话，界面会对一个**正在跑的
+ * 模型**说「未在配置中指定」—— 用户会去翻配置，配置里确实没有，白折腾一场。
+ *
+ * 取**最后一条**而不是第一条：用户在 TUI 里 `/model` 换过的话，只有最后那条
+ * 才是他现在在用的。
+ *
+ * 会话目录按 cwd 分（sessions/<cwd 编码>/），文件名是
+ * `<UTC ISO 时间戳>_<uuid>.jsonl` —— **字典序即时间序**，所以直接比字符串就能
+ * 挑出最新的那个，不用对每个文件 stat（跨项目几十个目录时省一轮 I/O）。
+ */
+async function detectPiSessionState(agentDir) {
+  const sessionsDir = path.join(agentDir, 'sessions');
+  let dirs;
+  try {
+    dirs = await fs.readdir(sessionsDir, { withFileTypes: true });
+  } catch {
+    return null; // 从没跑过 pi / 目录被删 —— 当"没有第二处来源"，不抛
+  }
+
+  let newestName = null;
+  let newestPath = null;
+  for (const d of dirs) {
+    if (!d.isDirectory()) continue;
+    const dirPath = path.join(sessionsDir, d.name);
+    let files;
+    try {
+      files = await fs.readdir(dirPath);
+    } catch {
+      continue; // 单个项目目录读不了（权限/竞态删除）不该拖垮整次探测
+    }
+    for (const f of files) {
+      if (!f.endsWith('.jsonl')) continue;
+      if (newestName !== null && f <= newestName) continue;
+      newestName = f;
+      newestPath = path.join(dirPath, f);
+    }
+  }
+  if (!newestPath) return null;
+
+  const state = lastModelChange(await readTextWindow(newestPath));
+  return state ? { model: state.model, display: null, provider: state.provider, source: 'state' } : null;
+}
+
+/**
+ * pi 当前用哪个模型：**配置文件优先，没有就退回会话记录**（同 opencode 的两处口径）。
+ *
+ * provider 只取 settings 的 defaultProvider（形如 `cc-switch-open-code-go`）——
+ * 它和 claude 的 base_url 一样是"这个模型打给谁"，放 detail 里给用户看。
+ *
+ * ⚠️ 已知的口径差：官方 findInitialModel 要求 defaultProvider 与 defaultModel
+ * **同时**存在才认这条默认值，这里只要 defaultModel 就报。这是有意的宽容 ——
+ * pi 自己的设置界面（settings-selector）与 setModel(persist) 永远成对写入，
+ * 手写只填一半属于畸形配置；此时如实报"配置里写了这个模型"比整块不显示有用。
+ */
+function detectPi(json, sessionState) {
+  const raw = json && json.defaultModel;
+  if (typeof raw === 'string' && raw.trim()) {
+    const provider = json && typeof json.defaultProvider === 'string' && json.defaultProvider.trim()
+      ? json.defaultProvider.trim()
+      : null;
+    return { model: raw.trim(), display: null, provider, source: 'config' };
+  }
+  return sessionState;
 }
 
 function escapeRe(s) {
@@ -312,7 +450,7 @@ function escapeRe(s) {
 }
 
 /**
- * 探测五个执行器当前配置的模型。
+ * 探测五个执行器当前在用的模型。
  *
  * @param {object} [opts]
  * @param {string} [opts.homeDir] 测试沙箱用（默认 os.homedir()）
@@ -320,12 +458,15 @@ function escapeRe(s) {
  *          每项 `{ model, display, provider, source }`；该执行器没配模型时为 null。
  *          source = 'config'（配置文件里写死的）| 'state'（CLI 自己记的"上次用的"）。
  *
- * 五路并发、互不阻塞：任何一个配置文件读失败都只让**它自己**变成 null。
+ * 八路并发、互不阻塞：任何一个文件读失败都只让**它自己**变成 null。
+ * 两处来源的执行器（opencode / pi）都是 config 优先、state 兜底，
+ * 由 detectOpencode / detectPi 各自收口。
  */
 export async function detectExecutorModels({ homeDir } = {}) {
   const home = homeDir || os.homedir();
+  const piDir = piAgentDir(home);
 
-  const [claudeRaw, codexRaw, opencodeJsonRaw, opencodeJsoncRaw, opencodeStateRaw, codebuddyRaw, piRaw] = await Promise.all([
+  const [claudeRaw, codexRaw, opencodeJsonRaw, opencodeJsoncRaw, opencodeStateRaw, codebuddyRaw, piRaw, piState] = await Promise.all([
     readTextOrNull(path.join(home, '.claude', 'settings.json')),
     readTextOrNull(path.join(home, '.codex', 'config.toml')),
     // .json 优先（标准名），.jsonc 兜底。opencode 两个都认。
@@ -335,8 +476,10 @@ export async function detectExecutorModels({ homeDir } = {}) {
     readTextOrNull(path.join(home, '.local', 'state', 'opencode', 'model.json')),
     // CodeBuddy Code CLI（与 WorkBuddy 桌面版共用的配置目录）
     readTextOrNull(path.join(home, '.codebuddy', 'settings.json')),
-    // Pi CLI（配置目录可被 PI_CODING_AGENT_DIR 覆盖，见 detectPi/piSettingsPath）
-    readTextOrNull(piSettingsPath(home)),
+    // Pi CLI（配置目录可被 PI_CODING_AGENT_DIR 覆盖，见 piAgentDir）
+    readTextOrNull(path.join(piDir, 'settings.json')),
+    // Pi 的"最近使用"（defaultModel 只在显式「设为默认」时才写，见 detectPiSessionState）
+    detectPiSessionState(piDir),
   ]);
 
   const pickJson = (raw) => {
@@ -359,7 +502,7 @@ export async function detectExecutorModels({ homeDir } = {}) {
     codex: codexRaw ? detectCodex(codexRaw) : null,
     opencode: detectOpencode(opencodeCfg, opencodeState),
     codebuddy: detectCodebuddy(codebuddyCfg),
-    pi: detectPi(piCfg),
+    pi: detectPi(piCfg, piState),
   };
 }
 

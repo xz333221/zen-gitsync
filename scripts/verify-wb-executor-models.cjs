@@ -2,9 +2,9 @@
  * 「这个执行器现在实际在用什么模型」在界面上看得见的验证。
  *
  * 为什么要有这个：工作台派任务**一律不传 --model**，模型完全跟随 claude / codex /
- * opencode / codebuddy 各自的配置文件。这条设计本身是对的，但副作用是界面上一个模型都看不到 ——
- * 用户想确认"这活到底是哪个模型跑的"只能去翻四个不同格式的配置文件。这次把
- * "读配置文件"收口成一个只读接口（server: routes/workbench/executorModels.js）
+ * opencode / codebuddy / pi 各自的配置文件。这条设计本身是对的，但副作用是界面上一个
+ * 模型都看不到 —— 用户想确认"这活到底是哪个模型跑的"只能去翻五个不同格式的配置文件。
+ * 这次把"读配置/状态"收口成一个只读接口（server: routes/workbench/executorModels.js）
  * 并在三处展示。这个脚本验的就是**展示这一层**真的成立。
  *
  * 验收契约（改这块时别破坏）：
@@ -14,7 +14,10 @@
  *   C 下拉项右侧标出该执行器的模型（主 Agent 控制台 / 工作台执行按钮 / 设置里共三处）
  *   D 工作台执行按钮的 title 与下拉同口径（不开下拉也知道这活谁跑）
  *   E **三处对同一个执行器给出的模型文案必须一字不差** —— 三处各写一份措辞是这类
- *     "同一个事实在多处展示"最典型的腐坏方式
+ *     "同一个事实在多处展示"最典型的腐坏方式。⚠️ 基准取**下拉里带勾那一项**
+ *     （= 真正在用的执行器），不硬编码 claude：活动执行器存在 config.json 的
+ *     ui.lastTaskExecutor 里，是用户共享状态，夹具定不了（本机被选成了 pi，
+ *     硬编码会让 E 组随别人的选择时红时绿）
  *   F **没探测到 ≠ 没配置**：接口失败时一律不显示，绝不说"未在配置中指定" ——
  *     请求还没回来就替用户下结论（"你没配"）是在撒谎，而用户会信
  *   G 切换执行器时那行跟着换。三条分支各一遍：两处来源都没有的 → 「未在配置中指定」
@@ -61,8 +64,9 @@ const REVERSE = process.argv.includes('--reverse')
  *   opencode —— **来源是 CLI 自己的 state 而不是配置文件**（TUI 里选过、
  *               没回写配置）。本机 opencode 就是这个样子，早期版本因此误报"未指定"
  *   codebuddy —— 配置文件一处来源（~/.codebuddy/settings.json 的顶层 model）
- *   pi       —— 配置文件一处来源（~/.pi/agent/settings.json 的顶层 defaultModel，
- *               2026-10-13 接入；键名与另几家都不同，官方 settings 文档）
+ *   pi       —— **来源是 CLI 自己的会话记录**（settings.json 的 defaultModel 只在
+ *               用户显式「设为默认」时才写；日常直接开 pi 的人那份文件是空的，
+ *               模型落在 sessions/*.jsonl 的 model_change 里，2026-10-13 接入）
  */
 const FIXTURE = {
   claude: { name: 'deepseek-v4.1-flash', detail: 'claude-sonnet-5[1M]', provider: 'http://127.0.0.1:15721', source: null },
@@ -74,7 +78,7 @@ const FIXTURE = {
     source: 'state',
   },
   codebuddy: { name: 'deepseek-v4-1-flash-260910', detail: null, provider: null, source: 'config' },
-  pi: { name: 'deepseek/deepseek-v4-flash', detail: null, provider: null, source: 'config' },
+  pi: { name: 'deepseek-v4.1-flash', detail: null, provider: 'cc-switch-open-code-go', source: 'state' },
 }
 /** 与前端 i18n（@42BB9:未在配置中指定 / 当前模型：{model} / CLI 内最近使用）同一份口径 */
 const UNSET_TEXT = '未在配置中指定'
@@ -297,14 +301,16 @@ async function main() {
         body: JSON.stringify({ success: true, checkedAt: new Date().toISOString(), models: FIXTURE }),
       })
     })
-    // 四个执行器都判"已安装"：否则下拉项被置灰、picker 还会自作主张回落到别的值
+    // 五个执行器都判"已安装"：否则下拉项被置灰、picker 还会自作主张回落到别的值
+    // （pi 尤其要显式给 true —— 少了它 G9b「切到 Pi Agent」那半条永远跳过，
+    //  等于这条执行器的展示链没验过）
     await page.route('**/api/check-tools*', (route) => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
           success: true, platform: 'win32',
-          vscode: true, claude: true, codex: true, opencode: true, codebuddy: true, kimi: false, zcode: false, dsh: false,
+          vscode: true, claude: true, codex: true, opencode: true, codebuddy: true, pi: true, kimi: false, zcode: false, dsh: false,
           installers: {}, versions: {},
         }),
       })
@@ -433,10 +439,12 @@ async function main() {
       line.found && line.text.includes(FIXTURE.codebuddy.name), JSON.stringify(line))
 
     // G9：pi 是第五家（2026-10-13 接入）—— 同一条理由：进列表 ≠ 展示链接了。
-    // 它的键名是 defaultModel 不是 model（官方 settings 文档），探测走另一条路。
+    // 它的来源是**会话记录**（settings.json 的 defaultModel 日常是空的，见 FIXTURE 注释），
+    // 所以除了"那行给出模型名"，还要验它**没说成「未在配置中指定」**——
+    // 对一个正在跑的模型说"没指定"，用户会去翻配置，而配置里确实没有（2026-10-13 报的）。
     // 分两层验：**选项 + 模型文案必查**（未安装也渲染，见 GitGlobalSettingsDialog
-    // 的模板）；**点击 + 那行模型只在装机后跑** —— 未安装时 el-option 是 disabled
-    // （availability 的正常行为，本机没装 pi），点不动不是缺陷。
+    // 的模板）；**点击 + 那行模型要 pi 判为已安装** —— 未安装时 el-option 是 disabled
+    // （availability 的正常行为），点不动不是缺陷；本脚本的 check-tools 桩已给 pi: true。
     await executorSelect(page).click()
     await sleep(450)
     opts = await readSettingsOptions(page)
@@ -448,10 +456,17 @@ async function main() {
         .filter({ hasText: 'Pi Agent' }).first().click()
       await sleep(500)
       line = await readSettingsExecutor(page)
-      check('G9b 切到 Pi Agent：那行给出它配置里的模型',
-        line.found && line.text.includes(FIXTURE.pi.name), JSON.stringify(line))
+      // ⚠️ 光比模型名会假绿：本机 pi 与 claude 的模型名**恰好同名**
+      // （都是 deepseek-v4.1-flash，同一个网关）。所以再带上 pi 独有的服务商 ——
+      // 万一"切到 Pi Agent"没生效，这行还是 claude 的，provider 对不上就翻红。
+      check('G9b 切到 Pi Agent：那行给出它在用的模型（不是「未在配置中指定」）',
+        line.found && line.text.includes(FIXTURE.pi.name)
+          && line.text.includes(FIXTURE.pi.provider) && !line.text.includes(UNSET_TEXT),
+        JSON.stringify(line))
+      check('G9c 来源是会话记录的那种，括号里同样标出「CLI 内最近使用」',
+        !!line.detail && line.detail.includes(STATE_SOURCE_TEXT), String(line.detail))
     } else {
-      log('本机没装 pi（选项 disabled）：跳过点击那半条，装机后自然生效')
+      log('pi 选项是 disabled（check-tools 桩没给 pi: true？）：跳过点击那半条')
     }
     // 下拉保持展开：G3 的 pickExecutor 对已展开的 select 会跳过 trigger 点击
 
@@ -479,11 +494,31 @@ async function main() {
     await picker.waitFor({ state: 'visible', timeout: 10000 })
     await sleep(400)
     const pickerBtnTitle = await picker.locator('> .tep__btn').first().getAttribute('title')
-    check('E1 控制台执行器按钮的 title 带出当前模型',
-      !!pickerBtnTitle && pickerBtnTitle.includes(FIXTURE.claude.name), String(pickerBtnTitle))
     await picker.locator('> .tep__btn').first().click()
     await sleep(500)
     const pickerDrop = await readDropdown(page, '.tep', '.tep__item', '.tep__item-model')
+    /**
+     * 带勾那一项（= 真正在用的执行器）的模型信息。
+     *
+     * ⚠️ E 组**不能**硬编码"当前必须是 claude"：活动执行器是用户存在
+     * config.json 的共享状态（ui.lastTaskExecutor），夹具定不了它 —— 本机被
+     * 用户选成了 pi，于是 E3 恒红、E1 靠"pi 与 claude 恰好同名
+     * （都是 deepseek-v4.1-flash，同一个网关）"假绿。改成从下拉里读出
+     * "这一项现在显示什么"，再验按钮 / 工作台的 title 与它同口径 ——
+     * 逐执行器的模型文案本身已由 C1/C4/C5/D2 对着夹具钉住了，这里只管**拼装**。
+     */
+    const activeModelTitle = await page.evaluate(() => {
+      const menu = Array.from(document.querySelectorAll('.el-dropdown-menu'))
+        .find(m => m.offsetParent !== null)
+      if (!menu) return null
+      const item = Array.from(menu.querySelectorAll('.tep__item'))
+        .find(el => el.querySelector('.tep__item-check'))
+      const model = item ? item.querySelector('.tep__item-model') : null
+      return model ? model.getAttribute('title') : null
+    })
+    check('E1 控制台执行器按钮的 title 带出当前模型（与带勾那一项同口径）',
+      !!pickerBtnTitle && !!activeModelTitle && pickerBtnTitle.endsWith(activeModelTitle),
+      `btn="${pickerBtnTitle}" 带勾项="${activeModelTitle}"`)
     check('C4 控制台下拉：每个执行器右侧标出模型',
       pickerDrop.found && pickerDrop.items.some(i => i.model === FIXTURE.claude.name),
       JSON.stringify(pickerDrop.items.map(i => `${i.text}|${i.model}`)))
@@ -528,12 +563,12 @@ async function main() {
       !!pickerModelText && pickerModelText === wbModelText && settingsText.includes(pickerModelText),
       `设置=${JSON.stringify(settingsText)} 下拉=${JSON.stringify(pickerModelText)} 工作台=${JSON.stringify(wbModelText)}`)
     check('E3 picker 与工作台按钮的 title 用同一份「模型 · 别名 · 服务商」口径（picker 只是多带一句入口说明）',
-      // picker 的 title 是「这个下拉是干嘛的 · 模型信息」，工作台那条只有模型信息 ——
-      // 所以比"后者是前者的后缀"，而不是比全等
-      !!splitHintTitle
-        && splitHintTitle === `${FIXTURE.claude.name} · ${FIXTURE.claude.detail} · ${FIXTURE.claude.provider}`
+      // 比的是"两处**逐字**同一份口径"，不是"必须等于 claude 那份" ——
+      // 用带勾那一项的信息做基准，见 E1 上方的注释
+      !!splitHintTitle && !!activeModelTitle
+        && splitHintTitle === activeModelTitle
         && !!pickerBtnTitle && pickerBtnTitle.endsWith(splitHintTitle),
-      `picker="${pickerBtnTitle}" hint="${splitHintTitle}"`)
+      `picker="${pickerBtnTitle}" hint="${splitHintTitle}" 带勾项="${activeModelTitle}"`)
 
     shot = path.resolve(__dirname, '../tmp-verify-wb-executor-models.png')
     await page.screenshot({ path: shot })
