@@ -100,6 +100,7 @@ import {
   buildProjectEntries,
   canonicalProjectPath,
 } from './projectRegistry.js';
+import { getProjectIcon } from './projectIcon.js';
 import { buildEnvContextBlock } from './envContext.js';
 import { readHiddenProjects, hideProject, filterHiddenProjects } from './hiddenProjects.js';
 import { ensureMemoryStore } from '../../../../memory/store.js';
@@ -1065,6 +1066,7 @@ export function registerWorkbenchRoutes({
   // ════════════════════════════════════════════════════════════════════════
   // §16. 多项目编排台（L1 看板 + 主 Agent 控制台）
   //   GET  /api/workbench/projects               项目清单 + 看板任务
+  //   GET  /api/workbench/project-icon           项目自己的图标（favicon）
   //   POST /api/workbench/projects/remove        从清单里移除一个项目条目
   //   GET  /api/workbench/orchestrator           调度开关 + 指令存档 + 活动流 + 预设提示词
   //   POST /api/workbench/orchestrator/state     暂停 / 恢复调度
@@ -1107,7 +1109,9 @@ export function registerWorkbenchRoutes({
     const currentProjectPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
     // Git 探测自带 15s TTL 缓存（directoryGitState.js），看板 5s 轮询里有 2/3 是命中缓存，
     // 实际 spawn 频率被自然限制在 15s 一次，不需要再给这个接口加"跳过一次探测"的开关。
-    const allProjects = await listProjects({ recentDirs, tasks, jobs: jobsSnap, currentProjectPath });
+    const allProjects = await listProjects({
+      recentDirs, tasks, jobs: jobsSnap, currentProjectPath, withIcons: true,
+    });
     // 滤掉用户手动移除、且目录确实已经不在了的那些条目（语义见 hiddenProjects.js）。
     // 放在 listProjects 之后而不是之前：Git 探测得照常跑完 —— 目录有没有回来，
     // 正是"该不该继续藏着"这条判据的依据。
@@ -1206,6 +1210,75 @@ export function registerWorkbenchRoutes({
   app.get('/api/workbench/projects', asyncRoute(async (_req, res) => {
     const payload = await loadBoardPayload();
     res.json({ success: true, ...payload });
+  }));
+
+  /**
+   * 项目图标的路径白名单。口径与 /projects/remove 完全一致：key 归一后必须命中
+   * buildProjectEntries 的某一条（最近目录 ∪ 任务里出现过的 projectPath）。
+   *
+   * 为什么要有这道门：图标端点要按客户端给的路径去读盘，不加白名单就成了
+   * 「任意目录里那个叫 favicon.* 的文件」的读取通道 —— 与 /projects 那条
+   * 「不接受客户端传入路径」的安全边界是同一条。
+   *
+   * 结果缓存 10s：一次页面加载会连发三十几个图标请求，每个都去读一遍 tasks.json
+   * 不值得；而 10s 远小于"用户刚加了个项目"的感知阈值。
+   */
+  let knownProjectKeys = { at: 0, keys: new Set() };
+  async function isKnownProjectKey(key) {
+    const now = Date.now();
+    if (now - knownProjectKeys.at > 10000) {
+      const data = await readJson(TASKS_FILE, { tasks: [] });
+      let recentDirs = [];
+      try {
+        if (configManager && typeof configManager.getRecentDirectories === 'function') {
+          recentDirs = (await configManager.getRecentDirectories()) || [];
+        }
+      } catch (err) {
+        // 与看板同一退路：读不到最近目录就只按任务里的路径认
+        logger.warn('[workbench] 校验项目图标路径时读取最近目录失败:', err?.message || err);
+      }
+      const entries = buildProjectEntries({ recentDirs, tasks: data.tasks || [] });
+      knownProjectKeys = { at: now, keys: new Set(entries.map(e => e.key)) };
+    }
+    return knownProjectKeys.keys.has(key);
+  }
+
+  /**
+   * 项目图标（favicon）—— 左栏项目行那枚图。
+   *
+   * 为什么不把图标直接塞进 /projects 的响应里（base64）：那个接口是 5s 轮询的，
+   * 三十几个图标每次轮询都重发一遍纯属浪费；这里按需取一次，浏览器还能长缓存。
+   *
+   * 缓存策略：URL 里带了 `v=<mtime>`（见 projectIcon.projectIconUrl），图标一换地址就变，
+   * 所以这里可以放心给 1 小时强缓存 —— 不会出现"项目换了图标而界面一直是旧的"。
+   *
+   * 探测本身走 projectIcon 的 5 分钟 TTL 缓存，重复请求不重复走盘。
+   * 目录里没有图标 → 404，前端据此退回文件夹图标（这不是错误，是一种正常结果）。
+   */
+  app.get('/api/workbench/project-icon', asyncRoute(async (req, res) => {
+    const raw = typeof req.query.path === 'string' ? req.query.path : '';
+    const key = canonicalProjectPath(raw);
+    if (!key) throw new HttpError(400, '缺少项目路径');
+    if (!(await isKnownProjectKey(key))) throw new HttpError(404, '项目不在清单里');
+
+    const icon = await getProjectIcon(key);
+    // remote 图标不走这里（前端直接拿那个地址），所以到这一步一定得有本地文件
+    if (!icon || !icon.abs) throw new HttpError(404, '该项目没有图标');
+
+    let stat = null;
+    try {
+      stat = await fsp.stat(icon.abs);
+    } catch {
+      stat = null;
+    }
+    if (!stat || !stat.isFile()) throw new HttpError(404, '图标已丢失');
+
+    res.set('Content-Type', icon.mime);
+    res.set('Content-Length', String(stat.size));
+    res.set('Cache-Control', 'private, max-age=3600');
+    const stream = fs.createReadStream(icon.abs);
+    stream.on('error', () => res.end());
+    stream.pipe(res);
   }));
 
   /**

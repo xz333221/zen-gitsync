@@ -34,6 +34,7 @@
 //   - Git 状态复用 utils/directoryGitState.js 的批量探测（带并发上限 + TTL 缓存 + 超时）。
 
 import { probeDirectoryGitStates } from '../../utils/directoryGitState.js';
+import { resolveProjectIcons, projectIconUrl } from './projectIcon.js';
 import { pickLiveActivity, tailExcerpt, jobAgent, jobDurationMs } from './jobActivity.js';
 // 图片后缀白名单只此一份（jobImage.js 的注释里也钉着这条）：卡片封面、附件缩略图、
 // 对话流内嵌图三处要是各写一份，迟早出现"这张缩略图能显示、那张不行"。
@@ -297,7 +298,12 @@ function pickGitState(state) {
  * @param {object[]} input.jobs         jobStore.snapshotJobs() 的结果
  * @param {string}   [input.currentProjectPath] 应用当前所在项目（用于打 isCurrent 标记）
  * @param {boolean}  [input.withGit]    是否探测 Git 状态（默认 true）
+ * @param {boolean}  [input.withIcons]  是否探测项目图标（favicon，默认 **false**）
  * @param {object}   [input.probeOptions] 透传给 probeDirectoryGitStates（超时 / TTL / 并发）
+ *
+ * withIcons 默认关：图标只给**看板左栏**用，而这条路还挂在"给模型看的项目清单"上
+ * （projectTool.createProjectListProvider），那边 refresh 一次要跑两遍 —— 让模型的
+ * 文字清单为了一枚图去走盘没有意义。要图标的调用方显式打开。
  */
 export async function listProjects({
   recentDirs = [],
@@ -305,6 +311,7 @@ export async function listProjects({
   jobs = [],
   currentProjectPath = '',
   withGit = true,
+  withIcons = false,
   probeOptions,
 } = {}) {
   const entries = buildProjectEntries({ recentDirs, tasks });
@@ -315,6 +322,10 @@ export async function listProjects({
   if (withGit && entries.length > 0) {
     states = await probeDirectoryGitStates(entries.map(e => e.path), probeOptions);
   }
+  // 图标探测自带 5 分钟 TTL 缓存，5s 轮询里绝大多数轮次只是一次 Map 查表
+  const icons = withIcons && entries.length > 0
+    ? await resolveProjectIcons(entries.map(e => e.path))
+    : new Map();
 
   return entries.map(e => {
     const state = withGit ? states[e.path] : null;
@@ -329,6 +340,11 @@ export async function listProjects({
       exists: state ? state.exists : null,
       git: pickGitState(state),
       stats: stats.get(e.key) || emptyStats(),
+      /**
+       * 项目自己的图标（favicon）地址；null = 没找到，前端退回文件夹图标。
+       * 只给地址，不给服务端的绝对路径 —— 那是内部事实，没必要随接口漏出去。
+       */
+      iconUrl: projectIconUrl(e.key, icons.get(e.path) || null),
     };
   });
 }

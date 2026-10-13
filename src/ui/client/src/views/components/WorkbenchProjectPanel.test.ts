@@ -33,6 +33,7 @@ const proj = (over: Partial<ProjectSummary> = {}): ProjectSummary => ({
   exists: true,
   git: git(),
   stats: stats(),
+  iconUrl: null,
   ...over,
 })
 
@@ -129,5 +130,57 @@ describe('WorkbenchProjectPanel · 从清单移除', () => {
     await vi.waitFor(() => expect(ElMessageBox.confirm).toHaveBeenCalledTimes(1))
     const msg = String(vi.mocked(ElMessageBox.confirm).mock.calls[0][0])
     expect(msg).not.toContain('{n}')
+  })
+})
+// ── 项目图标（favicon） ────────────────────────────────────────────────
+//   I1 服务端给了图标地址 -> 行上渲染 <img>，不再画文件夹图标
+//   I2 没给（null）-> 退回文件夹图标
+//   I3 图加载失败 -> 当场退回文件夹图标（不留破图）
+//   I4 失败记的是**地址**：换了图标（新地址）要能重试，不能因为上次失败就一直不显示
+describe('WorkbenchProjectPanel · 项目图标', () => {
+  const rowIcon = (w: any, name: string) => {
+    const row = rowOf(w, name)!
+    return {
+      img: row.querySelector('.proj-item__icon--img') as HTMLImageElement | null,
+      folder: row.querySelector('.el-icon.proj-item__icon:not(.proj-item__icon--img)'),
+    }
+  }
+
+  test('I1 有图标地址：渲染 img，src 就是服务端给的那个地址', () => {
+    const w = mountPanel([
+      proj({ name: 'withicon', iconUrl: '/api/workbench/project-icon?path=x&v=123' }),
+    ])
+    const { img, folder } = rowIcon(w, 'withicon')
+    expect(img).toBeTruthy()
+    expect(img!.getAttribute('src')).toBe('/api/workbench/project-icon?path=x&v=123')
+    expect(folder).toBeNull()
+  })
+
+  test('I2 没有图标：退回文件夹图标，不渲染 img', () => {
+    const w = mountPanel([proj({ name: 'noicon', iconUrl: null })])
+    const { img, folder } = rowIcon(w, 'noicon')
+    expect(img).toBeNull()
+    expect(folder).toBeTruthy()
+  })
+
+  test('I3 加载失败：当场退回文件夹图标', async () => {
+    const w = mountPanel([proj({ name: 'broken', iconUrl: '/api/workbench/project-icon?path=b&v=1' })])
+    expect(rowIcon(w, 'broken').img).toBeTruthy()
+    rowIcon(w, 'broken').img!.dispatchEvent(new Event('error'))
+    await w.vm.$nextTick()
+    expect(rowIcon(w, 'broken').img).toBeNull()
+    expect(rowIcon(w, 'broken').folder).toBeTruthy()
+  })
+
+  test('I4 失败按地址记：项目换了图标（新地址）会重试', async () => {
+    const w = mountPanel([proj({ name: 'retry', iconUrl: '/api/workbench/project-icon?path=r&v=1' })])
+    rowIcon(w, 'retry').img!.dispatchEvent(new Event('error'))
+    await w.vm.$nextTick()
+    expect(rowIcon(w, 'retry').img).toBeNull()
+
+    // 服务端换了图标 -> 地址里的 v 变了（真实链路里是下一轮轮询带回来的）
+    await w.setProps({ projects: [proj({ name: 'retry', iconUrl: '/api/workbench/project-icon?path=r&v=2' })] })
+    await w.vm.$nextTick()
+    expect(rowIcon(w, 'retry').img).toBeTruthy()
   })
 })

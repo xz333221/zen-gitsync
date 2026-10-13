@@ -27,6 +27,10 @@
        否则一行里塞四五个标签，项目名会被挤成省略号。
     3. 进度行只给**有任务**的项目：total=0 时整行不渲染。一排「0/0 任务完成」+ 一条空进度条
        全是噪声，占的行高还让有任务的项目不显眼；没有进度行本身就是"这儿还没开工"的信号。
+
+  图标位（2026-10-13 补）：优先用**项目自己的 favicon**（服务端探测，见 projectIcon.js），
+  没找到 / 加载失败才退回文件夹图标 —— 十几个项目排在一起时，图标是名字之外唯一的辨识线索。
+  加载失败会记下那个地址（见 markIconFailed），不再重试。
 -->
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
@@ -147,6 +151,23 @@ function gitLine(p: ProjectSummary): string {
 /** 有没有分支可挂图标：只有真的落在某个分支上（含游离 HEAD）才算，"未知"没有 */
 function hasBranchIcon(p: ProjectSummary): boolean {
   return !!(p.git && p.git.isGitRepo && (p.git.detached || p.git.branch))
+}
+
+// ── 项目图标（favicon） ────────────────────────────────────────────────
+/**
+ * 加载失败的项目图标**地址**（不是项目 key）。
+ *
+ * 地址里带着服务端的图标 mtime，项目换了图标地址就跟着变 —— 按地址记，
+ * 换完图标下一轮轮询拿到的新地址会自动重试一次；按 key 记的话，用户换完图标
+ * 得重启界面才能看见，而"行上一直挂个破图"比退回文件夹图标难看得多。
+ */
+const failedIconUrls = ref<Set<string>>(new Set())
+
+function markIconFailed(url: string | null) {
+  if (!url || failedIconUrls.value.has(url)) return
+  const next = new Set(failedIconUrls.value)
+  next.add(url)
+  failedIconUrls.value = next
 }
 
 // ── 打开方式菜单（hover 才出现的第二个按钮） ──────────────────────────
@@ -405,7 +426,17 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
         @keydown.space.self.prevent="emit('select', p)"
       >
         <div class="proj-item__row1">
-          <el-icon class="proj-item__icon"><Folder /></el-icon>
+          <!-- 项目自己的图标（favicon）优先，没有 / 加载失败才退回文件夹图标。
+               失败要记一笔：服务端重启过、或图标文件被删掉时，不记的话每次重渲染都会
+               再发一次注定失败的请求，行上还一直挂着个破图。 -->
+          <img
+            v-if="p.iconUrl && !failedIconUrls.has(p.iconUrl)"
+            class="proj-item__icon proj-item__icon--img"
+            :src="p.iconUrl"
+            alt=""
+            @error="markIconFailed(p.iconUrl)"
+          />
+          <el-icon v-else class="proj-item__icon"><Folder /></el-icon>
           <span class="proj-item__name">{{ p.name }}</span>
           <!-- 运行中 / 当前 这两个信号与 hover 才出现的操作按钮锚在同一个右端点：
                hover 时整组淡出让位给按钮，而不是让图标压在徽标上 -->
@@ -870,6 +901,18 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   font-size: var(--font-size-mid);
   color: var(--text-meta);
   flex-shrink: 0;
+}
+/* 项目自己的图标（favicon）：尺寸跟着 el-icon 那一档走（1em），
+   否则"有图标"和"没图标"的行，项目名的起始位置会左右跳。
+   contain 而不是 cover —— 各家的 favicon 长宽比五花八门，裁掉一边比留白更难看；
+   垫一层极淡的底：不少项目的图标是深色字形 + 透明背景，深色主题下会整个糊掉。
+   圆角跟徽标同一档（--radius-base 偏大，14px 的方块上 3px 更稳）。 */
+.proj-item__icon--img {
+  width: 1em;
+  height: 1em;
+  object-fit: contain;
+  border-radius: 3px;
+  background: var(--bg-subtle);
 }
 .proj-item.is-active .proj-item__icon { color: var(--color-primary); }
 .proj-item__name {

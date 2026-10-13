@@ -79,6 +79,7 @@
     "verify:agent-ask-sound": "node scripts/verify-agent-ask-sound.cjs",
     "verify:wb-proj-branch": "node scripts/verify-workbench-proj-branch.cjs",
     "verify:wb-proj-filter": "node scripts/verify-wb-proj-filter.cjs",
+    "verify:wb-proj-icon": "node scripts/verify-wb-proj-icon.cjs",
     "verify:wb-proj-search": "node scripts/verify-wb-proj-search.cjs",
     "verify:wb-proj-search:reverse": "node scripts/verify-wb-proj-search.cjs --reverse",
     "verify:wb-proj-remove": "node scripts/verify-wb-project-remove.cjs",

@@ -176,6 +176,12 @@ export interface ProjectSummary {
   exists: boolean | null
   git: ProjectGitState | null
   stats: ProjectStats
+  /**
+   * 项目自己的图标（favicon）地址；null = 服务端没在项目里找到图标，
+   * 行上退回文件夹图标。地址由服务端给（可能是本站端点，也可能是项目声明的远程地址），
+   * 前端只管显示。
+   */
+  iconUrl: string | null
 }
 
 /**
