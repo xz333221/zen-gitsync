@@ -1,5 +1,6 @@
 /**
- * 项目图标（favicon）—— 浏览器交互验证。两处消费点：左栏项目列表 + 「常用目录」卡片。
+ * 项目图标（favicon）—— 浏览器交互验证。三处消费点：左栏项目列表 + 「常用目录」卡片
+ * + 顶栏目录选择器（当前项目图标）。
  *
  * 守的契约：
  *   左栏（WorkbenchProjectPanel）
@@ -15,6 +16,10 @@
  *   D1/D2 有图标的卡片渲染 <img> 且真的加载出来
  *   D3 图标槽 38px，两种形态同尺寸、名字左边缘对齐
  *   D4 端点全 404 时每张卡都退回文件夹字形（与 K4 同一个兜底，另一处消费点）
+ * 顶栏目录选择器（DirectorySelector，当前项目图标）
+ *   H0 /api/current_directory 带 iconUrl 且本仓库能探到自己的 favicon（端点可取）
+ *   H1-H5 顶栏画出图标槽 + <img> 真加载出来 + 排在目录名左侧 + 槽 20px
+ *   H6 端点全 404 时顶栏当场退回文件夹字形（第三处消费点，同一个兜底）
  *   服务端契约
  *   K6 真图标 200 + 图片 Content-Type + 长缓存；不在清单里的路径 404（白名单）
  *
@@ -28,6 +33,8 @@
  *   · CSS 里 .proj-item__icon--img 去掉 width/height → K5a 红（图标按原始尺寸铺开）
  *   · 图标槽退回塞进 row1（不跨两行）→ K5c 红（图标高度只有一行）
  *   · 后端路由去掉 isKnownProjectKey 那道门 → K6c 红（任意路径都能读）
+ *   · 顶栏去掉图标槽 / DirectorySelector 不再渲染 img → H1 / H2 / H4 / H5 红
+ *   · /api/current_directory 不返回 iconUrl → H0a / H0b 红
  */
 const path = require('node:path')
 // playwright 装在 src/ui/client 下，把它的 node_modules 挂进解析路径，脚本才能独立跑
@@ -119,6 +126,31 @@ const obsCards = (page) => page.evaluate(() => {
   })
 })
 
+/** 读顶栏目录选择器那枚「当前项目图标」 */
+const obsHeader = (page) => page.evaluate(() => {
+  const btn = document.querySelector('.directory-display')
+  if (!btn) return null
+  const slot = btn.querySelector('.directory-display__icon')
+  const img = btn.querySelector('img.directory-display__icon-img')
+  const glyph = btn.querySelector('i.el-icon.directory-display__icon-glyph')
+  const nameEl = btn.querySelector('.directory-display__name')
+  const r = (el) => (el ? el.getBoundingClientRect() : null)
+  const b = r(btn), s = r(slot), n = r(nameEl)
+  return {
+    name: nameEl ? (nameEl.textContent || '').trim() : '',
+    hasSlot: !!slot,
+    hasImg: !!img,
+    hasGlyph: !!glyph,
+    src: img ? (img.getAttribute('src') || '') : '',
+    loaded: img ? !!(img.complete && img.naturalWidth > 0) : null,
+    slotBox: s ? { w: Math.round(s.width), h: Math.round(s.height), left: Math.round(s.left) } : null,
+    imgBox: img ? { w: Math.round(img.width), h: Math.round(img.height) } : null,
+    nameLeft: n ? Math.round(n.left) : null,
+    // 图标是否落在目录名左侧（有/无图标两种形态都该成立）
+    iconLeftOfName: (!!s && !!n) ? s.left < n.left : null,
+  }
+})
+
 async function openBoard(page) {
   await page.waitForSelector('.activity-bar', { timeout: 20000 })
   await page.locator('.activity-btn[aria-label^="工作台"]').first().click()
@@ -174,6 +206,23 @@ async function main() {
       recentDirs.length > 0 && recentDirs.every(d => 'iconUrl' in d) && recentDirs.some(d => d.iconUrl),
       `${recentDirs.filter(d => d.iconUrl).length}/${recentDirs.length} 个目录带图标`)
 
+    // 顶栏那枚「当前项目图标」的数据源：/api/current_directory 也得带 iconUrl。
+    // 本项目自身带 public/favicon.svg（index.html 里声明了），所以正常应该拿到一个本站端点地址。
+    const cur = await fetch(`${API}/api/current_directory`, { cache: 'no-store' }).then(r => r.json())
+    check('H0a /api/current_directory 带 iconUrl 字段（顶栏图标的数据源）',
+      'iconUrl' in cur, `directory=${cur.directory} iconUrl=${cur.iconUrl}`)
+    check('H0b 当前项目（本仓库）探测到了自己的 favicon（地址指向本站图标端点）',
+      typeof cur.iconUrl === 'string' && cur.iconUrl.startsWith('/api/workbench/project-icon'),
+      `iconUrl=${cur.iconUrl}`)
+    if (typeof cur.iconUrl === 'string' && cur.iconUrl.startsWith('/api/')) {
+      const iconRes = await fetch(`${API}${cur.iconUrl}`)
+      check('H0c 当前目录图标端点可取（200 + 图片）',
+        iconRes.status === 200 && /^image\//.test(iconRes.headers.get('content-type') || ''),
+        `${iconRes.status} ${iconRes.headers.get('content-type')}`)
+    } else {
+      check('H0c 当前目录图标端点可取（200 + 图片）', false, '没有拿到本站图标地址，跳过')
+    }
+
     // ── 左栏项目列表 ────────────────────────────────────────────────
     await page.goto(BASE, { waitUntil: 'domcontentloaded' })
     await openBoard(page)
@@ -213,6 +262,27 @@ async function main() {
     check('K5d 文件夹字形比槽小（"这儿没有图标"该更轻，而不是撑满 32px）',
       folderRows.length > 0 && folderRows.every(r => r.folderBox && r.folderBox.h <= 24),
       folderRows.map(r => r.folderBox && r.folderBox.h).slice(0, 3).join(','))
+
+    // ── 顶栏目录选择器：当前项目图标 ───────────────────────────────────
+    // 当前项目（本仓库）自带 favicon，所以正向期望是 <img> 且真的加载出来。
+    const header = await obsHeader(page)
+    check('H1 顶栏目录胶囊渲染出图标槽（.directory-display__icon）', !!(header && header.hasSlot))
+    if (header && header.hasSlot) {
+      check('H2 有 favicon 时顶栏画 <img>（与左栏同一枚图，不是文件夹）',
+        header.hasImg && !header.hasGlyph, `img=${header.hasImg} glyph=${header.hasGlyph}`)
+      // 图异步下载：等到落地再断言，否则是探针假红
+      await waitUntil(async () => {
+        const h = await obsHeader(page)
+        return !h || !h.hasImg || h.loaded === true
+      }, 10000)
+      const h2 = await obsHeader(page)
+      check('H3 顶栏图标真的加载出来了（naturalWidth > 0，不是 404 破图）',
+        !!(h2 && h2.hasImg && h2.loaded === true), JSON.stringify(h2 && h2.imgBox))
+      check('H4 图标排在目录名左侧（点图标＝点目录名的同一条热区）',
+        !!(h2 && h2.iconLeftOfName === true), `slot.left=${h2 && h2.slotBox && h2.slotBox.left} name.left=${h2 && h2.nameLeft}`)
+      check('H5 图标槽是 20px 的方槽（两种形态共用同一尺寸契约）',
+        !!(h2 && h2.slotBox && h2.slotBox.w === 20 && h2.slotBox.h === 20), JSON.stringify(h2 && h2.slotBox))
+    }
 
     if (SHOT) {
       // 把鼠标挪开再截图：点过活动栏之后那枚按钮的 tooltip 会一直挂在左栏上挡住几行
@@ -262,6 +332,16 @@ async function main() {
     check('K4 图标全部 404 时每一行都退回文件夹图标（不留破图）',
       rows.length > 0 && rows.every(r => !r.hasImg && r.hasFolder),
       `仍有 img 的行：${rows.filter(r => r.hasImg).map(r => r.name).join(',') || '无'}`)
+
+    // 同一批 404 下，顶栏那枚也得当场退回文件夹字形（@error → markIconFailed）
+    await waitUntil(async () => {
+      const h = await obsHeader(page)
+      return !!h && !h.hasImg && h.hasGlyph
+    }, 8000)
+    const h404 = await obsHeader(page)
+    check('H6 图标端点全 404 时，顶栏当场退回文件夹字形（不留破图）',
+      !!(h404 && !h404.hasImg && h404.hasGlyph),
+      `img=${h404 && h404.hasImg} glyph=${h404 && h404.hasGlyph}`)
 
     const opened2 = await openDirDialog(page)
     if (opened2) {

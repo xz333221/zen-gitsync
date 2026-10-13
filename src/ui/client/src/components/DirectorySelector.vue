@@ -25,6 +25,7 @@ import { useGitStore } from "@/stores/gitStore";
 import { useLocaleStore } from "@/stores/localeStore";
 import { useToolsStore, type ToolId } from "@/stores/toolsStore";
 import { storeToRefs } from "pinia";
+import { useIconFallback } from "@/composables/useIconFallback";
 import IconButton from "@components/IconButton.vue";
 import RecentDirectoriesList from "@components/RecentDirectoriesList.vue";
 import DirListRefreshButton from "@components/DirListRefreshButton.vue";
@@ -62,6 +63,12 @@ const { currentLocale } = storeToRefs(useLocaleStore());
 
 // 从 store 中获取当前目录
 const currentDirectory = computed(() => configStore.currentDirectory);
+
+// 当前项目的图标（服务端 /api/current_directory 一起给的，与左栏项目行、常用目录卡片
+// 是同一枚图）。加载失败按**地址**记一笔（useIconFallback），当场退回文件夹字形 ——
+// 与另外两处消费点同一套兜底，不会留破图，也不会每次重渲染都再发一次注定失败的请求。
+const currentIconUrl = computed(() => configStore.currentIconUrl);
+const { isIconBroken, markIconFailed } = useIconFallback();
 
 // 获取当前文件夹名称（用于显示）
 const currentFolderName = computed(() => getFolderNameFromPath(currentDirectory.value));
@@ -734,7 +741,9 @@ async function changeDirectory() {
       
 
       // 直接更新 store 状态
-      configStore.setCurrentDirectory(result.directory);
+      // 与目录一起写图标地址：切到新项目后顶栏那枚图标要**当场**跟着换，
+      // 否则会停在上一个项目的图标上（服务端 change_directory 已把它算好）。
+      configStore.setCurrentDirectory(result.directory, result.iconUrl || '');
       gitStore.isGitRepo = result.isGitRepo;
 
       // 切换目录后强制重新加载配置
@@ -822,7 +831,20 @@ function onBrowserSelect(path: string) {
       @click="onOpenDialog"
       @contextmenu.prevent="onCopyFolderName"
     >
-      {{ currentFolderName }}
+      <!-- 当前项目图标：有 favicon 就画它（与左栏项目行 / 常用目录卡片同一枚图），
+           没有 / 加载失败退回文件夹字形。整块在按钮内 —— 点图标＝点目录名，
+           走同一个「切换工作目录」弹窗。 -->
+      <span class="directory-display__icon" aria-hidden="true">
+        <img
+          v-if="currentIconUrl && !isIconBroken(currentIconUrl)"
+          class="directory-display__icon-img"
+          :src="currentIconUrl"
+          alt=""
+          @error="markIconFailed(currentIconUrl)"
+        />
+        <el-icon v-else class="directory-display__icon-glyph"><Folder /></el-icon>
+      </span>
+      <span class="directory-display__name">{{ currentFolderName }}</span>
     </button>
     <!-- 旧版"非 Git 仓库"红色徽章已移除:左侧 GitStatus 面板已经完整展示
          "当前目录不是 Git 仓库 + 初始化按钮 + 打开其他目录",顶栏重复出现
@@ -1297,7 +1319,8 @@ function onBrowserSelect(path: string) {
 /* 目录名：不占额外空白，只在整条胶囊放不下时才被压缩省略。
    原来 min-width:0 + flex:1 会两头顶：有余量时右侧留一大片空白（换成固定
    min-width 也一样），空间不够时又被压成 "zen-gits…" —— 所以用 flex-grow:0
-   让它按文字宽度走，靠 flex-shrink 在 720px 上限内自动省略。 */
+   让它按文字宽度走，靠 flex-shrink 在胶囊上限（App.vue .header-center 的
+   max-width，已含本组件图标位的宽度）内自动省略。 */
 .directory-selector--header .directory-display {
   flex: 0 1 auto;
   min-width: 72px;
@@ -1337,15 +1360,18 @@ function onBrowserSelect(path: string) {
 .directory-display {
   flex: 1;
   min-width: 0;
+  /* 图标 + 目录名一排：图标位固定、名字吃掉剩余宽度并在放不下时省略。
+     省略号挂在 .directory-display__name 上（flex item 上的 text-overflow
+     管不到按钮里的文本节点，加了图标后按钮不再只有一个文本节点）。 */
+  display: flex;
+  align-items: center;
+  gap: 7px;
   padding-left: var(--spacing-base);
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: var(--font-size-2xl);
   font-weight: 600;
   letter-spacing: var(--letter-spacing-tight, -0.4px);
   color: var(--color-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   cursor: pointer;
   border-radius: var(--radius-md);
   padding: 2px 8px;
@@ -1355,6 +1381,38 @@ function onBrowserSelect(path: string) {
   background: transparent;
   text-align: left;
   appearance: none;
+}
+
+/* 当前项目图标槽。有 favicon 时画 <img>，否则里面是文件夹字形 ——
+   两种形态共用同一个槽尺寸，目录名左边缘因此完全对齐（与左栏项目行同一条约定）。 */
+.directory-display__icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+/* 图标本身铺满那个槽。contain 而非 cover：各家 favicon 长宽比不一，裁掉一边更难看；
+   极淡的底兜住"深色字形 + 透明背景"的图标（深色主题下会整个糊掉）。 */
+.directory-display__icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-base);
+  background: var(--bg-subtle);
+  -webkit-user-drag: none;
+}
+/* 文件夹兜底字形比槽小一档：没有图标这件事本身该更轻，别撑满 20px。 */
+.directory-display__icon-glyph {
+  font-size: var(--font-size-md);
+  color: var(--text-meta);
+}
+.directory-display__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .directory-display:focus-visible {

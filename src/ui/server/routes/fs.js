@@ -27,7 +27,7 @@ import { fetchDirectoryRemotes } from '../utils/directoryFetch.js';
 // 「最近目录」卡片上的图标 = 左栏项目列表画的那一枚，探测实现只有一份（workbench/projectIcon.js）。
 // canonicalProjectPath 同样复用 projectRegistry 那份 —— 图标地址里的 path 参数要跟
 // /api/workbench/project-icon 的白名单逐字对齐，两边各写一份归一化迟早对不上。
-import { resolveProjectIcons, projectIconUrl } from './workbench/projectIcon.js';
+import { resolveProjectIcons, projectIconUrl, getProjectIcon } from './workbench/projectIcon.js';
 import { canonicalProjectPath } from './workbench/projectRegistry.js';
 import { invalidateCurrentProjectKey, invalidateRawConfigCache } from '../../../config.js';
 import { invalidateCwdCache } from '../../../utils/index.js';
@@ -99,10 +99,26 @@ export function registerFsRoutes({
   }
 
   // 新增获取当前工作目录接口
+  //
+  // 顶栏目录选择器上那枚「当前项目图标」的数据源：与左栏项目行、常用目录卡片
+  // 用**同一个**探测实现（workbench/projectIcon.js，带 5 分钟 TTL 缓存），
+  // 地址里的 path 归一成 canonicalProjectPath —— 与 /api/workbench/project-icon
+  // 的白名单逐字对齐。非 Git 目录也可能是某个前端项目（照样有 favicon），所以这一项
+  // 在两个分支上都给；探不到就是 null，前端退回文件夹图标。
+  const currentIconUrl = async (directory) => {
+    try {
+      return projectIconUrl(canonicalProjectPath(directory), await getProjectIcon(directory));
+    } catch (e) {
+      logger.warn('[current_directory] 探测当前目录图标失败，退回文件夹图标:', e?.message || e);
+      return null;
+    }
+  }
+
   app.get('/api/current_directory', asyncRoute(async (req, res) => {
     try {
       const directory = process.cwd();
-      
+      const iconUrl = await currentIconUrl(directory);
+
       // 检查当前目录是否是Git仓库
       try {
         await execGitCommand(['rev-parse', '--is-inside-work-tree']);
@@ -114,13 +130,15 @@ export function registerFsRoutes({
         return res.status(400).json({
           error: '当前目录不是一个Git仓库',
           directory,
-          isGitRepo: false
+          isGitRepo: false,
+          iconUrl
         });
       }
-      
+
       res.json({
         directory,
-        isGitRepo: true
+        isGitRepo: true,
+        iconUrl
       });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -204,6 +222,7 @@ export function registerFsRoutes({
             success: true,
             directory: newDirectory,
             isGitRepo: true,
+            iconUrl: await currentIconUrl(newDirectory),
             projectRoomId: newProjectRoomId
           });
         } catch (error) {
@@ -235,6 +254,7 @@ export function registerFsRoutes({
             success: true,
             directory: newDirectory,
             isGitRepo: false,
+            iconUrl: await currentIconUrl(newDirectory),
             warning: '新目录不是一个Git仓库',
             projectRoomId: newProjectRoomId
           });

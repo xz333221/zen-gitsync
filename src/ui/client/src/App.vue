@@ -174,7 +174,9 @@ async function loadCurrentDirectory() {
   try {
     const responseDir = await fetch('/api/current_directory')
     const dirData = await responseDir.json()
-    configStore.setCurrentDirectory(dirData.directory || $t('@F13B4:未知目录'))
+    // iconUrl 与目录一起写进 store：顶栏目录选择器那枚「当前项目图标」读的就是它
+    // （服务端已把地址归一好，没有图标时是 null → store 里落成空串 → 退回文件夹字形）
+    configStore.setCurrentDirectory(dirData.directory || $t('@F13B4:未知目录'), dirData.iconUrl || '')
     return dirData
   } catch (error) {
     console.error('获取当前目录失败:', error)
@@ -1489,7 +1491,12 @@ body {
 
 .header-center {
   min-width: 0;
-  max-width: min(720px, 100%);
+  /* 748 = 原来的 720 上限 + 目录胶囊里新增的图标位（20px 图标 + 7px 间距 ≈ 27，取整 28）。
+     上限原本就是为了「目录名和工具行挤不下时让目录名省略」——图标是后加进来的，
+     不把上限一起放大，它就会把那 27px 从目录名身上抠走（实测 1600px 下目录名从
+     完整变成只剩 65px 宽）。放大同样的量后，目录名的可见宽度与加图标之前一致；
+     上限本身仍是一个上限（短名字时两边照旧由 space-between 分摊空档，行为不变）。 */
+  max-width: min(748px, 100%);
   display: flex;
   align-items: center;
   justify-content: center;

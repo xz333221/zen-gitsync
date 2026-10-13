@@ -186,6 +186,9 @@ export const useConfigStore = defineStore('config', () => {
   const configFilePath = ref('')
   // 当前工作目录
   const currentDirectory = ref('')
+  // 当前项目的图标地址（顶栏目录选择器用；服务端 /api/current_directory 一起给的）。
+  // 空串 = 没有图标 → 顶栏退回文件夹字形。见 setCurrentDirectory。
+  const currentIconUrl = ref('')
   // Push完成后自动关闭进度弹窗（从文件配置加载，默认true；用户在 设置→提交设置 可单独关闭）
   const autoClosePushModal = ref(true)
   // 自动设置默认提交信息（从文件配置加载，默认false）
@@ -350,8 +353,14 @@ export const useConfigStore = defineStore('config', () => {
   const isUiLoaded = ref(false)
 
   // 设置当前目录
-  function setCurrentDirectory(dir: string) {
+  //
+  // iconUrl 可选：顶栏目录选择器上那枚「当前项目图标」的地址（服务端 /api/current_directory
+  // 一起给的，与左栏项目行、常用目录卡片同一枚图）。跟目录**同时**写，两者才不会错位
+  // —— 有目录、图标却停在上一个项目是最难看的一种不一致。不传就是「没有图标」，
+  // 顶栏退回文件夹字形。
+  function setCurrentDirectory(dir: string, iconUrl = '') {
     currentDirectory.value = dir || ''
+    currentIconUrl.value = iconUrl || ''
   }
 
   const aiDiffSummaryEnabled = computed(() => {
@@ -1739,6 +1748,7 @@ export const useConfigStore = defineStore('config', () => {
     configFilePath,
     hasConfigLoadError,
     currentDirectory,
+    currentIconUrl,
     config,
     autoClosePushModal,
     autoSetDefaultMessage,
