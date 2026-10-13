@@ -36,10 +36,11 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Fold, Expand } from '@element-plus/icons-vue'
+import { Fold, Expand, Folder, Grid } from '@element-plus/icons-vue'
 import type { Attachment, BoardTask, ProjectSummary, Task } from '@/types/workbench'
 import { canonicalProjectPath } from '@/utils/path'
 import type { TaskExecutorId } from '@/utils/taskExecutor'
+import { useIconFallback } from '@/composables/useIconFallback'
 import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection'
 import { useWorkbenchProjects } from '@/composables/useWorkbenchProjects'
 import { useOrchestrator } from '@/composables/useOrchestrator'
@@ -114,6 +115,16 @@ const selectedProject = computed<ProjectSummary | null>(() => {
   if (!selectedKey.value) return null
   return projects.value.find(p => p.key === selectedKey.value) || null
 })
+
+/**
+ * 看板头部那枚项目图标（2026-10-13，用户：「中间这一块上边也把图标显示出来吧」）。
+ *
+ * 与左栏项目行、顶栏目录胶囊是**同一套**实现的两处复用，不是第三份：
+ *   · 地址由服务端随 /api/workbench/projects 一起给（ProjectSummary.iconUrl），前端不探测；
+ *   · 加载失败/没有就是文件夹字形，兜底记忆也共用这一份 useIconFallback（按地址记，
+ *     换图标拿到新地址会自动重试一次）。
+ */
+const { isIconBroken, markIconFailed } = useIconFallback()
 
 /** 项目被移除 / 首次加载后校正选中项：无效的 key 一律退回「全部项目」 */
 watch(projects, (list) => {
@@ -806,6 +817,23 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
 
       <main class="board__main">
         <div class="board__main-head">
+          <!-- 项目图标槽：和左栏项目行、顶栏目录胶囊同一个形态契约 ——
+               有 favicon 画 <img>，加载失败 / 没有就退回字形（这里是 Folder）；
+               「全部项目」没有单一项目可画，退回 Grid，与左栏「全部项目」那一行同款。 -->
+          <span class="board__project-icon-slot" aria-hidden="true">
+            <img
+              v-if="selectedProject && selectedProject.iconUrl && !isIconBroken(selectedProject.iconUrl)"
+              class="board__project-icon-img"
+              :src="selectedProject.iconUrl"
+              alt=""
+              @error="markIconFailed(selectedProject.iconUrl)"
+            />
+            <el-icon v-else class="board__project-icon-glyph">
+              <Folder v-if="selectedProject" />
+              <Grid v-else />
+            </el-icon>
+          </span>
+
           <div class="board__main-title">
             <h2 class="board__project-name">
               {{ selectedProject ? selectedProject.name : $t('@WORKBENCH:全部项目') }}
@@ -1068,6 +1096,34 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   padding: 8px 12px;
   flex-shrink: 0;
   min-width: 0;
+}
+/* ── 头部那枚项目图标 ─────────────────────────────────────────────────
+   24px 槽：这一行只有一行字（项目名 + 路径 + 计数），槽跨不了两行，
+   所以不能照搬左栏那个跨两行文字的 32px —— 那会把头部顶高、和下面的看板列头抢空间。
+   也不再缩到顶栏目录胶囊的 20px：这里是内容区的标题行，项目名是 14px，
+   20px 的图标压不住它，读起来像"顺带画的一枚小图"。
+   字形兜底比槽小一档（16px）：没有图标这件事本身该更轻，别撑满 24px。 */
+.board__project-icon-slot {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+/* 图标本身铺满那个槽。contain 而非 cover：各家 favicon 长宽比不一，裁掉一边更难看；
+   极淡的底兜住"深色字形 + 透明背景"的图标（深色主题下会整个糊掉）。 */
+.board__project-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  -webkit-user-drag: none;
+}
+.board__project-icon-glyph {
+  font-size: var(--font-size-lg);
+  color: var(--text-meta);
 }
 .board__main-title {
   display: flex;

@@ -1,6 +1,6 @@
 /**
- * 项目图标（favicon）—— 浏览器交互验证。三处消费点：左栏项目列表 + 「常用目录」卡片
- * + 顶栏目录选择器（当前项目图标）。
+ * 项目图标（favicon）—— 浏览器交互验证。四处消费点：左栏项目列表 + 「常用目录」卡片
+ * + 顶栏目录选择器（当前项目图标）+ 看板头部（选中项目的图标）。
  *
  * 守的契约：
  *   左栏（WorkbenchProjectPanel）
@@ -20,6 +20,12 @@
  *   H0 /api/current_directory 带 iconUrl 且本仓库能探到自己的 favicon（端点可取）
  *   H1-H5 顶栏画出图标槽 + <img> 真加载出来 + 排在目录名左侧 + 槽 20px
  *   H6 端点全 404 时顶栏当场退回文件夹字形（第三处消费点，同一个兜底）
+ * 看板头部（WorkbenchBoard 的 .board__main-head，选中项目的图标）
+ *   I1 头部有图标槽（这一行原来只有名字 + 路径 + 计数，一枚图标都没有）
+ *   I2/I3 选中带 favicon 的项目时画 <img> 且**真的加载出来**（同 K1 那套反假绿）
+ *   I4 图标排在项目名左侧；I5 槽是 24px 的方槽
+ *   I6 「全部项目」时退回宫格字形（没有单一项目可画，也不许留空槽）
+ *   I7 端点全 404 时头部当场退回文件夹字形（第四处消费点，同一个兜底）
  *   服务端契约
  *   K6 真图标 200 + 图片 Content-Type + 长缓存；不在清单里的路径 404（白名单）
  *
@@ -35,6 +41,8 @@
  *   · 后端路由去掉 isKnownProjectKey 那道门 → K6c 红（任意路径都能读）
  *   · 顶栏去掉图标槽 / DirectorySelector 不再渲染 img → H1 / H2 / H4 / H5 红
  *   · /api/current_directory 不返回 iconUrl → H0a / H0b 红
+ *   · 看板头部去掉图标槽 → I1 红；头部不画 img（永远宫格字形）→ I2 / I3 红
+ *   · 头部图标槽改成 32px（照搬左栏那个）→ I5 红
  */
 const path = require('node:path')
 // playwright 装在 src/ui/client 下，把它的 node_modules 挂进解析路径，脚本才能独立跑
@@ -45,6 +53,8 @@ const BASE = process.env.ZEN_BASE || 'http://localhost:5544' // 前端
 const API = process.env.ZEN_API || 'http://127.0.0.1:5545' // 后端
 const SHOT = process.env.ZEN_SHOT || ''
 const SHOT_DIALOG = process.env.ZEN_SHOT_DIALOG || ''
+/** 看板整块（含头部那枚项目图标 + 左栏选中行）—— 只在正向用例那一步截 */
+const SHOT_BOARD = process.env.ZEN_SHOT_BOARD || ''
 
 const results = []
 const consoleErrors = []
@@ -151,6 +161,30 @@ const obsHeader = (page) => page.evaluate(() => {
   }
 })
 
+/** 读看板头部那枚「选中项目的图标」（WorkbenchBoard 的 .board__main-head） */
+const obsBoardHead = (page) => page.evaluate(() => {
+  const head = document.querySelector('.board__main-head')
+  if (!head) return null
+  const slot = head.querySelector('.board__project-icon-slot')
+  const img = head.querySelector('img.board__project-icon-img')
+  const glyph = head.querySelector('i.el-icon.board__project-icon-glyph')
+  const nameEl = head.querySelector('.board__project-name')
+  const r = (el) => (el ? el.getBoundingClientRect() : null)
+  const s = r(slot), n = r(nameEl), i = r(img)
+  return {
+    projectName: nameEl ? (nameEl.textContent || '').trim() : '',
+    hasSlot: !!slot,
+    hasImg: !!img,
+    hasGlyph: !!glyph,
+    src: img ? (img.getAttribute('src') || '') : '',
+    loaded: img ? !!(img.complete && img.naturalWidth > 0) : null,
+    slotBox: s ? { w: Math.round(s.width), h: Math.round(s.height), left: Math.round(s.left) } : null,
+    imgBox: i ? { w: Math.round(i.width), h: Math.round(i.height) } : null,
+    nameLeft: n ? Math.round(n.left) : null,
+    iconLeftOfName: (!!s && !!n) ? s.left < n.left : null,
+  }
+})
+
 async function openBoard(page) {
   await page.waitForSelector('.activity-bar', { timeout: 20000 })
   await page.locator('.activity-btn[aria-label^="工作台"]').first().click()
@@ -173,6 +207,9 @@ async function main() {
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()) })
   page.on('pageerror', (e) => pageErrors.push(String(e)))
+
+  /** 正向用例里点的那个「带图标的项目」名字，反向用例（端点全 404）要拿它把选中态还原 */
+  let boardIconProjectName = null
 
   try {
     // ── 服务端契约（先测，不依赖页面） ──────────────────────────────
@@ -284,6 +321,53 @@ async function main() {
         !!(h2 && h2.slotBox && h2.slotBox.w === 20 && h2.slotBox.h === 20), JSON.stringify(h2 && h2.slotBox))
     }
 
+    // ── 看板头部：选中项目的图标（第四处消费点） ──────────────────────
+    // 打开工作台时若本机没存过选中项会自动落到「当前项目」，但那是"碰巧"。
+    // 这里显式点一个**带图标的**行，把断言钉在确定的状态上。
+    boardIconProjectName = (rows.find(r => r.hasImg) || {}).name || null
+    check('I0 清单里至少有一个带图标的项目可用作正向用例', !!boardIconProjectName, `${boardIconProjectName}`)
+    if (boardIconProjectName) {
+      await page.locator('.proj-item', { hasText: boardIconProjectName }).first().click()
+      await waitUntil(async () => (await obsBoardHead(page))?.projectName === boardIconProjectName, 6000)
+    }
+    const bh = await obsBoardHead(page)
+    check('I1 看板头部渲染出图标槽（.board__project-icon-slot）', !!(bh && bh.hasSlot))
+    if (bh && bh.hasSlot) {
+      check('I2 选中带 favicon 的项目时，头部画 <img>（不是文件夹字形）',
+        bh.hasImg && !bh.hasGlyph, `项目=${bh.projectName} img=${bh.hasImg} glyph=${bh.hasGlyph}`)
+      // 图异步下载：同 K1b / H3，先等落地再断言，否则是探针假红
+      await waitUntil(async () => {
+        const h = await obsBoardHead(page)
+        return !h || !h.hasImg || h.loaded === true
+      }, 10000)
+      const bh2 = await obsBoardHead(page)
+      check('I3 头部图标真的加载出来了（naturalWidth > 0，不是 404 破图）',
+        !!(bh2 && bh2.hasImg && bh2.loaded === true), JSON.stringify(bh2 && bh2.imgBox))
+      check('I4 图标排在项目名左侧',
+        !!(bh2 && bh2.iconLeftOfName === true),
+        `slot.left=${bh2 && bh2.slotBox && bh2.slotBox.left} name.left=${bh2 && bh2.nameLeft}`)
+      check('I5 图标槽是 24px 的方槽（左栏 32 / 顶栏 20 之外这一行自己的第三档）',
+        !!(bh2 && bh2.slotBox && bh2.slotBox.w === 24 && bh2.slotBox.h === 24),
+        JSON.stringify(bh2 && bh2.slotBox))
+    }
+    if (SHOT_BOARD) {
+      // 鼠标挪开再截：选中行此刻挂着 hover 的按钮组，截图里会多出两枚按钮
+      await page.mouse.move(1200, 700)
+      await sleep(300)
+      await page.locator('.board').first()
+        .screenshot({ path: SHOT_BOARD })
+        .catch(() => page.screenshot({ path: SHOT_BOARD }))
+      log(`截图：${SHOT_BOARD}`)
+    }
+    // 「全部项目」没有单一项目可画 —— 退回宫格字形，而不是留个空槽。
+    // 只按字形断言，不比对文案：文案跟 locale 走，这条契约与语言无关。
+    await page.locator('.proj-item--all').first().click()
+    await sleep(300)
+    const bhAll = await obsBoardHead(page)
+    check('I6 「全部项目」时头部退回宫格字形（有槽、没 img、有字形）',
+      !!(bhAll && bhAll.hasSlot && bhAll.hasGlyph && !bhAll.hasImg),
+      `img=${bhAll && bhAll.hasImg} glyph=${bhAll && bhAll.hasGlyph}`)
+
     if (SHOT) {
       // 把鼠标挪开再截图：点过活动栏之后那枚按钮的 tooltip 会一直挂在左栏上挡住几行
       await page.mouse.move(900, 600)
@@ -342,6 +426,22 @@ async function main() {
     check('H6 图标端点全 404 时，顶栏当场退回文件夹字形（不留破图）',
       !!(h404 && !h404.hasImg && h404.hasGlyph),
       `img=${h404 && h404.hasImg} glyph=${h404 && h404.hasGlyph}`)
+
+    // 第四处：看板头部那枚。reload 后选中态从 localStorage 还原，而 I6 那一下点的是
+    // 「全部项目」，所以这里得重新点回那个带图标的项目，断言才不是空跑。
+    if (boardIconProjectName) {
+      await page.locator('.proj-item', { hasText: boardIconProjectName }).first().click()
+      await waitUntil(async () => {
+        const h = await obsBoardHead(page)
+        return !!h && h.projectName === boardIconProjectName && !h.hasImg && h.hasGlyph
+      }, 8000)
+      const bh404 = await obsBoardHead(page)
+      check('I7 图标端点全 404 时，看板头部当场退回文件夹字形（不留破图）',
+        !!(bh404 && !bh404.hasImg && bh404.hasGlyph),
+        `项目=${bh404 && bh404.projectName} img=${bh404 && bh404.hasImg} glyph=${bh404 && bh404.hasGlyph}`)
+    } else {
+      check('I7 图标端点全 404 时，看板头部当场退回文件夹字形（不留破图）', false, '没有可用作正向用例的项目')
+    }
 
     const opened2 = await openDirDialog(page)
     if (opened2) {

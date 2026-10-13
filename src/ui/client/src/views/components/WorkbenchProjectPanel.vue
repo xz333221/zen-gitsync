@@ -855,9 +855,28 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   outline: none;
 }
 .proj-item:hover { background: var(--bg-container-hover); }
+/* 选中行。2026-10-13 加强：原来只有一道 10%→4% 的主色渐变 + 1px 14% 内描边，
+   十几个项目排在一起时和"旁边那行稍微亮一点"分不出来（用户：「选中状态不是很明显」）。
+   现在三件事一起说同一句话，且信号强度递进：
+     1. 左缘一道 3px 实心主色竖条 —— 一屏扫过去不用逐行比对就能认出选中项；
+     2. 底色加深到 18%→6%（原来 10%→4%）；
+     3. 内描边抬到 30%（原来 14%），给浅色主题下一个明确的边界。
+   ⚠️ 竖条走 ::before 而不是 border-left：border 会挤进内容盒、把 32px 图标槽与项目名
+   整体右移 3px，有图标与没图标的行就对不齐了 —— K5b「项目名左边缘对齐」守的就是这条。
+   ⚠️ top/bottom 各留 8px：行有 8px 圆角，竖条铺到两角会从圆角外露出来。 */
 .proj-item.is-active {
-  background: linear-gradient(90deg, var(--tint-primary-10), var(--tint-primary-04));
-  box-shadow: inset 0 0 0 1px var(--tint-primary-14);
+  background: linear-gradient(90deg, var(--tint-primary-18), var(--tint-primary-06));
+  box-shadow: inset 0 0 0 1px var(--tint-primary-30);
+}
+.proj-item.is-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--color-primary);
 }
 .proj-item:focus-visible { outline: var(--focus-outline); outline-offset: -1px; }
 /* 2026-10-04：从字面 color-mix 改成 --role-active-*，与进度条那档同源。
@@ -867,7 +886,11 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
    计数 chip / 进度条四处出现；真正稀有的信号（在跑的琥珀）反被稀释。
    判据与第五轮看板卡那条一致：**这个状态能不能从它所在的位置读出来**。
    这里完成度已经由进度条填满 +「n/n 任务完成」两处说了，行底留给少数状态。 */
-.proj-item.is-running { background: var(--role-active-surface); }
+.proj-item.is-running:not(.is-active) { background: var(--role-active-surface); }
+/* ⚠️ `:not(.is-active)` 是 2026-10-13 跟着上面那条加强一起加的：两条规则的权重一样、
+   .is-running 在后面，选中一个正在跑的项目时底色会被琥珀洗掉，而"选中"是布局态、
+   "在跑"是状态 —— 底色只能给一个，给布局态。在跑的信号没丢：row1 那枚呼吸的琥珀点还在，
+   而且它比一层 9% 的底色好认得多。 */
 
 /* 「全部项目」：与真实项目同构，但用一条下边线把它和下面的项目列表分隔开 */
 .proj-item--all {
