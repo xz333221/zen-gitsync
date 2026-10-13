@@ -41,6 +41,7 @@ import { Delete, DocumentCopy, Folder, Loading, Search } from "@element-plus/ico
 import { $t } from "@/lang/static";
 import { getFolderNameFromPath } from "@/utils/path";
 import { oncePerLoad } from "@/utils/oncePerLoad";
+import { useIconFallback } from "@/composables/useIconFallback";
 import RecentDirectoriesSummary from "@/components/RecentDirectoriesSummary.vue";
 import DirListRefreshButton from "@/components/DirListRefreshButton.vue";
 
@@ -76,6 +77,11 @@ interface DirectoryItem {
   exists: boolean;
   base: string;
   git: DirectoryGitState | null;
+  /**
+   * 目录自己的图标（favicon）地址；null / undefined = 没有图标，卡片画文件夹字形。
+   * 由服务端随列表一起给（见 fs.js 的 /api/recent_directories），前端不自己拼。
+   */
+  iconUrl?: string | null;
 }
 
 /** 后端 /api/recent_directories/fetch 的结果 */
@@ -149,10 +155,13 @@ const emit = defineEmits<{ select: [path: string]; loaded: [count: number] }>();
  *  把标题行 / 搜索框留在左列(见样式里的 .dir-list--panel.dir-list--split) */
 const isSplit = computed(() => props.layout === "split");
 
-const directories = ref<Array<{ path: string; exists: boolean }>>([]);
+const directories = ref<Array<{ path: string; exists: boolean; iconUrl?: string | null }>>([]);
 const isLoading = ref(false);
 // 目录路径 → Git 状态。探测是异步补充的,所以单独存一份,不阻塞列表渲染
 const gitStates = ref<Record<string, DirectoryGitState>>({});
+// 图标加载失败就当场退回文件夹字形(见 useIconFallback:按**地址**记,
+// 项目换了图标会拿到新地址、自动重试一次)。与左栏项目列表共用同一套兜底。
+const { isIconBroken, markIconFailed } = useIconFallback();
 // 搜索关键词。两种形态共用同一份过滤逻辑(见下面 items):panel 形态是首屏「最近项目」
 // 面板自带的搜索框,弹窗的 bare 形态也渲染它 —— 常用目录一屏三十来个、又都长一个样,
 // 没有筛选只能靠肉眼扫。
@@ -619,7 +628,17 @@ defineExpose({
           :aria-label="itemAriaLabel(item)"
           @click="onItemClick(item, $event)"
         >
-          <el-icon class="dir-card__icon" aria-hidden="true"><Folder /></el-icon>
+          <!-- 目录自己的图标（favicon）优先，没有 / 加载失败才退回文件夹图标。
+               两种形态共用同一个 38px 的槽，右边的名字与徽标不会左右跳。
+               图标跟着 /api/recent_directories 一起来（与左栏项目列表画的是同一枚图）。 -->
+          <img
+            v-if="item.iconUrl && !isIconBroken(item.iconUrl)"
+            class="dir-card__icon dir-card__icon--img"
+            :src="item.iconUrl"
+            alt=""
+            @error="markIconFailed(item.iconUrl)"
+          />
+          <el-icon v-else class="dir-card__icon" aria-hidden="true"><Folder /></el-icon>
           <span class="dir-card__name">
             <span class="dir-card__name-base">{{ item.base }}</span>
             <span class="dir-card__name-path">{{ item.path }}</span>
@@ -993,6 +1012,16 @@ defineExpose({
   border-radius: var(--radius-lg);
   background: var(--tint-primary-08);
   color: var(--color-primary);
+}
+/* 目录自己的图标（favicon）：铺满那个 38px 的槽（原来里面是一枚主色文件夹字形）。
+   ⚠️ 不写 width/height：尺寸由 .dir-card__icon 那 38px 定死，而 img 是卡片的 flex item，
+   写 `width: 100%` 会按**卡片**宽度解析（不是那个槽），图标会横着铺满整行。
+   contain 而不是 cover —— favicon 长宽比五花八门，裁掉一边比留白更难看；
+   底换成中性的一层淡色：槽原本的 --tint-primary-08 是给字形当底的主色浅染，
+   垫在别人的 logo 底下会串色。 */
+.dir-card__icon--img {
+  object-fit: contain;
+  background: var(--bg-subtle);
 }
 /* 失效目录:图标色块退成中性灰,与"不存在"语义一致 */
 .dir-card.is-missing .dir-card__icon {

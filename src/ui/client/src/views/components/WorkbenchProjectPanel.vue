@@ -30,7 +30,8 @@
 
   图标位（2026-10-13 补）：优先用**项目自己的 favicon**（服务端探测，见 projectIcon.js），
   没找到 / 加载失败才退回文件夹图标 —— 十几个项目排在一起时，图标是名字之外唯一的辨识线索。
-  加载失败会记下那个地址（见 markIconFailed），不再重试。
+  图标槽 32px、跨 row1 + row2 两行（用户："弄大一些，占 2 行的位置"）；加载失败会记下
+  那个地址（useIconFallback），不再重试。「常用目录」卡片用的是同一枚图标、同一套兜底。
 -->
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
@@ -49,6 +50,7 @@ import {
 } from '@element-plus/icons-vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
 import ToolInstallDialog from '@components/ToolInstallDialog.vue'
+import { useIconFallback } from '@/composables/useIconFallback'
 import claudeCodeIcon from '@/assets/icons/svg/claudecode-color.svg'
 import { useToolsStore, type ToolId } from '@/stores/toolsStore'
 // 打开方式（文件管理器 / 终端 / 编辑器与 AI 工具 / 新标签页跑 g ui）统一走这个 composable：
@@ -154,21 +156,9 @@ function hasBranchIcon(p: ProjectSummary): boolean {
 }
 
 // ── 项目图标（favicon） ────────────────────────────────────────────────
-/**
- * 加载失败的项目图标**地址**（不是项目 key）。
- *
- * 地址里带着服务端的图标 mtime，项目换了图标地址就跟着变 —— 按地址记，
- * 换完图标下一轮轮询拿到的新地址会自动重试一次；按 key 记的话，用户换完图标
- * 得重启界面才能看见，而"行上一直挂个破图"比退回文件夹图标难看得多。
- */
-const failedIconUrls = ref<Set<string>>(new Set())
-
-function markIconFailed(url: string | null) {
-  if (!url || failedIconUrls.value.has(url)) return
-  const next = new Set(failedIconUrls.value)
-  next.add(url)
-  failedIconUrls.value = next
-}
+// 加载失败就当场退回文件夹图标（见 useIconFallback：按**地址**记，项目换了图标
+// 会拿到新地址、自动重试一次）。
+const { isIconBroken, markIconFailed } = useIconFallback()
 
 // ── 打开方式菜单（hover 才出现的第二个按钮） ──────────────────────────
 // 用 el-popover + manual trigger，和顶栏的工具菜单同一套做法：
@@ -374,33 +364,38 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
         @keydown.enter.prevent="emit('select', null)"
         @keydown.space.prevent="emit('select', null)"
       >
-        <div class="proj-item__row1">
-          <el-icon class="proj-item__icon"><Grid /></el-icon>
-          <span class="proj-item__name">{{ $t('@WORKBENCH:全部项目') }}</span>
-          <span v-if="totals.running > 0" class="proj-item__running" aria-hidden="true" />
-          <span class="proj-item__num">{{ projects.length }}</span>
-        </div>
-
-        <!-- 第二行只在真有内容时说。原来这里写「{n} 个项目」，而同一个 28 就在上面
-             那枚 proj-item__num chip 里、面板标题和顶栏也各写了一遍 —— 一屏四个 28。
-             真正只有这一行能说的是"有几个在跑"。 -->
-        <div v-if="totals.running > 0" class="proj-item__row2">
-          <span class="proj-item__running-text">
-            {{ $t('@WORKBENCH:{n} 个执行中', { n: totals.running }) }}
+        <div class="proj-item__body">
+          <span class="proj-item__icon-slot">
+            <el-icon class="proj-item__icon"><Grid /></el-icon>
           </span>
-        </div>
 
-        <!-- 只留数字不给进度条（用户 2026-10-13：数字有用，彩条占地方）。
-             title 交代口径：这里只加列表里这些项目的任务，与顶栏「全部任务」不等
-             （实测差 10 条：9 条属于一个已从列表移除的项目 + 1 条属于容器目录）。 -->
-        <div
-          v-if="totals.total > 0"
-          class="proj-item__row3"
-          :title="$t('@WORKBENCH:只统计项目列表里这些项目名下的任务')"
-        >
-          <span class="proj-item__progress-text">
-            {{ $t('@WORKBENCH:{done}/{total} 任务完成', { done: totals.done, total: totals.total }) }}
-          </span>
+          <div class="proj-item__row1">
+            <span class="proj-item__name">{{ $t('@WORKBENCH:全部项目') }}</span>
+            <span v-if="totals.running > 0" class="proj-item__running" aria-hidden="true" />
+            <span class="proj-item__num">{{ projects.length }}</span>
+          </div>
+
+          <!-- 第二行只在真有内容时说。原来这里写「{n} 个项目」，而同一个 28 就在上面
+               那枚 proj-item__num chip 里、面板标题和顶栏也各写了一遍 —— 一屏四个 28。
+               真正只有这一行能说的是"有几个在跑"。 -->
+          <div v-if="totals.running > 0" class="proj-item__row2">
+            <span class="proj-item__running-text">
+              {{ $t('@WORKBENCH:{n} 个执行中', { n: totals.running }) }}
+            </span>
+          </div>
+
+          <!-- 只留数字不给进度条（用户 2026-10-13：数字有用，彩条占地方）。
+               title 交代口径：这里只加列表里这些项目的任务，与顶栏「全部任务」不等
+               （实测差 10 条：9 条属于一个已从列表移除的项目 + 1 条属于容器目录）。 -->
+          <div
+            v-if="totals.total > 0"
+            class="proj-item__row3"
+            :title="$t('@WORKBENCH:只统计项目列表里这些项目名下的任务')"
+          >
+            <span class="proj-item__progress-text">
+              {{ $t('@WORKBENCH:{done}/{total} 任务完成', { done: totals.done, total: totals.total }) }}
+            </span>
+          </div>
         </div>
       </li>
 
@@ -425,53 +420,59 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
         @keydown.enter.self.prevent="emit('select', p)"
         @keydown.space.self.prevent="emit('select', p)"
       >
-        <div class="proj-item__row1">
-          <!-- 项目自己的图标（favicon）优先，没有 / 加载失败才退回文件夹图标。
+        <div class="proj-item__body">
+          <!-- 图标位跨 row1 + row2（见 .proj-item__icon-slot）：项目自己的 favicon 是
+               32px 的方块，占两行文字的高度；没有 / 加载失败就退回一枚文件夹字形。
                失败要记一笔：服务端重启过、或图标文件被删掉时，不记的话每次重渲染都会
                再发一次注定失败的请求，行上还一直挂着个破图。 -->
-          <img
-            v-if="p.iconUrl && !failedIconUrls.has(p.iconUrl)"
-            class="proj-item__icon proj-item__icon--img"
-            :src="p.iconUrl"
-            alt=""
-            @error="markIconFailed(p.iconUrl)"
-          />
-          <el-icon v-else class="proj-item__icon"><Folder /></el-icon>
-          <span class="proj-item__name">{{ p.name }}</span>
-          <!-- 运行中 / 当前 这两个信号与 hover 才出现的操作按钮锚在同一个右端点：
-               hover 时整组淡出让位给按钮，而不是让图标压在徽标上 -->
-          <span class="proj-item__signals">
-            <span v-if="p.stats.runningJobs > 0" class="proj-item__running" aria-hidden="true" />
-            <span v-if="p.isCurrent" class="proj-item__badge">{{ $t('@WORKBENCH:当前') }}</span>
+          <span class="proj-item__icon-slot">
+            <img
+              v-if="p.iconUrl && !isIconBroken(p.iconUrl)"
+              class="proj-item__icon proj-item__icon--img"
+              :src="p.iconUrl"
+              alt=""
+              @error="markIconFailed(p.iconUrl)"
+            />
+            <el-icon v-else class="proj-item__icon"><Folder /></el-icon>
           </span>
-        </div>
 
-        <div class="proj-item__row2">
-          <template v-if="p.exists === false">
-            <span class="proj-chip proj-chip--missing">{{ $t('@WORKBENCH:目录不存在') }}</span>
-          </template>
-          <template v-else>
-            <!-- gitLine 为空即"不是 Git 仓库"：不给文字，也不给图标 -->
-            <span v-if="gitLine(p)" class="proj-item__branch">
-              <svg-icon
-                v-if="hasBranchIcon(p)"
-                icon-class="git-branch"
-                class-name="proj-item__branch-icon"
-              />
-              <span class="proj-item__branch-name">{{ gitLine(p) }}</span>
+          <div class="proj-item__row1">
+            <span class="proj-item__name">{{ p.name }}</span>
+            <!-- 运行中 / 当前 这两个信号与 hover 才出现的操作按钮锚在同一个右端点：
+                 hover 时整组淡出让位给按钮，而不是让图标压在徽标上 -->
+            <span class="proj-item__signals">
+              <span v-if="p.stats.runningJobs > 0" class="proj-item__running" aria-hidden="true" />
+              <span v-if="p.isCurrent" class="proj-item__badge">{{ $t('@WORKBENCH:当前') }}</span>
             </span>
-            <span v-if="p.git && p.git.ahead > 0" class="proj-chip proj-chip--ahead">↑{{ p.git.ahead }}</span>
-            <span v-if="p.git && p.git.behind > 0" class="proj-chip proj-chip--behind">↓{{ p.git.behind }}</span>
-            <span v-if="p.git && p.git.changed > 0" class="proj-chip proj-chip--dirty">●{{ p.git.changed }}</span>
-          </template>
-          <span class="proj-item__time">{{ relativeTimeFromIso(p.stats.lastActiveAt) }}</span>
-        </div>
+          </div>
 
-        <!-- 同上：这个项目一个任务都没有就不给进度行 -->
-        <div v-if="p.stats.total > 0" class="proj-item__row3">
-          <span class="proj-item__progress-text">
-            {{ $t('@WORKBENCH:{done}/{total} 任务完成', { done: p.stats.done, total: p.stats.total }) }}
-          </span>
+          <div class="proj-item__row2">
+            <template v-if="p.exists === false">
+              <span class="proj-chip proj-chip--missing">{{ $t('@WORKBENCH:目录不存在') }}</span>
+            </template>
+            <template v-else>
+              <!-- gitLine 为空即"不是 Git 仓库"：不给文字，也不给图标 -->
+              <span v-if="gitLine(p)" class="proj-item__branch">
+                <svg-icon
+                  v-if="hasBranchIcon(p)"
+                  icon-class="git-branch"
+                  class-name="proj-item__branch-icon"
+                />
+                <span class="proj-item__branch-name">{{ gitLine(p) }}</span>
+              </span>
+              <span v-if="p.git && p.git.ahead > 0" class="proj-chip proj-chip--ahead">↑{{ p.git.ahead }}</span>
+              <span v-if="p.git && p.git.behind > 0" class="proj-chip proj-chip--behind">↓{{ p.git.behind }}</span>
+              <span v-if="p.git && p.git.changed > 0" class="proj-chip proj-chip--dirty">●{{ p.git.changed }}</span>
+            </template>
+            <span class="proj-item__time">{{ relativeTimeFromIso(p.stats.lastActiveAt) }}</span>
+          </div>
+
+          <!-- 同上：这个项目一个任务都没有就不给进度行 -->
+          <div v-if="p.stats.total > 0" class="proj-item__row3">
+            <span class="proj-item__progress-text">
+              {{ $t('@WORKBENCH:{done}/{total} 任务完成', { done: p.stats.done, total: p.stats.total }) }}
+            </span>
+          </div>
         </div>
 
         <!-- 打开动作：与行主体平级，绝对定位锚在 row1 右端（不占位，否则「当前」徽标
@@ -891,27 +892,52 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   font-variant-numeric: tabular-nums;
 }
 
+/* 行内容：左边一列图标槽（32px），右边一列文字（row1 名字 / row2 分支·时间 / row3 进度）。
+   用 grid 而不是 row1 里塞图标，是为了让图标能**跨 row1 + row2** —— 项目自己的 favicon
+   是个 32px 的方块，占两行文字的高度（用户 2026-10-13：「弄大一些，占 2 行的位置」）。 */
+.proj-item__body {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: center;
+}
+.proj-item__row1,
+.proj-item__row2,
+.proj-item__row3 {
+  grid-column: 2;
+  min-width: 0;
+}
+.proj-item__icon-slot {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
 .proj-item__row1 {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-width: 0;
 }
+/* 文件夹兜底：槽有 32px，字形只占 20px —— 没有图标的行看起来比有图标的行轻，
+   这正是"这儿没有图标"该有的样子；槽的尺寸不变，项目名的左边缘因此两种形态完全对齐。 */
 .proj-item__icon {
-  font-size: var(--font-size-mid);
+  font-size: var(--font-size-xl);
   color: var(--text-meta);
   flex-shrink: 0;
 }
-/* 项目自己的图标（favicon）：尺寸跟着 el-icon 那一档走（1em），
-   否则"有图标"和"没图标"的行，项目名的起始位置会左右跳。
+/* 项目自己的图标（favicon）：铺满那个 32px 的槽。
    contain 而不是 cover —— 各家的 favicon 长宽比五花八门，裁掉一边比留白更难看；
    垫一层极淡的底：不少项目的图标是深色字形 + 透明背景，深色主题下会整个糊掉。
-   圆角跟徽标同一档（--radius-base 偏大，14px 的方块上 3px 更稳）。 */
+   圆角跟「常用目录」卡片上那个 38px 图标槽同一档（--radius-lg）。 */
 .proj-item__icon--img {
-  width: 1em;
-  height: 1em;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-  border-radius: 3px;
+  border-radius: var(--radius-lg);
   background: var(--bg-subtle);
 }
 .proj-item.is-active .proj-item__icon { color: var(--color-primary); }

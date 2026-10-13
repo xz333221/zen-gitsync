@@ -1,25 +1,32 @@
 /**
- * 左栏「项目列表」的项目图标（favicon）—— 浏览器交互验证。
+ * 项目图标（favicon）—— 浏览器交互验证。两处消费点：左栏项目列表 + 「常用目录」卡片。
  *
- * 守的契约（对应 WorkbenchProjectPanel.vue 的图标位 + 后端 /api/workbench/project-icon）：
+ * 守的契约：
+ *   左栏（WorkbenchProjectPanel）
  *   K1 服务端给了 iconUrl 的行渲染 <img>，且**图真的加载出来了**（naturalWidth > 0）——
  *      只断言 <img> 存在是假绿：src 指向一个 404 时元素照样在，只是屏幕上一片空白。
- *   K2 有图标的行不再画文件夹图标（两者互斥，不能叠着）
+ *   K2 有图标的行不再画文件夹图标（两者互斥）
  *   K3 没图标（iconUrl = null）的行退回文件夹图标，且没有 <img>
  *   K4 图标全部 404 时（服务端重启 / 文件被删），行**当场退回**文件夹图标 ——
  *      不许留破图。这一条用 route 挡掉端点来造，是 K1 的反向对照。
- *   K5 几何：图标 14×14；有图标与没图标的行，项目名左边缘对齐（宽度不一致会让名字左右跳）
- *   K6 端点契约：真图标返回 200 + 图片 Content-Type + 长缓存；不在清单里的路径 404
- *      （白名单，不能变成"任意目录里 favicon.* 的读取通道"）
+ *   K5 几何：图标槽 32px 且两种形态同尺寸、项目名左边缘对齐；**图标真的占两行**
+ *      （高度≈row1.top→row2.bottom 那一段）；文件夹字形比槽小（"这儿没图标"要更轻）
+ *   常用目录（RecentDirectoriesList，弹窗里的卡片）
+ *   D1/D2 有图标的卡片渲染 <img> 且真的加载出来
+ *   D3 图标槽 38px，两种形态同尺寸、名字左边缘对齐
+ *   D4 端点全 404 时每张卡都退回文件夹字形（与 K4 同一个兜底，另一处消费点）
+ *   服务端契约
+ *   K6 真图标 200 + 图片 Content-Type + 长缓存；不在清单里的路径 404（白名单）
  *
  * 为什么用**真实项目清单**而不是夹具：这个功能的输入就是用户机器上那些项目的
  * favicon，夹具只能证明"我造的 JSON 能渲染"。所以正向用例吃真数据（本机 32 个项目里
- * 一半以上带图标），兜底用例用 route 挡端点造。
+ * 15 个带图标），兜底用例用 route 挡端点造。
  *
  * 反向验证（撤掉实现后哪几条会红）：
- *   · 模板里把 img 的 v-if 改成 false（永远画文件夹图标）→ K1 / K2 红
- *   · 去掉 @error="markIconFailed" → K4 红（行上留着破图）
- *   · CSS 里 .proj-item__icon--img 不写 width/height → K5 红（图标按原始尺寸铺开）
+ *   · 模板里把 img 的 v-if 改成 false（永远画文件夹图标）→ K1 / K2 / D1 红
+ *   · 去掉 @error="markIconFailed" → K4 / D4 红（屏幕上留着破图）
+ *   · CSS 里 .proj-item__icon--img 去掉 width/height → K5a 红（图标按原始尺寸铺开）
+ *   · 图标槽退回塞进 row1（不跨两行）→ K5c 红（图标高度只有一行）
  *   · 后端路由去掉 isKnownProjectKey 那道门 → K6c 红（任意路径都能读）
  */
 const path = require('node:path')
@@ -30,6 +37,7 @@ const { chromium } = require('playwright')
 const BASE = process.env.ZEN_BASE || 'http://localhost:5544' // 前端
 const API = process.env.ZEN_API || 'http://127.0.0.1:5545' // 后端
 const SHOT = process.env.ZEN_SHOT || ''
+const SHOT_DIALOG = process.env.ZEN_SHOT_DIALOG || ''
 
 const results = []
 const consoleErrors = []
@@ -52,23 +60,61 @@ async function waitUntil(fn, timeout = 15000, interval = 150) {
 }
 
 /** 读一屏项目行：图标形态 + 几何 */
-const obs = (page) => page.evaluate(() => {
+const obsRows = (page) => page.evaluate(() => {
+  const rect = (el) => {
+    if (!el) return null
+    const b = el.getBoundingClientRect()
+    return {
+      w: Math.round(b.width), h: Math.round(b.height),
+      left: Math.round(b.left), top: Math.round(b.top), bottom: Math.round(b.bottom),
+    }
+  }
   const rows = Array.from(document.querySelectorAll('.proj-item'))
     .filter(n => !n.classList.contains('proj-item--all'))
   return rows.map((r) => {
     const img = r.querySelector('img.proj-item__icon--img')
-    const icon = r.querySelector('.proj-item__icon')
+    const folder = r.querySelector('i.el-icon.proj-item__icon')
     const nameEl = r.querySelector('.proj-item__name')
-    const rect = icon ? icon.getBoundingClientRect() : null
+    const row1 = r.querySelector('.proj-item__row1')
+    const row2 = r.querySelector('.proj-item__row2')
     return {
       name: nameEl ? (nameEl.textContent || '').trim() : '',
       hasImg: !!img,
-      hasFolder: !!r.querySelector('.el-icon.proj-item__icon'),
+      hasFolder: !!folder,
       src: img ? (img.getAttribute('src') || '') : '',
       loaded: img ? !!(img.complete && img.naturalWidth > 0) : null,
-      iconW: rect ? Math.round(rect.width) : 0,
-      iconH: rect ? Math.round(rect.height) : 0,
+      slot: rect(r.querySelector('.proj-item__icon-slot')),
+      imgBox: rect(img),
+      folderBox: rect(folder),
       nameLeft: nameEl ? Math.round(nameEl.getBoundingClientRect().left) : 0,
+      // row1 顶到 row2 底 = 「两行文字」的实际高度，图标该覆盖这一段
+      textSpan: (row1 && row2)
+        ? Math.round(row2.getBoundingClientRect().bottom - row1.getBoundingClientRect().top)
+        : null,
+    }
+  })
+})
+
+/** 读「常用目录」弹窗里的卡片 */
+const obsCards = (page) => page.evaluate(() => {
+  const cards = Array.from(document.querySelectorAll('.dir-card'))
+  return cards.map((c) => {
+    const img = c.querySelector('img.dir-card__icon--img')
+    const slot = c.querySelector('.dir-card__icon')
+    const nameEl = c.querySelector('.dir-card__name-base')
+    const b = slot ? slot.getBoundingClientRect() : null
+    const cardBox = c.getBoundingClientRect()
+    const nameBox = nameEl ? nameEl.getBoundingClientRect() : null
+    return {
+      name: nameEl ? (nameEl.textContent || '').trim() : '',
+      hasImg: !!img,
+      hasFolder: !!c.querySelector('i.el-icon.dir-card__icon'),
+      src: img ? (img.getAttribute('src') || '') : '',
+      loaded: img ? !!(img.complete && img.naturalWidth > 0) : null,
+      size: b ? `${Math.round(b.width)}x${Math.round(b.height)}` : '',
+      // 名字相对**本张卡**左边缘的偏移：弹窗是两栏布局，绝对值按栏不同，
+      // 只有这个相对量才是"图标槽宽度 + 间距"那件事的度量
+      nameOffset: nameBox ? Math.round(nameBox.left - cardBox.left) : null,
     }
   })
 })
@@ -78,8 +124,16 @@ async function openBoard(page) {
   await page.locator('.activity-btn[aria-label^="工作台"]').first().click()
   await page.waitForSelector('.board', { timeout: 15000 })
   await page.waitForSelector('.proj-item', { timeout: 15000 })
-  // 等一轮轮询把图标地址带回来（首屏那次 /projects 通常已经带了，这里只是兜底）
-  await waitUntil(async () => (await obs(page)).length > 0)
+  await waitUntil(async () => (await obsRows(page)).length > 0)
+}
+
+/** 打开「切换工作目录」弹窗（常用目录卡片在那儿）。走窗口事件，不赌点哪个元素 */
+async function openDirDialog(page) {
+  await page.evaluate(() => {
+    window.dispatchEvent(new CustomEvent('zen-gitsync:open-directory-dialog'))
+  })
+  const ok = await waitUntil(async () => (await obsCards(page)).length > 0, 20000)
+  return ok
 }
 
 async function main() {
@@ -113,62 +167,112 @@ async function main() {
     const outsider = await fetch(`${API}/api/workbench/project-icon?path=${encodeURIComponent('C:\\Windows')}`)
     check('K6c 不在清单里的路径被挡（404，不是任意路径读盘通道）', outsider.status === 404, `status=${outsider.status}`)
 
-    // ── 浏览器：正常形态 ────────────────────────────────────────────
+    // 最近目录那份清单也得带图标地址（常用目录卡片的数据源）
+    const recent = await fetch(`${API}/api/recent_directories`, { cache: 'no-store' }).then(r => r.json())
+    const recentDirs = recent.directories || []
+    check('K0b /api/recent_directories 每条都带 iconUrl 字段（常用目录卡片的数据源）',
+      recentDirs.length > 0 && recentDirs.every(d => 'iconUrl' in d) && recentDirs.some(d => d.iconUrl),
+      `${recentDirs.filter(d => d.iconUrl).length}/${recentDirs.length} 个目录带图标`)
+
+    // ── 左栏项目列表 ────────────────────────────────────────────────
     await page.goto(BASE, { waitUntil: 'domcontentloaded' })
     await openBoard(page)
-    let rows = await obs(page)
+    let rows = await obsRows(page)
 
-    const iconRows = rows.filter(r => r.hasImg)
-    const folderRows = rows.filter(r => !r.hasImg)
     check('K1a 有图标地址的行渲染出 <img class="proj-item__icon--img">',
-      iconRows.length > 0, `${iconRows.length} 行`)
+      rows.some(r => r.hasImg), `${rows.filter(r => r.hasImg).length} 行`)
     // 图是异步下载的：行一出现就断言"加载完了"必然红（那是探针的错，不是功能的错），
     // 先等它们落地，再判有没有 404 破图。
-    await waitUntil(async () => (await obs(page)).filter(r => r.hasImg).every(r => r.loaded === true), 10000)
-    rows = await obs(page)
-    const iconRows2 = rows.filter(r => r.hasImg)
+    await waitUntil(async () => (await obsRows(page)).filter(r => r.hasImg).every(r => r.loaded === true), 10000)
+    rows = await obsRows(page)
+    const iconRows = rows.filter(r => r.hasImg)
+    const folderRows = rows.filter(r => !r.hasImg)
     check('K1b 这些 <img> 真的加载出来了（naturalWidth > 0，不是 404 破图）',
-      iconRows2.length > 0 && iconRows2.every(r => r.loaded === true),
-      iconRows2.filter(r => !r.loaded).map(r => r.name).join(',') || '全部已加载')
+      iconRows.length > 0 && iconRows.every(r => r.loaded === true),
+      iconRows.filter(r => !r.loaded).map(r => r.name).join(',') || '全部已加载')
     check('K2 有图标的行不再画文件夹图标（两者互斥）',
-      iconRows2.every(r => !r.hasFolder))
+      iconRows.every(r => !r.hasFolder))
     check('K3 没有图标地址的行退回文件夹图标，且没有 <img>',
       folderRows.length > 0 && folderRows.every(r => r.hasFolder && !r.hasImg),
       `${folderRows.length} 行退回文件夹图标`)
     check('K6d <img> 的 src 指向本站图标端点（或项目声明的远程地址）',
-      iconRows2.every(r => r.src.startsWith('/api/workbench/project-icon') || /^https?:/.test(r.src)),
-      iconRows2.map(r => r.src.slice(0, 46)).slice(0, 3).join(' | '))
+      iconRows.every(r => r.src.startsWith('/api/workbench/project-icon') || /^https?:/.test(r.src)),
+      iconRows.map(r => r.src.slice(0, 46)).slice(0, 2).join(' | '))
 
-    // ── K5 几何：图标尺寸与文件夹图标一致，名字左边缘对齐 ────────────
-    // 不钉死具体像素（那会随 --font-size-mid 变），钉的是"两种形态同尺寸"这个契约。
-    const sizes = new Set(rows.map(r => `${r.iconW}x${r.iconH}`))
-    const one = [...sizes][0] || ''
-    check('K5a 有图标与没图标的行，图标是同一个尺寸（否则项目名会左右跳）',
-      sizes.size === 1 && /^(\d+)x\1$/.test(one) && Number(one.split('x')[0]) >= 12,
-      `实际尺寸 ${[...sizes].join(' / ')}`)
+    // ── K5 几何 ────────────────────────────────────────────────────
+    const slots = new Set(rows.map(r => `${r.slot.w}x${r.slot.h}`))
+    check('K5a 每行的图标槽都是同一个尺寸（32×32，两种形态共用）',
+      slots.size === 1 && [...slots][0] === '32x32', `实际 ${[...slots].join(' / ')}`)
     const lefts = new Set(rows.map(r => r.nameLeft))
     check('K5b 有图标与没图标的行，项目名左边缘对齐',
       lefts.size === 1, `左边缘 ${[...lefts].join(' / ')}`)
+    // 用户要的"占 2 行的位置"：图标高度得跟 row1.top→row2.bottom 那一段对得上
+    const spanOk = iconRows.every(r => r.textSpan && Math.abs(r.imgBox.h - r.textSpan) <= 8)
+    check('K5c 图标真的占两行（高度≈名字行 + 分支行的总高）', spanOk,
+      iconRows.map(r => `${r.name}:${r.imgBox.h}/${r.textSpan}`).slice(0, 3).join(' '))
+    check('K5d 文件夹字形比槽小（"这儿没有图标"该更轻，而不是撑满 32px）',
+      folderRows.length > 0 && folderRows.every(r => r.folderBox && r.folderBox.h <= 24),
+      folderRows.map(r => r.folderBox && r.folderBox.h).slice(0, 3).join(','))
 
     if (SHOT) {
       // 把鼠标挪开再截图：点过活动栏之后那枚按钮的 tooltip 会一直挂在左栏上挡住几行
       await page.mouse.move(900, 600)
       await sleep(400)
-      const panel = page.locator('.proj').first()
-      const target = (await panel.count()) ? panel : page.locator('.proj-item').first()
-      await target.screenshot({ path: SHOT }).catch(() => page.screenshot({ path: SHOT }))
+      await page.locator('.proj').first().screenshot({ path: SHOT }).catch(() => page.screenshot({ path: SHOT }))
       log(`截图：${SHOT}`)
     }
 
-    // ── K4 反向：图标端点全 404 → 必须当场退回文件夹图标 ──────────────
+    // ── 常用目录卡片 ────────────────────────────────────────────────
+    const opened = await openDirDialog(page)
+    check('D0 「切换工作目录」弹窗打开并渲染出常用目录卡片', opened)
+    if (opened) {
+      await waitUntil(async () => (await obsCards(page)).filter(c => c.hasImg).every(c => c.loaded === true), 10000)
+      // 等弹窗的入场动画走完再量：动画期间整张弹窗带 transform，量出来是 37px 不是 38px
+      await sleep(600)
+      const cards = await obsCards(page)
+      const imgCards = cards.filter(c => c.hasImg)
+      const glyphCards = cards.filter(c => !c.hasImg)
+      check('D1 有图标地址的卡片渲染出 <img class="dir-card__icon--img">',
+        imgCards.length > 0, `${imgCards.length}/${cards.length} 张卡带图标`)
+      check('D2 这些 <img> 真的加载出来了（不是 404 破图）',
+        imgCards.every(c => c.loaded === true),
+        imgCards.filter(c => !c.loaded).map(c => c.name).join(',') || '全部已加载')
+      check('D3 有图标与没图标的卡片，图标槽同尺寸（38×38）且名字相对卡片的左偏移一致',
+        new Set(cards.map(c => c.size)).size === 1
+        && new Set(cards.map(c => c.nameOffset)).size === 1
+        && cards[0].size === '38x38',
+        `尺寸 ${[...new Set(cards.map(c => c.size))].join('/')} 名字偏移 ${[...new Set(cards.map(c => c.nameOffset))].join('/')}`)
+      check('D5 没图标的卡片退回文件夹字形（两种形态共存）',
+        glyphCards.length > 0 && glyphCards.every(c => c.hasFolder), `${glyphCards.length} 张退回`)
+
+      if (SHOT_DIALOG) {
+        await page.locator('.directory-dialog').first()
+          .screenshot({ path: SHOT_DIALOG })
+          .catch(() => page.screenshot({ path: SHOT_DIALOG }))
+        log(`截图：${SHOT_DIALOG}`)
+      }
+    }
+
+    // ── K4/D4 反向：图标端点全 404 → 两处都必须当场退回文件夹图标 ──────
     await page.route('**/api/workbench/project-icon**', (route) => route.fulfill({ status: 404, body: '' }))
     await page.reload({ waitUntil: 'domcontentloaded' })
     await openBoard(page)
-    await waitUntil(async () => (await obs(page)).every(r => !r.hasImg), 8000)
-    rows = await obs(page)
+    await waitUntil(async () => (await obsRows(page)).every(r => !r.hasImg), 8000)
+    rows = await obsRows(page)
     check('K4 图标全部 404 时每一行都退回文件夹图标（不留破图）',
       rows.length > 0 && rows.every(r => !r.hasImg && r.hasFolder),
       `仍有 img 的行：${rows.filter(r => r.hasImg).map(r => r.name).join(',') || '无'}`)
+
+    const opened2 = await openDirDialog(page)
+    if (opened2) {
+      await waitUntil(async () => (await obsCards(page)).every(c => !c.hasImg), 8000)
+      const cards2 = await obsCards(page)
+      check('D4 同一批 404 下，常用目录卡片也全部退回文件夹字形',
+        cards2.length > 0 && cards2.every(c => !c.hasImg && c.hasFolder),
+        `仍有 img 的卡：${cards2.filter(c => c.hasImg).map(c => c.name).join(',') || '无'}`)
+    } else {
+      check('D4 同一批 404 下，常用目录卡片也全部退回文件夹字形', false, '弹窗没打开')
+    }
     await page.unroute('**/api/workbench/project-icon**')
   } catch (err) {
     check('脚本异常', false, String(err?.message || err))

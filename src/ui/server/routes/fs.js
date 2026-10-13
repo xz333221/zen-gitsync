@@ -24,6 +24,11 @@ import { ensureWithinCwd, normalizeProjectPath } from '../utils/pathGuard.js';
 import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
 import { probeDirectoryGitStates, normalizeDirKey } from '../utils/directoryGitState.js';
 import { fetchDirectoryRemotes } from '../utils/directoryFetch.js';
+// 「最近目录」卡片上的图标 = 左栏项目列表画的那一枚，探测实现只有一份（workbench/projectIcon.js）。
+// canonicalProjectPath 同样复用 projectRegistry 那份 —— 图标地址里的 path 参数要跟
+// /api/workbench/project-icon 的白名单逐字对齐，两边各写一份归一化迟早对不上。
+import { resolveProjectIcons, projectIconUrl } from './workbench/projectIcon.js';
+import { canonicalProjectPath } from './workbench/projectRegistry.js';
 import { invalidateCurrentProjectKey, invalidateRawConfigCache } from '../../../config.js';
 import { invalidateCwdCache } from '../../../utils/index.js';
 
@@ -453,6 +458,11 @@ export function registerFsRoutes({
     }));
 
   // 获取最近访问的目录列表
+  //
+  // 每条带一个 `iconUrl`（项目自己的 favicon，见 workbench/projectIcon.js）——
+  // 与左栏项目列表画的是同一枚图。**跟着列表一起给**而不是另开一个批量接口：
+  // 图标是纯 fs 探测（有 5 分钟 TTL 缓存，32 个目录一轮约 100ms），不像 git-state
+  // 那样要起进程，没必要为它多一次往返；而且卡片首屏就有图标，不会先闪一排文件夹图标。
   app.get('/api/recent_directories', asyncRoute(async (req, res) => {
     try {
       // 尝试从配置中获取最近的目录
@@ -470,9 +480,23 @@ export function registerFsRoutes({
           return { path: dir, exists };
         })
       );
+      // 只探存在的目录：目录都没了，里面也不可能有图标（findProjectIcon 会直接返回 null，
+      // 这一句只是省掉那次 stat）
+      const probePaths = checked.filter(d => d.exists).map(d => d.path);
+      let icons = new Map();
+      try {
+        icons = await resolveProjectIcons(probePaths);
+      } catch (err) {
+        // 图标是锦上添花：探不出来不该让整份最近目录挂掉（卡片退回文件夹图标）
+        logger.warn('[recent] 探测目录图标失败，卡片退回文件夹图标:', err?.message || err);
+      }
       res.json({
         success: true,
-        directories: checked
+        directories: checked.map(d => ({
+          ...d,
+          // 地址里的 path 必须是**归一后的 key**（/api/workbench/project-icon 按它做白名单校验）
+          iconUrl: d.exists ? projectIconUrl(canonicalProjectPath(d.path), icons.get(d.path) || null) : null,
+        }))
       });
     } catch (error) {
       res.status(500).json({

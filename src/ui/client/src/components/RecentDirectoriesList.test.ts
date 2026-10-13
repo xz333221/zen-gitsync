@@ -43,6 +43,8 @@ import { mountWithSetup } from '@/test-utils/mount'
 interface DirEntry {
   path: string
   exists: boolean
+  /** 目录自己的图标地址(favicon);服务端随列表一起给,缺省=没有图标 */
+  iconUrl?: string | null
 }
 
 const json = (body: unknown) =>
@@ -508,5 +510,67 @@ describe('RecentDirectoriesList.vue 搜索过滤', () => {
     await w.find('button.dir-list__search-clear').trigger('click')
     expect(w.findAll('.dir-card').length).toBe(3)
     expect(w.find('button.dir-list__search-clear').exists()).toBe(false)
+  })
+})
+
+// ── 目录图标（favicon） ────────────────────────────────────────────────
+//   F1 服务端给了 iconUrl -> 卡片画 <img>，不再画文件夹字形
+//   F2 没给（null）-> 退回文件夹字形
+//   F3 图加载失败 -> 当场退回文件夹字形（卡片上不留破图）
+//   F4 失败记的是**地址**：换了图标（新地址）要能重试
+describe('RecentDirectoriesList · 目录图标', () => {
+  const dirs = (iconUrl: string | null): DirEntry[] => [
+    { path: 'C:\ws\demo', exists: true, iconUrl },
+    { path: 'C:\ws\plain', exists: true, iconUrl: null },
+  ]
+
+  test('F1 有图标地址：渲染 img，src 就是服务端给的那个地址', async () => {
+    setupFetch({ dirs: dirs('/api/workbench/project-icon?path=c%3A%5Cws%5Cdemo&v=42') })
+    const w = mountList()
+    await flushAll()
+
+    const img = w.find('.dir-card__icon--img')
+    expect(img.exists()).toBe(true)
+    expect(img.attributes('src')).toBe('/api/workbench/project-icon?path=c%3A%5Cws%5Cdemo&v=42')
+    // 另一张卡（没图标）照旧是文件夹字形：两种形态在同一份列表里共存
+    expect(w.findAll('i.el-icon.dir-card__icon').length).toBe(1)
+  })
+
+  test('F2 没有图标：退回文件夹字形，不渲染 img', async () => {
+    setupFetch({ dirs: dirs(null) })
+    const w = mountList()
+    await flushAll()
+    expect(w.find('.dir-card__icon--img').exists()).toBe(false)
+    expect(w.findAll('i.el-icon.dir-card__icon').length).toBe(2)
+  })
+
+  test('F3 加载失败：当场退回文件夹字形', async () => {
+    setupFetch({ dirs: dirs('/api/workbench/project-icon?path=x&v=1') })
+    const w = mountList()
+    await flushAll()
+    expect(w.find('.dir-card__icon--img').exists()).toBe(true)
+
+    await w.find('.dir-card__icon--img').trigger('error')
+    expect(w.find('.dir-card__icon--img').exists()).toBe(false)
+    expect(w.findAll('i.el-icon.dir-card__icon').length).toBe(2)
+  })
+
+  test('F4 失败按地址记：目录换了图标（新地址）会重试', async () => {
+    const spy = setupFetch({ dirs: dirs('/api/workbench/project-icon?path=x&v=1') })
+    const w = mountList()
+    await flushAll()
+    await w.find('.dir-card__icon--img').trigger('error')
+    expect(w.find('.dir-card__icon--img').exists()).toBe(false)
+
+    // 服务端换了图标 -> 地址里的 v 变了（真实链路里是下次打开弹窗带回来的）
+    spy.mockImplementation(async () => json({
+      success: true,
+      directories: dirs('/api/workbench/project-icon?path=x&v=2'),
+    }))
+    await w.vm.$nextTick()
+    // 重新挂载等于重开一次弹窗
+    const w2 = mountList()
+    await flushAll()
+    expect(w2.find('.dir-card__icon--img').attributes('src')).toContain('v=2')
   })
 })
