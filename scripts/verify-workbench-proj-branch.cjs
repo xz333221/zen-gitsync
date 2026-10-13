@@ -17,9 +17,12 @@
  *        `.svg-icon{color:--text-secondary}`，覆盖它必须**锚在 .proj-item__branch 下**
  *        把权重抬到 (0,3,0)；裸 :deep() 与之同为 (0,2,0)，谁生效只看样式表注入顺序）
  *   F8 exists=false 优先  -> 目录都不存在时只显示「目录不存在」，不显示分支位
- *   G1 total=0            -> **进度行整行不渲染**（不留「0/0 任务完成」和空进度条）
- *     ⚠️ 回归点：一排 0/0 + 空进度条是纯噪声，占的行高还让有任务的项目不显眼。
+ *   G1 total=0            -> **进度行整行不渲染**（不留「0/0 任务完成」）
+ *     ⚠️ 回归点：一排 0/0 是纯噪声，占的行高还让有任务的项目不显眼。
  *   G2 total>0            -> 进度行照常渲染（G1 不能变成"把进度行全关了"）
+ *
+ * 2026-10-13：左栏进度条移除（用户："数字有用，彩条占地方"），
+ * 原 G1b（进度条本体不在）随消费点一起退役，进度行的契约只剩文字。
  *
  * 前置：dev server 已启动（npm run dev，后端 5545 / 前端 5544）。
  * 用法：node scripts/verify-workbench-proj-branch.cjs
@@ -117,10 +120,9 @@ const ROW = (name) => {
     // 省略号是否真的发生：内容比可视宽度长
     nameOverflowed: nameEl ? nameEl.scrollWidth > nameEl.clientWidth : null,
     branchBox: box(branch),
-    // 进度行（G1/G2）：有没有整行、里面写的是什么、有没有进度条本体
+    // 进度行（G1/G2）：有没有整行、里面写的是什么
     hasRow3: !!row3,
     row3Text: row3 ? row3.textContent.replace(/\s+/g, ' ').trim() : null,
-    hasBar: !!el.querySelector('.proj-item__bar'),
   }
 }
 
@@ -221,16 +223,14 @@ async function main() {
     const noTask = rows['zen-verify-NoTask'] || {}
     check('G1a 无任务的项目：不渲染进度行', noTask.hasRow3 === false,
       `hasRow3=${noTask.hasRow3} row3Text="${noTask.row3Text}"`)
-    check('G1b 无任务的项目：进度条本体也不在（不是只藏了文字）', noTask.hasBar === false,
-      `hasBar=${noTask.hasBar}`)
     check('G1c 无任务的项目：整行文本里不该出现「任务完成」',
       !!noTask.row3Text === false || !/任务完成/.test(noTask.row3Text),
       `row3Text="${noTask.row3Text}"`)
 
     /* ---------- G2：有任务的项目照旧渲染（防止 G1 变成"把进度行全关了"） ---------- */
     check('G2 有任务的项目：进度行照常渲染且文案正确',
-      main.hasRow3 === true && main.hasBar === true && /1\/3\s*任务完成/.test(main.row3Text || ''),
-      `hasRow3=${main.hasRow3} hasBar=${main.hasBar} row3Text="${main.row3Text}"`)
+      main.hasRow3 === true && /1\/3\s*任务完成/.test(main.row3Text || ''),
+      `hasRow3=${main.hasRow3} row3Text="${main.row3Text}"`)
   } catch (err) {
     check('脚本异常', false, String(err?.message || err))
   } finally {

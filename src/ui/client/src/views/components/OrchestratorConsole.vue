@@ -1563,8 +1563,9 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   color: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
-/* 进度条：几何与左栏项目列表那条（WorkbenchProjectPanel 的 proj-item__bar）保持一致，
-   两处的"进度"才像同一个东西。轨道用 --bg-active（深浅两套都有定义）—— 卡片本身
+/* 进度条：4px 圆角胶囊（几何原与左栏项目列表那条一致 —— 左栏那条 2026-10-13
+   已随"数字有用，彩条占地方"移除，这里的两条是全应用仅剩的进度条）。
+   轨道用 --bg-active（深浅两套都有定义）—— 卡片本身
    已经是 --bg-subtle，轨道再用更浅的色就看不见了 */
 .rp__progress {
   display: flex;

@@ -131,11 +131,6 @@ const totals = computed(() => props.projects.reduce(
   { running: 0, done: 0, total: 0 }
 ))
 
-/** 「全部项目」的汇总进度：跨项目按任务数加权，无任务时 0 而不是 NaN */
-const overallProgress = computed(() =>
-  totals.value.total > 0 ? Math.round((totals.value.done / totals.value.total) * 100) : 0
-)
-
 /**
  * 左栏那一行的分支文案。**空串 = 这行不显示**：
  * 不是 Git 仓库时不留文字 —— 那一格空着本身就是"这儿没有分支"的信号，
@@ -374,7 +369,7 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
           </span>
         </div>
 
-        <!-- 一个任务都没有时整行不渲染（「0/0 任务完成」+ 空进度条是纯噪声）。
+        <!-- 只留数字不给进度条（用户 2026-10-13：数字有用，彩条占地方）。
              title 交代口径：这里只加列表里这些项目的任务，与顶栏「全部任务」不等
              （实测差 10 条：9 条属于一个已从列表移除的项目 + 1 条属于容器目录）。 -->
         <div
@@ -382,9 +377,6 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
           class="proj-item__row3"
           :title="$t('@WORKBENCH:只统计项目列表里这些项目名下的任务')"
         >
-          <span class="proj-item__bar" aria-hidden="true">
-            <i class="proj-item__bar-fill" :style="{ width: overallProgress + '%' }" />
-          </span>
           <span class="proj-item__progress-text">
             {{ $t('@WORKBENCH:{done}/{total} 任务完成', { done: totals.done, total: totals.total }) }}
           </span>
@@ -446,9 +438,6 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
 
         <!-- 同上：这个项目一个任务都没有就不给进度行 -->
         <div v-if="p.stats.total > 0" class="proj-item__row3">
-          <span class="proj-item__bar" aria-hidden="true">
-            <i class="proj-item__bar-fill" :style="{ width: p.stats.progress + '%' }" />
-          </span>
           <span class="proj-item__progress-text">
             {{ $t('@WORKBENCH:{done}/{total} 任务完成', { done: p.stats.done, total: p.stats.total }) }}
           </span>
@@ -1136,31 +1125,9 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   gap: 6px;
   margin-top: 5px;
 }
-.proj-item__bar {
-  flex: 1;
-  min-width: 0;
-  height: 4px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--text-tertiary) 16%, transparent);
-  overflow: hidden;
-}
-.proj-item__bar-fill {
-  display: block;
-  height: 100%;
-  border-radius: var(--radius-pill);
-  /* 2026-10-04：原本是 var(--gradient-progress)（primary→primary-light 蓝渐变），
-     30 个项目排下来是一条条同一个蓝，进度条完全没传递信息。
-     改成按角色上色（父级 .proj-item.is-running / .is-complete 决定），
-     于是"哪个项目有活儿在跑""哪个已经收尾"扫一眼就知道。
-     同日第四轮：颜色从 `--role-*-ink` 换成 `--role-*-bar` ——
-     用户反馈"白色主题下黄色和绿色的进度条还是感觉有点深"，
-     ink 是给文字过 AA 的暗档，当 4px 实心块用会把整列压沉。 */
-  background: var(--role-pending-bar);
-  transition: width var(--transition-base) var(--ease-custom),
-              background var(--transition-fast) var(--ease-custom);
-}
-.proj-item.is-running .proj-item__bar-fill { background: var(--role-active-bar); }
-.proj-item.is-complete .proj-item__bar-fill { background: var(--role-done-bar); }
+/* 2026-10-13：左栏的彩色进度条整个下掉了（用户："数字有用，彩条占地方"），
+   row3 只剩「x/x 任务完成」一行字。控制台那两条进度条（OrchestratorConsole
+   的 .rp__bar-fill / .rpt__bar-fill）不受影响，--role-*-bar 令牌仍有消费方。 */
 .proj-item__progress-text {
   flex-shrink: 0;
   font-size: var(--font-size-xs);

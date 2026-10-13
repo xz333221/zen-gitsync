@@ -1,8 +1,8 @@
 /**
- * 角色色 —— 浓度分层 + 列头/首卡间距 + 进度条填充亮度。
+ * 角色色 —— 浓度分层 + 列头/首卡间距。
  *
  * 守的契约（对应 variables.scss / dark-theme.scss 的 `--role-*` 与
- * WorkbenchKanban.vue / WorkbenchProjectPanel.vue / OrchestratorConsole.vue）：
+ * WorkbenchKanban.vue / OrchestratorConsole.vue）：
  *   C1  角色色的 surface / wash / **bar** 一律**不许从 ink 调**。
  *       ink 是为小字过 AA 4.5:1 刻意压暗的档（active 的 ink 是 #b45309 深棕），
  *       拿它当调色源，4~14% 兑出来是灰褐 / 灰绿 —— 这正是用户 2026-10-04 报的
@@ -17,15 +17,16 @@
  *       出错的卡反过来必须有浅红底（出错是跨列的，不染就扫不出哪条失败）。
  *   C4  列头与首卡之间要有间距 —— 曾是 0（`padding: 0 12px 12px`），
  *       首卡和列头色带贴死，用户报"卡片和上边的看板类型的 title 之间没有间距"。
- *   C5  进度条填充不许直接吃 ink（三个消费点：项目列表 / 控制台进度报告 /
- *       任务事实每条进度），必须走 --role-*-bar。
- *   C6  进度条填充**实测亮度**（WCAG 相对亮度）：亮于同角色 ink ≥1.6×
- *       （pending 档 ≥1.05×，它的 hue 与 ink 同族）、对轨道 ≥2.0:1。
- *       两头都卡 —— 见 C6 处的取舍说明。
+ *   C5  进度条填充不许直接吃 ink（两个消费点：控制台进度报告 / 任务事实每条进度），
+ *       必须走 --role-*-bar。
+ *
+ *   2026-10-13：左栏项目列表的进度条整个下掉了（用户："数字有用，彩条占地方"），
+ *   曾经的 C6（进度条实测亮度）与运行时的 bars 量测随消费点一起移除；
+ *   --role-*-bar 令牌保留 —— 控制台那两条进度条还在用它。
  *
  * ⚠️ 断言用**几何量 + 合成后的实际底色**（getComputedStyle 一路往父层合成到不透明为止），
- *   不是"截图看着对"。--reverse 把旧写法（ink 调色 + 透明 + 上边距 0 + 进度条吃 ink）
- *   注回去，C1 / C3 / C4 / C6 必须变红 —— 证明这些断言守的是这套值本身，而不是"页面没崩"。
+ *   不是"截图看着对"。--reverse 把旧写法（ink 调色 + 透明 + 上边距 0）
+ *   注回去，C1 / C3 / C4 必须变红 —— 证明这些断言守的是这套值本身，而不是"页面没崩"。
  */
 const path = require('node:path')
 const fs = require('node:fs')
@@ -103,11 +104,11 @@ console.log('── A. 静态断言 ──')
   check('C2b dark-theme.scss 整套覆盖 surface + wash + bar（否则暗色下白板 / 条被压暗）', missingDark.length === 0, missingDark.join(' '))
 }
 
-// C5 进度条填充不许吃 ink。三个消费点各是一条 `background:`，这里按选择器抓那一条，
+// C5 进度条填充不许吃 ink。消费点各是一条 `background:`，这里按选择器抓那一条，
 //    不去全文 grep —— 同文件里 ink 还有正当用法（文字/图标/图标底色）。
+//    （2026-10-13 起是两个消费点：左栏项目列表那条进度条已随功能一起移除。）
 {
   const consumers = [
-    ['views/components/WorkbenchProjectPanel.vue', /\.proj-item__bar-fill\s*\{([^}]*)\}/g, 3],
     ['views/components/OrchestratorConsole.vue', /\.rp__bar-fill\s*\{([^}]*)\}/g, 1],
     ['views/components/OrchestratorConsole.vue', /\.rpt__bar-fill\s*\{([^}]*)\}/g, 1],
   ]
@@ -120,7 +121,7 @@ console.log('── A. 静态断言 ──')
       bad.push(`${rel} ${re.source.split('\\')[0]} 命中 ${hits.length} 条、走 bar 的 ${okOnes.length} 条（要 ≥${atLeast}）`)
     }
   }
-  check('C5 三个进度条消费点都走 --role-*-bar（不吃 ink）', bad.length === 0, bad.join(' | '))
+  check('C5 两个进度条消费点都走 --role-*-bar（不吃 ink）', bad.length === 0, bad.join(' | '))
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -169,25 +170,10 @@ const MEASURE = () => {
     return acc
   }
   const lum = (c) => (c ? +((0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255).toFixed(4) : null)
-  /* C6 用的是**真正的 WCAG 相对亮度**（先线性化），不是上面那个加权平均。
-     上面那个当"谁比谁亮"的排序够用（C3a/C3b 都是同一把尺子比大小），
-     但它不是对比度公式的输入 —— 拿它算出来的"对比度"会比真值低一档
-     （实测 done 1.7 vs 真值 2.46），照着调阈值就等于把标准定错了。 */
-  const lin = (v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4) }
-  const wcag = (c) => (c ? 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b) : null)
+  /* 历史上这里还有一把 WCAG 相对亮度（lin/wcag/contrast）+ hexc，
+     专门量左栏进度条的实测亮度（旧 C6）。那条进度条 2026-10-13 移除，
+     这几个帮手跟着退休 —— 别再为"删了会不会有人用"留死代码。 */
   const rgb = (c) => (c ? `rgb(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)})` : 'none')
-  const contrast = (a, b) => {
-    const [x, y] = [wcag(a), wcag(b)].sort((p, q) => q - p)
-    return +((x + 0.05) / (y + 0.05)).toFixed(2)
-  }
-  /** 令牌表里的 ink 是 `var(--color-*-dark)` 链，getComputedStyle 读自定义属性时
-      已经做过替换，所以这里只会拿到 `#rrggbb` 字面量。 */
-  const hexc = (s) => {
-    const m = String(s).trim().match(/^#([0-9a-f]{6})$/i)
-    return m
-      ? { r: parseInt(m[1].slice(0, 2), 16), g: parseInt(m[1].slice(2, 4), 16), b: parseInt(m[1].slice(4, 6), 16), a: 1 }
-      : null
-  }
 
   const cols = Array.from(document.querySelectorAll('.kb-col'))
   const out = { canvas: null, cols: [], running: null, error: null, plain: null, gap: null, padTop: null }
@@ -206,47 +192,24 @@ const MEASURE = () => {
       gap: head && card ? +(card.getBoundingClientRect().top - head.getBoundingClientRect().bottom).toFixed(1) : null,
     })
   }
-  const r = document.querySelector('.kb-card.is-running')
   const e = document.querySelector('.kb-card.has-error')
   const p = document.querySelector('.kb-card:not(.is-running):not(.has-error)')
   const st = (n) => (n ? { lum: lum(resolveBg(n)), rgb: rgb(resolveBg(n)) } : null)
-  out.running = st(r)
-  out.error = st(e)
   out.plain = st(p)
+  out.error = st(e)
+  /* C3c 的量测对象**强制摆出来**：板上没有在跑的卡时，借一张普通卡临时挂
+     is-running 再量（与旧 bars 量测同一思路 —— 断言不该因"今天数据里恰好没有"
+     而缺席，那会让它变成"今天没测、明天才红"）。先量 plain 再借同一张卡量
+     running；transition 已在 main() 里全局关掉，挂上类读到的就是落点。 */
+  let runningNode = document.querySelector('.kb-card.is-running')
+  let forcedRunning = null
+  if (!runningNode) {
+    const cand = p || document.querySelector('.kb-card')
+    if (cand) { cand.classList.add('is-running'); forcedRunning = cand; runningNode = cand }
+  }
+  out.running = st(runningNode)
+  if (forcedRunning) forcedRunning.classList.remove('is-running')
   if (out.cols[0]) { out.gap = out.cols[0].gap; out.padTop = out.cols[0].padTop }
-
-  /* 进度条填充：**强制**把三行分别摆成 idle / 在跑 / 已完成再量。
-     实时数据里三种状态不一定同时在场（没有在跑的活儿时琥珀条压根不渲染），
-     顺着数据量就会出现"这条断言今天没测、明天才红"的假象。 */
-  out.bars = []
-  const barRows = Array.from(document.querySelectorAll('.proj-item')).filter(
-    (n) => n.querySelector('.proj-item__bar-fill') && n.querySelector('.proj-item__bar'),
-  )
-  const rootCS = getComputedStyle(document.documentElement)
-  const ROLE_UI = [
-    ['pending', (n) => n.classList.remove('is-running', 'is-complete')],
-    ['active', (n) => { n.classList.remove('is-complete'); n.classList.add('is-running') }],
-    ['done', (n) => { n.classList.remove('is-running'); n.classList.add('is-complete') }],
-  ]
-  ROLE_UI.forEach(([role, apply], i) => {
-    const row = barRows[i]
-    if (!row) return
-    apply(row)
-    const f = parse(getComputedStyle(row.querySelector('.proj-item__bar-fill')).backgroundColor)
-    const track = resolveBg(row.querySelector('.proj-item__bar'))
-    const ink = hexc(rootCS.getPropertyValue(`--role-${role}-ink`))
-    out.bars.push({
-      role,
-      fill: rgb(f),
-      fillLum: +wcag(f).toFixed(4),
-      ink: ink ? rgb(ink) : null,
-      inkLum: ink ? +wcag(ink).toFixed(4) : null,
-      // 记的是实时墨水色而不是硬编码 —— 令牌表改了这里跟着改，比值才一直有意义
-      ratio: ink ? +(wcag(f) / wcag(ink)).toFixed(2) : null,
-      track: rgb(track),
-      contrast: contrast(f, track),
-    })
-  })
   return out
 }
 
@@ -254,8 +217,8 @@ const MEASURE = () => {
  *  列身 = 各角色 4~6% 的**透明**淡底（落在深灰底板上再掉一档明度）；
  *  列头 = `color-mix(--col-ink 14%)` —— 从压暗过的 ink 调色（灰褐/灰绿的来源）；
  *  状态卡 = 同一个 6% 透明淡底直接当卡片自己的背景（盖掉卡片的白底）；
- *  列表上内边距 = 0；
- *  进度条 = 三条直接吃 ink（第四轮"进度条还是偏深"的来源）。 */
+ *  列表上内边距 = 0。
+ *  （2026-10-13：旧样本里"进度条吃 ink"的三条随左栏进度条一起移除。） */
 const LEGACY_CSS = `
   .kb-col { background: color-mix(in srgb, #64748b 6%, transparent) !important; }
   .kb-col.kb-col--doing { background: color-mix(in srgb, var(--color-warning) 6%, transparent) !important; }
@@ -264,10 +227,6 @@ const LEGACY_CSS = `
   .kb-card.is-running { background: color-mix(in srgb, var(--color-warning) 6%, transparent) !important; }
   .kb-card.has-error { background: color-mix(in srgb, var(--color-danger) 6%, transparent) !important; }
   .kb-col__list { padding: 0 12px 12px !important; }
-  /* 进度条吃 ink —— 2026-10-04 第四轮前的写法（"黄色和绿色的进度条还是感觉有点深"） */
-  .proj-item__bar-fill { background: var(--role-pending-ink) !important; }
-  .proj-item.is-running .proj-item__bar-fill { background: var(--role-active-ink) !important; }
-  .proj-item.is-complete .proj-item__bar-fill { background: var(--role-done-ink) !important; }
 `
 
 async function main() {
@@ -338,10 +297,12 @@ async function main() {
        所以给卡面再染一遍色是纯冗余，代价却是同屏别的卡都白、唯独它一块暖色 ——
        用户报「我非进行中的正常任务都是白色，进行中的是橙色有点奇怪」。
        断言写成"与普通卡逐位相同"而不是"等于 #fff"：要守的契约是**一致**，
-       哪天卡面整体换个底色不该把这条带红。 */
+       哪天卡面整体换个底色不该把这条带红。
+       量测对象在 MEASURE 里强制摆出来（没有在跑的卡就借一张普通卡挂类），
+       所以这里不再有"数据里没在跑的任务"这个缺席分支。 */
     check('C3c 进行中的卡与同列的普通卡同底（状态不靠换底色表达）',
       !!m.running && !!m.plain && m.running.rgb === m.plain.rgb,
-      m.running ? `running ${m.running.rgb} vs plain ${m.plain && m.plain.rgb}` : '没有 .kb-card.is-running（数据里没在跑的任务）')
+      m.running ? `running ${m.running.rgb} vs plain ${m.plain && m.plain.rgb}` : '板上连一张 .kb-card 都没有')
     check('C3d 出错的卡是浅红底（lum ≥ 0.90 且 r > g）',
       !!m.error && m.error.lum >= 0.9 && red[0] > red[1],
       m.error ? `${m.error.rgb} lum=${m.error.lum}` : '没有 .kb-card.has-error（数据里没有出错的任务）')
@@ -352,28 +313,7 @@ async function main() {
       `gaps=${gaps.join(',')} padTop=${m.padTop}`)
     check('C4b .kb-col__list 上内边距不为 0', m.padTop !== '0px' && m.padTop !== null, `padding-top=${m.padTop}`)
 
-    // C6 进度条填充的**实测亮度**。两头都卡，因为用户报过两次"深"，
-    //    而"浅到看不见"是它的对称失败：
-    //   下限方向（不许再深）：填充亮度 ≥ 同角色 ink 亮度 × 1.6
-    //   上限方向（不许糊）：填充对轨道 ≥ 2.0:1
-    //   ⚠️ 只有 1.6× 这条能在 --reverse 里变红（旧写法 = ink，比值恒为 1.0）。
-    //      2.0:1 那条旧写法反而更高（4.1~4.4:1），拿它做反向证据是错的 ——
-    //      它的边界是**反方向**的：注一版 `--role-*-hue` 纯色进去（比值 2.7~3.0×，
-    //      C6a 反而更绿）才会把 C6b 顶红，实测 amber 1.78:1 / done 2.02:1 越界。
-    const bars = m.bars || []
-    bars.forEach((b) => console.log(`        进度条 ${b.role.padEnd(7)} 填充 ${b.fill} lum=${b.fillLum} | ink ${b.ink} lum=${b.inkLum} 亮 ${b.ratio}× | 轨道 ${b.track} 对比 ${b.contrast}:1`))
-    /* 每档的下限不同：pending 的 hue(#64748b) 与 ink(#5b6472) 本来就同族，
-       浅色档不该为了"亮"把它洗成灰白 —— 它答的是"这个项目没在跑"，静默是它的语义。
-       所以那档只卡"不许退回 ink"，有色的两档才卡 1.6×。 */
-    const BAR_FLOOR = { pending: 1.05, active: 1.6, done: 1.6 }
-    const deep = bars.filter((b) => !(b.ratio >= (BAR_FLOOR[b.role] || 1.6)))
-    check('C6a 进度条填充亮于同角色 ink（active/done ≥1.6×，pending ≥1.05×）',
-      bars.length === 3 && deep.length === 0,
-      bars.length !== 3
-        ? `只量到 ${bars.length} 条（.proj-item 不够三条）`
-        : bars.map((b) => `${b.role} ${b.ratio}×/≥${BAR_FLOOR[b.role]}`).join(' '))
-    check('C6b 进度条填充对轨道 ≥2.0:1', bars.length === 3 && bars.every((b) => b.contrast >= 2.0),
-      bars.map((b) => `${b.role} ${b.contrast}:1`).join(' '))
+    // （C6 已随左栏进度条移除 —— 2026-10-13，理由见文件头。）
 
     await page.locator('.kb__columns').first().screenshot({ path: path.join(SHOT_DIR, REVERSE ? 'kanban-legacy.png' : 'kanban.png') })
     await browser.close()
@@ -399,7 +339,6 @@ async function main() {
     'C3d 出错的卡是浅红底（lum ≥ 0.90 且 r > g）',
     'C4a 列头与首卡之间有间距（≥ 8px）',
     'C4b .kb-col__list 上内边距不为 0',
-    'C6a 进度条填充亮于同角色 ink（active/done ≥1.6×，pending ≥1.05×）',  // 旧写法直接吃 ink，比值恒 1.0
   ]
   let okOverall
   if (REVERSE) {
