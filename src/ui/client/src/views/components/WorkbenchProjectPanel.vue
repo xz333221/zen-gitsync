@@ -253,6 +253,22 @@ async function copyFolderName(p: ProjectSummary) {
 }
 
 /**
+ * 复制项目**文件夹路径**（完整绝对路径，粘进终端 `cd` 用）。
+ * 与上面的「复制文件夹名称」成对：名称用于建同名目录 / 当文件名，
+ * 路径用于 cd / 喂给命令行工具。成功提示另起一句，别和名称的混。
+ */
+async function copyFolderPath(p: ProjectSummary) {
+  closeOpenMenu()
+  if (!p.path) return
+  try {
+    await navigator.clipboard.writeText(p.path)
+    ElMessage.success($t('@67CE7:已复制文件夹路径'))
+  } catch {
+    ElMessage.error($t('@67CE7:复制失败'))
+  }
+}
+
+/**
  * 「从清单移除」：目录已经不在了，这一行留着只会一直占位，而用户唯一想做的就是把它清掉。
  *
  * 弹确认框，而且**必须把"任务不会被删"写进去**：这个动作看着像删除，
@@ -582,6 +598,19 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
               >
                 <span class="proj-menu__icon"><el-icon aria-hidden="true"><CopyDocument /></el-icon></span>
                 <span class="proj-menu__label">{{ $t('@67CE7:复制文件夹名称') }}</span>
+              </li>
+              <!-- 复制文件夹路径：与名称成对（名称=最后一级目录名，路径=完整绝对路径，
+                   粘进终端 cd 用）。同属"操作目录本身"的一组，排在名称下面。 -->
+              <li
+                class="proj-menu__item"
+                role="menuitem"
+                tabindex="-1"
+                @click="copyFolderPath(p)"
+                @keydown.enter.prevent="copyFolderPath(p)"
+                @keydown.space.prevent="copyFolderPath(p)"
+              >
+                <span class="proj-menu__icon"><el-icon aria-hidden="true"><CopyDocument /></el-icon></span>
+                <span class="proj-menu__label">{{ $t('@67CE7:复制文件夹路径') }}</span>
               </li>
 
               <li class="proj-menu__sep" role="separator" />

@@ -724,6 +724,8 @@ export default {
   '@67CE7:复制目录路径': 'Copy directory path',
   '@67CE7:复制文件夹名称': 'Copy folder name',
   '@67CE7:已复制文件夹名称': 'Folder name copied',
+  '@67CE7:复制文件夹路径': 'Copy folder path',
+  '@67CE7:已复制文件夹路径': 'Folder path copied',
   '@67CE7:复制失败': 'Copy failed',
   '@67CE7:更多工具': 'More tools',
   '@67CE7:展开更多工具': 'Show more tools',
