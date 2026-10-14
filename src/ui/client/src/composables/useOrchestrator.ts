@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// 主 Agent 控制台数据源：GET /api/workbench/orchestrator 及其六个写接口
-// （调度开关 / 派发 / 全局预设提示词 / 项目预设提示词 / 立即报告 / 报告间隔）。
+// 主 Agent 控制台数据源：GET /api/workbench/orchestrator 及其五个写接口
+// （派发 / 全局预设提示词 / 项目预设提示词 / 立即报告 / 报告间隔）。
 //
-// 关于「暂停调度」的真实语义（别在 UI 上把它说成别的）：
-//   暂停只拦**自动派发** —— 通过控制台派发的指令在暂停期间只建任务不执行；
-//   手动点执行、子任务单独执行一概不受影响。暂停的是主 Agent 的自主行为，不是用户的手。
-//   拦截在服务端（routes/workbench/index.js），前端这个开关只是同一份状态的镜像。
+// 关于「派发后跑不跑」：
+//   只由**本次派发的 autoRun** 决定（控制台上那个"只建任务不执行"的勾选、
+//   或内置智能体调 dispatch_task 时自己传的值）。曾经有一个全局的「暂停调度」
+//   开关 + 对应的 `/orchestrator/state` 接口，2026-10-14 连同 UI 一起删了 ——
+//   派发这个动作本身就是"要它跑"的意思，一个专门用来让派发不执行的开关
+//   只会帮倒忙。手动点执行、子任务执行本来就不受它影响。
 //
 // 关于「预设提示词」：
 //   两级（全局 + 每个项目一条），派发时服务端按**落点项目**解析后拼在指令之前，
@@ -79,7 +81,6 @@ export interface DispatchPayload {
 }
 
 export function useOrchestrator() {
-  const active = ref(true)
   const instructions = ref<OrchestratorInstruction[]>([])
   const activity = ref<OrchestratorActivity[]>([])
   /**
@@ -93,7 +94,6 @@ export function useOrchestrator() {
   const running = ref<RunningAgent[]>([])
   const updatedAt = ref<string | null>(null)
   const loaded = ref(false)
-  const togglingSchedule = ref(false)
   const dispatching = ref(false)
   /** 全局预设提示词（'' = 没设置） */
   const defaultPrompt = ref('')
@@ -115,7 +115,6 @@ export function useOrchestrator() {
         if (!silent) ElMessage.error(res?.error || $t('@WORKBENCH:读取编排状态失败'))
         return false
       }
-      active.value = res.active !== false
       // 只认正整数：老服务端没有这个字段（undefined）时保留本地兜底值，
       // 别把计数器的上限渲染成 0 / undefined
       if (Number.isInteger(res.maxInstructionChars) && res.maxInstructionChars > 0) {
@@ -278,37 +277,6 @@ export function useOrchestrator() {
     }
   }
 
-  /** 暂停 / 恢复调度。返回是否成功，失败时回滚本地开关 */
-  async function setSchedulingActive(next: boolean): Promise<boolean> {
-    if (togglingSchedule.value) return false
-    const prev = active.value
-    active.value = next
-    togglingSchedule.value = true
-    try {
-      const res = await fetch('/api/workbench/orchestrator/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: next }),
-      }).then(r => r.json())
-      if (!res?.success) {
-        active.value = prev
-        ElMessage.error(res?.error || $t('@WORKBENCH:切换调度状态失败'))
-        return false
-      }
-      active.value = res.active !== false
-      ElMessage.success(
-        active.value ? $t('@WORKBENCH:已恢复调度') : $t('@WORKBENCH:已暂停调度，派发将只建任务不执行')
-      )
-      return true
-    } catch (err: any) {
-      active.value = prev
-      ElMessage.error($t('@WORKBENCH:网络错误: ') + (err?.message || err))
-      return false
-    } finally {
-      togglingSchedule.value = false
-    }
-  }
-
   /**
    * 派发一条指令。成功返回新建的任务（调用方据此打开编辑器或刷新看板）。
    * 400 之外的失败不在这里 toast 之外做特殊处理 —— 服务端的错误文案（目录不存在等）
@@ -353,11 +321,11 @@ export function useOrchestrator() {
   }
 
   return {
-    active, instructions, activity, running, updatedAt, loaded,
-    togglingSchedule, dispatching, maxInstructionChars,
+    instructions, activity, running, updatedAt, loaded,
+    dispatching, maxInstructionChars,
     defaultPrompt, projectPrompts,
     reports, loadingReports, generatingReport, reportIntervalMs,
-    loadOrchestrator, setSchedulingActive, dispatch,
+    loadOrchestrator, dispatch,
     saveDefaultPrompt, saveProjectPrompt,
     loadReports, generateReport, setReportInterval,
   }

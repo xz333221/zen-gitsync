@@ -51,7 +51,7 @@ export const DEFAULT_JOBS_CONFIG = { maxCount: 500, maxSizeMB: 256 };
 // 每进程一个文件同时也消掉了多进程 read-modify-write 的丢更新（同 instances/ 的理由）。
 export const LIVE_JOBS_DIR = path.join(DATA_DIR, 'live-jobs');
 
-// 主 Agent 编排台：调度开关（active）+ 人类干预指令存档。
+// 主 Agent 编排台：人类干预指令存档 + 派发预设提示词 + 进度报告配置。
 // 指令存档是「我说过什么」的流水，不参与执行逻辑，只用于控制台日志流回放。
 export const ORCHESTRATOR_FILE = path.join(DATA_DIR, 'orchestrator.json');
 export const MAX_ORCHESTRATOR_INSTRUCTIONS = 200;

@@ -449,7 +449,6 @@ test('两块提示词都注入请求副本：g ai 默认提示词 + 派发提示
     writeSandboxFile('config.json', { agentDefaultPrompt: '【g ai 默认提示词】回答用中文' })
     writeSandboxFile('orchestrator.json', {
       version: 1,
-      active: true,
       defaultPrompt: '【全局派发提示词】改完就提交',
       projectPrompts: { [projectKey]: { path: process.cwd(), prompt: '【本项目派发提示词】包管理器用 pnpm' } },
     })

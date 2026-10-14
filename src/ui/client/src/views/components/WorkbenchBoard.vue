@@ -82,11 +82,11 @@ const {
 // 不会因为某个字段被就地改写而漏发。
 watch(boardTasks, (list) => emit('board-tasks', list), { immediate: true })
 const {
-  active, activity, running, dispatching, togglingSchedule,
+  activity, running, dispatching,
   maxInstructionChars,
   defaultPrompt, projectPrompts,
   reports, generatingReport, reportIntervalMs,
-  loadOrchestrator, setSchedulingActive, dispatch,
+  loadOrchestrator, dispatch,
   saveDefaultPrompt, saveProjectPrompt,
   loadReports, generateReport, setReportInterval,
 } = useOrchestrator()
@@ -95,7 +95,6 @@ const {
 // （composables/useTaskExecutorSelection → config.json 的 ui.lastTaskExecutor，
 // 换端口重开也还在）。选中的没装时 active 已回落到另一个可用的，一个都没装就
 // 保持原样交给后端报 spawn 失败 —— 界面悄悄显示成一个跑不了的执行器更糟。
-// 变量名带 board 前缀：上面的 useOrchestrator() 已经占用 active（编排台开关）。
 const { active: boardExecutor } = useTaskExecutorSelection()
 
 // ── 选中项目（'' = 全部项目） ────────────────────────────────────────
@@ -699,10 +698,6 @@ async function onDispatch(payload: {
   await refresh(true)
 }
 
-async function onToggleSchedule(next: boolean) {
-  await setSchedulingActive(next)
-}
-
 // ── 预设提示词设置弹窗 ──────────────────────────────────────────────
 // 弹窗挂在看板这一层（不是控制台里）：它要用到项目清单与编排状态，而这两样
 // 都在这儿 —— 控制台只发一个"打开设置"的信号。
@@ -762,12 +757,8 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
       </button>
 
       <div class="board__brand">
-        <span class="board__live" :class="{ 'is-off': !active }" aria-hidden="true" />
         <div class="board__brand-text">
           <h1 class="board__title">{{ $t('@WORKBENCH:多项目编排台') }}</h1>
-          <p class="board__subtitle">
-            {{ active ? $t('@WORKBENCH:主 Agent 调度中') : $t('@WORKBENCH:主 Agent 已暂停') }}
-          </p>
         </div>
       </div>
 
@@ -892,11 +883,9 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
 
       <OrchestratorConsole
         ref="consoleRef"
-        :active="active"
         :running="running"
         :selected-project="selectedProject"
         :dispatching="dispatching"
-        :toggling-schedule="togglingSchedule"
         :today-done="headerStats.todayDone"
         :collapsed="rightHidden"
         :default-prompt="defaultPrompt"
@@ -906,7 +895,6 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
         :generating-report="generatingReport"
         :max-instruction-chars="maxInstructionChars"
         @toggle-collapse="toggleRight"
-        @toggle-schedule="onToggleSchedule"
         @dispatch="onDispatch"
         @generate-report="generateReport"
         @set-report-interval="setReportInterval"
@@ -969,20 +957,6 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   gap: 8px;
   min-width: 0;
 }
-.board__live {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--color-success);
-  box-shadow: var(--dot-glow-success);
-  animation: board-pulse 1.6s ease-in-out infinite;
-}
-.board__live.is-off { background: var(--color-warning); box-shadow: var(--dot-glow-warning); animation: none; }
-@keyframes board-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(1.4); }
-}
 .board__brand-text { min-width: 0; }
 .board__title {
   margin: 0;
@@ -994,12 +968,6 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   font-weight: 600;
   letter-spacing: var(--letter-spacing-heading);
   color: var(--text-primary);
-  line-height: 1.3;
-}
-.board__subtitle {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  color: var(--text-meta);
   line-height: 1.3;
 }
 

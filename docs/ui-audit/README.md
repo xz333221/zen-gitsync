@@ -160,6 +160,12 @@
 对齐线从 10px/12px 两种收到 12px 一种；`.rpt` 任务卡从 `--bg-active`（7.5% 黑）
 换成 `--bg-panel` 实色灰并提一档 padding；原生 checkbox 用 `accent-color` 收回主色。
 
+> **2026-10-14 追记**：上面那枚「暂停调度」连同它的状态行（`.oc__state-label` /
+> `.oc__state-value`）、顶栏副标题（`.board__subtitle`）与两枚脉冲小圆点一起删了 ——
+> 它唯一的作用是"让派发出去的活不执行"，而派发这个动作本身就是"要它跑"的意思，
+> 服务端那个 `active` 布尔与 `/orchestrator/state` 接口同时下线。栏内动作从 5 枚
+> 变 4 枚，`.oc__state` 只剩「{n} 个执行中」（`margin-left: auto` 靠右）。
+
 ![控制台精修前后](./console-polish-before-after.png)
 
 回归网：`verify:wb-colors` 全绿 —— C1（淡底调自 hue）、C5（进度条不走 ink）、

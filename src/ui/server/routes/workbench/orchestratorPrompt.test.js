@@ -29,7 +29,7 @@ import { MAX_DEFAULT_PROMPT_CHARS, INSTRUCTION_PREVIEW_CHARS } from './shared.js
 
 /** 造一份最小可用的编排状态（字段与 normalizeOrchestrator 的输出对齐） */
 function stateWith({ defaultPrompt = '', projectPrompts = {} } = {}) {
-  return { version: 1, active: true, updatedAt: null, instructions: [], defaultPrompt, projectPrompts };
+  return { version: 1, updatedAt: null, instructions: [], defaultPrompt, projectPrompts };
 }
 
 const KEY = 'd:\\ws\\alpha';
@@ -115,7 +115,7 @@ test('拼出来的正文永远不会超过任务提示词字段的上限', () =>
 // ── 归一化：磁盘上的脏数据不能让编排台打不开 ──────────────────────────
 
 test('normalizeOrchestrator：字段全缺时给出空提示词与空表', () => {
-  const s = normalizeOrchestrator({ active: true, instructions: [] });
+  const s = normalizeOrchestrator({ instructions: [] });
   assert.equal(s.defaultPrompt, '');
   assert.deepEqual(s.projectPrompts, {});
 });

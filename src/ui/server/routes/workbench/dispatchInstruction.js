@@ -102,7 +102,7 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
    * @param {boolean} [payload.useDefaultPrompt] 默认 true；false = 本次不附加预设提示词
    * @param {string} [payload.executor]          claude | opencode | codex；缺省走配置默认
    * @param {Array} [payload.attachments]        暂存区附件记录 [{ id, ext, originalName }]
-   * @returns {Promise<{task: object, instruction: object, ran: boolean, schedulingActive: boolean, target: object}>}
+   * @returns {Promise<{task: object, instruction: object, ran: boolean, target: object}>}
    */
   async function dispatchInstruction(payload = {}) {
     const text = typeof payload.text === 'string' ? payload.text.trim() : '';
@@ -169,10 +169,7 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
     }
 
     const autoRun = payload.autoRun !== false;
-    // 调度开关与预设提示词同在一份 state 里，只读一次：
-    // 分开读两次必然出现"读到的是两个瞬间"的窗口（改设置的同时派发）。
     const orchestratorState = await readOrchestrator();
-    const schedulingActive = orchestratorState.active;
 
     // 预设提示词按**落点项目**解析：全局那条对所有项目生效，项目级那条只在这个项目追加。
     // useDefaultPrompt=false 是"这一次不附加" —— 全局提示词若没法单次关掉，
@@ -213,13 +210,15 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
     tasks.push(task);
     await writeJson(TASKS_FILE, { tasks });
 
-    const willRun = autoRun && schedulingActive;
+    const willRun = autoRun;
     const record = await appendInstruction({
       text,
       projectPath: targetPath,
       taskId: task.id,
       status: willRun ? 'accepted' : 'created',
-      reason: autoRun && !schedulingActive ? '调度已暂停，只建了任务未执行' : '',
+      // 只建不跑（autoRun=false）时不留 reason：这不是失败，是调用方明确要的形态。
+      // 流水里的 status='created' 已经说清了，硬塞一句解释反而是替用户编话。
+      reason: '',
       // 落点是怎么定下来的（explicit / mention / agent / default），
       // 记下来才能在流水里回答用户那句"为什么派到这儿了"
       targetSource: target.source,
@@ -252,7 +251,7 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
 
     // executor 一并回给调用方：HTTP 响应与 dispatch_task 的结果文案都要说清"这条任务
     // 交给了谁"。只建不跑时是 null —— 那时不必为它多读一次配置。
-    return { task, instruction: record, ran: willRun, schedulingActive, target, executor };
+    return { task, instruction: record, ran: willRun, target, executor };
   }
 
   return { dispatchInstruction };

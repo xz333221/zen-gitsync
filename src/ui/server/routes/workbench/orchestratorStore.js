@@ -15,8 +15,7 @@
 // 主 Agent 编排台的状态存储 + 活动流拼装。
 //
 // 四件事：
-//   1. 调度开关（active）+ 人类干预指令存档，持久化到 ~/.zen-gitsync/orchestrator.json。
-//      「暂停调度」是服务端强制的：暂停期间自动派发会被拒绝（手动点执行不受影响）。
+//   1. 人类干预指令存档，持久化到 ~/.zen-gitsync/orchestrator.json。
 //   2. 派发预设提示词：一条全局的 + 每个项目一条的，同样存在 orchestrator.json。
 //      它们是「派发时自动附加的约束」，不是任务内容 —— 解析规则见 resolveDispatchPrompt。
 //   3. 进度报告：自动报告的间隔配置存在 orchestrator.json（一个数字，跟着轮询下发），
@@ -61,11 +60,10 @@ export const MAX_ACTIVITY_ENTRIES = 120;
 /** 预设提示词的三种来源。前端据此说明"这条指令附带了什么" */
 export const PROMPT_SOURCES = ['global', 'project', 'both'];
 
-/** 默认状态：新装 / 升级后直接是「调度中」，要停由用户自己去点暂停 */
+/** 默认状态 */
 function defaultState() {
   return {
     version: 1,
-    active: true,
     updatedAt: null,
     instructions: [],
     defaultPrompt: '',
@@ -136,8 +134,6 @@ export function normalizeOrchestrator(raw) {
   const instructions = Array.isArray(state.instructions) ? state.instructions : [];
   return {
     version: 1,
-    // 只有显式 false 才算暂停；其余（缺字段 / 脏值）一律当调度中
-    active: state.active === false ? false : true,
     updatedAt: typeof state.updatedAt === 'string' ? state.updatedAt : base.updatedAt,
     instructions: instructions
       .filter(x => x && typeof x === 'object')
@@ -172,16 +168,6 @@ export async function readOrchestrator() {
 async function persist(state) {
   await writeJson(ORCHESTRATOR_FILE, state);
   return state;
-}
-
-/** 暂停 / 恢复调度 */
-export async function setOrchestratorActive(active) {
-  return serialize(async () => {
-    const state = await readOrchestrator();
-    state.active = !!active;
-    state.updatedAt = nowIso();
-    return persist(state);
-  });
 }
 
 // ── 派发预设提示词 ──────────────────────────────────────────────────────

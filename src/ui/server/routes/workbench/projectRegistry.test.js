@@ -468,11 +468,7 @@ test('decorateTaskForBoard: 没跑过 / 那次没写正文时 lastReply 是空�
 
 test('normalizeOrchestrator: 缺字段/脏数据都要能起来', () => {
   const fresh = normalizeOrchestrator(null);
-  assert.equal(fresh.active, true); // 缺省是"调度中"
   assert.deepEqual(fresh.instructions, []);
-
-  assert.equal(normalizeOrchestrator({ active: false }).active, false);
-  assert.equal(normalizeOrchestrator({ active: 'no' }).active, true); // 只有显式 false 才算暂停
 
   const withJunk = normalizeOrchestrator({ instructions: [null, 5, { text: 'hi' }] });
   assert.equal(withJunk.instructions.length, 1);
@@ -535,7 +531,7 @@ test('buildActivityFeed: 只吸收指令后的首次起跑，手动重跑仍保�
 });
 
 test('buildActivityFeed: 指令还没跑起来时，起跑行照旧保留给别的 job', () => {
-  // 指令建了任务但没执行（调度暂停）——此时该任务的任何起跑都不是它带起来的
+  // 指令建了任务但没执行（派发时 autoRun=false）——此时该任务的任何起跑都不是它带起来的
   const jobs = [{ id: 'j1', taskId: 't1', status: 'done', startedAt: '2026-01-01T00:00:00Z', endedAt: '2026-01-01T00:05:00Z' }];
   const tasks = [{ id: 't1', title: '手跑的', projectPath: 'D:\\a' }];
   const instructions = [{

@@ -19,7 +19,7 @@
 //   1. 派发只有**一份实现** —— HTTP 端点与内置智能体的 dispatch_task 工具都落到这里。
 //      本文件直接测这份实现；两个入口各自的"取字段 / 压成字符串"由
 //      agentRoutes.test.js 与 scripts/verify-workbench-agent-dispatch.mjs 覆盖。
-//   2. 闸门语义不变：autoRun=false 或调度暂停 → 只建任务不执行（指令流水里写明原因）。
+//   2. 闸门语义不变：autoRun=false → 只建任务不执行。
 //   3. 落点依据如实记录（explicit / mention / agent / default），
 //      它是用户在活动流里回答"为什么派到这儿了"的唯一依据。
 //
@@ -54,7 +54,7 @@ delete process.env.HOMEPATH;
 
 const load = p => import(pathToFileURL(path.join(projectRoot, p)).href);
 const { createDispatcher, resolveExecutor } = await load('src/ui/server/routes/workbench/dispatchInstruction.js');
-const { readOrchestrator, setOrchestratorActive, setDefaultPrompt } = await load('src/ui/server/routes/workbench/orchestratorStore.js');
+const { readOrchestrator, setDefaultPrompt } = await load('src/ui/server/routes/workbench/orchestratorStore.js');
 const { readJson, TASKS_FILE, MAX_INSTRUCTION_CHARS } = await load('src/ui/server/routes/workbench/shared.js');
 
 // 两个项目目录：proj 是"选中/当前"的落点，other 用来证明显式指定优先于默认
@@ -134,23 +134,7 @@ test('落点：没给目标时退到默认项目，依据记为 default', async 
   assert.equal(result.instruction.targetSource, 'default');
 });
 
-test('调度暂停时只建任务不执行，指令流水写明原因', async () => {
-  const { dispatchInstruction } = makeDispatcher();
-  await setOrchestratorActive(false);
-  try {
-    const before = launched.length;
-    const result = await dispatchInstruction({ text: '暂停期间派一条', autoRun: true });
-    assert.equal(result.schedulingActive, false);
-    assert.equal(result.ran, false);
-    assert.match(result.instruction.reason, /调度已暂停/);
-    assert.equal(launched.length, before, '暂停期间不该有任何执行');
-    assert.equal(result.executor, null);
-  } finally {
-    await setOrchestratorActive(true);
-  }
-});
-
-test('autoRun=true 且调度中：交给执行入口，执行器按参数 > 配置默认解析', async () => {
+test('autoRun=true：交给执行入口，执行器按参数 > 配置默认解析', async () => {
   const { dispatchInstruction } = makeDispatcher();
   const explicit = await dispatchInstruction({ text: '显式指定 opencode', autoRun: true, executor: 'opencode' });
   assert.equal(explicit.ran, true);

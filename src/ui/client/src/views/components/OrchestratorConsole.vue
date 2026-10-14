@@ -55,7 +55,6 @@ import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection
 import type { TaskExecutorId } from '@/utils/taskExecutor'
 
 const props = defineProps<{
-  active: boolean
   /**
    * 正在执行的执行体（5s 轮询下发的 running 列表）。
    *
@@ -67,7 +66,6 @@ const props = defineProps<{
   running: RunningAgent[]
   selectedProject: ProjectSummary | null
   dispatching: boolean
-  togglingSchedule: boolean
   /** 今日已完成的执行轮次，由看板统一算好后传入（两处各算一遍必然对不上） */
   todayDone: number
   /**
@@ -97,7 +95,6 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'toggle-schedule': [next: boolean]
   /** 点折叠条 / 头部折叠按钮：翻转让看板去决定折叠还是展开 */
   'toggle-collapse': []
   /** 打开「预设提示词」设置弹窗（弹窗由看板持有 —— 它才拿得到项目清单） */
@@ -700,23 +697,13 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
       @click="emit('toggle-collapse')"
     >
       <el-icon class="oc__rail-icon"><Fold /></el-icon>
-      <span class="oc__rail-live" :class="{ 'is-off': !active }" aria-hidden="true" />
       <span class="oc__rail-text">{{ $t('@WORKBENCH:主 Agent 控制台') }}</span>
     </button>
 
     <!-- 折叠时这几块整体隐藏而不是销毁（v-show 而不是 v-if）：
          草稿指令和已贴的附件都还留着，展开回来能接着发 -->
     <header v-show="!collapsed" class="oc__head">
-      <span class="oc__live" :class="{ 'is-off': !active }" aria-hidden="true" />
       <h3 class="oc__title">{{ $t('@WORKBENCH:主 Agent 控制台') }}</h3>
-      <button
-        type="button"
-        class="oc__toggle"
-        :class="{ 'is-off': !active }"
-        :disabled="togglingSchedule"
-        :title="active ? $t('@WORKBENCH:暂停后派发只建任务，不会自动执行') : $t('@WORKBENCH:恢复后派发会自动执行')"
-        @click="emit('toggle-schedule', !active)"
-      >{{ active ? $t('@WORKBENCH:暂停调度') : $t('@WORKBENCH:恢复调度') }}</button>
       <button
         type="button"
         class="oc__collapse"
@@ -729,11 +716,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
       </button>
     </header>
 
-    <div v-show="!collapsed" class="oc__state" :class="{ 'is-paused': !active }">
-      <span class="oc__state-label">{{ $t('@WORKBENCH:调度状态') }}</span>
-      <span class="oc__state-value">
-        {{ active ? $t('@WORKBENCH:调度中') : $t('@WORKBENCH:已暂停') }}
-      </span>
+    <div v-show="!collapsed" class="oc__state">
       <span class="oc__state-meta">{{ $t('@WORKBENCH:{n} 个执行中', { n: runningCount }) }}</span>
     </div>
 
@@ -1123,16 +1106,6 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 }
 .oc__rail:focus-visible { outline: var(--focus-outline); outline-offset: -2px; }
 .oc__rail-icon { font-size: var(--font-size-base); flex-shrink: 0; }
-.oc__rail-live {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--color-success);
-  box-shadow: var(--dot-glow-success);
-  animation: oc-pulse 1.6s ease-in-out infinite;
-}
-.oc__rail-live.is-off { background: var(--color-warning); box-shadow: var(--dot-glow-warning); animation: none; }
 /* writing-mode 竖排：标题横着放不进 32px */
 .oc__rail-text {
   writing-mode: vertical-rl;
@@ -1149,20 +1122,6 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
-.oc__live {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--color-success);
-  box-shadow: var(--dot-glow-success);
-  animation: oc-pulse 1.6s ease-in-out infinite;
-}
-.oc__live.is-off { background: var(--color-warning); box-shadow: var(--dot-glow-warning); animation: none; }
-@keyframes oc-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.45; transform: scale(1.35); }
-}
 /* 2026-10-05：面板标题原来和它下面的每一条注脚一样是 12px/500/次要色 ——
    整栏扫下来没有一处比别处更重，读起来是一堆平级的灰字。标题是这一栏唯一
    的"我是谁"，给它 13px/600/正文色，把层级从最上面立起来（正文刻度天花板
@@ -1176,46 +1135,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   flex: 1;
   min-width: 0;
 }
-/* 「暂停调度 / 恢复调度」：这一栏唯一的全局动作，原来是一段没有边框的 11px
-   灰字 —— 和标题同为纯文字，看起来像第二个标题而不是能点的东西。
-   现在与「立即报告」同一套胶囊（22px / pill / 1px 描边 / 白底），
-   栏内所有"动作"长得一样。 */
-.oc__toggle {
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-  height: 22px;
-  padding: 0 10px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-pill);
-  background: var(--surface-elevated);
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  font-family: inherit;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: color var(--transition-fast) var(--ease-custom),
-              border-color var(--transition-fast) var(--ease-custom),
-              background var(--transition-fast) var(--ease-custom);
-}
-.oc__toggle:hover:not(:disabled) {
-  color: var(--role-active-ink);
-  border-color: var(--role-active-edge);
-  background: var(--role-active-surface);
-}
-/* 暂停态：这一个按钮同时是"状态"和"动作"。暂停中染角色色（琥珀 = 需要注意），
-   于是"现在没在自动跑"这件事在栏头就能看见，不用读到下面那行状态才明白。 */
-.oc__toggle.is-off {
-  color: var(--role-active-ink);
-  border-color: var(--role-active-edge);
-  background: var(--role-active-surface);
-}
-.oc__toggle.is-off:hover:not(:disabled) { border-color: var(--role-active-ink); }
-.oc__toggle:disabled { opacity: var(--disabled-opacity); cursor: default; }
-.oc__toggle:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
-
-/* 折叠按钮：和 .oc__toggle 同款无底色图标按钮，只是换成图标 */
+/* 折叠按钮：22px 无底色图标按钮 */
 .oc__collapse {
   display: inline-flex;
   align-items: center;
@@ -1238,8 +1158,9 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 /* 状态读数条。原来底色是 --gradient-accent-soft（一层极淡的主色渐变），
    而右下角那块栏底本身就是 #f5f7fa —— 渐变叠上去只是让它"偏蓝一点点"，
    既不像一条有身份的读数，又让这一屏多出一种没有名字的底色。
-   现在底色退回与拨片同一支中性 --bg-subtle，靠"值加粗放大 + 暂停时整条转角色色"
-   来表达状态。 */
+   现在底色退回与拨片同一支中性 --bg-subtle。
+   这一行原来还有「调度状态 / 调度中」两枚（暂停时整条转角色色），2026-10-14
+   随调度开关一起删了 —— 剩「{n} 个执行中」一项，靠 margin-left:auto 靠右。 */
 .oc__state {
   display: flex;
   align-items: baseline;
@@ -1251,25 +1172,6 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   border-bottom: 1px solid var(--border-color-light);
   flex-shrink: 0;
 }
-/* 2026-10-04：这里原本是 `color: var(--warning-dark)` —— 令牌表里只有
-   --color-warning-dark，压根没有 --warning-dark。var() 解析失败会让整条声明
-   被丢掉（编译器/tsc/build/浏览器 console 全都不报），于是「已暂停」与「调度中」
-   一直是一个颜色。同一个错字当时在本文件还有第二处（任务事实那条的 .rpt__silent），
-   两处一起修了；那一区 2026-10-14 已整块移到看板卡片上。 */
-.oc__state.is-paused {
-  color: var(--role-active-ink);
-  background: var(--role-active-surface);
-  border-bottom-color: var(--role-active-edge);
-}
-.oc__state-label { color: var(--text-meta); }
-/* 值比标签大一档、粗一档：这一行要回答的是"现在到底跑不跑"，标签只是它的名字 */
-.oc__state-value {
-  margin-left: 2px;
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.oc__state.is-paused .oc__state-value { color: var(--role-active-ink); }
 .oc__state-meta {
   margin-left: auto;
   color: var(--text-meta);
@@ -1278,7 +1180,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 
 /* 工作方式切换：一个两段式拨片。
    为什么不做成两个独立按钮：它们互斥且只有两档，拨片能一眼看出"现在是哪一档"，
-   而两个按钮在窄栏里看起来像"两个动作"（尤其旁边就有一个真的动作按钮「暂停调度」）。 */
+   而两个按钮在窄栏里看起来像"两个动作"（栏里另外几枚才是真的动作按钮）。 */
 .oc__mode {
   display: flex;
   gap: 2px;

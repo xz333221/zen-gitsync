@@ -111,7 +111,6 @@ import {
 } from './dispatchInstruction.js';
 import {
   readOrchestrator,
-  setOrchestratorActive,
   setDefaultPrompt,
   setProjectPrompt,
   buildActivityFeed,
@@ -1068,15 +1067,15 @@ export function registerWorkbenchRoutes({
   //   GET  /api/workbench/projects               项目清单 + 看板任务
   //   GET  /api/workbench/project-icon           项目自己的图标（favicon）
   //   POST /api/workbench/projects/remove        从清单里移除一个项目条目
-  //   GET  /api/workbench/orchestrator           调度开关 + 指令存档 + 活动流 + 预设提示词
-  //   POST /api/workbench/orchestrator/state     暂停 / 恢复调度
+  //   GET  /api/workbench/orchestrator           指令存档 + 活动流 + 预设提示词
   //   POST /api/workbench/orchestrator/dispatch  派发一条人类干预指令
   //   POST /api/workbench/orchestrator/default-prompt   写全局预设提示词
   //   POST /api/workbench/orchestrator/project-prompt   写某个项目的预设提示词
   //
-  // 「暂停调度」的实际语义：只拦**自动派发**（dispatch 里带 autoRun），
-  // 手动点执行 / 子任务执行一概不受影响 —— 暂停的是主 Agent 的自主行为，
-  // 不是把用户的手也一起绑住。
+  // 派发与否由调用方给的 autoRun 决定（控制台那个"只建任务不执行"的勾选、
+  // 或内置智能体调 dispatch_task 时自己传的值）。**没有**一个全局的
+  // "暂停派发"总开关 —— 2026-10-14 连同它的 UI 一起删了：它唯一的作用是
+  // 让派发出去的活不执行，而派发这个动作本身就是"要它跑"的意思。
   // ════════════════════════════════════════════════════════════════════════
 
   /**
@@ -1376,7 +1375,6 @@ export function registerWorkbenchRoutes({
     const jobsSnap = snapshotJobs();
     res.json({
       success: true,
-      active: state.active,
       updatedAt: state.updatedAt,
       // ⚠️ 这个接口是 5s 轮询的。指令正文在**下发这一份**里被截到
       // INSTRUCTION_PREVIEW_CHARS（落盘那份不截，见 shared.js 的注释）。
@@ -1601,14 +1599,6 @@ export function registerWorkbenchRoutes({
   }, REPORT_TICK_MS);
   stallTimer.unref?.();
 
-  app.post('/api/workbench/orchestrator/state', asyncRoute(async (req, res) => {
-    const active = req.body?.active;
-    if (typeof active !== 'boolean') throw new HttpError(400, 'active 必须是布尔值');
-    const state = await setOrchestratorActive(active);
-    publish('orchestrator:state', { active: state.active, updatedAt: state.updatedAt });
-    res.json({ success: true, active: state.active, updatedAt: state.updatedAt });
-  }));
-
   /** 提示词参数校验：空串是合法值（= 清除），只拦超长与非字符串 */
   function assertPromptText(prompt) {
     if (typeof prompt !== 'string') throw new HttpError(400, 'prompt 必须是字符串');
@@ -1670,7 +1660,7 @@ export function registerWorkbenchRoutes({
    * body: { text, projectPath?, autoRun?, useDefaultPrompt?, executor?, attachments? }
    *   - projectPath 缺省 -> 交给 targetResolver 判断落到哪个项目（显式指定 > 指令里点名
    *     > 主 Agent 判断 > 应用当前项目）。用户不必先选项目，落点会如实记进指令流水
-   *   - autoRun 默认 true；调度暂停时只建任务不执行（指令记录里会写明原因）
+   *   - autoRun 默认 true；false = 只建任务不执行
    *
    * 一条指令落成目标项目下的一个任务：整段指令就是那次会话的 prompt。
    *
