@@ -29,7 +29,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
-import { Paperclip, Promotion, Expand, Fold, Setting, Refresh, ArrowDown, ArrowRight } from '@element-plus/icons-vue'
+import { Paperclip, Promotion, Expand, Fold, Setting, Refresh, ArrowDown, ArrowRight, LocationInformation } from '@element-plus/icons-vue'
 import type {
   Attachment,
   ProgressReport,
@@ -103,6 +103,13 @@ const emit = defineEmits<{
   'generate-report': []
   /** 改自动报告间隔（毫秒，0 = 关闭自动报告）。落盘在服务端，由看板转发 */
   'set-report-interval': [ms: number]
+  /**
+   * 点报告卡上的定位按钮：让看板把这份报告讲的任务滚到可见处并标记（is-opened）。
+   *
+   * 为什么不是"再渲染一遍任务卡"：那份字段 2026-10-14 已经从这栏搬去看板卡片
+   * （3bd983ea），左右两栏说同一批事是余下的重复；用"跳过去"消重，而不是回退。
+   */
+  'locate-task': [taskId: string]
   dispatch: [payload: {
     text: string
     autoRun: boolean
@@ -461,6 +468,26 @@ const liveReport = computed<ProgressReport | null>(() => {
 })
 
 /**
+ * 定位按钮的目标：这份报告讲的、**还在跑**的第一个任务。
+ *
+ * 优先还活着的（判据与 reportIsLive 同一套）：过期报告点开的定位没有意义 ——
+ * 那张卡早不在「进行中」列里，跳过去只会落空。一个都没在跑时才退回第一条带
+ * taskId 的（用户从历史点开一份时至少能跳去它现在的列）。
+ * 老记录没有 taskId → null，按钮不画（好过跳去一个不存在的地方）。
+ */
+const locateTaskId = computed<string | null>(() => {
+  const r = currentReport.value
+  if (!r) return null
+  const tasks = r.tasks || []
+  const ids = runningIds.value
+  const live = tasks.find(t =>
+    (t.jobId && ids.job.has(t.jobId)) || (!t.jobId && !!t.taskId && ids.task.has(t.taskId))
+  )
+  const hit = live || tasks.find(t => !!t.taskId)
+  return hit?.taskId || null
+})
+
+/**
  * 正在展示的那份报告。
  *
  * 优先级：用户从历史里点的那份 → 最新那份还活着的。
@@ -669,6 +696,18 @@ function toggleSect(which: 'history' | 'git') {
 }
 
 /**
+ * 空态里那枚「回看历史报告」（2026-10-14 评审轮加上来的）。
+ *
+ * 空态的悬停一直写着"要回看可以从历史报告里点开"，但历史区默认折着、
+ * 还在面板更下方 —— 那句话实际上是一条"你自己去找"的指令。
+ * 这里直接把历史区展开：已经展开着就什么都不做（按钮的职责是"别让回看
+ * 变成找按钮"，不是再当一次折叠开关）。
+ */
+function reviewHistory() {
+  if (!historyOpen.value) toggleSect('history')
+}
+
+/**
  * 概览收起时标题行上剩下的那点内容：头两项（分支 / 工作区）。
  * 这两项是"这个仓库现在什么状态"的全部答案，其余（与上游 / 今日完成 / 最后活跃）
  * 都得点开看。非 Git 仓库、目录不存在、没选中项目时 gitSummary 会短于两项，
@@ -808,6 +847,19 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
               {{ $t('@WORKBENCH:{n} 个任务进行中', { n: currentReport.tasks.length }) }}
             </span>
             <span class="rp__time">{{ clockFromIso(currentReport.at) }}</span>
+            <!-- 定位：这份报告讲的任务就在看板上，但右栏看不见它在哪一列。
+                 一键滚过去 + 标记，不用去三列里找（2026-10-14 评审：左右两栏
+                 说同一批事，用"跳过去"消重，而不是把任务卡搬回来） -->
+            <button
+              v-if="locateTaskId"
+              type="button"
+              class="rp__locate"
+              :title="$t('@WORKBENCH:在面板中定位这份报告讲的任务')"
+              :aria-label="$t('@WORKBENCH:在面板中定位这份报告讲的任务')"
+              @click="emit('locate-task', locateTaskId)"
+            >
+              <el-icon><LocationInformation /></el-icon>
+            </button>
           </div>
 
           <!-- 进度条：主 Agent 自己给的百分比（不是我们拿时长算的 —— 跑多久跟还剩多少活
@@ -870,7 +922,17 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
           -->
         </li>
         <li v-else class="oc-empty" :title="idleHintTitle">
-          {{ idleHint }}
+          <span class="oc-empty__text">{{ idleHint }}</span>
+          <!-- 2026-10-14 评审轮：空态别做死胡同。悬停一直写着"要回看可以从历史报告里
+               点开"，但历史区默认折着、还在面板更下方 —— 有历史就直接给一键展开 -->
+          <button
+            v-if="(reports || []).length > 1"
+            type="button"
+            class="oc-empty__action"
+            @click="reviewHistory"
+          >
+            {{ $t('@WORKBENCH:回看历史报告') }}
+          </button>
         </li>
       </ul>
 
@@ -1035,8 +1097,13 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
           :title="$t('@WORKBENCH:取消勾选则本次派发的任务不带预设提示词（设置本身不受影响）')"
         >
           <input type="checkbox" v-model="useDefaultPrompt" />
-          <span>{{ $t('@WORKBENCH:预设提示词（{state}）', { state: promptStateLabel }) }}</span>
+          <!-- 2026-10-14 评审轮改名：旧文案「预设提示词（全局）」没说清这个勾选
+               干什么（用户原话：语义不清）。它勾的是"这次派发带上预设提示词" -->
+          <span>{{ $t('@WORKBENCH:附带预设提示词（{state}）', { state: promptStateLabel }) }}</span>
         </label>
+        <!-- 执行器标签：picker 本体只显示品牌名（「Claude Code」），
+             不标明身份会被当成模型选择（2026-10-14 评审） -->
+        <span class="oc__foot-label">{{ $t('@WORKBENCH:任务执行器') }}</span>
         <!-- 执行器：与工作台执行按钮、看板「执行」共用同一份选择。
              下拉本体收口在 TaskExecutorPicker（对话模式底下那个也是它），
              它自己读 composable 的共享状态，这里不用再传 v-model -->
@@ -1391,6 +1458,25 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   color: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
+/* 定位按钮（2026-10-14）：18px 无底图标按钮，跟报告头一行的小字号配套。
+   位置在时间戳右边 —— 那头是"这份报告是什么"，这枚是"带我去看它讲的活" */
+.rp__locate {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-meta);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: color var(--transition-fast) var(--ease-custom);
+}
+.rp__locate:hover { color: var(--color-primary); }
+.rp__locate:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 /* 进度条：4px 圆角胶囊（几何原与左栏项目列表那条一致 —— 左栏那条 2026-10-13
    已随"数字有用，彩条占地方"移除，这里的两条是全应用仅剩的进度条）。
    轨道用 --bg-active（深浅两套都有定义）—— 卡片本身
@@ -1616,6 +1702,21 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   border-radius: var(--radius-lg);
   background: var(--bg-subtle);
 }
+/* 空态里的「回看历史报告」（2026-10-14）：小号文字按钮，
+   不另做底色 —— 整块已经是虚线空态框，再套一枚胶囊会多一层容器 */
+.oc-empty__action {
+  display: block;
+  margin: 8px auto 0;
+  padding: 2px 8px;
+  border: none;
+  background: transparent;
+  color: var(--color-primary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: color var(--transition-fast) var(--ease-custom);
+}
+.oc-empty__action:hover { color: var(--color-primary-dark); text-decoration: underline; }
+.oc-empty__action:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
 .oc__git {
   padding: 8px 12px 10px;
@@ -1711,6 +1812,14 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   flex-wrap: wrap;
   row-gap: 6px;
   margin-top: 6px;
+}
+/* 派发栏里的字段小标签（2026-10-14：「任务执行器」）。
+   执行器 picker 本体只显示品牌名，旁边不标明身份会被当成模型选择 */
+.oc__foot-label {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-meta);
+  white-space: nowrap;
 }
 /* 回形针：按项目惯例 —— 图标按钮不加底色/边框，只变图标色 */
 .oc__attach {

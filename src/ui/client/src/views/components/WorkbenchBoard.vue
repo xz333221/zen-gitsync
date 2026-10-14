@@ -70,6 +70,13 @@ const emit = defineEmits<{
    * 递上去的是同一个数组对象，两处显示的字因此逐字一致。
    */
   'board-tasks': [tasks: BoardTask[]]
+  /**
+   * 右栏报告卡上的「定位」：把这份报告讲的任务在看板上标记出来（is-opened）。
+   *
+   * 与 'open-task' 是两件事：那个是"点卡片 → 弹任务编辑器"，这个只是"让我看见
+   * 它在哪"（2026-10-14 评审：右栏报告与中栏任务卡说的是同一批事，用定位消重）。
+   */
+  'locate-task': [taskId: string]
 }>()
 
 const {
@@ -765,19 +772,21 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
       <div class="board__stats">
         <span class="board__stat">
           <span class="board__stat-label">{{ $t('@WORKBENCH:项目') }}</span>
-          <strong class="board__stat-value">{{ headerStats.projects }}</strong>
+          <!-- is-zero：2026-10-14 评审轮。四项统计同权重视觉上抢不出主次，
+               0 是"此刻没有"的信号，该退到跟标签同一档，让非零值成为主角 -->
+          <strong class="board__stat-value" :class="{ 'is-zero': headerStats.projects === 0 }">{{ headerStats.projects }}</strong>
         </span>
         <span class="board__stat" :title="$t('@WORKBENCH:看板上全部任务（含已从项目列表移除的项目）')">
           <span class="board__stat-label">{{ $t('@WORKBENCH:全部任务') }}</span>
-          <strong class="board__stat-value">{{ headerStats.tasks }}</strong>
+          <strong class="board__stat-value" :class="{ 'is-zero': headerStats.tasks === 0 }">{{ headerStats.tasks }}</strong>
         </span>
         <span class="board__stat">
           <span class="board__stat-label">{{ $t('@WORKBENCH:活跃执行') }}</span>
-          <strong class="board__stat-value" :class="{ 'is-live': headerStats.running > 0 }">{{ headerStats.running }}</strong>
+          <strong class="board__stat-value" :class="{ 'is-live': headerStats.running > 0, 'is-zero': headerStats.running === 0 }">{{ headerStats.running }}</strong>
         </span>
         <span class="board__stat">
           <span class="board__stat-label">{{ $t('@WORKBENCH:今日完成') }}</span>
-          <strong class="board__stat-value">{{ headerStats.todayDone }}</strong>
+          <strong class="board__stat-value" :class="{ 'is-zero': headerStats.todayDone === 0 }">{{ headerStats.todayDone }}</strong>
         </span>
       </div>
     </header>
@@ -899,6 +908,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
         @generate-report="generateReport"
         @set-report-interval="setReportInterval"
         @open-prompt-settings="promptDialogOpen = true"
+        @locate-task="emit('locate-task', $event)"
       />
     </div>
 
@@ -993,6 +1003,9 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   font-variant-numeric: tabular-nums;
 }
 .board__stat-value.is-live { color: var(--color-warning-dark); }
+/* 零值退场（2026-10-14 评审轮）：降到 meta 档，跟标签同一灰度。
+   不是藏起来 —— 数字还在，只是不再跟非零值抢视觉重量 */
+.board__stat-value.is-zero { color: var(--text-meta); }
 
 /* 图标按钮只变颜色，不加底色/边框 */
 .board__icon-btn {

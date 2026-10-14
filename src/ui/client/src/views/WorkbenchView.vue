@@ -167,6 +167,23 @@ async function openTaskFromBoard(payload: { taskId: string; projectPath: string 
   editorOpen.value = true
 }
 
+/**
+ * 右栏报告卡上的「定位」（2026-10-14 评审轮）：只在看板上把那张卡标记出来
+ * （is-opened + 滚进可见区，见 WorkbenchKanban 的 watch），**不弹编辑器** ——
+ * 弹窗是"点卡片"的语义（openTaskFromBoard），定位只是"让我看见它在哪"。
+ *
+ * 任务不在当前视图时（多半在别的项目下）明说：按钮点了没反应比这更糟。
+ * 判据用看板快照 boardTasks（WorkbenchBoard 每轮轮询递上来的那一份），
+ * 不现拉接口 —— 定位是"此刻屏指的东西"，跟轮询同源才指得准。
+ */
+function locateTaskFromBoard(taskId: string) {
+  if (!boardTasks.value.some(t => t.id === taskId)) {
+    ElMessage.info($t('@WORKBENCH:该任务不在当前视图（可能在别的项目下）'))
+    return
+  }
+  boardOpenedTaskId.value = taskId
+}
+
 // ── 数据层（状态 + 加载 + CRUD） ─────────────────────────────────────────────
 const {
   tasks, jobs, currentProject,
@@ -1075,6 +1092,7 @@ const selectedTaskQueue = computed(() =>
       :opened-task-id="boardOpenedTaskId"
       @open-task="openTaskFromBoard"
       @board-tasks="boardTasks = $event"
+      @locate-task="locateTaskFromBoard"
     />
 
     <!-- L2：单任务编辑器 —— 大弹窗浮在看板之上，关掉即回到原位，全程无跳转 -->

@@ -2547,12 +2547,18 @@ export default {
   '@WORKBENCH:落点项目': 'the target project',
   '@WORKBENCH:全局 + 本项目': 'global + this project',
   '@WORKBENCH:全局 + 落点项目': 'global + the target project',
-  '@WORKBENCH:预设提示词（{state}）': 'Preset prompt ({state})',
+  // 2026-10-14 renamed: the checkbox means "attach the preset prompt to this dispatch";
+  // the old "Preset prompt ({state})" never said what it does
+  '@WORKBENCH:附带预设提示词（{state}）': 'Attach preset prompt ({state})',
   '@WORKBENCH:取消勾选则本次派发的任务不带预设提示词（设置本身不受影响）': 'Uncheck to dispatch this one task without the preset prompt (the setting itself is untouched)',
   '@WORKBENCH:已保存全局预设提示词': 'Global preset prompt saved',
   '@WORKBENCH:已保存项目预设提示词': 'Project preset prompt saved',
   '@WORKBENCH:全局提示词': 'Global prompt',
   '@WORKBENCH:项目提示词': 'Project prompt',
+  // ── Console report area: idle action + locate (2026-10-14 UI review round) ──
+  '@WORKBENCH:回看历史报告': 'Review past reports',
+  '@WORKBENCH:在面板中定位这份报告讲的任务': 'Locate this report\u2019s task on the board',
+  '@WORKBENCH:该任务不在当前视图（可能在别的项目下）': 'That task is not in the current view (it may belong to another project)',
   // 任务详情「提示词」区（只读展示派发时冻结的快照）
   '@WORKBENCH:提示词': 'Prompt',
   '@WORKBENCH:这条任务没有附加提示词': 'No prompt attached to this task',

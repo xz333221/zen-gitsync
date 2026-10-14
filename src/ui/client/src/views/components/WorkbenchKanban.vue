@@ -55,7 +55,7 @@
   都不再响应 hover，而点一下（拿到焦点）又能让它冒出来」，见 .kb-card__actions 那段。
 -->
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { Search } from '@element-plus/icons-vue'
 import TaskExecutorIcon from '@/components/TaskExecutorIcon.vue'
@@ -198,6 +198,26 @@ const columnsStyle = computed(() => ({
 const animateCollapse = ref(false)
 onMounted(() => {
   requestAnimationFrame(() => requestAnimationFrame(() => { animateCollapse.value = true }))
+})
+
+/**
+ * 上层把某张卡设成"点开的"（is-opened）时，把它滚进可见区。
+ *
+ * 用场：右栏报告卡上的「定位」按钮 —— 报告讲的任务就在看板上，但右栏看不见它在
+ * 哪一列哪一行（2026-10-14 评审轮）。点卡片走的是"弹编辑器"（open-task），
+ * 那次点击本来就让卡在视内；这里补的是"只标记、不弹窗"的定位路剩下的那步。
+ *
+ * 只在值**变化**时触发（watch 默认不 immediate）：首帧带着恢复出来的
+ * openedTaskId 时不该把页面弹走。找不到元素就安静退出 —— 任务可能不在当前
+ * 项目视图（那种情况上层先拦，见 WorkbenchView 的 locateTaskFromBoard），
+ * 也可能是「已完成」列更早的 30 条之外、DOM 里还没有它。
+ */
+watch(() => props.openedTaskId, (id) => {
+  if (!id) return
+  nextTick(() => {
+    document.querySelector(`.kb-card[data-task-id="${id}"]`)
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  })
 })
 
 /**
