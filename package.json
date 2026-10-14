@@ -92,6 +92,8 @@
     "verify:wb-editor-persist": "node scripts/verify-workbench-editor-persist.cjs",
     "verify:wb-open-scroll-bottom": "node scripts/verify-workbench-open-scroll-bottom.cjs",
     "verify:chat-rail": "node scripts/verify-chat-message-rail.cjs",
+    "verify:conv-collapse": "node scripts/verify-conv-collapse.cjs",
+    "verify:conv-collapse:reverse": "node scripts/verify-conv-collapse.cjs --reverse",
     "verify:agent-session-copy": "node scripts/verify-agent-session-copy.cjs",
     "verify:agent-retry": "node scripts/verify-agent-llm-retry.cjs",
     "verify:editor-preview-scroll": "node scripts/verify-editor-preview-scroll.cjs",

@@ -51,6 +51,7 @@ import { useConfigStore } from '@/stores/configStore'
 import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import { useNarrowPane } from '@/composables/useNarrowPane'
+import { useConvListCollapse } from '@/composables/useConvListCollapse'
 import { agentEngineName, type AgentEngineId } from '@/utils/agentEngine'
 import {
   buildConversationItems,
@@ -175,6 +176,14 @@ const { width, narrow } = useNarrowPane(rootRef)
 /** 窄屏下的当前页。宽屏两栏并排时用不到它 */
 const page = ref<'list' | 'chat'>('chat')
 
+/**
+ * 会话列表的收起 / 展开。宽屏才成立 —— 窄屏时列表是独立一页，没有"旁边那一列"可收。
+ * 状态与另外两个入口共用一份（见 useConvListCollapse 里的注释）。
+ */
+const { convListCollapsed, setConvListCollapsed } = useConvListCollapse()
+/** 宽屏 + 已收起：把左侧那一列从 240px 收到 40px（数值见下面的 .is-convs-collapsed） */
+const convsCollapsed = computed(() => !narrow.value && convListCollapsed.value)
+
 const chatRef = ref<InstanceType<typeof ChatContainer> | null>(null)
 function scrollToBottom(smooth = true) {
   chatRef.value?.scrollToBottom?.(smooth)
@@ -281,8 +290,8 @@ onMounted(() => {
       </button>
     </div>
 
-    <div class="acs__body" :class="{ 'is-wide': !narrow }">
-      <!-- 会话历史：宽屏是常驻左列，窄屏是独享整页 -->
+    <div class="acs__body" :class="{ 'is-wide': !narrow, 'is-convs-collapsed': convsCollapsed }">
+      <!-- 会话历史：宽屏是常驻左列（可收起），窄屏是独享整页 -->
       <div v-show="!narrow || page === 'list'" class="acs__convs">
         <ConversationList
           :show-search="true"
@@ -290,6 +299,9 @@ onMounted(() => {
           :active-id="currentSessionId"
           :loading="sessionsLoading"
           :labels="conversationLabels"
+          :collapsible="!narrow"
+          :collapsed="convsCollapsed"
+          @update:collapsed="setConvListCollapsed"
           @select="onSelectSession"
           @new="onNewSession"
           @rename="renameSession"
@@ -442,7 +454,17 @@ onMounted(() => {
   grid-template-areas:
     'list chat'
     'list composer';
+  /* 收起/展开时列宽平滑收放（与主 Agent 控制台折叠同一条曲线）。
+     拖动分隔条那类场景才需要关掉过渡，这里没有拖拽。 */
+  transition: grid-template-columns var(--transition-base) var(--ease-custom);
 }
+/*
+  收起态：左列只剩组件库那条收纳条，宽度收到 40px。
+  内边距也要跟着收 —— .acs__convs 常态是 8px，40px 里再扣掉左右各 8px 就只剩 24px，
+  收纳条（图标 + 竖排文案）会被挤成一条缝。数值与库 README 里的推荐档一致。
+*/
+.acs__body.is-wide.is-convs-collapsed { grid-template-columns: 40px minmax(0, 1fr); }
+.acs__body.is-wide.is-convs-collapsed .acs__convs { padding: 8px 4px; }
 .acs__convs {
   grid-area: stage;
   min-height: 0;

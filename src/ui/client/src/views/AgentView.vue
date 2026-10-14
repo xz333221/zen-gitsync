@@ -36,6 +36,7 @@ import { resolveAgentPresets } from '@/utils/agentPresets'
 import { subscribeScheduleEvents } from '@/utils/scheduleApi'
 import { agentEngineName, type AgentEngineId } from '@/utils/agentEngine'
 import { useNarrowPane } from '@/composables/useNarrowPane'
+import { useConvListCollapse } from '@/composables/useConvListCollapse'
 import MarketplacePanel from '@/components/MarketplacePanel.vue'
 import SchedulePanel from '@/components/SchedulePanel.vue'
 import AgentPromptSettings from '@/components/AgentPromptSettings.vue'
@@ -203,7 +204,21 @@ function handleNewSession() {
 const sidebarWidth = ref(280)
 const isResizing = ref(false)
 
+/**
+ * 会话列表收起 / 展开。收起时左栏只剩组件库那条收纳条（宽度见 CONV_RAIL_WIDTH），
+ * 拖拽分隔条随之隐藏 —— 40px 的收纳条没有可拖的余地，留着只会误触。
+ * 状态与主 Agent 控制台、文件空间 g ai 面板共用一份（见 useConvListCollapse）。
+ */
+const { convListCollapsed, setConvListCollapsed } = useConvListCollapse()
+/**
+ * 收起时的列宽：收纳条（图标 + 竖排文案）在 40px 里放得下，再窄就只剩图标。
+ * 与另两个入口（主 Agent 控制台 / 文件空间面板）的 `.is-convs-collapsed` 取同一个数 ——
+ * 三处是同一个控件，宽度不一样会显得像两个东西。
+ */
+const CONV_RAIL_WIDTH = 40
+
 function startResize(e: MouseEvent) {
+  if (convListCollapsed.value) return
   isResizing.value = true
   const startX = e.clientX
   const startWidth = sidebarWidth.value
@@ -270,14 +285,21 @@ onBeforeUnmount(() => {
     <!-- ═══ 宽屏：左侧会话列表（只在「对话」Tab 显示）═══
          窄屏时这一整块不渲染，会话列表改成 body 里的一个整页（见 .agent-list-page） -->
     <template v-if="activeTab === 'chat' && !narrow">
-      <aside class="agent-sidebar" :style="{ width: sidebarWidth + 'px' }">
-      <!-- 会话列表：UI 与交互都在组件库的 ConversationList 里 -->
+      <aside
+        class="agent-sidebar"
+        :class="{ 'is-convs-collapsed': convListCollapsed }"
+        :style="{ width: (convListCollapsed ? CONV_RAIL_WIDTH : sidebarWidth) + 'px' }"
+      >
+      <!-- 会话列表：UI 与交互都在组件库的 ConversationList 里（含收起 / 展开） -->
       <ConversationList
         class="agent-conversations"
         :items="conversationItems"
         :active-id="currentSessionId"
         :loading="sessionsLoading"
         :labels="conversationLabels"
+        collapsible
+        :collapsed="convListCollapsed"
+        @update:collapsed="setConvListCollapsed"
         @select="selectSession"
         @new="handleNewSession"
         @rename="renameSession"
@@ -285,8 +307,9 @@ onBeforeUnmount(() => {
       />
       </aside>
 
-    <!-- 拖拽分隔条 -->
+    <!-- 拖拽分隔条（收起时藏起来：40px 的收纳条没有可拖的余地） -->
     <div
+      v-if="!convListCollapsed"
       class="sidebar-resizer"
       @mousedown="startResize"
       :class="{ active: isResizing }"
@@ -453,13 +476,22 @@ onBeforeUnmount(() => {
   background: var(--bg-panel);
   border-right: 1px solid var(--border-color);
   overflow: hidden;
+  /* 收起 / 展开的收放动画（与主 Agent 控制台折叠同一条曲线）。
+     拖动分隔条那一路没有过渡 —— 它直接改 sidebarWidth，慢半拍会像拽橡皮筋。 */
+  transition: width var(--transition-base) var(--ease-custom);
 }
 
-/* 会话列表用组件库的 ConversationList（搜索/新建/重命名/删除都在组件里） */
+/* 会话列表用组件库的 ConversationList（搜索/新建/重命名/删除/收起都在组件里） */
 .agent-conversations {
   flex: 1;
   min-height: 0;
   padding: 10px 6px 8px 12px;
+}
+
+/* 收起态：40px 的收纳条 —— 常态那份「左 12 右 6」的内边距得让开，
+   否则收纳条只剩 22px，竖排文案会被裁掉（数值见 CONV_RAIL_WIDTH 的注释） */
+.agent-sidebar.is-convs-collapsed .agent-conversations {
+  padding: 10px 4px 8px;
 }
 
 /* ── 拖拽分隔条 ─────────────────────────────────── */

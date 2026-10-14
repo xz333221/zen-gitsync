@@ -2785,6 +2785,9 @@ export default {
   '@AGENT:重命名': 'Rename',
   '@AGENT:删除': 'Delete',
   '@AGENT:加载会话中...': 'Loading session...',
+  // 短文案是刻意的：这两条同时是收起后收纳条上的竖排文字，长句子会撑出列外
+  '@AGENT:收起会话列表': 'Collapse list',
+  '@AGENT:展开会话列表': 'Expand list',
   '@AGENT:返回会话列表': 'Back to conversations',
   '@AGENT:智能体助手': 'AI Agent',
   '@AGENT:计划': 'Plan',

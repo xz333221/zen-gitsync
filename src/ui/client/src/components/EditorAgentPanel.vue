@@ -74,8 +74,8 @@
       </button>
     </div>
 
-    <div class="agent-panel-body" :class="{ 'is-wide': !narrow }">
-      <!-- 会话历史：宽屏是常驻左列（行高正常 + 带搜索框），窄屏是独享整页 -->
+    <div class="agent-panel-body" :class="{ 'is-wide': !narrow, 'is-convs-collapsed': convsCollapsed }">
+      <!-- 会话历史：宽屏是常驻左列（可收起），窄屏是独享整页 -->
       <div v-show="!narrow || page === 'list'" class="agent-panel-convs">
         <ConversationList
           :show-search="true"
@@ -83,6 +83,9 @@
           :active-id="currentSessionId"
           :loading="sessionsLoading"
           :labels="conversationLabels"
+          :collapsible="!narrow"
+          :collapsed="convsCollapsed"
+          @update:collapsed="setConvListCollapsed"
           @select="onSelectSession"
           @new="onNewSession"
           @rename="renameSession"
@@ -188,6 +191,7 @@ import 'zen-ai-chat-ui/style.css'
 import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import { useNarrowPane } from '@/composables/useNarrowPane'
+import { useConvListCollapse } from '@/composables/useConvListCollapse'
 import { agentEngineName, type AgentEngineId } from '@/utils/agentEngine'
 import {
   buildConversationItems,
@@ -287,6 +291,14 @@ const rootRef = ref<HTMLElement | null>(null)
 const { width, narrow } = useNarrowPane(rootRef)
 /** 窄屏下的当前页。宽屏两栏并排时用不到它 */
 const page = ref<'list' | 'chat'>('chat')
+
+/**
+ * 会话列表的收起 / 展开。宽屏才成立 —— 窄屏时列表是独立一页，没有"旁边那一列"可收。
+ * 状态与智能体视图、主 Agent 控制台共用一份（见 useConvListCollapse）。
+ */
+const { convListCollapsed, setConvListCollapsed } = useConvListCollapse()
+/** 宽屏 + 已收起：左列从 240px 收到 40px（数值见下面的 .is-convs-collapsed） */
+const convsCollapsed = computed(() => !narrow.value && convListCollapsed.value)
 
 // ── 当前文档卡片：锚点插进库的输入框容器，和附件同处一行 ────────
 // 锚点是个空 div，样式靠 `:deep()` 从父级选择器下发（动态创建的元素没有 scoped 属性，
@@ -520,7 +532,14 @@ onBeforeUnmount(() => {
   grid-template-areas:
     'list chat'
     'list composer';
+  /* 收起/展开时列宽平滑收放（与主 Agent 控制台折叠同一条曲线） */
+  transition: grid-template-columns var(--transition-base) var(--ease-custom);
 }
+
+/* 收起态：左列只剩组件库那条收纳条，宽度收到 40px。
+   内边距也要跟着收 —— 常态是 8px 10px，40px 里再扣掉左右各 10px 就只剩 20px。 */
+.agent-panel-body.is-wide.is-convs-collapsed { grid-template-columns: 40px minmax(0, 1fr); }
+.agent-panel-body.is-wide.is-convs-collapsed .agent-panel-convs { padding: 8px 4px; }
 
 /* 会话历史：窄屏整页独占（行高正常 + 带搜索框），宽屏是左侧常驻一列 */
 .agent-panel-convs {

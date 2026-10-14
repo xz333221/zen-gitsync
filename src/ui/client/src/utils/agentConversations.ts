@@ -55,7 +55,13 @@ export function buildConversationItems(
   }))
 }
 
-/** 会话列表文案（走 app 的 i18n） */
+/**
+ * 会话列表文案（走 app 的 i18n）。
+ *
+ * 末两条是「收起 / 展开」：既是那两枚按钮的 title / aria-label，也是收起后收纳条上的
+ * 竖排文字（库只认这一份文案，没有单独的短文案字段）—— 所以英文也刻意取得短
+ * （"Collapse list"），长句子竖排下来会把收纳条撑出列外。
+ */
 export function agentConversationLabels(): Partial<ConversationListLabels> {
   return {
     newConversation: $t('@AGENT:新建会话'),
@@ -67,6 +73,8 @@ export function agentConversationLabels(): Partial<ConversationListLabels> {
     rename: $t('@AGENT:重命名'),
     delete: $t('@AGENT:删除'),
     untitled: $t('@AGENT:无标题'),
+    collapse: $t('@AGENT:收起会话列表'),
+    expand: $t('@AGENT:展开会话列表'),
   }
 }
 
