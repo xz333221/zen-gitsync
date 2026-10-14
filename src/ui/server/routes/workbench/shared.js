@@ -156,6 +156,23 @@ export const MANIFEST_FILES = [
 // 封顶只会逼人分批建任务。数量放开后单文件上限成了唯一的内存关口，所以它必须留着。
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;       // 单个附件最大 20MB
 
+/**
+ * 所有 SSE 长连接的保活间隔（毫秒）。**必须 ≤5s，别往上调。**
+ *
+ * Firefox 对 text/event-stream 的空档极敏感：两次 body 字节之间隔太久，它会直接掐掉
+ * 连接，页面拿到的是 `TypeError: Error in input stream` —— 看着像"这一轮失败"，
+ * 而服务端其实还在正常跑（对话那一轮的落盘、任务日志、定时任务面板都是这样）。
+ * 上游复现帖（enisdenjo/graphql-sse#99）给的线是：5s 一条能一直活着，7.5s 以上最终会断。
+ *
+ * 所以间隔不看"省不省流量"（一条注释十几个字节，一小时也就几 KB），只看浏览器脾气。
+ * 集中在这里的理由：agentRoutes 的对话流、任务日志流、定时任务面板流三条都靠它，
+ * 各写各的迟早出现"一处改成 5s、另一处还留着 15s"，而漏的那条永远查不出来。
+ *
+ * 配套还有一条（不在这个常量里）：流一建立就要立刻写一次，因为 Firefox 在收到
+ * 第一个 body 字节之前不会把响应交给页面的 fetch。
+ */
+export const SSE_HEARTBEAT_MS = 5000;
+
 // ── 时间 / ID 工具 ─────────────────────────────────────────
 export function nowIso() {
   return new Date().toISOString();

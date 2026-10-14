@@ -41,7 +41,7 @@ import { isSessionBusy, acquireSession, releaseSession } from './sessionGate.js'
 import { createScheduler } from './scheduler.js';
 import { registerScheduleRoutes } from './scheduleRoutes.js';
 import { normalizeItems, filterToRecentDirs, buildDirStatusBlock } from '../recentDirectoriesAiSummary.js';
-import { nowIso, logger, fs, fsp, MAX_IMAGE_BYTES } from './shared.js';
+import { nowIso, logger, fs, fsp, MAX_IMAGE_BYTES, SSE_HEARTBEAT_MS } from './shared.js';
 // 正文内嵌图片的路径判定纯函数 —— 与任务对话的图片端点（workbench/index.js 的
 // /api/workbench/jobs/:id/image）同一份：后缀白名单、root 内、防穿越。两份白名单
 // 分叉时不会报错，只会让某一类图在任务对话里能看、在 Agent 对话里裂。
@@ -471,6 +471,10 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
       'X-Accel-Buffering': 'no'
     });
     res.flushHeaders?.();
+    // 先把流"点亮"：Firefox 在收到第一个 body 字节之前，不会把流式响应交给页面的
+    // fetch（只 flush 头会一直卡着不 resolve，Chromium 则是收到头就 resolve）。
+    // 一条惰性注释即可，代价 3 个字节。
+    try { res.write(':\n\n'); } catch {}
     const send = (obj) => {
       try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch {}
     };
@@ -487,6 +491,13 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
       return res.end();
     }
     let activeSessionKey = null;
+
+    // 心跳只在真的开跑这一轮之后起（上面那条 busy 短路不需要它，也不该背一个 interval）。
+    // 出口统一在 finally 里 clearInterval —— 中间那些 return res.end() 全在 try 里，
+    // 漏一个就等于给进程留一个一直在写的定时器。
+    const heartbeat = setInterval(() => {
+      try { res.write(': keep-alive\n\n'); } catch {}
+    }, SSE_HEARTBEAT_MS);
 
     // 客户端断开
     if (req.socket) {
@@ -803,6 +814,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
       finished = true;
       res.end();
     } finally {
+      clearInterval(heartbeat);
       if (activeSessionKey) releaseSession(activeSessionKey);
     }
   });

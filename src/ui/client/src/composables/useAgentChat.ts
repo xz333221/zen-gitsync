@@ -1369,7 +1369,19 @@ export function useAgentChat() {
         }
       } else {
         assistantMsg.status = 'error'
-        assistantMsg.error = err?.message || String(err)
+        // 走到这里基本只剩"流被浏览器掐了"这一类：服务端自己报错走的是上面的
+        // error 事件，那条文案带中文前缀。浏览器给的是英文原文（Firefox 断
+        // text/event-stream 时就是 "Error in input stream"），用户既看不懂，
+        // 也不知道这一轮其实还能接着跑。换成一句人话，原文降级成"原因"。
+        // 服务端那一轮已经落过盘，点「重试」会带 resume 续跑，不会把活重干一遍。
+        const detail = err?.message || String(err)
+        assistantMsg.error = $t('@AGENT:连接中断，本轮进度已保留；点「重试」接着跑。原因：{reason}', { reason: detail })
+        // 思考块必须跟着定格。这条 catch 分支不重置 reasoningStatus 的话，断开之后
+        // 它一直停在 "思考中" 并**实时跳秒**（服务端 error 事件那条路本来就会定格），
+        // 于是一个早就死掉的轮次看起来还在思考。
+        if (assistantMsg.reasoningStatus === 'streaming') {
+          assistantMsg.reasoningStatus = 'done'
+        }
         ElMessage.error(assistantMsg.error || $t('@AGENT:对话失败'))
       }
     } finally {

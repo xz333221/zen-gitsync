@@ -616,3 +616,78 @@ test('没有 cwd 的老会话：根退回当前项目路径（与列表可见性
   assert.equal(res.statusCode, 200);
   assert.equal(res.headers['content-type'], 'image/png');
 });
+
+// SSE 保活：Firefox 对 text/event-stream 有两条硬脾气，都只有在浏览器里才看得见
+// （单测能守住的是"字节有没有按约定写出去"，守不住浏览器行为本身）：
+//   ① 收到第一个 body 字节之前，它不把响应交给页面的 fetch —— 只 flush 头会一直卡住，
+//      所以"流已建立"这个信号本身就是一条惰性注释；
+//   ② 两次字节之间空太久，它会直接掐连接，报 TypeError: Error in input stream
+//      （见 enisdenjo/graphql-sse#99；实测 5s 一条能一直活着）。
+// 没有心跳时，只要这一轮里有一步超过半分钟不吐字（长命令 / 慢 LLM / MCP），
+// 用户看到的就是"这一轮失败 + 重试"，而服务端其实还在正常跑并已落盘。
+test('SSE 保活：建流先点亮，开跑后每 5s 一条注释心跳，收尾必须停掉', async (t) => {
+  const activeCwd = path.resolve('active-project');
+  let chatHandler;
+  const app = {
+    get() {},
+    delete() {},
+    put() {},
+    post(route, handler) {
+      if (route === '/api/agent/chat') chatHandler = handler;
+    }
+  };
+  registerAgentRoutes({
+    app,
+    getCurrentProjectPath: () => activeCwd,
+    configManager: {
+      readRawConfigFile: async () => ({
+        models: [{ model: 'test', name: 'T', baseURL: 'https://example.invalid/v1', apiKey: 'k', isDefault: true }]
+      })
+    },
+    snapshotter: STUB_SNAPSHOTTER
+  });
+
+  // 模型吐半句就挂住：这一轮会一直停在"生成中"，正好用来观察空转期间的心跳
+  const hanging = init => new Response(new ReadableStream({
+    start(stream) {
+      stream.enqueue(new TextEncoder().encode(event({ choices: [{ delta: { content: '半句' } }] })));
+      init?.signal?.addEventListener('abort', () => stream.error(new DOMException('Aborted', 'AbortError')));
+    }
+  }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init) => hanging(init);
+  // 只假 setInterval（心跳），setTimeout 保持真身 —— waitUntil 靠它轮询
+  t.mock.timers.enable({ apis: ['setInterval'] });
+
+  let output = '';
+  let onSocketClose;
+  const req = {
+    body: { userMessage: '保活用例', cwd: activeCwd },
+    headers: {},
+    socket: { once(_evt, cb) { onSocketClose = cb; } }
+  };
+  const res = { set() {}, flushHeaders() {}, write(chunk) { output += chunk; }, end() {} };
+  const dataFrames = text => text.split('\n').filter(l => l.trim().startsWith('data:')).length;
+
+  try {
+    const route = chatHandler(req, res);
+    await waitUntil(() => output.length > 0);
+    assert.equal(output.slice(0, 3), ':\n\n', '建流要先补一条惰性注释，否则 Firefox 的 fetch 一直不 resolve');
+
+    await waitUntil(() => output.includes('"type":"content"'));
+    const beforeTick = output;
+    t.mock.timers.tick(5000);
+    assert.match(output.slice(beforeTick.length), /^: keep-alive\n\n/, '空转满一个心跳周期要补一条注释');
+    assert.equal(dataFrames(output), dataFrames(beforeTick), '心跳是注释，不该混进任何 data: 事件');
+
+    onSocketClose();          // 客户端断开 → 这一轮收尾
+    await route;
+    const afterEnd = output;
+    t.mock.timers.tick(30000); // 收尾后再空转 30s
+    assert.equal(output, afterEnd, '收尾必须 clearInterval，否则每轮都给进程留一个一直在写的定时器');
+  } finally {
+    globalThis.fetch = originalFetch;
+    t.mock.timers.reset();
+  }
+});

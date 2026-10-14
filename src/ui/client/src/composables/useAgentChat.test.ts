@@ -281,6 +281,36 @@ describe('useAgentChat parallel sessions', () => {
     expect(last?.finishedAt).toBeGreaterThanOrEqual(last!.createdAt!)
   })
 
+  // 流被**浏览器**掐断（Firefox 断开 text/event-stream 时，reader 收到的就是
+  // TypeError: Error in input stream）。两条契约：
+  //   · 气泡给人话 + 原文（原文不能占满整条，用户看不懂也不知道还能续跑）；
+  //   · 思考块同时定格 —— 这条 catch 分支不重置 reasoningStatus 的话，断了之后
+  //     它会一直显示"思考中"并实时跳秒（服务端 error 事件那条路本来就会定格）。
+  test('流被浏览器掐断：白话语保留原文，思考块同时定格', async () => {
+    // 这条 catch 会弹一条 ElMessage.error：桩掉它，别让用例去动真实 DOM
+    const toast = vi.spyOn(ElMessage, 'error').mockImplementation(() => ({} as any))
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const sendPromise = chat.sendMessage('跑个长命令')
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    chatStreams[0].send({ type: 'thinking', delta: '先看看目录' })
+    await flush()
+
+    chatStreams[0].error(new TypeError('Error in input stream'))
+    await sendPromise
+    await flush()
+
+    const last = chat.messages.value[chat.messages.value.length - 1]
+    expect(last?.status).toBe('error')
+    expect(last?.reasoningStatus).toBe('done')
+    expect(last?.error).toContain('Error in input stream')
+    expect(last?.error).not.toBe('Error in input stream')
+    expect(toast).toHaveBeenCalled()
+  })
+
 
   // 之前的实现直接以服务端列表覆盖，左栏这一条就消失了（用户报的"一停止任务就没了"）。
   test('停止后服务端列表还没这条会话时，左栏条目要保留', async () => {

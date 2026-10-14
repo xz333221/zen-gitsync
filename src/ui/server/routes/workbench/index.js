@@ -52,6 +52,7 @@ import {
   writeJson,
   nowIso,
   genId,
+  SSE_HEARTBEAT_MS,
 } from './shared.js';
 import {
   isImageExt,
@@ -191,7 +192,7 @@ export function registerWorkbenchRoutes({
     send({ event: 'hello', payload: { jobs: snapshotJobs() }, ts: nowIso() });
     const handler = (evt) => send(evt);
     bus.on('event', handler);
-    const ka = setInterval(() => res.write(`: keep-alive\n\n`), 15000);
+    const ka = setInterval(() => res.write(`: keep-alive\n\n`), SSE_HEARTBEAT_MS);
     req.on('close', () => {
       clearInterval(ka);
       bus.off('event', handler);

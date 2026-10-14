@@ -2826,6 +2826,7 @@ export default {
   '@AGENT:已停止': 'Stopped',
   '@AGENT:对话失败': 'Chat failed',
   '@AGENT:连接中断，正在自动重试（{attempt}/{max}）：{reason}': 'Connection interrupted, retrying automatically ({attempt}/{max}): {reason}',
+  '@AGENT:连接中断，本轮进度已保留；点「重试」接着跑。原因：{reason}': 'Connection interrupted. Progress in this turn is kept — click Retry to continue. Reason: {reason}',
   '@AGENT:只能重试最后一轮': 'Only the last turn can be retried',
   '@AGENT:这条会话还没在服务端建立，请重新发送消息': 'This session has not been created on the server yet — please send the message again',
   '@AGENT:该会话由外部 CLI 引擎运行，不支持重试上一轮，请重新发送': 'This session runs on an external CLI engine, which cannot retry the last turn — please send the message again',

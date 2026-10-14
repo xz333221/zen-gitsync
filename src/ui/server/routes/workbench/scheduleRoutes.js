@@ -31,7 +31,7 @@ import {
   loadTasks, createTask, updateTask, deleteTask,
 } from '../../../../utils/scheduleStore.js';
 import { nextFireAfter } from '../../../../utils/scheduleCron.js';
-import { nowIso } from './shared.js';
+import { nowIso, SSE_HEARTBEAT_MS } from './shared.js';
 
 const RUN_FAIL_REASONS = {
   'already-running': '该任务正在执行中，请等它跑完',
@@ -119,7 +119,7 @@ export function registerScheduleRoutes({ app, scheduler, getCurrentProjectPath }
     const dispose = scheduler.onEvent(evt => send(evt));
     const keepAlive = setInterval(() => {
       try { res.write(': keep-alive\n\n'); } catch {}
-    }, 15000);
+    }, SSE_HEARTBEAT_MS);
     req.on('close', () => {
       clearInterval(keepAlive);
       dispose();
