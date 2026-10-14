@@ -37,7 +37,7 @@ import type {
   ProjectSummary,
   RunningAgent,
 } from '@/types/workbench'
-import { clockFromIso, formatDurationMs, relativeTimeFromIso } from '@/utils/relativeTime'
+import { clockFromIso, relativeTimeFromIso } from '@/utils/relativeTime'
 import {
   REPORT_INTERVAL_OPTIONS_MS,
   REPORT_PERCENT_HINT_KEY,
@@ -46,7 +46,6 @@ import {
   reportIntervalLabelKey,
   reportIntervalLabelParams,
   reportPercent,
-  reportSilentMs,
 } from '@/utils/progressReport'
 import AttachmentZone from '@/components/AttachmentZone.vue'
 import AgentChatSurface from '@/components/AgentChatSurface.vue'
@@ -508,7 +507,9 @@ function pickReport(r: ProgressReport) { selectedReportId.value = r.id }
  * 报告正文的折叠态（默认露 6 行）。
  *
  * 为什么折：右栏只有 ~300px 宽，模型那种"任务1…任务2…任务3…"连着几段的汇报
- * 不截一下会把下面三组任务事实整个顶出视口，而事实才是扫得动的那部分。
+ * 不截一下，光这段正文就能把整张报告卡撑满 —— 而卡下面还有历史报告 / 项目概览
+ * 要占位，它们会被挤到看不见的地方去（2026-10-14 之前挤掉的是「任务事实」那一区，
+ * 那一区已搬去看板卡片，但"正文别独占整张卡"这条不变）。
  *
  * 截没截断**不猜**：量真实高度（scrollHeight > clientHeight）。宽度是工作台给的
  * --wb-right-w，同一段文字在宽窄两栏下截断点不一样，所以用 ResizeObserver 跟着重算。
@@ -568,16 +569,11 @@ function historyPct(r: ProgressReport): string {
 /**
  * 当前这份报告的整体进度。null = 主 Agent 没给 → 顶部那条进度条整行不渲染。
  * 绝不回落到 0：一条 0% 的实心条是在替模型说它没说过的话。
+ *
+ * 每个任务各自的百分比不在这里 —— 2026-10-14 起它跟着「任务事实」那一区一起
+ * 搬到了看板卡片上（见 utils/progressReport 的 taskPercentIndex）。
  */
 const currentPercent = computed(() => reportPercent(currentReport.value?.percent))
-
-/** 当前这份报告的任务事实 + 归一后的百分比与静默时长（模板里 v-for 用它，省掉每行四次函数调用） */
-const currentTasks = computed(() => (currentReport.value?.tasks || []).map(t => ({
-  ...t,
-  pct: reportPercent(t.percent),
-  // null = 不显示"静默 x 秒"，也不把卡片左侧竖线转成告警色（老数据里 0 会被当成"没静默"）
-  silent: reportSilentMs(t.silentMs),
-})))
 
 /** 历史列表里那一行摘要：有正文就取开头，没有就说清为什么没有 */
 function reportBrief(r: ProgressReport): string {
@@ -660,9 +656,6 @@ const gitSummary = computed(() => {
 const SECT_KEY = {
   history: 'wb.ocHistoryOpen.v1',
   git: 'wb.ocGitOpen.v1',
-  // 2026-10-11：任务事实默认折起 —— 它是从正在跑的任务里抄的原始证据，
-  // 与中间看板「进行中」卡片高度重合，展开时把报告正文整个顶出视口（用户截图反馈）
-  facts: 'wb.ocFactsOpen.v1',
 } as const
 
 function readSectOpen(key: string): boolean {
@@ -671,10 +664,9 @@ function readSectOpen(key: string): boolean {
 
 const historyOpen = ref(readSectOpen(SECT_KEY.history))
 const gitOpen = ref(readSectOpen(SECT_KEY.git))
-const factsOpen = ref(readSectOpen(SECT_KEY.facts))
 
-function toggleSect(which: 'history' | 'git' | 'facts') {
-  const target = which === 'history' ? historyOpen : which === 'git' ? gitOpen : factsOpen
+function toggleSect(which: 'history' | 'git') {
+  const target = which === 'history' ? historyOpen : gitOpen
   target.value = !target.value
   try { localStorage.setItem(SECT_KEY[which], target.value ? '1' : '0') } catch { /* 同上 */ }
 }
@@ -862,9 +854,9 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
           </div>
 
           <!-- 正文：主 Agent 写的**判断**。默认只露 6 行 —— 右栏只有 ~300px 宽，
-               模型那种"任务1…任务2…任务3…"连着几段的汇报不截一下会把下面三组
-               任务事实整个顶出视口，而事实才是扫得动的那部分。折起来时底下压一层
-               渐隐（不是硬切），配一个「展开全文」，不用拖滚动条去找结尾。 -->
+               模型那种"任务1…任务2…任务3…"连着几段的汇报不截一下会独占整张卡。
+               折起来时底下压一层渐隐（不是硬切），配一个「展开全文」，
+               不用拖滚动条去找结尾。 -->
           <div v-if="currentReport.text" class="rp__body">
             <p
               ref="textEl"
@@ -884,83 +876,15 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
                三种情况的处理办法完全不同，一律写"暂无"会让人白等 -->
           <p v-else class="rp__notice" :title="currentReport.errorDetail">{{ reportNotice(currentReport) }}</p>
 
-          <!-- 事实区：给一个区块标题是为了把"判断"与"依据"分开 —— 上面那段是模型说的，
-               下面这几张卡是从正在跑的任务里抄出来的事实，两者对不上时用户得能一眼
-               看出是模型在编（见服务端 progressReport.js 的 buildReportPrompt）。
-               2026-10-11 改为默认折起：内容与看板「进行中」卡片几乎同源，常展开只会
-               重复占掉半栏；折起来时标题行保留任务数，点击展开看证据明细。 -->
-          <div v-if="currentTasks.length" class="rp__facts" :class="{ 'is-collapsed': !factsOpen }">
-            <button
-              type="button"
-              class="oc__sect rp__facts-toggle"
-              :aria-expanded="factsOpen"
-              :title="factsOpen ? $t('@WORKBENCH:收起') : $t('@WORKBENCH:展开')"
-              @click="toggleSect('facts')"
-            >
-              <el-icon class="oc__sect-caret"><component :is="factsOpen ? ArrowDown : ArrowRight" /></el-icon>
-              <span
-                class="oc__sect-title"
-                :title="$t('@WORKBENCH:上面是主 Agent 的判断，下面这些是从正在跑的任务里抄出来的事实')"
-              >{{ $t('@WORKBENCH:任务事实') }}</span>
-              <span class="oc__sect-meta">
-                <span class="oc__sect-brief">{{ $t('@WORKBENCH:{n} 个任务', { n: currentTasks.length }) }}</span>
-              </span>
-            </button>
-            <ul v-show="factsOpen" class="rp__tasks">
-              <li
-                v-for="(t, i) in currentTasks"
-                :key="t.taskId || i"
-                class="rpt"
-                :class="{ 'is-silent': t.silent !== null }"
-              >
-                <p class="rpt__title">{{ t.taskTitle || $t('@WORKBENCH:未命名任务') }}</p>
-                <p class="rpt__meta">
-                  <span v-if="t.projectName" class="rpt__project">{{ t.projectName }}</span>
-                  <span>{{ $t('@WORKBENCH:已运行 {elapsed}', { elapsed: formatDurationMs(t.elapsedMs) }) }}</span>
-                  <span v-if="t.agent" class="rpt__agent">{{ t.agent }}</span>
-                  <!-- 次数看总数，鼠标停上去看**分布** —— 119 次里 118 次都是 Bash
-                       和"改了三处代码"，是完全不同的两件事，而一行放不下分布 -->
-                  <span v-if="t.toolCallCount" :title="t.toolMix || ''">
-                    {{ $t('@WORKBENCH:工具 {n} 次', { n: t.toolCallCount }) }}
-                  </span>
-                  <!-- 静默只在**显然静默**时才有值（服务端有阈值）；0 一律不画 ——
-                       老版本落盘时把"没有静默"写成了 0，见 reportSilentMs 的注释 -->
-                  <span v-if="t.silent !== null" class="rpt__silent">
-                    {{ $t('@WORKBENCH:静默 {elapsed}', { elapsed: formatDurationMs(t.silent) }) }}
-                  </span>
-                </p>
-                <!-- 每个任务自己的进度。整体那条说不清"是哪两个任务拖着的" —— 这一行就是
-                     为它准备的。主 Agent 只给整体、没给单个时（老模型 / 判断不出来）整行不渲染 -->
-                <p v-if="t.pct !== null" class="rpt__progress" :title="$t(REPORT_PERCENT_HINT_KEY)">
-                  <span
-                    class="rpt__bar"
-                    role="progressbar"
-                    :aria-valuenow="t.pct"
-                    aria-valuemin="0"
-                    aria-valuemax="100"
-                    :aria-label="t.taskTitle || $t('@WORKBENCH:未命名任务')"
-                  >
-                    <i class="rpt__bar-fill" :style="{ width: t.pct + '%' }" />
-                  </span>
-                  <span class="rpt__percent">{{ t.pct }}%</span>
-                </p>
-                <!-- 证据按可靠程度排：工具调用（正在做什么）→ 思考（为什么）→ 正文。
-                     思考这一行是 2026-09-29 补的：很多任务一句正文都不写，只靠工具调用
-                     根本看不出它在干嘛，而它的思考当时就在库里。
-                     三行都带标签：窄栏放得下，标签比左侧竖线更能让三行左对齐、一列扫下来
-                     （看板卡片上没有标签是因为卡片更窄，见 WorkbenchKanban 的 kb-card__live-tag） -->
-                <p v-if="t.lastTool" class="rpt__line is-tool" :title="t.lastTool">
-                  <span class="rpt__tag">{{ $t('@WORKBENCH:工具') }}</span>{{ t.lastTool }}
-                </p>
-                <p v-if="t.lastThought" class="rpt__line is-thought" :title="t.lastThought">
-                  <span class="rpt__tag">{{ $t('@WORKBENCH:最近思考') }}</span>{{ t.lastThought }}
-                </p>
-                <p v-if="t.lastLine" class="rpt__line" :title="t.lastLine">
-                  <span class="rpt__tag">{{ $t('@WORKBENCH:最新回复') }}</span>{{ t.lastLine }}
-                </p>
-              </li>
-            </ul>
-          </div>
+          <!--
+            这里原来还有一区「任务事实」（每个在跑的任务一张卡：标题 + 自己的进度条 +
+            工具 / 思考 / 回复三行证据）。2026-10-14 整块下掉 —— 那些字段中间看板
+            「进行中」的卡片本来就逐字有（服务端同一份 jobActivity 实现），两处并排
+            显示的是同一件事说两遍（用户截图反馈："左右都有，有点重叠"）。
+            唯一卡片上没有的是**每个任务自己的百分比**，它跟着这次搬迁挪到了卡片上
+            （WorkbenchKanban 的 .kb-card__live-progress）。所以这一栏现在只留
+            主 Agent 的**判断**（正文 + 整体进度），依据去卡片上看。
+          -->
         </li>
         <li v-else class="oc-empty" :title="idleHintTitle">
           {{ idleHint }}
@@ -1330,7 +1254,8 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 /* 2026-10-04：这里原本是 `color: var(--warning-dark)` —— 令牌表里只有
    --color-warning-dark，压根没有 --warning-dark。var() 解析失败会让整条声明
    被丢掉（编译器/tsc/build/浏览器 console 全都不报），于是「已暂停」与「调度中」
-   一直是一个颜色。同一个错字在本文件还有第二处（.rpt__silent），一并修。 */
+   一直是一个颜色。同一个错字当时在本文件还有第二处（任务事实那条的 .rpt__silent），
+   两处一起修了；那一区 2026-10-14 已整块移到看板卡片上。 */
 .oc__state.is-paused {
   color: var(--role-active-ink);
   background: var(--role-active-surface);
@@ -1667,155 +1592,15 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   line-height: 1.55;
   color: var(--text-meta);
 }
-/* 事实区：正文（判断）与下面这堆（依据）之间要有一道真边界。标题这行把两者的
-   身份写出来 —— 上面那段是模型说的，下面是从 job 里抄的，对不上时一眼能看出是谁在编 */
-.rp__facts { margin: 9px 0 0; padding-top: 7px; border-top: 1px solid var(--border-color); }
-/* 折起时少留一点空隙：下面只剩标题一行，再压 7px 会显得和正文脱节 */
-.rp__facts.is-collapsed { margin-top: 7px; }
-/* 2026-10-11：任务事实的标题从纯文字换成 oc__sect 折叠头（历史报告/项目概览同款）。
-   字号压回 xs 与原 caption 一致；折起时去掉底部 margin，让标题行贴住分界线 */
-.rp__facts-toggle { margin-bottom: 0; font-size: var(--font-size-xs); }
-.rp__facts:not(.is-collapsed) .rp__facts-toggle { margin-bottom: 5px; }
-.rp__facts-toggle .oc__sect-title { letter-spacing: 0.04em; }
-.rp__tasks {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin: 0;
-  padding: 0;
-}
-/* 每个任务一张卡。以前任务与任务之间只有 6px 间隙，谁是谁的证据全靠读，
-   窄栏里三组并排就是"一大片字"。左侧那道竖线是状态位：静默过久的那条转告警色 */
-/* 2026-10-05：底色从 --bg-active（7.5% 黑，压在现在这张白卡上偏深）换成
-   --bg-panel —— 它是"面板灰"这一支实色，白卡里一条灰带，边界比 4% 的描边
-   更清楚，也不用再靠边框把两块分开。padding 与圆角各提一档，让每条任务
-   有能呼吸的体量。 */
-.rpt {
-  min-width: 0;
-  padding: 7px 9px;
-  border-radius: var(--radius-md);
-  background: var(--bg-panel);
-  /* 2026-10-04：原本紧跟在这圈 1px 描边后面又写了一条
-     border-left: 2px solid var(--border-color) 把左边加粗 —— 视觉上
-     就是一根侧边色条。删掉即可，描边保持 1px 均匀。 */
-  border: 1px solid var(--border-color-light);
-}
-/* 2026-10-04：原本是 border-left-color（只染左边，配合已删掉的 2px 左边
-     加粗用）。现在描边整圈统一 1px，改成整圈染。
-   2026-10-05：底色同步换成角色淡底（--role-active-surface，不透明的那支）——
-   --tint-warning-06 是带 alpha 的，叠在 --bg-panel 上合成出来的值深浅两套
-   主题各不相同（README 第三轮记的就是这条）。 */
-.rpt.is-silent {
-  border-color: var(--role-active-edge);
-  background: var(--role-active-surface);
-}
-/* 任务名是这张卡的标题：比下面那几行证据亮一档、粗一档，
-   一列扫下来先看到的是"谁在跑"，再决定要不要读证据 */
-.rpt__title {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rpt__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 6px;
-  margin: 1px 0 0;
-  font-size: var(--font-size-xs);
-  color: var(--text-meta);
-  font-variant-numeric: tabular-nums;
-}
-/* meta 里相邻两项之间加个间隔点：这一行挤着 3~5 个短片段，
-   6px 的 gap 在 11px 字下分不清哪里到哪里，只能靠点的位置读 */
-.rpt__meta > span + span::before {
-  content: '·';
-  margin-right: 6px;
-  color: var(--text-meta);
-}
-.rpt__project { color: var(--text-secondary); }
-/* 每个任务自己的进度：比整体那条细一档（3px），它是注脚不是标题 */
-.rpt__progress {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 3px 0 0;
-}
-.rpt__bar {
-  flex: 1;
-  min-width: 0;
-  height: 3px;
-  border-radius: var(--radius-pill);
-  background: var(--bg-active);
-  overflow: hidden;
-}
-/* 同 .rp__bar-fill：任务事实里每一条进度也是「在跑的活儿」 */
-.rpt__bar-fill {
-  display: block;
-  height: 100%;
-  border-radius: var(--radius-pill);
-  background: var(--role-active-bar);
-  transition: width var(--transition-base) var(--ease-custom);
-}
-.rpt__percent {
-  flex-shrink: 0;
-  min-width: 30px;
-  text-align: right;
-  font-size: var(--font-size-xs);
-  color: var(--text-meta);
-  font-variant-numeric: tabular-nums;
-}
-/* 静默：报告里说"可能卡住了"时，用户能在这行上核到依据。
-   给一枚淡底：它是这一行里唯一的告警信号，混在灰色的时长/次数中间会被扫过去 */
-.rpt__silent {
-  padding: 0 4px;
-  border-radius: var(--radius-pill);
-  background: var(--tint-warning-14);
-  /* 原本是 var(--warning-dark) —— 同一个错字，本文件第二处。整条声明被丢掉之后，
-     这枚「可能卡住了」的告警徽标只剩淡底没有字色，压在灰底上几乎看不见。 */
-  color: var(--role-active-ink);
-  font-weight: 600;
-}
-.rpt__line {
-  margin: 3px 0 0;
-  font-size: var(--font-size-xs);
-  line-height: 1.5;
-  color: var(--text-meta);
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  word-break: break-word;
-}
-/* 工具行只给一行：它是"正在做什么"的标签（`Edit src/App.vue`），
-   折成两行会被读成一句内容，而它本来不是（与看板卡片同一取舍） */
-.rpt__line.is-tool {
-  -webkit-line-clamp: 1;
-  line-clamp: 1;
-}
-/* 思考那行比工具行**亮一档**：它是"它在干嘛"最直接的证据，
-   而工具行只说明"它动了哪个文件"。看板那边靠左侧竖线分，这里改用标签 ——
-   窄栏放得下标签，三行左对齐才扫得动（见模板里 .rpt__tag 的注释） */
-.rpt__line.is-thought { color: var(--text-secondary); }
-/* 固定宽度：三行各自的标签（工具 / 思考 / 回复）占一样宽，
-   正文就从同一条竖线起排，一列扫下来不会左左右右。
-   标签用 --text-meta 而不是 --text-tertiary：后者是装饰档（状态点/占位符），
-   而"这行是工具调用还是思考"是实打实要读的信息。
-   2026-10-05：标签统一加 500 字重 —— 原来只有"思考"那一行加粗，三行标签
-   在正文同为灰色时和正文糊成一体，读不出"标签 + 内容"的格。 */
-.rpt__tag {
-  display: inline-block;
-  min-width: 20px;
-  margin-right: 5px;
-  font-weight: 500;
-  color: var(--text-meta);
-}
-
+/*
+  2026-10-14：这里原来还有一区「任务事实」（.rp__facts / .rpt*）—— 每个在跑的任务
+  一张卡：标题、项目、时长、工具次数、静默、自己的进度条，外加工具 / 思考 / 回复三行证据。
+  整块下掉了，因为它与中间看板「进行中」卡片是**同一批字段**（服务端同一份
+  jobActivity 实现），两处并排显示就是同一件事说两遍（用户截图反馈："左右都有，有点重叠"）。
+  卡片那边反而更全（多 PID、执行器图标、静默的告警色），唯一它没有的「每个任务自己的
+  百分比」跟着这次搬迁挪到了卡片上（WorkbenchKanban 的 .kb-card__live-progress）。
+  所以这一栏现在只留主 Agent 的**判断**：正文 + 整体进度。
+*/
 /* ── 可收起的区块标题行（历史报告 / 项目概览共用）──────────
    标题自己就是开关：窄栏里再塞一枚"收起"按钮就是再挤一处，
    而这两块的内容（回看用的历史、Git 状态）都不是每眼都要读的。

@@ -17,12 +17,12 @@
  *       出错的卡反过来必须有浅红底（出错是跨列的，不染就扫不出哪条失败）。
  *   C4  列头与首卡之间要有间距 —— 曾是 0（`padding: 0 12px 12px`），
  *       首卡和列头色带贴死，用户报"卡片和上边的看板类型的 title 之间没有间距"。
- *   C5  进度条填充不许直接吃 ink（两个消费点：控制台进度报告 / 任务事实每条进度），
- *       必须走 --role-*-bar。
+ *   C5  进度条填充不许直接吃 ink（两个消费点：控制台进度报告的整体那条 / 看板卡片上
+ *       每个任务那条），必须走 --role-*-bar。
  *
  *   2026-10-13：左栏项目列表的进度条整个下掉了（用户："数字有用，彩条占地方"），
  *   曾经的 C6（进度条实测亮度）与运行时的 bars 量测随消费点一起移除；
- *   --role-*-bar 令牌保留 —— 控制台那两条进度条还在用它。
+ *   --role-*-bar 令牌保留 —— 控制台与看板卡片那两条进度条还在用它。
  *
  * ⚠️ 断言用**几何量 + 合成后的实际底色**（getComputedStyle 一路往父层合成到不透明为止），
  *   不是"截图看着对"。--reverse 把旧写法（ink 调色 + 透明 + 上边距 0）
@@ -106,11 +106,13 @@ console.log('── A. 静态断言 ──')
 
 // C5 进度条填充不许吃 ink。消费点各是一条 `background:`，这里按选择器抓那一条，
 //    不去全文 grep —— 同文件里 ink 还有正当用法（文字/图标/图标底色）。
-//    （2026-10-13 起是两个消费点：左栏项目列表那条进度条已随功能一起移除。）
+//    （2026-10-13 起是两个消费点：左栏项目列表那条进度条已随功能一起移除。
+//      2026-10-14：第二个消费点从右栏「任务事实」的 .rpt__bar-fill 换成看板卡片的
+//      .kb-card__live-bar-fill —— 那一区整块搬去看板卡片了。）
 {
   const consumers = [
     ['views/components/OrchestratorConsole.vue', /\.rp__bar-fill\s*\{([^}]*)\}/g, 1],
-    ['views/components/OrchestratorConsole.vue', /\.rpt__bar-fill\s*\{([^}]*)\}/g, 1],
+    ['views/components/WorkbenchKanban.vue', /\.kb-card__live-bar-fill\s*\{([^}]*)\}/g, 1],
   ]
   const bad = []
   for (const [rel, re, atLeast] of consumers) {

@@ -14,9 +14,12 @@
  *      另外把「服务端不给报告」那一条桩出来，单独验前端的回应（真实环境里
  *      "恰好没有任务在跑"不可控，见 P5e/P5f）
  *   P6 两份以上时出现历史区，点其中一条能把上面那张换掉（选中态跟着走）
- *   P7 进度条：主 Agent 给的百分比被画成条（宽度 = 那个数），带「AI 估计」字样与
- *      role=progressbar；每个任务各自的百分比只在模型给了时才画一条；历史列表那一列
- *      **没有进度时留空但占位**；**没给百分比就一条都不画**（反证：桩一份 percent=null 的报告）
+ *   P7 进度条：主 Agent 给的**整体**百分比被画成条（宽度 = 那个数），带「AI 估计」字样与
+ *      role=progressbar；历史列表那一列**没有进度时留空但占位**；**没给百分比就一条都不画**
+ *      （反证：桩一份 percent=null 的报告）。
+ *      ⚠️ 2026-10-14：每个任务**各自**的百分比跟着「任务事实」那一区搬到了看板卡片上
+ *      （用户反馈"左右都有，有点重叠"），P7e/P7f 因此改成守"旧位置真的没了"；
+ *      卡片那侧的"什么时候画 / 什么时候不画"在 verify-wb-card-progress.cjs
  *   P10 空正文的原因码：LLM_EMPTY（模型答了但没写正文）与通用失败说两句不同的话，
  *     悬停带服务端写的 errorDetail；认不出来的码仍然退回通用文案（反证）
  *   P11 小屏（780）：控制台排在看板**前面**、长正文不再被 6 行上限截断、
@@ -78,7 +81,10 @@ async function readPanel(page) {
       notice: (document.querySelector('.rp__notice')?.textContent || '').trim(),
       /** 没有正文时那句说明的悬停提示 = 服务端写的 errorDetail（失败原因的细节） */
       noticeTitle: document.querySelector('.rp__notice')?.getAttribute('title') || '',
-      factTitles: Array.from(document.querySelectorAll('.rpt__title')).map(e => e.textContent.trim()),
+      /** 2026-10-14：「任务事实」那一区整块下掉（搬去看板卡片），这里只用来数它还在不在。
+       *  它守的是"真的没了"，卡片那侧的进度见 verify:wb-card-progress */
+      factBlocks: document.querySelectorAll('.rp__facts').length,
+      factItems: document.querySelectorAll('.rpt').length,
       historyCount: document.querySelectorAll('.oc__history-item').length,
       /** 选中项的下标。别拿文字比：多份报告的摘要可能一模一样（都是"当时没有任务在执行"），
        *  文字相同 ≠ 选中没变 */
@@ -93,7 +99,7 @@ async function readPanel(page) {
   stale: (document.querySelector('.rp__stale')?.textContent || '').trim(),
   /** 控制台顶栏那个实时计数（「{n} 个执行中」），用来判断桩有没有生效 */
   runningMeta: (document.querySelector('.oc__state-meta')?.textContent || '').trim(),
-      /** 进度条：卡片整体那条（`.rpt__bar` 是每个任务各自的那条，别混） */
+      /** 进度条：卡片整体那条（每个任务各自的那条 2026-10-14 起在看板卡片上，别混） */
       hasBar: !!card?.querySelector('.rp__bar'),
       barRole: card?.querySelector('.rp__bar')?.getAttribute('role') || '',
       barAriaNow: card?.querySelector('.rp__bar')?.getAttribute('aria-valuenow') || '',
@@ -103,11 +109,6 @@ async function readPanel(page) {
       barFillPx: card?.querySelector('.rp__bar-fill')?.getBoundingClientRect().width ?? 0,
       percentText: (card?.querySelector('.rp__percent')?.textContent || '').trim(),
       barTitle: card?.querySelector('.rp__progress')?.getAttribute('title') || '',
-      /** 每个任务各自那条进度条的百分比文案（没有的不渲染，所以数量 ≤ 任务数） */
-      factPercents: Array.from(document.querySelectorAll('.rpt__percent')).map(e => e.textContent.trim()),
-      factTitlesWithPct: Array.from(document.querySelectorAll('.rpt'))
-        .filter(li => li.querySelector('.rpt__percent'))
-        .map(li => (li.querySelector('.rpt__title')?.textContent || '').trim()),
       historyPercents: Array.from(document.querySelectorAll('.oc__history-pct')).map(e => e.textContent.trim()),
     }
   })
@@ -526,12 +527,17 @@ async function main() {
       `role=${pm.barRole} now=${pm.barAriaNow}`)
     check('P7d 悬停能说明这个数字的来路（"不是精确进度"那句）',
       pm.barTitle.length > 0, `title="${pm.barTitle.slice(0, 60)}"`)
-    // 桩里的两个任务一个给了 70、一个没给 —— 只有给了的那条该画出来
-    check('P7e 每个任务的百分比只在模型给了时才画（null 那条不画）',
-      pm.factPercents.length === 1 && pm.factPercents[0] === '70%', pm.factPercents.join(','))
-    check('P7f 有进度的那条挂在**给了数字的那个任务**下面，没给的那条没有',
-      pm.factTitlesWithPct.length === 1 && pm.factTitlesWithPct[0] === '桩任务 1',
-      pm.factTitlesWithPct.join(' / '))
+    // 桩里的两个任务一个给了 70、一个没给 —— 只有给了的那条该画出来。
+    // ⚠️ 2026-10-14：每个任务自己那条进度条**跟着「任务事实」搬到了看板卡片上**
+    //    （用户反馈"左右都有，有点重叠"），右栏不再有它。所以这两条挪去了
+    //    verify-wb-card-progress.cjs（那边的 A/B/C 三组守的就是"什么时候画"），
+    //    这里改成守"旧位置真的没了" —— 少了这条，两边都以为对方在守，实际没人守。
+    check('P7e 右栏不再有「任务事实」那一区（事实与每个任务的进度都搬到看板卡片上）',
+      pm.factBlocks === 0 && pm.factItems === 0,
+      `rp__facts=${pm.factBlocks} rpt=${pm.factItems}`)
+    check('P7f 上面那条不是"面板没渲染"（报告卡在，正文本该有）',
+      pm.text.includes('改登录模块') || pm.hasBar,
+      `text="${pm.text.slice(0, 30)}" hasBar=${pm.hasBar}`)
     // 历史区要在两份以上才出现；出现时第一条就是刚插进来的这份
     check('P7g 历史列表里也带百分比',
       pm.historyCount <= 1 || pm.historyPercents[0] === `${STUB_PERCENT}%`,
@@ -543,8 +549,8 @@ async function main() {
     await stubOnce(stubReport(null, [null, null], '桩：这次模型没给百分比。'))
     pm = await readPanel(page)
     check('P7h 模型没给百分比时：卡片上一条进度条都没有（不画 0% 糊弄人）',
-      pm.hasBar === false && pm.percentText === '' && pm.factPercents.length === 0,
-      `bar=${pm.hasBar} percent="${pm.percentText}" facts=${pm.factPercents.join(',')}`)
+      pm.hasBar === false && pm.percentText === '' && pm.factBlocks === 0,
+      `bar=${pm.hasBar} percent="${pm.percentText}" facts=${pm.factBlocks}`)
     check('P7i 历史里那一列空着但占位（没有进度的那几条摘要不会整体左移）',
       pm.historyCount <= 1
         || (pm.historyPercents.length === pm.historyCount && pm.historyPercents[0] === ''),
@@ -703,7 +709,13 @@ async function main() {
     // 展开是一次选择，刷新后得还在（控制台是常驻栏，每次跳回默认值会很烦）
     await page.reload({ waitUntil: 'domcontentloaded' })
     await openCommandMode(page)
-    await sleep(300)
+    /* ⚠️ 等历史区**渲染出来**再读，别用固定 sleep：它是 `v-if="reports.length > 1"`，
+       而报告是 onMounted 里 refresh()（项目 + 编排状态）之后才拉的 —— 本机 32 个项目的
+       启动链实测 5 秒上下。固定 sleep(300) 会在报告到达之前就读，报出一个与
+       "选择记没记住"完全无关的假红（2026-10-14 实测：报告 t+5.1s 到、断言 t+5.4s 读，
+       两次跑里有一次读早了）。等不到就照旧红 —— 那是真的没渲染，不是这条要测的东西。 */
+    await page.waitForSelector('.oc__history .oc__sect', { timeout: 15000 }).catch(() => {})
+    await sleep(200)
     sc = await readSect()
     check('P12f 展开过的两块刷新后仍是展开的（选择记在 localStorage）',
       sc.history.expanded === 'true' && sc.git.expanded === 'true',

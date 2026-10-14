@@ -21,6 +21,7 @@
 
 import { describe, it, expect } from 'vitest'
 
+import type { BoardTaskLive, ProgressReport, ProgressReportFact } from '@/types/workbench'
 import {
   REPORT_INTERVAL_OPTIONS_MS,
   DEFAULT_REPORT_INTERVAL_MS,
@@ -32,6 +33,7 @@ import {
   reportErrorKey,
   reportPercent,
   reportSilentMs,
+  taskPercentIndex,
 } from './progressReport'
 
 describe('进度报告间隔档位', () => {
@@ -130,5 +132,67 @@ describe('报告事实里的静默时长', () => {
     expect(reportSilentMs('60000')).toBeNull()
     expect(reportSilentMs(-1)).toBeNull()
     expect(reportSilentMs(NaN)).toBeNull()
+  })
+})
+
+/**
+ * 卡片上那条进度条的数据源：报告（模型估的百分比）↔ 看板任务（5s 轮询的执行事实）。
+ * 两份数据来自两个接口，这里是把它们对上的唯一一处实现 —— 所以每一条"不该画"的口径
+ * 都得钉住：错挂一个数字，用户看到的是**这一轮**的假进度。
+ */
+describe('卡片进度查表（报告 ↔ 任务）', () => {
+  // 夹具刻意用宽松类型：要喂的就是**盘上真会出现**的脏值（越界的 130、空串），
+  // 而 ProgressReportFact.percent 的声明是 number | null —— 严格按声明写就测不到那几条。
+  // 收口在这里一处 cast，别扩散到断言里。
+  const report = (tasks: Record<string, unknown>[]): ProgressReport[] =>
+    [{ id: 'r1', at: null, trigger: 'auto', text: '', errorCode: '', errorDetail: '', tasks: tasks as unknown as ProgressReportFact[] }]
+  const fact = (o: Record<string, unknown>): Record<string, unknown> => ({
+    taskId: null, taskTitle: '', projectName: '', startedAt: null, elapsedMs: 0,
+    agent: '', toolCallCount: 0, lastTool: '', lastLine: '', ...o,
+  })
+  const task = (id: string, jobId: string) => ({ id, live: { jobId } as BoardTaskLive })
+
+  it('jobId 对得上就挂上那个数字', () => {
+    const reports = report([fact({ taskId: 't1', jobId: 'j1', percent: 62 })])
+    expect(taskPercentIndex(reports, [task('t1', 'j1')])).toEqual({ t1: 62 })
+  })
+
+  it('同一个任务重跑一轮：上一轮的百分比不许挂到这一轮上', () => {
+    // 报告里讲的是 j-old，卡上跑的是 j-new —— 只比 taskId 的话这里会挂出 90
+    const reports = report([fact({ taskId: 't1', jobId: 'j-old', percent: 90 })])
+    expect(taskPercentIndex(reports, [task('t1', 'j-new')])).toEqual({})
+  })
+
+  it('老记录（报告里没有 jobId）退回按 taskId 认', () => {
+    const reports = report([fact({ taskId: 't1', jobId: null, percent: 35 })])
+    expect(taskPercentIndex(reports, [task('t1', 'j-new')])).toEqual({ t1: 35 })
+  })
+
+  it('模型没给 / 给了脏值都不进表（不拿 0 糊过去）', () => {
+    const reports = report([
+      fact({ taskId: 't1', jobId: 'j1', percent: null }),
+      fact({ taskId: 't2', jobId: 'j2', percent: 130 }),
+      fact({ taskId: 't3', jobId: 'j3', percent: '' }),
+    ])
+    expect(taskPercentIndex(reports, [task('t1', 'j1'), task('t2', 'j2'), task('t3', 'j3')])).toEqual({})
+  })
+
+  it('没在跑的任务不进表（进度只属于正在跑的那一轮）', () => {
+    const reports = report([fact({ taskId: 't1', jobId: 'j1', percent: 40 })])
+    expect(taskPercentIndex(reports, [{ id: 't1', live: null }])).toEqual({})
+  })
+
+  it('同一 job 有多份报告时取**最新**那份（列表新的在前）', () => {
+    const reports: ProgressReport[] = [
+      { id: 'r2', at: null, trigger: 'auto', text: '', errorCode: '', errorDetail: '', tasks: [fact({ taskId: 't1', jobId: 'j1', percent: 80 })] as unknown as ProgressReportFact[] },
+      { id: 'r1', at: null, trigger: 'auto', text: '', errorCode: '', errorDetail: '', tasks: [fact({ taskId: 't1', jobId: 'j1', percent: 20 })] as unknown as ProgressReportFact[] },
+    ]
+    expect(taskPercentIndex(reports, [task('t1', 'j1')])).toEqual({ t1: 80 })
+  })
+
+  it('脏输入不炸：没报告 / 没任务 / 报告里没有这条任务', () => {
+    expect(taskPercentIndex(undefined, [task('t1', 'j1')])).toEqual({})
+    expect(taskPercentIndex(report([fact({ taskId: 't1', jobId: 'j1', percent: 50 })]), undefined)).toEqual({})
+    expect(taskPercentIndex(report([]), [task('t1', 'j1')])).toEqual({})
   })
 })

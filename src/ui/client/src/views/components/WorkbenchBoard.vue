@@ -39,6 +39,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Fold, Expand, Folder, Grid } from '@element-plus/icons-vue'
 import type { Attachment, BoardTask, ProjectSummary, Task } from '@/types/workbench'
 import { canonicalProjectPath } from '@/utils/path'
+import { taskPercentIndex } from '@/utils/progressReport'
 import type { TaskExecutorId } from '@/utils/taskExecutor'
 import { useIconFallback } from '@/composables/useIconFallback'
 import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection'
@@ -170,6 +171,18 @@ const visibleTasks = computed<BoardTask[]>(() => {
   const key = selectedKey.value
   return boardTasks.value.filter(t => canonicalProjectPath(t.projectPath) === key)
 })
+
+/**
+ * 「这条任务现在几成」：任务 id → 百分比（0–100）。卡片上那条进度条的唯一数据源。
+ *
+ * 为什么要在这一层对上：百分比**只存在于进度报告里**（模型估的），而卡片那份数据
+ * 来自另一个接口（5s 轮询的项目快照），报告是 30s 一次 —— 两个快照互不知道对方。
+ * 对口径的实现只有一处（utils/progressReport 的 taskPercentIndex），看板只管画。
+ *
+ * 传的是**全部**任务而不是 visibleTasks：切项目筛选时这张表不必重算，
+ * 而且表本身只覆盖"正在跑"的那几条，多算几条无所谓。
+ */
+const taskPercents = computed(() => taskPercentIndex(reports.value, boardTasks.value))
 
 const headerStats = computed(() => {
   const start = new Date()
@@ -853,6 +866,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
         <WorkbenchKanban
           :tasks="visibleTasks"
           :project-labels="projectLabels"
+          :task-percents="taskPercents"
           :show-project-label="!selectedProject"
           :opened-task-id="props.openedTaskId"
           @open-task="onOpenTask"

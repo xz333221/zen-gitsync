@@ -54,6 +54,8 @@
     "verify:wb-overview": "node scripts/verify-workbench-overview.cjs",
     "verify:wb-progress-report": "node scripts/verify-wb-progress-report.cjs",
     "verify:wb-card-live": "node scripts/verify-wb-card-live.cjs",
+    "verify:wb-card-progress": "node scripts/verify-wb-card-progress.cjs",
+    "verify:wb-card-progress:reverse": "node scripts/verify-wb-card-progress.cjs --reverse",
     "verify:wb-card-row1": "node scripts/verify-wb-card-row1.cjs",
     "verify:wb-card-reply": "node scripts/verify-wb-card-reply.cjs",
     "verify:wb-task-duration": "node scripts/verify-wb-task-duration.cjs",

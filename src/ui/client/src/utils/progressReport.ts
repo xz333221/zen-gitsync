@@ -22,6 +22,8 @@
 // 报告**正文**是服务端写的自然语言（不可信数据里长出来的东西，但它本身是模型输出），
 // 前端只渲染不改写；能改写的只有这些"码"（trigger / errorCode）对应的人话。
 
+import type { BoardTask, ProgressReport } from '@/types/workbench'
+
 /** 自动报告间隔档位（毫秒）。0 = 关闭自动报告（手动「立即报告」不受影响） */
 export const REPORT_INTERVAL_OPTIONS_MS = [0, 5, 10, 15, 30, 60].map(min => min * 60 * 1000)
 
@@ -91,6 +93,56 @@ export function reportPercent(value: unknown): number | null {
   if (!Number.isFinite(n)) return null
   const round = Math.round(n)
   return round >= 0 && round <= 100 ? round : null
+}
+
+/**
+ * 「这张卡片现在几成」的查表：报告历史（新的在前）+ 看板任务 → `{ 任务 id: 百分比 }`。
+ *
+ * 为什么要有这张表：每个任务自己的百分比**只存在于报告里**（模型在正文之前一并交的，
+ * 见服务端 progressReport.js 的 TASKS 标记），而进度条画在**看板卡片**上 ——
+ * 卡片那一份数据来自 /api/workbench/projects（5s 轮询），报告来自另一个接口
+ * （30s 一次），两边谁也不知道谁。这个函数就是把两份按 id 对上的唯一一处实现，
+ * 看板拿到结果后只负责画。
+ *
+ * 为什么按 **jobId** 认：同一个任务重跑一轮会换一个 job，只比 taskId 会把**上一轮**
+ * 的百分比挂到这一轮上（"刚点执行就显示 70%"）。老记录没有 jobId 这个字段
+ * （2026-10 之后才落），退回比 taskId —— 那种记录里一个任务只有一条事实，认不错。
+ * 判据与右栏面板认"这份报告还算不算当前"时用的是同一条（见 OrchestratorConsole
+ * 的 reportIsLive），两处不该有两套口径。
+ *
+ * 三处刻意的"不给"：
+ *   · 没在跑的任务不进表 —— 卡片的进度只属于**正在跑的那一轮**，跑完的卡片显示
+ *     "上次跑到 70%"是另一回事（而且那个数字早过期了）；
+ *   · 模型没给 / 给了脏值（见 reportPercent）不进表 —— 不拿 0 糊过去；
+ *   · 报告里没有这条任务就不进表 —— 新起的任务要等下一份报告才有进度，
+ *     这不是缺陷，是"这个数字本来就得模型估"。
+ */
+export function taskPercentIndex(
+  reports: ProgressReport[] | undefined,
+  tasks: Pick<BoardTask, 'id' | 'live'>[] | undefined,
+): Record<string, number> {
+  /** jobId → 百分比。报告是新的在前，所以**先写进去的那条就是最新的** */
+  const byJob = new Map<string, number>()
+  /** 老记录（没有 jobId）退回用 taskId 认，同样先写进去的为准 */
+  const byTask = new Map<string, number>()
+  for (const r of reports || []) {
+    for (const f of r?.tasks || []) {
+      const pct = reportPercent(f.percent)
+      if (pct === null) continue
+      if (f.jobId) {
+        if (!byJob.has(f.jobId)) byJob.set(f.jobId, pct)
+      } else if (f.taskId && !byTask.has(f.taskId)) {
+        byTask.set(f.taskId, pct)
+      }
+    }
+  }
+  const out: Record<string, number> = {}
+  for (const t of tasks || []) {
+    if (!t || !t.id || !t.live) continue
+    const pct = (t.live.jobId ? byJob.get(t.live.jobId) : undefined) ?? byTask.get(t.id)
+    if (pct !== undefined) out[t.id] = pct
+  }
+  return out
 }
 
 // ── 静默时长 ──────────────────────────────────────────────────────────

@@ -64,12 +64,21 @@ import { taskExecutorName, type TaskExecutorId } from '@/utils/taskExecutor'
 import { projectTagStyle } from '@/utils/projectTag'
 import { formatDurationMs, relativeTimeFromIso } from '@/utils/relativeTime'
 import { taskDoneAt, taskDurationBody, taskLiveText, taskSpentText, taskTimeIso, taskTimeTitle } from '@/utils/taskTime'
-import { reportSilentMs } from '@/utils/progressReport'
+import { REPORT_PERCENT_HINT_KEY, REPORT_PERCENT_LABEL_KEY, reportSilentMs } from '@/utils/progressReport'
 
 const props = defineProps<{
   tasks: BoardTask[]
   /** 视图为「全部项目」时在卡片上标出项目名，避免同名任务分不清 */
   projectLabels: Record<string, string>
+  /**
+   * 「这条任务现在几成」：任务 id → 百分比（0–100）。
+   *
+   * 只有**正在跑、且最近一份进度报告里提到它**的任务才在这张表里（其余键不存在）。
+   * 报告与看板任务来自两个接口，配对（按 jobId，老记录退回 taskId）在上层一处做完
+   * （WorkbenchBoard 的 taskPercents → utils/progressReport 的 taskPercentIndex）——
+   * 卡片这里只管画，不自己再对一遍，免得两处口径慢慢分叉。
+   */
+  taskPercents?: Record<string, number>
   showProjectLabel: boolean
   /**
    * 用户从看板上点开过的任务 id（null = 还没点开过任何一条）。
@@ -308,6 +317,24 @@ function hasError(t: BoardTask): boolean {
  */
 function cardAgent(t: BoardTask): string {
   return t.live?.agent || t.lastJobAgent || ''
+}
+
+/**
+ * 这条任务现在几成（0–100），null = 卡片上不画那条进度条。
+ *
+ * 数字来自**主 Agent 的估计**（每次进度报告一并交的，见 utils/progressReport），
+ * 不是实测 —— 所以画的时候必须带上「AI 估计」四个字与悬停说明，别让它看着像实测进度。
+ *
+ * 判据有两层，缺一不可：
+ *   · 这条任务**正在跑**（t.live）—— 进度只属于正在跑的那一轮，跑完的卡片显示
+ *     "上次跑到 70%"是另一回事，而且那个数字早过期了；
+ *   · 最近一份报告里提到了它 —— 没提到就不画（不是画 0）。模型没给数字、
+ *     给了越界值、任务刚起还没来得及进报告，都落在这里。
+ */
+function cardPercent(t: BoardTask): number | null {
+  if (!t.live) return null
+  const v = props.taskPercents?.[t.id]
+  return typeof v === 'number' ? v : null
 }
 
 /**
@@ -612,6 +639,41 @@ function coverTitle(img: BoardImage): string {
                   {{ $t('@WORKBENCH:静默 {elapsed}', { elapsed: formatDurationMs(reportSilentMs(t.live.silentMs)) }) }}
                 </span>
               </p>
+              <!--
+                这条任务现在几成（主 Agent 估的）。2026-10-14 从右栏「任务事实」搬过来：
+                那一区列的就是这几行事实（工具 / 思考 / 回复 + 时长），与卡片几乎逐字重合，
+                两处并排显示时用户看到的是同一件事说两遍（用户截图反馈"左右都有，有点重叠"）。
+                搬过来之后**只有进度条是新东西** —— 其余字段卡片本来就有，而且更全
+                （多了 PID、执行器图标、静默的告警色）。
+
+                位置在活动行**上面**：它是对这一轮的总述（"跑到哪了"），
+                底下三行才是证据（"凭什么这么说"）。这也与右栏那份的排法一致
+                （标题 → 元信息 → 进度条 → 证据），两边看起来该是一回事。
+
+                不画的情况全部交给 cardPercent 判（没在跑 / 报告里没提到它 / 模型没给数字），
+                绝不画一条 0% 的实心条 —— 那等于替模型说它没说过的话。
+              -->
+              <p
+                v-if="cardPercent(t) !== null"
+                class="kb-card__live-progress"
+                :title="$t(REPORT_PERCENT_HINT_KEY)"
+              >
+                <span
+                  class="kb-card__live-bar"
+                  role="progressbar"
+                  :aria-valuenow="cardPercent(t)!"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  :aria-label="cardTitle(t) || $t('@WORKBENCH:未命名任务')"
+                >
+                  <i class="kb-card__live-bar-fill" :style="{ width: cardPercent(t) + '%' }" />
+                </span>
+                <!-- 「AI 估计」四个字不能省（与右栏整体那条同一取舍）：卡片上再没有别的
+                     地方交代这个数字是怎么来的，光甩一个 22% 会被当成实测进度 -->
+                <span class="kb-card__live-pct">
+                  <span class="kb-card__live-pct-tag">{{ $t(REPORT_PERCENT_LABEL_KEY) }}</span>{{ cardPercent(t) }}%
+                </span>
+              </p>
               <p v-if="t.live.lastTool" class="kb-card__live-line is-tool" :title="t.live.lastTool">
                 {{ t.live.lastTool }}
               </p>
@@ -829,6 +891,15 @@ function coverTitle(img: BoardImage): string {
                   </span>
                 </template>
                 {{ liveSummary(t) }}
+                <!-- 进度与看板卡片同一份数据（同一张表）：两种画法一边有一边没有，
+                     会让人以为是两份数据。列表这行只有一行，所以只给数字不给条 -->
+                <span
+                  v-if="cardPercent(t) !== null"
+                  class="kb-table__pct"
+                  :title="$t(REPORT_PERCENT_HINT_KEY)"
+                >
+                  {{ $t(REPORT_PERCENT_LABEL_KEY) }} {{ cardPercent(t) }}%
+                </span>
                 <span v-if="reportSilentMs(t.live.silentMs) !== null" class="kb-table__live-silent">
                   {{ $t('@WORKBENCH:静默 {elapsed}', { elapsed: formatDurationMs(reportSilentMs(t.live.silentMs)) }) }}
                 </span>
@@ -1418,7 +1489,8 @@ function coverTitle(img: BoardImage): string {
 
 /* ── 卡片上的「现在在干嘛」（只在任务正在跑时出现） ──
    与任务标题之间用一条浅虚线隔开：上面是"这是什么任务"，下面是"它现在怎么样了"。
-   视觉口径刻意与右栏进度报告面板的 .rpt__* 一致（同一批事实，两处看起来该是一回事） */
+   事实口径与右栏进度报告同源（服务端 jobActivity 那一份实现）—— 同一件事两处说，
+   用词和取舍必须一致，所以这里的每一行都对着右栏那一行写 */
 .kb-card__live {
   margin-top: 8px;
   padding-top: 8px;
@@ -1482,6 +1554,46 @@ function coverTitle(img: BoardImage): string {
 
 /* 静默：卡片上最接近"可能卡住了"的信号，用告警色 */
 .kb-card__live-silent { color: var(--color-warning-dark); }
+
+/* ── 这条任务现在几成（主 Agent 估的百分比）──
+   2026-10-14 从右栏「任务事实」搬过来（那一区整块下掉了，见模板里的注释）。
+   形状沿用原来那条（3px / pill / --role-active-bar）—— 右栏整体那条是 4px，
+   这里是"某一条任务"的注脚，细一档；两条都用同一个令牌，看起来才是一个东西。
+   它**只在有数字时渲染**（v-if cardPercent），所以轨道不必考虑空态。 */
+.kb-card__live-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 5px 0 0;
+}
+.kb-card__live-bar {
+  flex: 1;
+  min-width: 0;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-active);
+  overflow: hidden;
+}
+/* 与右栏那条同一个取舍：填充走 --role-*-bar（从 hue 调），**不吃 ink** ——
+   从 ink 调出来的是灰褐/灰绿，正是"进度条偏深"那个反馈的成因
+   （scripts/verify-wb-colors.cjs 的 C5 守着这一条） */
+.kb-card__live-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--role-active-bar);
+  transition: width var(--transition-base) var(--ease-custom);
+}
+/* 数字右对齐、定宽：每 30s 报告刷新一次，宽度不钉住的话百分比一变整条就左右挪。
+   卡片比右栏更窄，所以「AI 估计」这四个字用 xs 字号、与数字之间靠 gap 分开 */
+.kb-card__live-pct {
+  flex: none;
+  font-size: var(--font-size-xs);
+  color: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+}
+.kb-card__live-pct-tag { margin-right: 4px; color: var(--text-meta); }
+
 .kb-card__live-line {
   margin: 4px 0 0;
   font-size: var(--font-size-xs);
@@ -1848,6 +1960,9 @@ function coverTitle(img: BoardImage): string {
   text-overflow: ellipsis;
 }
 .kb-table__live-silent { margin-left: 6px; color: var(--color-warning-dark); }
+/* 进度（「AI 估计 22%」）：与卡片那条进度条同一份数据，这一行只放得下数字。
+   不跟着 .kb-table__live-silent 用告警色 —— 它不是异常信号，是常规元信息 */
+.kb-table__pct { margin-left: 6px; font-variant-numeric: tabular-nums; }
 /* 「最后回复」在列表行里用同一根引用竖线（与看板卡片的 .kb-card__reply 同一个含义）。
    不写 padding-left：图标与正文之间已经由 .kb-table__agent 的右外边距管着，
    再叠一层内边距会把图标推到正文上去（与卡片那边同一条坑）。 */
