@@ -523,18 +523,52 @@ async function launchOpenCode(dirPath, { permissionMode } = {}) {
 }
 
 /**
- * 用 CodeBuddy Code 打开目录（交互 TUI，2026-10-12 随执行器接入一起补）。
+ * codebuddy 的权限档位（`--permission-mode`，用 CLI 自己的档位名当 token）。
  *
- * `--port 0` 是**必须**的：CLI 每次运行都自带一个引擎服务器，默认端口写死 62443，
- * 而 WorkBuddy 桌面版常驻占着它 —— 实测裸跑 `codebuddy`（交互也一样）直接
- * EADDRINUSE 退出。0 = 让 OS 选空闲端口，与 headless 执行器
- * （taskRunner.launchCodebuddyPrint）同一个口径。
+ * 档位名与 claude **逐字相同**（acceptEdits / bypassPermissions），所以直接沿用
+ * claude 那套 token，不必再造一份 —— 前端两处菜单传的是同一个字符串。
  *
- * 登录态同样来自 ~/.codebuddy：没登录过的话 TUI 里会提示 /login 扫码。
+ *   'bypassPermissions' → `--permission-mode bypassPermissions`
+ *       官方档位说明原文 "Skips all permission prompts"，这就是它的**完全批准**档。
+ *       实测（2026-10-14，本机 CLI）`codebuddy -p --output-format stream-json
+ *       --permission-mode bypassPermissions` 的 init 事件回传
+ *       `permissionMode: "bypassPermissions"` —— 档位真的生效，不是被静默忽略。
+ *       `-y / --dangerously-skip-permissions` 是同一档的别名（headless 执行器走的就是
+ *       -y，init 同样回传 bypassPermissions），这里用 `--permission-mode` 是因为它
+ *       是 TUI 也认的正式写法（help: "Default permission mode for this process
+ *       (TUI, --serve Web, ACP)"），且与 claude 的启动参数形状一致。
+ *   'acceptEdits'       → `--permission-mode acceptEdits`（自动批准文件编辑，中间档）
+ *   其余一切（undefined / 未知串 / 非字符串）→ 一个 flag 都不带，跟随 CLI 自己的配置
+ *
+ * 白名单式：只有表里这两个 token 能变成参数，不存在拼参数注入的面。
+ * 回归 `test/open-with-permission.test.mjs`。
  */
-async function launchCodebuddy(dirPath) {
+const CODEBUDDY_MODE_FLAGS = new Map([
+  ['acceptEdits', ['--permission-mode', 'acceptEdits']],
+  ['bypassPermissions', ['--permission-mode', 'bypassPermissions']],
+]);
+
+/**
+ * codebuddy 的启动参数（按权限档位）。
+ *
+ * `--port 0` 是**必须**的（与档位无关，恒定带上）：CLI 每次运行都自带一个引擎服务器，
+ * 默认端口写死 62443，而 WorkBuddy 桌面版常驻占着它 —— 实测裸跑 `codebuddy`
+ * （交互也一样）直接 EADDRINUSE 退出。0 = 让 OS 选空闲端口，与 headless 执行器
+ * （taskRunner.launchCodebuddyPrint）同一个口径。
+ */
+export function buildCodebuddyArgs(permissionMode) {
+  return ['--port', '0', ...(CODEBUDDY_MODE_FLAGS.get(permissionMode) || [])];
+}
+
+/**
+ * 用 CodeBuddy Code 打开目录（交互 TUI，2026-10-12 随执行器接入一起补）。
+ * 权限档位见 buildCodebuddyArgs。
+ *
+ * 登录态来自 ~/.codebuddy：没登录过的话 TUI 里会提示 /login 扫码。
+ */
+async function launchCodebuddy(dirPath, { permissionMode } = {}) {
   // CodeBuddy Code CLI - https://www.codebuddy.cn/docs/cli
-  const cliArgs = ['--port', '0'];
+  const cliArgs = buildCodebuddyArgs(permissionMode);
   if (process.platform === 'win32') {
     return spawnDetached('cmd.exe', ['/c', 'start', '""', 'codebuddy', ...cliArgs], {
       cwd: dirPath
@@ -592,13 +626,42 @@ export async function launchGai(dirPath, {
   });
 }
 
-async function launchKimiCode(dirPath) {
+/**
+ * kimi 的权限档位。
+ *
+ *   'auto' | 'bypassPermissions' → `--auto`
+ *       官方 help 原文 "Start in Never Ask mode: never interrupts you; everything runs
+ *       and is decided automatically" —— 这才是它的**完全批准**档。
+ *       `bypassPermissions` 只是让调用方与 claude / codex / opencode 那档共用同一个
+ *       字符串，不是另一种行为。
+ *   其余一切（undefined / 未知串 / 非字符串）→ 一个 flag 都不带（默认档：该问的照问）
+ *
+ * ⚠️ 这个 `--auto` 与 opencode 的 `--auto` **同名但语义不同**：opencode 是"自动批准
+ *    未被显式拒绝的权限"（配置里 deny 的仍拦），kimi 是"从不打断"。档位 token 各按各家
+ *    CLI 的叫法走，别硬凑一个公共词（同 codex 那段的取舍）。
+ * ⚠️ kimi 还有一个中间档 `-y / --yolo`（Ask When Needed：常规编辑与命令自动放行，
+ *    危险动作 / 提问 / 计划仍会问），菜单暂未暴露 —— 要加时在 KIMI_MODE_FLAGS 补一行。
+ *
+ * 白名单式：只有表里这两个 token 能变成参数。
+ * 回归 `test/open-with-permission.test.mjs`。
+ */
+const KIMI_MODE_FLAGS = new Map([
+  ['auto', ['--auto']],
+  ['bypassPermissions', ['--auto']],
+]);
+
+export function buildKimiArgs(permissionMode) {
+  return [...(KIMI_MODE_FLAGS.get(permissionMode) || [])];
+}
+
+async function launchKimiCode(dirPath, { permissionMode } = {}) {
+  const cliArgs = buildKimiArgs(permissionMode);
   if (process.platform === 'win32') {
     const executable = await findKimiExecutable();
     if (!executable) throw new Error('未检测到 Kimi Code，请先安装 kimi CLI');
-    return spawnDetached('cmd.exe', ['/c', 'start', '""', executable], { cwd: dirPath });
+    return spawnDetached('cmd.exe', ['/c', 'start', '""', executable, ...cliArgs], { cwd: dirPath });
   }
-  return launchInTerminal(dirPath, 'kimi');
+  return launchInTerminal(dirPath, 'kimi', cliArgs);
 }
 
 async function launchDsh(dirPath) {
@@ -1126,7 +1189,7 @@ export function registerFileOpenRoutes({
   // 用 CodeBuddy Code 打开目录
   app.post('/api/open-directory-with-codebuddy', asyncRoute(async (req, res) => {
       try {
-        const { path: dirPath } = req.body || {};
+        const { path: dirPath, permissionMode } = req.body || {};
         if (!dirPath) {
           throw new HttpError(400, '目录路径不能为空');
         }
@@ -1138,8 +1201,11 @@ export function registerFileOpenRoutes({
         }
 
         try {
-          await launchCodebuddy(dirPath);
-          res.json({ success: true, message: '已用 CodeBuddy Code 打开目录' });
+          await launchCodebuddy(dirPath, { permissionMode });
+          const message = CODEBUDDY_MODE_FLAGS.has(permissionMode)
+            ? `已用 CodeBuddy Code 打开目录（permission-mode=${permissionMode}）`
+            : '已用 CodeBuddy Code 打开目录';
+          res.json({ success: true, message });
         } catch (error) {
           res.status(400).json({
             success: false,
@@ -1181,12 +1247,15 @@ export function registerFileOpenRoutes({
 
   // 用 Kimi Code 打开目录
   app.post('/api/open-directory-with-kimi', asyncRoute(async (req, res) => {
-    const { path: dirPath } = req.body || {};
+    const { path: dirPath, permissionMode } = req.body || {};
     if (!dirPath) throw new HttpError(400, '目录路径不能为空');
     try {
       await fs.access(dirPath);
-      await launchKimiCode(dirPath);
-      res.json({ success: true, message: '已用 Kimi Code 打开目录' });
+      await launchKimiCode(dirPath, { permissionMode });
+      const message = KIMI_MODE_FLAGS.has(permissionMode)
+        ? '已用 Kimi Code 打开目录（--auto：从不打断）'
+        : '已用 Kimi Code 打开目录';
+      res.json({ success: true, message });
     } catch (error) {
       res.status(400).json({ success: false, error: error.message || '未检测到 Kimi Code，请先安装 kimi CLI' });
     }

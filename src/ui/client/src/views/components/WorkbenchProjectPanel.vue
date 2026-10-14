@@ -680,6 +680,35 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
                 <span class="proj-menu__icon"><svg-icon icon-class="codex" class="icon-invert-dark" /></span>
                 <span class="proj-menu__label">{{ $t('@67CE7:用 Codex 打开（完全批准）') }}</span>
               </li>
+
+              <!-- codebuddy / kimi 的「完全批准」档（默认档已在上面那条 v-for 里）。
+                   token 与服务端 buildCodebuddyArgs / buildKimiArgs 对齐：
+                     codebuddy 'bypassPermissions' → `--permission-mode bypassPermissions`
+                     kimi      'auto'              → `--auto`（Never Ask：从不打断） -->
+              <li
+                class="proj-menu__item proj-menu__item--danger"
+                :class="{ 'is-missing': toolMissing('codebuddy') }"
+                role="menuitem"
+                tabindex="-1"
+                @click="openWithTool(p, 'codebuddy', 'bypassPermissions')"
+                @keydown.enter.prevent="openWithTool(p, 'codebuddy', 'bypassPermissions')"
+                @keydown.space.prevent="openWithTool(p, 'codebuddy', 'bypassPermissions')"
+              >
+                <span class="proj-menu__icon"><svg-icon icon-class="codebuddy" /></span>
+                <span class="proj-menu__label">{{ $t('@67CE7:用 CodeBuddy Code 打开（完全批准）') }}</span>
+              </li>
+              <li
+                class="proj-menu__item proj-menu__item--danger"
+                :class="{ 'is-missing': toolMissing('kimi') }"
+                role="menuitem"
+                tabindex="-1"
+                @click="openWithTool(p, 'kimi', 'auto')"
+                @keydown.enter.prevent="openWithTool(p, 'kimi', 'auto')"
+                @keydown.space.prevent="openWithTool(p, 'kimi', 'auto')"
+              >
+                <span class="proj-menu__icon"><svg-icon icon-class="kimi" /></span>
+                <span class="proj-menu__label">{{ $t('@67CE7:用 Kimi Code 打开（完全批准）') }}</span>
+              </li>
             </ul>
           </el-popover>
         </div>

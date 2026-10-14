@@ -217,10 +217,12 @@ function onClaudePrimaryClick() {
   runOrInstall('claude', () => onOpenInClaudeCode('bypassPermissions'))
 }
 
-async function onOpenInKimi() {
+// 用 Kimi Code 打开当前目录
+// mode='auto' → kimi 的「完全批准」档（`--auto`：Never Ask，从不打断）
+async function onOpenInKimi(mode?: string) {
   if (warnIfEmptyDirectory()) return
   toastOpenResult(
-    await openPathWithTool('kimi', currentDirectory.value),
+    await openPathWithTool('kimi', currentDirectory.value, mode),
     '@67CE7:已用 Kimi Code 打开目录',
     '@67CE7:打开失败: ',
   )
@@ -315,13 +317,22 @@ const PRIMARY_TOOLTIP_KEYS: Partial<Record<SimpleToolId, string>> = {
 /**
  * 「用 X 打开」的权限档位 —— 只有真有档位可分的工具才在这张表里。
  *
- * token 交给服务端解释（见 `fileOpen.js` 的 buildOpencodeArgs / buildCodexArgs）：
- *   opencode: 'auto'     → `--auto`
- *   codex:    'sandboxed' → `-a never -s workspace-write`（从不问，但命令仍在沙箱里）
- *             'bypass'    → `--dangerously-bypass-approvals-and-sandbox`（免批准 + 免沙箱）
+ * token 交给服务端解释（见 `fileOpen.js` 的 buildOpencodeArgs / buildCodexArgs /
+ * buildCodebuddyArgs / buildKimiArgs）：
+ *   opencode:  'auto'     → `--auto`
+ *   codex:     'sandboxed' → `-a never -s workspace-write`（从不问，但命令仍在沙箱里）
+ *              'bypass'    → `--dangerously-bypass-approvals-and-sandbox`（免批准 + 免沙箱）
+ *   codebuddy: 'bypassPermissions' → `--permission-mode bypassPermissions`（跳过所有确认；
+ *              CLI 的档位名与 claude 逐字相同，所以 token 也照抄）
+ *   kimi:      'auto'     → `--auto`（Never Ask：从不打断。⚠️ 与 opencode 的 `--auto`
+ *              同名但语义不同 —— 前者是"从不打断"，后者是"自动批准未被显式拒绝的"）
  * 各家的档位 token 刻意**不统一** —— CLI 的语义本来就不一样，硬凑一个公共词只会让服务端
  * 多一层没必要的映射。第一项恒为"默认权限"（不带 token）：顶栏左键已经是完全批准档了
  * （见 `TOOL_PRIMARY_MODE`），这一档只能从右键菜单 / 编排台项目菜单点进来。
+ *
+ * ⚠️ 左键直点的档位**只对 TOOL_PRIMARY_MODE 里列出的工具**是完全批准（claude / codex /
+ *    opencode）；codebuddy / kimi 目前左键仍是默认档，这张表里第一项和左键是同一件事。
+ *   要不要把它们也改成"直点即完全批准"，见 TOOL_PRIMARY_MODE 顶部那段的产品口径。
  */
 interface ToolPermissionTier {
   /** 缺省 = 该工具的默认档（不带任何 flag）。左键走的是完全批准档，所以这一档只能
@@ -341,6 +352,14 @@ const TOOL_PERMISSION_TIERS: Partial<Record<SimpleToolId, ToolPermissionTier[]>>
     { mode: 'sandboxed', hintKey: '@67CE7:自动批准（沙箱内）' },
     { mode: 'bypass', hintKey: '@67CE7:完全批准（免沙箱）', danger: true },
   ],
+  codebuddy: [
+    { hintKey: '@67CE7:默认权限' },
+    { mode: 'bypassPermissions', hintKey: '@67CE7:完全批准（跳过所有确认）', danger: true },
+  ],
+  kimi: [
+    { hintKey: '@67CE7:默认权限' },
+    { mode: 'auto', hintKey: '@67CE7:完全批准（--auto）', danger: true },
+  ],
 }
 
 function permissionTiersOf(id: SimpleToolId): ToolPermissionTier[] {
@@ -351,6 +370,8 @@ function permissionTiersOf(id: SimpleToolId): ToolPermissionTier[] {
 const TOOL_MODE_ACTIONS: Partial<Record<SimpleToolId, (mode?: string) => void | Promise<void>>> = {
   opencode: onOpenInOpencode,
   codex: onOpenInCodex,
+  codebuddy: onOpenInCodebuddy,
+  kimi: onOpenInKimi,
 }
 
 function pickToolMode(tool: SimpleTool, mode?: string) {
@@ -510,10 +531,11 @@ async function onOpenInOpencode(mode?: string) {
 }
 
 // 用 CodeBuddy Code 打开当前目录（交互 TUI；服务端固定带 --port 0 避开桌面版占用的 62443）
-async function onOpenInCodebuddy() {
+// mode='bypassPermissions' → 完全批准（`--permission-mode bypassPermissions`：跳过所有确认）
+async function onOpenInCodebuddy(mode?: string) {
   if (warnIfEmptyDirectory()) return;
   toastOpenResult(
-    await openPathWithTool('codebuddy', currentDirectory.value),
+    await openPathWithTool('codebuddy', currentDirectory.value, mode),
     '@67CE7:已用 CodeBuddy Code 打开目录',
     '@67CE7:打开失败: ',
   );

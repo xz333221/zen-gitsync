@@ -1,32 +1,52 @@
 /**
  * 「用工具打开」的权限档位 —— 参数映射的运行时断言。
  *
- * 契约（见 src/ui/server/routes/fileOpen.js 的 buildOpencodeArgs / buildCodexArgs）：
+ * 契约（见 src/ui/server/routes/fileOpen.js 的 buildOpencodeArgs / buildCodexArgs /
+ * buildCodebuddyArgs / buildKimiArgs）：
  *   opencode  'auto' | 'bypassPermissions' → `--auto`（官方 auto mode：自动批准**未被
  *             显式拒绝**的权限，配置里显式 deny 的仍会被拦）
  *   codex     'sandboxed'                  → `-a never -s workspace-write`
  *                                          （从不问人，但命令仍在沙箱里跑）
  *             'bypass' | 'bypassPermissions' → `--dangerously-bypass-approvals-and-sandbox`
  *                                          （免批准 + 免沙箱）
+ *   codebuddy 'bypassPermissions'          → `--permission-mode bypassPermissions`
+ *                                          （官方档位说明 "Skips all permission prompts"）
+ *             'acceptEdits'                → `--permission-mode acceptEdits`
+ *             （`--port 0` 与档位无关，恒定带上：避开桌面版占用的 62443）
+ *   kimi      'auto' | 'bypassPermissions' → `--auto`（Never Ask：从不打断。
+ *             ⚠️ 与 opencode 的 `--auto` 同名不同义）
  *   其余一切（undefined / 'default' / 未知串 / 非字符串）→ 一个 flag 都不带
  *
- * 为什么单独测这两个函数而不是打 HTTP 接口：真去打 /api/open-directory-with-* 会 spawn
- * 一个终端（codex / opencode 的 TUI 会停在那里等人输入）—— 验证不能有这种副作用。
- * 抽成纯函数后，映射关系是真的被跑过断言，不是在源码里搜字符串。
+ * 为什么单独测这几个函数而不是打 HTTP 接口：真去打 /api/open-directory-with-* 会 spawn
+ * 一个终端（codex / opencode / codebuddy / kimi 的 TUI 会停在那里等人输入）—— 验证不能
+ * 有这种副作用。抽成纯函数后，映射关系是真的被跑过断言，不是在源码里搜字符串。
  *
  * 反向验证（把改动撤掉后哪几条会红）：
  *   · 把 opencode 的档位表清空 → 第 1 组红
  *   · 把 codex 的 'sandboxed' 那行删掉 → 第 4 组红
- *   · 让默认档也返回 flag → 第 2、3、5 组红
+ *   · 把 codebuddy / kimi 的档位表清空 → 各自的"完全批准档"那组红
+ *   · 让默认档也返回 flag → 每组的"默认档"与"注入面"两条红
  *
  * 用法：npm run verify:open-with-permission
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildOpencodeArgs, buildCodexArgs } from '../src/ui/server/routes/fileOpen.js'
+import {
+  buildOpencodeArgs,
+  buildCodexArgs,
+  buildCodebuddyArgs,
+  buildKimiArgs,
+} from '../src/ui/server/routes/fileOpen.js'
 
 /** 默认档（以及一切不认识的 token）必须一个参数都不带 —— 不能偷偷进免批准 */
 const NO_FLAG_TOKENS = [undefined, null, '', 'default', 'acceptEdits', 'allow', 'readOnly', 0, false, {}, []]
+
+/** codebuddy 的档位表里**有** 'acceptEdits'（官方档位名，与 claude 同名），
+ *  所以它那份"默认档"清单要单独列 —— 别图省事复用上面那份，否则这条会假红。 */
+const CODEBUDDY_NO_FLAG_TOKENS = NO_FLAG_TOKENS.filter((t) => t !== 'acceptEdits')
+
+/** codebuddy 的默认档不是空数组：`--port 0` 与权限档无关，恒定带上 */
+const CODEBUDDY_BASE_ARGS = ['--port', '0']
 
 /** 拼串 / 大小写变体 / 原型链上的名字：白名单式匹配，一律拿不到参数 */
 const NASTY_TOKENS = [
@@ -77,5 +97,46 @@ test('codex 默认档：不带任何 flag', () => {
 test('codex 注入面：只认白名单 token', () => {
   for (const token of NASTY_TOKENS) {
     assert.deepEqual(buildCodexArgs(token), [], `token=${JSON.stringify(token)} 不该带参`)
+  }
+})
+
+test('codebuddy 完全批准档：bypassPermissions → --permission-mode bypassPermissions', () => {
+  assert.deepEqual(buildCodebuddyArgs('bypassPermissions'), [
+    ...CODEBUDDY_BASE_ARGS, '--permission-mode', 'bypassPermissions',
+  ])
+})
+
+test('codebuddy 中间档：acceptEdits → --permission-mode acceptEdits', () => {
+  assert.deepEqual(buildCodebuddyArgs('acceptEdits'), [
+    ...CODEBUDDY_BASE_ARGS, '--permission-mode', 'acceptEdits',
+  ])
+})
+
+test('codebuddy 默认档：只带 --port 0（避开桌面版占的 62443），不带权限 flag', () => {
+  for (const token of CODEBUDDY_NO_FLAG_TOKENS) {
+    assert.deepEqual(buildCodebuddyArgs(token), CODEBUDDY_BASE_ARGS, `token=${JSON.stringify(token)} 不该带权限参数`)
+  }
+})
+
+test('codebuddy 注入面：只认白名单 token', () => {
+  for (const token of NASTY_TOKENS) {
+    assert.deepEqual(buildCodebuddyArgs(token), CODEBUDDY_BASE_ARGS, `token=${JSON.stringify(token)} 不该带权限参数`)
+  }
+})
+
+test('kimi 完全批准档：auto / bypassPermissions → --auto', () => {
+  assert.deepEqual(buildKimiArgs('auto'), ['--auto'])
+  assert.deepEqual(buildKimiArgs('bypassPermissions'), ['--auto'])
+})
+
+test('kimi 默认档：不带任何 flag', () => {
+  for (const token of NO_FLAG_TOKENS) {
+    assert.deepEqual(buildKimiArgs(token), [], `token=${JSON.stringify(token)} 不该带参`)
+  }
+})
+
+test('kimi 注入面：只认白名单 token', () => {
+  for (const token of NASTY_TOKENS) {
+    assert.deepEqual(buildKimiArgs(token), [], `token=${JSON.stringify(token)} 不该带参`)
   }
 })

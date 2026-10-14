@@ -2,10 +2,16 @@
  * 「用工具打开」的权限档位菜单 —— 浏览器交互 + 请求契约验证。
  *
  * 背景：各家 CLI 的免批准档不一样，菜单要如实反映：
- *   claude   默认 / 批准文件编辑（acceptEdits）/ 完全批准（bypassPermissions）
- *   opencode 默认 / 完全批准（`--auto`；只有两档，没有中间档）
- *   codex    默认 / 自动批准（`-a never -s workspace-write`，仍有沙箱）/
- *            完全批准（`--dangerously-bypass-approvals-and-sandbox`，免批准 + 免沙箱）
+ *   claude    默认 / 批准文件编辑（acceptEdits）/ 完全批准（bypassPermissions）
+ *   opencode  默认 / 完全批准（`--auto`；只有两档，没有中间档）
+ *   codex     默认 / 自动批准（`-a never -s workspace-write`，仍有沙箱）/
+ *             完全批准（`--dangerously-bypass-approvals-and-sandbox`，免批准 + 免沙箱）
+ *   codebuddy 默认 / 完全批准（`--permission-mode bypassPermissions`，官方说明
+ *             "Skips all permission prompts"）
+ *   kimi      默认 / 完全批准（`--auto`，Never Ask：从不打断）
+ *   其余工具（vscode / pi / dsh / zcode）**没有**档位可加 —— pi 根本不在每次工具调用前
+ *   问人（docs/security.md 明说 "does not ask for approval before every tool call"），
+ *   dsh 只有 web profile 的 host/port 参数，zcode 是桌面 App。别硬凑。
  *
  * 守的契约（对每个"有档位"的工具逐一跑）：
  *   A0 该工具固定在顶栏且已安装（否则后面几条无从谈起）
@@ -16,10 +22,13 @@
  *   A4 点每个档位 → 发往 /api/open-directory-with-{tool} 的 body 里 permissionMode
  *      等于该档的 token；**默认档必须不带这个字段**（不能偷偷进免批准）
  *   A5 点完菜单关闭
- *   A6 **左键直点图标 = 完全批准档**（body.permissionMode === primary）——
- *      2026-09 起 codex / opencode 与 claude 对齐：直接点就给完全批准，菜单是给
- *      "这次想收着点"用的。这条是最容易被人改回去的默认值，所以钉死
- *   A6b 按钮的 tooltip / aria-label 写明「完全批准」—— 免批准要在界面上看得见
+ *   A6 **左键直点的档位**：有 primary 的工具（claude / codex / opencode）必须发
+ *      body.permissionMode === primary（完全批准）—— 2026-09 起这三家对齐成"直点即
+ *      完全批准，菜单是给想收着点用的"，这条是最容易被人改回去的默认值，所以钉死；
+ *      没有 primary 的（codebuddy / kimi）则反过来钉"左键仍是默认档、不带字段"，
+ *      两种口径都写死，谁改了探针都会说话
+ *   A6b 按钮的 tooltip / aria-label 与 A6 口径一致 —— 是完全批准档就得写明，
+ *      不是就不能谎称（免批准要在界面上看得见，也不能反过来吓人）
  *   B  编排台项目「打开方式」菜单：各档位项都在，点对了就发对的 token
  *      （编排台**不做**直点改造 —— 那里逐档平铺，默认档仍单独成项）
  *   R  反向锚：没有档位的工具（vscode）菜单里**只有「更新」**——
@@ -31,6 +40,7 @@
  * 反向验证（把改动撤掉后哪几条会红）：
  *   · 删掉模板里那段 `v-for="tier in permissionTiersOf(tool.id)"` → A2/A3/A4 红
  *   · 把 TOOL_PERMISSION_TIERS 里的 codex 一项删掉 → 只有 codex 那组红（分组独立）
+ *   · 把 codebuddy / kimi 那两项删掉 → 只有它俩那组红
  *   · 让 v-if 条件恒真 → R 红
  *   · 默认档也传 token → A4 的"默认档不带字段"那条红
  *   · 把 TOOL_PRIMARY_MODE 里的 codex / opencode 删掉（回到默认档直点）→ A6 红
@@ -48,7 +58,8 @@ const BASE = process.env.ZEN_BASE || 'http://127.0.0.1:5544'
 const API = process.env.ZEN_API || 'http://127.0.0.1:5545'
 
 /** 顶栏要逐一验的工具：aria = 菜单的 aria-label（= 工具名）；tiers 必须与界面逐项对齐。
- *  primary = 左键直点该图标时应带的 permissionMode（完全批准档） */
+ *  primary = 左键直点该图标时应带的 permissionMode（完全批准档）；
+ *  没有 primary = 该工具左键仍是默认档（菜单第一项与左键是同一件事）。 */
 const TOPBAR_CASES = [
   {
     id: 'opencode',
@@ -72,6 +83,27 @@ const TOPBAR_CASES = [
       { hint: '完全批准（免沙箱）', mode: 'bypass' },
     ],
   },
+  {
+    id: 'codebuddy',
+    aria: 'CodeBuddy Code',
+    buttonPrefix: '用 CodeBuddy Code 打开',
+    // 左键暂时仍是默认档（顶栏直点改造只覆盖了 claude / codex / opencode）
+    primary: null,
+    tiers: [
+      { hint: '默认权限', mode: null },
+      { hint: '完全批准（跳过所有确认）', mode: 'bypassPermissions' },
+    ],
+  },
+  {
+    id: 'kimi',
+    aria: 'Kimi Code',
+    buttonPrefix: '用 Kimi Code 打开',
+    primary: null,
+    tiers: [
+      { hint: '默认权限', mode: null },
+      { hint: '完全批准（--auto）', mode: 'auto' },
+    ],
+  },
 ]
 
 /** 编排台项目菜单里的档位项（默认档在上面那条 v-for 里，这里只验额外那几档） */
@@ -79,6 +111,8 @@ const PROJECT_CASES = [
   { label: '用 OpenCode 打开（完全批准）', mode: 'auto' },
   { label: '用 Codex 打开（自动批准）', mode: 'sandboxed' },
   { label: '用 Codex 打开（完全批准）', mode: 'bypass' },
+  { label: '用 CodeBuddy Code 打开（完全批准）', mode: 'bypassPermissions' },
+  { label: '用 Kimi Code 打开（完全批准）', mode: 'auto' },
 ]
 
 const results = []
@@ -116,6 +150,29 @@ async function main() {
 
   const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
   const context = await browser.newContext({ viewport: { width: 1600, height: 950 } })
+
+  // 顶栏只渲染「设置→顶部工具栏」里勾上的工具，而档位菜单只挂在顶栏图标上。
+  // 用户配置里被收起的工具（本机 kimi 就是）会让 A0 直接红 —— 可那是个人偏好，
+  // 不是产品契约。所以把 getConfig 的响应当场改一份：把本次要验的工具从
+  // headerToolsHidden 里摘掉。⚠️ 只改这一个浏览器上下文，**不写用户配置** ——
+  // 因此写入侧（save-ui-settings）也要吞掉：store 加载完会把 ui 整体替换一次，
+  // headerToolsHidden 的 watch 可能跟着回写一份，那份是被我们改过的可见名单，
+  // 真写下去就把用户的偏好改了。
+  const needPinned = [...TOPBAR_CASES.map(c => c.id), 'vscode'] // vscode 是 R 那条反向锚的对照组
+  await context.route('**/api/config/getConfig', async (route) => {
+    const resp = await route.fetch()
+    let data = null
+    try { data = await resp.json() } catch { /* 非 JSON 就原样回 */ }
+    if (data && data.ui && Array.isArray(data.ui.headerToolsHidden)) {
+      data.ui.headerToolsHidden = data.ui.headerToolsHidden.filter(id => !needPinned.includes(id))
+    }
+    await route.fulfill({ response: resp, json: data || undefined })
+  })
+  await context.route('**/api/config/save-ui-settings', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ success: true }),
+  }))
 
   // 拦掉这些打开端点：记下 body，绝不真的开窗口
   const openBodies = []
@@ -189,8 +246,11 @@ async function main() {
   //    于是 opencode 那组会点到 codex 的隐藏项，30s 超时）。
   const menuRoot = (aria) =>
     page.locator(`.simple-tool-menu-popover .claude-menu[aria-label="${aria}"]:visible`)
+  // 档位项不在时（有人删了某一档）别让 click 抛异常把整轮跑挂掉 —— 短超时 + 吞掉异常，
+  // 让 A4 自己判红，后面的工具组照跑（否则第一个坏档位会吞掉其余所有结论）。
   const clickMenuItem = async (aria, text) =>
-    menuRoot(aria).locator('.claude-menu__item', { hasText: text }).first().click()
+    menuRoot(aria).locator('.claude-menu__item', { hasText: text }).first()
+      .click({ timeout: 4000 }).catch(() => {})
 
   try {
     await page.goto(BASE, { waitUntil: 'domcontentloaded' })
@@ -203,7 +263,9 @@ async function main() {
       const pinned = await waitUntil(async () => (await btn.count()) === 1, 15000)
       check(`A0${tag} 固定在顶栏（否则档位菜单无处可挂）`, pinned, `count=${await btn.count()}`)
       if (!pinned) {
-        check(`A0${tag} 后续断言`, false, '该工具不在顶栏：请在 设置→顶部工具栏 里勾上它再跑')
+        // 可见性已由上面的 getConfig 拦截保证（不再要求用户先手动勾选），所以走到这里
+        // 只可能是这个工具没装、或工具检测还没跑完。
+        check(`A0${tag} 后续断言`, false, '该工具没出现在顶栏：确认本机装了它，且工具检测已跑完')
         continue
       }
       if (await btn.first().evaluate(el => el.className.includes('tool-button--missing'))) {
@@ -248,19 +310,25 @@ async function main() {
         await closeMenus()
       }
 
-      // A6 左键直点 = 完全批准档。放在档位循环**之后**：左键会弹出成功 toast，
-      // 而 toast 在顶部居中、正好压住这排工具按钮，先点它会把后面的右键点击吃掉。
+      // A6 左键直点。放在档位循环**之后**：左键会弹出成功 toast，而 toast 在顶部居中、
+      // 正好压住这排工具按钮，先点它会把后面的右键点击吃掉。
+      // 两种口径都钉死：有 primary 的必须给完全批准档，没有的必须仍是默认档。
       openBodies.length = 0
       await btn.first().click()
       const gotPrimary = await waitUntil(async () => openBodies.length > 0, 8000)
       const pBody = lastBody() || {}
-      check(`A6${tag} 左键直点 → permissionMode ${c.primary}（完全批准档）`,
-        gotPrimary && pBody.permissionMode === c.primary && typeof pBody.path === 'string' && pBody.path.length > 0,
+      const primaryOk = c.primary
+        ? pBody.permissionMode === c.primary
+        : !('permissionMode' in pBody)
+      check(`A6${tag} 左键直点 → ${c.primary ? `permissionMode ${c.primary}（完全批准档）` : '默认档（不带 permissionMode）'}`,
+        gotPrimary && primaryOk && typeof pBody.path === 'string' && pBody.path.length > 0,
         JSON.stringify(pBody))
-      // 界面上要看得出来：直点就是完全批准，按钮的 aria-label / tooltip 必须写明
+      // 界面上要看得出来：直点就是完全批准，按钮的 aria-label / tooltip 必须写明；
+      // 反过来，直点不是完全批准的工具就不许这么写（否则是吓人/误导）。
       const ariaNow = await btn.first().getAttribute('aria-label')
-      check(`A6b${tag} 按钮文案写明「完全批准」（tooltip / aria-label）`,
-        /完全批准/.test(ariaNow || ''), String(ariaNow).replace(/\n/g, ' '))
+      check(`A6b${tag} 按钮文案${c.primary ? '写明「完全批准」' : '不谎称完全批准'}（tooltip / aria-label）`,
+        c.primary ? /完全批准/.test(ariaNow || '') : !/完全批准/.test(ariaNow || ''),
+        String(ariaNow).replace(/\n/g, ' '))
       await dismissToasts()
       await closeMenus()
     }
@@ -312,10 +380,11 @@ async function main() {
         const projMenu = page.locator('.proj-menu').first()
         const labels = (await projMenu.locator('.proj-menu__label').allTextContents()).map(s => s.trim())
         const missing = PROJECT_CASES.map(c => c.label).filter(l => !labels.includes(l))
-        check('B1 三个档位项都在项目菜单里', missing.length === 0, missing.length ? `缺: ${missing.join(' / ')}` : `共 ${labels.length} 项`)
+        check('B1 项目菜单里的档位项都在', missing.length === 0, missing.length ? `缺: ${missing.join(' / ')}` : `共 ${labels.length} 项`)
         // 默认档不能被顶掉（它们还在上面那条 v-for 里）
-        check('B2 反向锚：默认档「用 Codex 打开 / 用 OpenCode 打开」还在',
-          labels.includes('用 Codex 打开') && labels.includes('用 OpenCode 打开'))
+        check('B2 反向锚：默认档「用 X 打开」都还在（含本轮新加档位的 codebuddy / kimi）',
+          ['用 Codex 打开', '用 OpenCode 打开', '用 CodeBuddy Code 打开', '用 Kimi Code 打开'].every(l => labels.includes(l)),
+          JSON.stringify(labels))
         await closeMenus()
       }
 
