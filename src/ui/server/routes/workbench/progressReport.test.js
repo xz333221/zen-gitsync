@@ -473,6 +473,21 @@ test('认不出来的标记行**留在正文里**，不吞内容', () => {
   assert.equal(r.text, '进度：还没法判断\n正文第一句。');
 });
 
+test('PROGRESS: ? 也摘掉：模型明确说"判断不出来"时不留一行怪话在正文里', () => {
+  // 2026-10-15 用户截图：任务刚派出 3 秒、0 次工具调用，模型按 prompt 要求写
+  // `PROGRESS: ?`，这行漏进了正文（TASKS 一向有 ? 特判，PROGRESS 之前没有）
+  assert.deepEqual(parseProgressHeader('PROGRESS: ?\nTASKS: ?\n正文'), {
+    percent: null, taskPercents: [null], text: '正文',
+  });
+  assert.deepEqual(parseProgressHeader('PROGRESS: ?\n正文'), {
+    percent: null, taskPercents: [], text: '正文',
+  });
+  // 全角冒号 + 全角问号同样认；有 TASKS 数字时整体仍取已知任务的均值（既有口径不变）
+  const mixed = parseProgressHeader('PROGRESS：？\nTASKS: 70, 30\n正文');
+  assert.equal(mixed.percent, 50);
+  assert.equal(mixed.text, '正文');
+});
+
 test('整体没给、各任务给了：整体取已知任务的平均值（模型自己的数字的均值）', () => {
   const r = parseProgressHeader('TASKS: 60, ?, 30\n正文');
   assert.equal(r.percent, 45);

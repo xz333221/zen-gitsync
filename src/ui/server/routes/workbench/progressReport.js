@@ -282,7 +282,11 @@ export function parseProgressHeader(raw) {
       const pm = line.match(PROGRESS_MARKER_RE);
       if (pm) {
         const v = percentFromText(pm[1]);
-        if (v !== null) { percent = v; hadHeader = true; return; }
+        // 明确的 `?`（`PROGRESS: ?`）也算认下来了，与下面 TASKS 同一口径：那是模型
+        // 按 prompt 要求明确回答"判断不出来"，标记行要摘掉、percent 留 null（不画
+        // 进度条）。2026-10-15 之前少了这一条，问号行会漏进报告正文 —— 用户截图里
+        // 「PROGRESS: ?」独占一行就是这么来的（当时任务刚派出 3 秒，模型估不出来）
+        if (v !== null || /[?？]/.test(pm[1])) { percent = v; hadHeader = true; return; }
       }
       const tm = line.match(TASKS_MARKER_RE);
       if (tm) {
