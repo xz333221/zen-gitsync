@@ -181,9 +181,11 @@ function onWindowMouseUp(_e: MouseEvent) {
         <span class="wb-new-btn__shortcut">N</span>
       </button>
 
+      <!-- 一个项目 = 一个块（组头 + 组内任务列表），块内列表限高自滚，见样式里
+           .wb-task-group__list 那段：单项目攒到几十条时不会把别的项目顶出可视区。 -->
       <ul class="wb-task-list" :class="{ 'is-grouped': groupedTasksList.hasMultiple }">
-        <template v-for="group in groupedTasksList.groups" :key="group.path">
-          <li
+        <li v-for="group in groupedTasksList.groups" :key="group.path" class="wb-task-group">
+          <div
             v-if="groupedTasksList.hasMultiple"
             class="wb-task-group__head"
             :class="{
@@ -206,8 +208,8 @@ function onWindowMouseUp(_e: MouseEvent) {
               {{ group.path === currentProjectKey ? currentProject.name : shortProjectLabel(group.label) }}
             </span>
             <span class="wb-pill wb-task-group__count">{{ group.tasks.length }}</span>
-          </li>
-          <template v-if="!isGroupCollapsed(group.path)">
+          </div>
+          <ul v-if="!isGroupCollapsed(group.path)" class="wb-task-group__list">
             <li
               v-for="t in group.tasks"
               :key="t.id"
@@ -267,8 +269,8 @@ function onWindowMouseUp(_e: MouseEvent) {
                 </button>
               </div>
             </li>
-          </template>
-        </template>
+          </ul>
+        </li>
         <li v-if="tasks.length === 0" class="wb-empty wb-empty--rich">
           <div class="wb-empty__art" aria-hidden="true">
             <el-icon><DocumentAdd /></el-icon>
@@ -296,6 +298,10 @@ function onWindowMouseUp(_e: MouseEvent) {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  /* 单个项目块里任务列表的高度上限（唯一旋钮）。
+     取视口比例而不是写死 px：编辑器弹窗本身贴着视口高（height-offset 88px），
+     写死 px 在矮窗口会顶破弹窗、在 4K 上又白白空着。46vh ≈ 1080p 露出十来条任务。 */
+  --wb-task-group-max-h: 46vh;
 }
 .wb-section {
   display: flex;
@@ -395,6 +401,25 @@ function onWindowMouseUp(_e: MouseEvent) {
 .wb-new-btn:active { transform: scale(0.99); }
 .wb-new-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 .wb-task-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+/* 一个项目 = 一个块：组头 + 组内任务列表成对包起来，**块内列表限高自滚**。
+   为什么要限高：一个项目攒到几十条任务时（实测 74 条），不限高会把整条侧栏拉成
+   一屏长列表 —— 组头被滚出视野，排在后面的项目更要翻半天才看得到。限高之后每组
+   自己滚、组头原地不动，"我在哪个项目下 / 下面还有几个项目"一眼可见。
+   高度只由 --wb-task-group-max-h 控制（定义在 .wb-sidebar 上）。 */
+.wb-task-group { min-width: 0; }
+.wb-task-group__list {
+  list-style: none;
+  margin: 0;
+  /* 上下各留 2px：拖动排序的落点指示线画在行外 2px 处，贴着滚动容器上沿会被裁掉 */
+  padding: 2px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: var(--wb-task-group-max-h);
+  overflow-y: auto;
+  /* 滚到底不要把滚动链传给外层侧栏，否则一次滚轮连跳两级 */
+  overscroll-behavior: contain;
+}
 /* 分组模式下任务项相对组头缩进一层,视觉上归属到项目分组下 */
 .wb-task-list.is-grouped .wb-task-item { margin-left: 14px; }
 .wb-task-item {
