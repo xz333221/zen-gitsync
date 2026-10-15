@@ -44,6 +44,8 @@
     "verify:wb-default-prompt": "node scripts/verify-workbench-default-prompt.cjs",
     "verify:agent-prompt-settings": "node scripts/verify-agent-prompt-settings.cjs",
     "verify:agent-prompt-settings:reverse": "node scripts/verify-agent-prompt-settings.cjs --reverse",
+    "verify:agent-input-facts": "node scripts/verify-agent-input-facts.cjs",
+    "verify:agent-input-facts:reverse": "node scripts/verify-agent-input-facts.cjs --reverse",
     "verify:wb-dialogs": "node scripts/verify-workbench-dialogs.cjs",
     "verify:wb-dispatch": "node scripts/verify-workbench-dispatch-attach.cjs",
     "verify:wb-env-context": "node scripts/verify-workbench-env-context.mjs",

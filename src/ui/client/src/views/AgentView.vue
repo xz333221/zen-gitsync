@@ -30,6 +30,7 @@ import { Loading, ChatDotRound, Goods, Connection, Timer, Setting } from '@eleme
 import { ChatContainer, ConversationList } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { useConfigStore } from '@/stores/configStore'
+import { useGitStore } from '@/stores/gitStore'
 import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
 import { buildConversationItems, agentConversationLabels, agentQuestionLabels, agentQueueLabels, AGENT_ASSISTANT_NAME, AGENT_ASSISTANT_AVATAR, MESSAGE_RAIL_CONFIG, MESSAGE_META_CONFIG } from '@/utils/agentConversations'
 import { resolveAgentPresets } from '@/utils/agentPresets'
@@ -44,6 +45,7 @@ import AgentEngineSelector from '@/components/AgentEngineSelector.vue'
 import CopySessionButton from '@/components/CopySessionButton.vue'
 
 const configStore = useConfigStore()
+const gitStore = useGitStore()
 
 // ── 面板宽度：够窄就把「会话列表」和「对话」折成两个页面 ──────────
 // 量的是这个视图容器自己的宽度（窄屏下拖动侧栏 / 分屏都会变；视口宽度反映不了）。
@@ -121,6 +123,17 @@ const chatTheme = computed<'light' | 'dark'>(() => {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   }
   return 'light'
+})
+
+// ── 输入框工具条上的「分支 + 模型」展示片 ──────────────────
+// 与工作台 g ai 面板（AgentChatSurface）、App.vue 底栏同一口径：
+// 分支读 gitStore.currentBranch（App 首次加载已强制拉取，切目录时 DirectorySelector 会刷新），
+// 模型读设置里标了「默认」的那一条。读不到就传 undefined —— 工具条那一片不渲染，
+// 不显示"未知"占位（库的 prop 默认空串同样不渲染）。
+const inputModelName = computed(() => {
+  const m = configStore.models.find((x: any) => x.isDefault)
+  if (!m) return ''
+  return m.name || m.model || ''
 })
 
 // ── 会话列表数据（喂给组件库的 ConversationList，映射逻辑与文件空间面板共用） ──
@@ -424,6 +437,8 @@ onBeforeUnmount(() => {
                 :queue-labels="queueLabels"
                 :upload-config="{ accept: AGENT_UPLOAD_ACCEPT }"
                 :context-usage="inputContextUsage"
+                :git-branch="gitStore.currentBranch || undefined"
+                :model="inputModelName || undefined"
                 :placeholder="isStreaming ? $t('@AGENT:生成中，发送后会排队，等本轮跑完自动接上…') : $t('@AGENT:输入消息，Enter 发送')"
                 :question="questionPanel"
                 :question-submitting="answeringQuestion"
