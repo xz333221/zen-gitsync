@@ -70,6 +70,8 @@
     "verify:wb-card-done:reverse": "node scripts/verify-wb-card-done.cjs --reverse",
     "verify:wb-rerun-label": "node scripts/verify-wb-rerun-label.cjs",
     "verify:wb-rerun-label:reverse": "node scripts/verify-wb-rerun-label.cjs --reverse",
+    "verify:wb-run-executor-badge": "node scripts/verify-wb-run-executor-badge.cjs",
+    "verify:wb-run-executor-badge:reverse": "node scripts/verify-wb-run-executor-badge.cjs --reverse",
     "verify:wb-auto-done": "node scripts/verify-wb-auto-done.cjs",
     "verify:wb-auto-done:reverse": "node scripts/verify-wb-auto-done.cjs --reverse",
     "verify:wb-card-cover": "node scripts/verify-wb-card-cover.cjs",

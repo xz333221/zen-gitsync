@@ -47,7 +47,7 @@ import { useWorkbenchSimpleConversation } from '@/composables/useWorkbenchSimple
 import { buildTaskExecutionText, type TaskExecutionScope } from '@/utils/taskExecutionExport'
 import { useWorkbenchExecution } from '@/composables/useWorkbenchExecution'
 import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection'
-import { TASK_EXECUTOR_OPTIONS, taskExecutorName, type TaskExecutorId } from '@/utils/taskExecutor'
+import { TASK_EXECUTOR_OPTIONS, taskExecutorName, isTaskExecutorId, type TaskExecutorId } from '@/utils/taskExecutor'
 import TaskExecutorIcon from '@components/TaskExecutorIcon.vue'
 import { useWorkbenchData } from '@/composables/useWorkbenchData'
 import WorkbenchSidebar from '@/views/components/WorkbenchSidebar.vue'
@@ -1078,6 +1078,23 @@ const lastSimpleJob = computed(() => simpleAllJobsFor(selectedTask.value).slice(
 const simpleAssistantLabel = computed(() => taskExecutorName(lastSimpleJob.value?.agent))
 const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.value?.agent))
 
+// 工具栏那枚「本轮实际执行器」徽标（见模板那段为什么必须有它）：与对话流头像同源，
+// 但 TaskExecutorIcon 的 prop 要 TaskExecutorId 类型 —— job.agent 是宽松的 string，
+// 过一道 isTaskExecutorId；老 job 没有 agent 字段时按 claude 兜底，与
+// taskExecutorName / avatarForExecutor 的回落口径一致（三处兜底必须同一个值）。
+const lastJobExecutorId = computed<TaskExecutorId>(() =>
+  isTaskExecutorId(lastSimpleJob.value?.agent) ? lastSimpleJob.value!.agent : 'claude'
+)
+// 在跑的那一轮要说"正在由 X 执行"：徽标跟着 job 状态翻词，跟 barStatus 的"执行中"同源
+const lastSimpleJobRunning = computed(() => simpleJobState(lastSimpleJob.value) === 'running')
+// 悬停说明 = 模型信息（与按钮 hint 同一口径，见 executorModelTitle）+ 一句"它和按钮上那个
+// 不是一回事"——按钮选的是下一次执行用谁，徽标说的是这一轮实际用了谁
+const lastRunExecutorTitle = computed(() => {
+  const model = executorModelTitle(lastJobExecutorId.value)
+  const hint = $t('@WORKBENCH:本轮实际使用的执行器；上方按钮选的是下一次执行用谁')
+  return model ? `${model} · ${hint}` : hint
+})
+
 // 排队续聊：任务在跑时输入框照样能用，发出去的内容先排队（见 useWorkbenchExecution）。
 // 「在不在跑」不在这儿另算一遍 —— 直接用上面那个 isTaskRunning / selectedTaskRunning。
 const selectedTaskQueue = computed(() =>
@@ -1242,6 +1259,31 @@ const selectedTaskQueue = computed(() =>
               : metaSaveState === 'error' ? $t('@WORKBENCH:保存失败')
               : $t('@WORKBENCH:有未保存的更改')
             }}
+          </span>
+          <!--
+            「本轮实际是谁跑的」常驻徽标：对话流左侧那颗执行器头像会随滚动跑掉，而它才是
+            "这一轮用什么执行"的事实；旁边 split button 上挂的 hint 是**下次**用谁
+            （selectedTaskExecutor，用户临时选择），两者经常不一致 —— 切了执行器还没重跑、
+            或这单是别的 g ui 实例跑的。不写明白，滚到上面只看到按钮那个执行器，
+            会误以为这一轮就是它跑的（2026-10-15 反馈）。
+            数据源与对话流头像、执行日志详情同源：最近一轮 job 的 agent 字段
+            （老 job 没有这个字段，按 claude 兜底，与 taskExecutorName 口径一致）。
+            从没跑过的任务不渲染（没有"本轮"可言）。
+            data-executor 给探针一个稳定钩子（值 = claude / opencode / codex / codebuddy / pi）。
+          -->
+          <span
+            v-if="lastSimpleJob"
+            class="wb-run-executor"
+            :class="{ 'is-running': lastSimpleJobRunning }"
+            :data-executor="lastJobExecutorId"
+            :title="lastRunExecutorTitle"
+          >
+            <TaskExecutorIcon :executor="lastJobExecutorId" class="wb-run-executor__icon" />
+            <span class="wb-run-executor__text">
+              {{ lastSimpleJobRunning
+                ? $t('@WORKBENCH:正在由 {name} 执行', { name: simpleAssistantLabel })
+                : $t('@WORKBENCH:本轮由 {name} 执行', { name: simpleAssistantLabel }) }}
+            </span>
           </span>
           <!--
             执行：split button —— 主体按当前选中执行器直接跑，下拉临时切换执行器。
@@ -2484,6 +2526,42 @@ const selectedTaskQueue = computed(() =>
   gap: 4px;
 }
 .wb-executor-split__hint-icon { font-size: var(--font-size-sm); }
+/* ── 「本轮实际执行器」常驻徽标 ─────────────────────────────────────────
+   对话流里那颗执行器头像会随滚动跑掉，按钮上的 hint 又是"下次用谁"（用户选择），
+   这枚徽标是"这轮实际是谁"的唯一常驻事实（2026-10-15）。
+   色相取 pending 角色色档（灰蓝）：它陈述事实，不抢「执行」主按钮的注意力；
+   不用品牌色 —— 五个执行器五个色会把工具栏变成调色盘。在跑时翻 active 档（琥珀），
+   与 barStatus「执行中」同一套语义。
+   让位结构：flex-shrink:100 + min-width:0 + 文字 ellipsis —— 窄容器时它先收缩，
+   标题输入框与右侧按钮不变形；view < 1180px 整枚隐藏（按弹窗 96vw − 侧栏 240px −
+   内边距算过：低于这个宽度工具栏摆不下它，收 ellipsis 也只是半截字，不如不显示）。 */
+.wb-run-executor {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 100;
+  min-width: 0;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--role-pending-edge);
+  background: var(--role-pending-wash);
+  color: var(--role-pending-ink);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+.wb-run-executor.is-running {
+  border-color: var(--role-active-edge);
+  background: var(--role-active-wash);
+  color: var(--role-active-ink);
+}
+.wb-run-executor__icon { font-size: var(--font-size-sm); flex-shrink: 0; }
+.wb-run-executor__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1180px) {
+  .wb-run-executor { display: none; }
+}
 .wb-executor-item {
   display: inline-flex;
   align-items: center;

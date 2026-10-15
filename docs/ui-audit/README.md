@@ -683,3 +683,28 @@ markdown 主题走 —— 那是文档自己的样子；「嵌在应用面板里
 
 回归网：`npm run verify:ai-diff-theme`（26 条：源码契约 + 两套主题实测底色/字色/对比度 + 弹窗那条渲染路径）
 与 `npm run verify:ai-diff-theme:reverse`（把旧的白底写法注回去，D2/D3/D4/D6 必须变红）。
+## 补记（2026-10-15）：任务执行弹窗常驻「本轮实际执行器」徽标
+
+用户反馈：任务执行弹窗里"这一轮是用什么跑的"只有对话流左侧那颗执行器头像，
+**滚下去就看不到了**；而滚上去唯一能看到的执行器信息是顶部 split button 上挂的
+hint —— 那个是"**下次**用谁"（`selectedTaskExecutor`，用户临时选择），两者经常
+不一致（切了执行器还没重跑、或这单是别的 g ui 实例跑的），会被误认成按钮那个
+执行器跑的。
+
+**修法：** 工具栏（`.wb-split__header`，常驻不可滚那一行）在 run 按钮左侧加一枚
+中性 pill「本轮由 X 执行」/ 在跑时翻「正在由 X 执行」。数据源与对话流头像、
+执行日志详情**同源**：最近一轮 job 的 `agent` 字段（老 job 没这个字段按 claude
+兜底，三处兜底同一个值）。色相取 `pending` 角色色档（灰蓝）、在跑翻 `active`
+（琥珀）—— 陈述事实不抢主按钮注意力；五个执行器五个品牌色会把工具栏变成调色盘。
+让位结构：`flex-shrink:100 + min-width:0 + 文字 ellipsis`，view < 1180px 整枚
+隐藏（按弹窗 96vw − 侧栏 240px − 内边距算的阈值，与 `.wb-editor-bar__status`
+在 620px 退场同一套思路）。
+
+| 徽标（本轮实际）与按钮 hint（下次用谁）并排 | 在跑时翻琥珀档 |
+|---|---|
+| ![本轮执行器徽标](./wb-run-executor-badge.png) | ![在跑时的徽标](./wb-run-executor-badge-running.png) |
+
+回归网：`npm run verify:wb-run-executor-badge`（19 条：文案跟 `job.agent` 走 /
+与按钮 hint 相互独立 / 滚动不断链 / 窄视口退场）+ `--reverse`（job 全空 → 徽标
+全不渲染，8 条）。存量红预警：库里 MessageRail 的 `getBoundingClientRect`
+pageerror 三条是改动前就有的（`verify-wb-rerun-label` 同样报），不是本改动引入。
