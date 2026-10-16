@@ -2051,13 +2051,17 @@ defineExpose({
 
 .status-badge.el-tag--warning {
   border-color: var(--action-amber-border);
-  color: var(--action-amber-deep);
+  /* --action-amber-deep(#d46b08) 在浅琥珀底上只有 3.3:1（2026-10-16 对比度走查），
+     改用主题翻转档：浅色 #b45309 ≈ 4.7:1、暗色亮琥珀，与分支 warning tag 同口径。 */
+  color: var(--color-warning-dark);
 }
 
 .status-badge.el-tag--info {
   background-color: var(--action-blue-soft);
   border-color: #91d5ff;
-  color: var(--color-primary);
+  /* 原 --color-primary(#3b82f6) 只有 3.0:1（2026-10-16 对比度走查），
+     换 primary 深档 #2563eb ≈ 4.7:1。 */
+  color: var(--color-primary-dark);
 }
 
 .status-badge:hover {

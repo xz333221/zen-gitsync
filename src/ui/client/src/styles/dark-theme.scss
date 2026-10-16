@@ -838,6 +838,21 @@ html[data-theme="dark"] {
     color: var(--color-danger-dark);
   }
 
+  /* info / primary 补齐（2026-10-16 对比度走查）：亮色侧新增了这两型的深档文字色，
+     暗色若不整套覆盖，common.scss 的亮色规则会以同等特异性漏进来（浅色字配深底）。
+     info 与 base 同款白字淡底；primary 走蓝底 + 亮蓝字。 */
+  .el-tag.el-tag--info {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .el-tag.el-tag--primary {
+    background-color: rgba(59, 130, 246, 0.2);
+    border-color: rgba(59, 130, 246, 0.4);
+    color: var(--color-primary-light);
+  }
+
   /* 自定义对话框按钮深色主题 - 使用实色替代渐变 */
   .dialog-confirm-btn {
     background: var(--color-primary);

@@ -456,8 +456,11 @@ function formatBytes(bytes: number): string {
  * （原本由绿转琥珀的那一档）才变色，那时候它才是真的需要被看见。
  */
 function usageAlert(percent: number): string | null {
-  if (percent >= 90) return 'var(--color-danger)'
-  if (percent >= 70) return 'var(--color-warning)'
+  // 颜色走**主题翻转档**（--color-*-dark：浅色=深档、暗色=亮档）。
+  // 原 --color-danger(#f56c6c) 压在浅色顶栏上只有 2.8:1，告警反而看不清
+  //（2026-10-16 对比度走查实测）。
+  if (percent >= 90) return 'var(--color-danger-dark)'
+  if (percent >= 70) return 'var(--color-warning-dark)'
   return null
 }
 

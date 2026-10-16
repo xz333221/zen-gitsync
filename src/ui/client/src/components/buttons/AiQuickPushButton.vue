@@ -235,4 +235,14 @@ function handleClick() {
     }
   }
 }
+
+/* 暗色：--role-ai-ink 在暗色走的是**亮档**(#a78bfa)，当实心底会把白字压到 2.7:1
+   （2026-10-16 对比度走查实测）。实心紫改用色板深档 #6d28d9：
+   与浅色主题同一颗紫、白字 ~6.7:1，悬停提亮一档。禁用态走 --action-disabled-*，不受影响。 */
+[data-theme="dark"] .one-ai-push-button:not(.is-disabled) {
+  background: var(--color-think-dark) !important;
+  &:hover:not(.is-disabled) {
+    background: color-mix(in srgb, var(--color-think-dark) 88%, #fff) !important;
+  }
+}
 </style>

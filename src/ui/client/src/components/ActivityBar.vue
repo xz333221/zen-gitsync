@@ -442,6 +442,10 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
 }
 
 /* ―― Workbench 任务执行数量徽标 ――――――――――――――――――――――――――― */
+/* ⚠️ 活动栏角标家族统一口径：白字实底角标的底色一律「令牌色兑 55% 黑」。
+   原始令牌（--color-success/warning/danger/primary 等）是给色块/描边用的亮度，
+   10~11px 白字压上去只有 2.0~3.7:1（2026-10-16 对比度走查实测，7 枚全中招）；
+   兑 55% 黑后全部 ≥6:1，色相身份不变。改任何一档前先重算白字对比度。 */
 .wb-running-badge {
   position: absolute;
   top: -2px;
@@ -456,7 +460,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   font-weight: 600;
   line-height: 1;
   color: #fff;
-  background: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 55%, #000);
   border-radius: var(--radius-lg);
   box-shadow: 0 0 0 2px var(--bg-container);
   pointer-events: none;
@@ -492,7 +496,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   font-weight: 600;
   line-height: 1;
   color: #fff;
-  background: var(--action-teal);
+  background: color-mix(in srgb, var(--action-teal) 55%, #000);
   border-radius: var(--radius-lg);
   box-shadow: 0 0 0 2px var(--bg-container);
   pointer-events: none;
@@ -515,7 +519,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   font-weight: 600;
   line-height: 1;
   color: #fff;
-  background: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 55%, #000);
   border-radius: var(--radius-lg);
   box-shadow: 0 0 0 2px var(--bg-container);
   pointer-events: none;
@@ -565,17 +569,17 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
 
 /* 落后:远端有新提交待拉取 —— 最需要注意的一档 */
 .git-sync-badge--behind {
-  background: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 55%, #000);
 }
 
 /* 只领先:本地提交待推送 —— 正常待办,用 success 而不是 warning 免得跟"落后"同色 */
 .git-sync-badge--ahead {
-  background: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 55%, #000);
 }
 
 /* 两边都有(分叉):得先解决,用 danger */
 .git-sync-badge--diverged {
-  background: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 55%, #000);
 }
 
 /* ── 编辑器未保存文件数量徽标 ─────────────────────────────────────── */
@@ -595,7 +599,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   font-weight: 600;
   line-height: 1;
   color: #fff;
-  background: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 55%, #000);
   border-radius: var(--radius-lg);
   box-shadow: 0 0 0 2px var(--bg-container);
   pointer-events: none;
@@ -620,7 +624,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   font-weight: 600;
   line-height: 1;
   color: #fff;
-  background: var(--color-info-light);
+  background: color-mix(in srgb, var(--color-info-light) 55%, #000);
   border-radius: var(--radius-lg);
   box-shadow: 0 0 0 2px var(--bg-container);
   pointer-events: none;

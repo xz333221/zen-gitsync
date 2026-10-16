@@ -617,8 +617,10 @@
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Courier New", monospace;
 
   /* 提交哈希（Git SHA 短码）专用色 token
-     亮色:蓝色文字 + 极淡蓝底;暗色由 dark-theme.scss 覆盖,保证对比度 ≥ 4.5:1 */
-  --commit-hash-fg: var(--color-primary);
+     亮色:#2563eb（primary-dark）配 #ecf5ff 淡蓝底 ≈ 4.7:1 —— 原 --color-primary
+     (#3b82f6) 实测只有 3.3:1，11px 等宽小字读不清（2026-10-16 对比度走查）；
+     暗色由 dark-theme.scss 覆盖（#60a5fa on tint-18 ≈ 5.0:1）。 */
+  --commit-hash-fg: var(--color-primary-dark);
   --commit-hash-bg: #ecf5ff;
   --commit-hash-fg-dark: var(--color-primary-light);
   --commit-hash-bg-dark: var(--tint-primary-18);

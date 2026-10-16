@@ -896,6 +896,20 @@ select option {
   }
 }
 
+/* =======================================================
+   标签（el-tag）文字色 —— 亮色
+   EP 默认的「浅底 + 同色系彩字」对比度只有 2.0~2.8:1（2026-10-16 对比度走查实测，
+   提交历史分支 chips / tag chips 全部中招），文字统一改走**深档**令牌：
+   primary/success/warning/danger 用 -dark 档（浅色=深、暗色=亮，随主题翻转），
+   info 走 text-secondary。⚠️ 暗色的对应覆盖在 dark-theme.scss，五型必须齐全 ——
+   缺一型，这里的亮色值会以同等特异性漏进暗色。
+   ======================================================= */
+.el-tag.el-tag--primary { color: var(--color-primary-dark); }
+.el-tag.el-tag--success { color: var(--color-success-dark); }
+.el-tag.el-tag--warning { color: var(--color-warning-dark); }
+.el-tag.el-tag--danger  { color: var(--color-danger-dark); }
+.el-tag.el-tag--info    { color: var(--text-secondary); }
+
 /* 提交历史表格紧凑样式 */
 .compact-table.el-table {
   --el-table-row-height: 32px;
