@@ -235,10 +235,18 @@ onBeforeUnmount(() => {
     >
       <div class="metric-card">
         <div class="metric-card__header">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="4" y="4" width="16" height="16" rx="2" />
-            <rect x="9" y="9" width="6" height="6" />
-            <path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2" />
+          <!-- cpu.svg（Tabler icons，MIT） -->
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M5 6a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-12a1 1 0 0 1-1-1l0-12" />
+            <path d="M9 9h6v6h-6l0-6" />
+            <path d="M3 10h2" />
+            <path d="M3 14h2" />
+            <path d="M10 3v2" />
+            <path d="M14 3v2" />
+            <path d="M21 10h-2" />
+            <path d="M21 14h-2" />
+            <path d="M14 21v-2" />
+            <path d="M10 21v-2" />
           </svg>
           <span>{{ $t('@MONITOR:CPU 占用') }}</span>
         </div>
@@ -261,9 +269,18 @@ onBeforeUnmount(() => {
 
       <div class="metric-card">
         <div class="metric-card__header">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="6" width="20" height="12" rx="2" />
-            <path d="M6 10v4M10 10v4M14 10v4M18 10v4" />
+          <!-- memory.svg（Tabler icons，MIT）：内存条 -->
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 11v2" />
+            <path d="M16 11v2" />
+            <path d="M3 7h18a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-18a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1a1 1 0 0 1-1-1v-1a1 1 0 0 1 1-1" />
+            <path d="M8 11v2" />
+            <path d="M4 17v2" />
+            <path d="M7 17v2" />
+            <path d="M10 17v2" />
+            <path d="M20 17v2" />
+            <path d="M17 17v2" />
+            <path d="M13 17v2" />
           </svg>
           <span>{{ $t('@MONITOR:内存占用') }}</span>
         </div>
@@ -288,9 +305,10 @@ onBeforeUnmount(() => {
 
       <div class="metric-card">
         <div class="metric-card__header">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
+          <!-- clock.svg（Tabler icons，MIT） -->
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0-18 0" />
+            <path d="M12 7v5l3 3" />
           </svg>
           <span>{{ $t('@MONITOR:系统运行时间') }}</span>
         </div>
@@ -305,8 +323,9 @@ onBeforeUnmount(() => {
 
       <div class="metric-card">
         <div class="metric-card__header">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+          <!-- activity.svg（Tabler icons，MIT） -->
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3 12h4l3 8l4-16l3 8h4" />
           </svg>
           <span>{{ $t('@MONITOR:监听端口') }}</span>
         </div>
@@ -325,11 +344,11 @@ onBeforeUnmount(() => {
       <!-- 磁盘占用：与四个 KPI 卡片同排 -->
       <div class="metric-card disk-card" v-if="store.overview.disks">
         <div class="metric-card__header">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="22" y1="12" x2="2" y2="12" />
-            <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
-            <line x1="6" y1="16" x2="6.01" y2="16" />
-            <line x1="10" y1="16" x2="10.01" y2="16" />
+          <!-- database.svg（Tabler icons，MIT）：磁盘占用（存储语义） -->
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 6a8 3 0 1 0 16 0a8 3 0 1 0-16 0" />
+            <path d="M4 6v6a8 3 0 0 0 16 0v-6" />
+            <path d="M4 12v6a8 3 0 0 0 16 0v-6" />
           </svg>
           <span>{{ $t('@MONITOR:磁盘占用') }}</span>
         </div>

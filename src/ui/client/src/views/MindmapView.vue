@@ -18,14 +18,8 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  FolderOpened,
-  Plus,
-  FolderChecked,
   Delete,
-  Edit,
-  Refresh,
-  Document,
-  ArrowDown
+  Edit
 } from '@element-plus/icons-vue'
 import { FilePickerModal as FilePicker } from 'local-file-picker/client'
 import { MindMap, markdownToMindMap, type MindMapNode } from 'flow-mindmap'
@@ -484,7 +478,15 @@ function formatSize(bytes: number): string {
     <!-- 顶部工具栏 -->
     <div class="mm-toolbar">
       <div class="mm-toolbar-left">
-        <el-button size="small" :icon="FolderOpened" @click="openDirPicker">
+        <el-button size="small" @click="openDirPicker">
+          <!-- folder-plus.svg（Tabler icons，MIT） -->
+          <template #icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 19h-7a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2h4l3 3h7a2 2 0 0 1 2 2v3.5" />
+              <path d="M16 19h6" />
+              <path d="M19 16v6" />
+            </svg>
+          </template>
           {{ $t('@MINDMAP:添加目录') }}
         </el-button>
         <el-tooltip v-if="store.dirs.length > 0" placement="bottom-start" :show-after="200">
@@ -502,30 +504,64 @@ function formatSize(bytes: number): string {
       <div class="mm-toolbar-right">
         <el-button
           size="small"
-          :icon="Plus"
           :disabled="store.dirs.length === 0"
           @click="handleNewFile()"
-        >{{ $t('@MINDMAP:新建') }}</el-button>
+        >
+          <!-- plus.svg（Tabler icons，MIT） -->
+          <template #icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 5l0 14" />
+              <path d="M5 12l14 0" />
+            </svg>
+          </template>
+          {{ $t('@MINDMAP:新建') }}
+        </el-button>
         <el-button
           size="small"
-          :icon="Document"
           :disabled="store.dirs.length === 0"
           @click="handleImportMarkdown()"
-        >{{ $t('@MINDMAP:从MD导入') }}</el-button>
+        >
+          <!-- file-import.svg（Tabler icons，MIT） -->
+          <template #icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+              <path d="M5 13v-8a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2h-5.5m-9.5-2h7m-3-3l3 3l-3 3" />
+            </svg>
+          </template>
+          {{ $t('@MINDMAP:从MD导入') }}
+        </el-button>
         <el-button
           size="small"
-          :icon="Edit"
           :disabled="!store.current"
           @click="handleExportMarkdown"
-        >{{ $t('@MINDMAP:复制MD') }}</el-button>
+        >
+          <!-- file-pencil.svg（Tabler icons，MIT） -->
+          <template #icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+              <path d="M17 21h-10a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2" />
+              <path d="M10 18l5-5a1.414 1.414 0 0 0-2-2l-5 5v2h2" />
+            </svg>
+          </template>
+          {{ $t('@MINDMAP:复制MD') }}
+        </el-button>
         <el-button
           size="small"
           type="primary"
-          :icon="FolderChecked"
           :disabled="!store.current || !store.dirty"
           :loading="store.loading"
           @click="() => { cancelAutosave(); handleSave() }"
-        >{{ $t('@MINDMAP:保存') }}</el-button>
+        >
+          <!-- device-floppy.svg（Tabler icons，MIT）：保存 -->
+          <template #icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M6 4h10l4 4v10a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2" />
+              <path d="M10 14a2 2 0 1 0 4 0a2 2 0 1 0-4 0" />
+              <path d="M14 4l0 4l-6 0l0-4" />
+            </svg>
+          </template>
+          {{ $t('@MINDMAP:保存') }}
+        </el-button>
         <span v-if="store.current" class="mm-status">
           <span class="mm-status-title" :title="store.current.title">{{ store.current.title }}</span>
           <span v-if="store.dirty" class="mm-status-dirty">●</span>
@@ -541,11 +577,18 @@ function formatSize(bytes: number): string {
           <el-button
             size="small"
             text
-            :icon="Refresh"
             :loading="store.refreshing"
             @click="store.refresh()"
             :disabled="store.dirs.length === 0"
-          />
+          >
+            <!-- refresh.svg（Tabler icons，MIT） -->
+            <template #icon>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                <path d="M20 11a8.1 8.1 0 0 0-15.5-2m-.5-4v4h4" />
+                <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+              </svg>
+            </template>
+          </el-button>
         </div>
 
         <div class="mm-sidebar-list" v-loading="store.refreshing">
@@ -566,7 +609,10 @@ function formatSize(bytes: number): string {
                 @contextmenu="openDirContextMenu($event, group.dir)"
               >
                 <el-icon class="mm-group-caret" :class="{ collapsed: collapsedGroups[group.dir] }">
-                  <ArrowDown />
+                  <!-- chevron-down.svg（Tabler icons，MIT）：收起态由 CSS 旋转 -90° -->
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 9l6 6l6-6" />
+                  </svg>
                 </el-icon>
                 <div class="mm-group-info">
                   <div class="mm-group-name">

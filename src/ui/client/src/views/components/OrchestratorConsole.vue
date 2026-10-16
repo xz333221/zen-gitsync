@@ -29,7 +29,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
-import { Paperclip, Promotion, Expand, Fold, Setting, Refresh, ArrowDown, ArrowRight, LocationInformation } from '@element-plus/icons-vue'
+import { Promotion, Expand, Fold, Refresh, ArrowDown, ArrowRight, LocationInformation } from '@element-plus/icons-vue'
 import type {
   Attachment,
   ProgressReport,
@@ -1072,7 +1072,12 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
           :aria-label="$t('@WORKBENCH:添加附件')"
           @click="onPickAttachment"
         >
-          <el-icon><Paperclip /></el-icon>
+          <!-- paperclip.svg（Tabler icons，MIT） -->
+          <el-icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3l6.5-6.5a3 3 0 0 0-6-6l-6.5 6.5a4.5 4.5 0 0 0 9 9l6.5-6.5" />
+            </svg>
+          </el-icon>
         </button>
         <!-- 预设提示词设置入口：图标按钮按项目惯例不加底色，
              有没有设过看右侧"附加预设提示词"那个勾选（它是真实生效状态，这个只是入口） -->
@@ -1084,7 +1089,13 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
           :aria-label="$t('@WORKBENCH:预设提示词设置')"
           @click="emit('open-prompt-settings')"
         >
-          <el-icon><Setting /></el-icon>
+          <!-- settings.svg（Tabler icons，MIT） -->
+          <el-icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37c1 .608 2.296.07 2.572-1.065" />
+              <path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0-6 0" />
+            </svg>
+          </el-icon>
         </button>
         <label class="oc__autorn" :title="$t('@WORKBENCH:取消勾选则只建任务草稿，不自动执行')">
           <input type="checkbox" v-model="autoRun" />
