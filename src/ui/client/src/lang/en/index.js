@@ -2449,6 +2449,7 @@ export default {
   '@WORKBENCH:尚无项目': 'No projects yet',
   '@WORKBENCH:常用目录与建过任务的目录都会出现在这里': 'Frequently used directories and directories with tasks appear here',
   '@WORKBENCH:搜索项目名称或路径': 'Search project name or path',
+  '@WORKBENCH:筛选项目': 'Filter projects',
   '@WORKBENCH:只看有任务': 'With tasks',
   '@WORKBENCH:隐藏非 Git': 'Hide non-Git',
   '@WORKBENCH:只显示有任务的项目': 'Show only projects that have tasks',

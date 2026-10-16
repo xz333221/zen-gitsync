@@ -15,7 +15,10 @@
  *   R3  color-scheme 跟随主题（light→light / dark→dark），原生控件不再被钉死成浅色
  *   R4  静止态描边可见（非透明、非零宽）且无焦点环；聚焦态描边 = --color-primary + --focus-ring-soft
  *   R5  正文 / placeholder 对**各自底色**都 ≥ 4.5:1（WCAG AA）
- *   R6  两个开关仍完整落在筛选条内、等宽不重叠、搜索框内无横向溢出
+ *   R6  标题行几何：漏斗按钮 + 搜索框都完整落在行内、漏斗在左不重叠、同高，
+ *       搜索框内无横向溢出（2026-10-16 开关搬进漏斗下拉、筛选条整行删除）
+ *   R8d 回归锚：开关开着 + 搜索收起时，meta 不渲染、放大镜不被顶出容器
+ *       （修过：meta 原来只判 filtering 不判 searchOpen）
  *   R0a 默认态只露一枚放大镜（容器 ≈34px 宽、未展开）
  *   R0b 点开后输入框展开（容器明显变宽）
  *
@@ -139,8 +142,9 @@ function OBS() {
   const box = document.querySelector('.proj__search')
   const icon = document.querySelector('.proj__search-icon')
   const input = document.querySelector('.proj__search-input')
-  const tools = document.querySelector('.proj__tools')
-  if (!box || !icon || !input || !tools) return null
+  const head = document.querySelector('.proj__head')
+  const filterBtn = document.querySelector('.proj__filter-btn')
+  if (!box || !icon || !input || !head || !filterBtn) return null
   const cs = (el, pseudo) => getComputedStyle(el, pseudo || undefined)
   const r = (el) => {
     const b = el.getBoundingClientRect()
@@ -158,7 +162,8 @@ function OBS() {
     caretColor: cs(input).caretColor,
     placeholderColor: cs(input, '::placeholder').color,
     boxRect: r(box),
-    toolsRect: r(tools),
+    headRect: r(head),
+    filterRect: r(filterBtn),
     toggles: Array.from(document.querySelectorAll('.proj__toggle')).map((b) => ({
       text: b.textContent.trim(), rect: r(b),
     })),
@@ -344,21 +349,50 @@ async function main() {
       check(`${tag}7a 正文对本主题底色 ≥ 4.5:1（WCAG AA）`, cInk >= 4.5, `${cInk.toFixed(2)}:1`)
       check(`${tag}7b placeholder 对本主题底色 ≥ 4.5:1`, cMeta >= 4.5, `${cMeta.toFixed(2)}:1`)
 
-      // 几何：这一行没被挤坏
-      const inTools = (r) => r.l >= s.toolsRect.l - 0.5 && r.r <= s.toolsRect.r + 0.5
-      const [t0, t1] = s.toggles
-      check(`${tag}8a 两个开关都完整落在筛选条内`,
-        s.toggles.length === 2 && inTools(t0.rect) && inTools(t1.rect),
-        `${JSON.stringify([t0 && t0.text, t1 && t1.text])} tools=[${s.toolsRect.l},${s.toolsRect.r}]`)
-      check(`${tag}8b 两个开关等宽且不重叠`,
-        !!t0 && !!t1 && Math.abs(t0.rect.w - t1.rect.w) < 0.5 && t0.rect.r <= t1.rect.l + 0.5,
-        t0 && t1 ? `w=${t0.rect.w}/${t1.rect.w}` : '开关不足两个')
+      // 几何：标题行没被挤坏（2026-10-16 起这行是 [标题][漏斗][搜索]，开关搬进漏斗下拉）
+      const inHead = (r) => r.l >= s.headRect.l - 0.5 && r.r <= s.headRect.r + 0.5
+      check(`${tag}8a 漏斗按钮与搜索框都完整落在标题行内`,
+        inHead(s.filterRect) && inHead(s.boxRect),
+        `filter=[${s.filterRect.l.toFixed(1)},${s.filterRect.r.toFixed(1)}] box=[${s.boxRect.l.toFixed(1)},${s.boxRect.r.toFixed(1)}] head=[${s.headRect.l},${s.headRect.r}]`)
+      check(`${tag}8b 漏斗在搜索左边、不重叠、同高`,
+        s.filterRect.r <= s.boxRect.l + 0.5 && Math.abs(s.filterRect.h - s.boxRect.h) < 0.5,
+        `filter.r=${s.filterRect.r.toFixed(1)} box.l=${s.boxRect.l.toFixed(1)} h=${s.filterRect.h}/${s.boxRect.h}`)
       check(`${tag}8c 搜索框内无横向溢出`, s.overflow.box && s.overflow.input, JSON.stringify(s.overflow))
 
-      // 记录一行几何：这一行到底是几行（改了两行布局再回来看这里）
-      log(`${tag} 布局：搜索框 top=${s.boxRect.t.toFixed(1)} 开关 top=${t0 ? t0.rect.t.toFixed(1) : 'n/a'}`
-        + `（相等=同一行；本项目按设计是两行，搜索独占一行）`)
+      // 记录一行几何：这行到底是几行（改布局再回来看这里）
+      log(`${tag} 布局：漏斗 top=${s.filterRect.t.toFixed(1)} 搜索框 top=${s.boxRect.t.toFixed(1)}`
+        + `（相等=同一行，都在标题行）`)
     }
+
+    // ── 8d：开关开着 + 搜索收起 —— 修过一次的挤压 bug 的回归锚 ──────────
+    // 背景：meta 小字原来只判 filtering 不判 searchOpen，"开关开着 + 搜索收起"
+    // 时它挤进 34px 的收起容器，把放大镜顶出框外。现在 meta 只在展开态渲染。
+    await setTheme('light')
+    await closeSearch()
+    await page.locator('.proj__filter-btn').click()
+    await page.locator('.proj__toggle').first().click() // 打开「只看有任务」
+    await page.keyboard.press('Escape') // 关掉下拉（不点画布，免得误触别的东西）
+    await sleep(250)
+    const squeeze = await page.evaluate(() => {
+      const box = document.querySelector('.proj__search')
+      const btn = document.querySelector('.proj__search-btn')
+      const br = box.getBoundingClientRect()
+      const rr = btn.getBoundingClientRect()
+      return {
+        overflow: box.scrollWidth <= box.clientWidth + 1,
+        btnInside: rr.left >= br.left - 0.5 && rr.right <= br.right + 0.5,
+        metaShown: !!document.querySelector('.proj__search-meta'),
+        filterOn: !!document.querySelector('.proj__filter-btn.is-on'),
+      }
+    })
+    check('8d 开关开着 + 搜索收起：容器无溢出、放大镜仍在框内、meta 不渲染（漏斗 is-on）',
+      squeeze.overflow && squeeze.btnInside && !squeeze.metaShown && squeeze.filterOn,
+      JSON.stringify(squeeze))
+    // 复位开关
+    await page.locator('.proj__filter-btn').click()
+    await page.locator('.proj__toggle').first().click()
+    await page.keyboard.press('Escape')
+    await sleep(200)
 
     // 留一张整页图，深浅各一张
     for (const theme of ['light', 'dark']) {

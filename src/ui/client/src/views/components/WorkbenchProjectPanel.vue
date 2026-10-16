@@ -93,6 +93,10 @@ const filtering = computed(
   () => !!query.value.trim() || onlyWithTasks.value || hideNonGit.value
 )
 
+/** 两个过滤开关里有没有开着的 —— 给漏斗入口的 is-on 信号用（开关收进下拉后，
+ *  没这个信号用户看不出"列表被筛过"。query 不算：搜索框自己有展开态可看）。 */
+const filtersActive = computed(() => onlyWithTasks.value || hideNonGit.value)
+
 /**
  * 筛选结果。三条规则刻意各自独立（可叠加）：
  *   · 「只看有任务」用 stats.total === 0 —— 与左栏进度行"没有就不显示"同一个口径；
@@ -248,6 +252,63 @@ async function confirmRemove(p: ProjectSummary) {
   <section class="proj">
     <header class="proj__head">
       <h3 class="proj__title">{{ $t('@WORKBENCH:项目列表') }}</h3>
+      <!-- 过滤入口（2026-10-16 用户要求）：漏斗图标 + 点击展开下拉，
+           原来的「只看有任务 / 隐藏非 Git」两个开关从卡片下方那行搬进下拉 ——
+           那一行只剩两个按钮纯占位。开关收进下拉后靠漏斗图标的 is-on 变色提示
+           "有筛选在生效"（下拉藏了状态，入口必须自己会说话）。 -->
+      <el-popover
+        v-if="projects.length > 0"
+        trigger="click"
+        placement="bottom-end"
+        :width="168"
+        :show-arrow="false"
+        :offset="6"
+        :teleported="true"
+        popper-class="proj-filter-popper"
+      >
+        <template #reference>
+          <button
+            type="button"
+            class="proj__filter-btn"
+            :class="{ 'is-on': filtersActive }"
+            :aria-label="$t('@WORKBENCH:筛选项目')"
+            :title="$t('@WORKBENCH:筛选项目')"
+          >
+            <!-- filter.svg（Tabler icons，MIT）：漏斗 = 过滤 -->
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 4h16v2.172a2 2 0 0 1-.586 1.414l-4.414 4.414v7l-6 2v-8.5l-4.48-4.928a2 2 0 0 1-.52-1.345v-2.227" />
+            </svg>
+          </button>
+        </template>
+        <div class="proj__toggles">
+          <button
+            type="button"
+            class="proj__toggle"
+            :class="{ 'is-on': onlyWithTasks }"
+            :aria-pressed="onlyWithTasks"
+            @click="onlyWithTasks = !onlyWithTasks"
+          >
+            <span>{{ $t('@WORKBENCH:只看有任务') }}</span>
+            <!-- check.svg（Tabler icons，MIT）：选中打勾 -->
+            <svg v-if="onlyWithTasks" class="proj__toggle-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M5 12l5 5l10-10" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="proj__toggle"
+            :class="{ 'is-on': hideNonGit }"
+            :aria-pressed="hideNonGit"
+            @click="hideNonGit = !hideNonGit"
+          >
+            <span>{{ $t('@WORKBENCH:隐藏非 Git') }}</span>
+            <svg v-if="hideNonGit" class="proj__toggle-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M5 12l5 5l10-10" />
+            </svg>
+          </button>
+        </div>
+      </el-popover>
+
       <!-- 搜索（2026-10-16 从下面的筛选条搬到这里）：默认只露一枚放大镜，
            点开输入框才展开。原标题右侧那枚常驻项目数（.proj__count）去掉 ——
            同一个数字顶栏、左栏「全部项目」行各还有一份；筛选中的匹配数
@@ -264,7 +325,10 @@ async function confirmRemove(p: ProjectSummary) {
           @keydown.esc="query = ''"
           @blur="onSearchBlur"
         />
-        <span v-if="filtering" class="proj__search-meta">{{ visible.length }}/{{ projects.length }}</span>
+        <!-- ⚠️ 必须带 searchOpen：只写 filtering 的话，"开关开着 + 搜索收起"时
+             这枚小字会挤进 34px 的收起容器，把放大镜顶出框外（实测按出 6px）。
+             原设计意图就是"展开态下"才显示，这里是补上漏掉的条件。 -->
+        <span v-if="filtering && searchOpen" class="proj__search-meta">{{ visible.length }}/{{ projects.length }}</span>
         <!-- mousedown.prevent：不让这一下先把输入框焦点弄丢，否则"点开 → 再点图标
              想收起"会变成 blur 收起 + click 又重新展开（同看板标题行那枚） -->
         <button
@@ -279,29 +343,6 @@ async function confirmRemove(p: ProjectSummary) {
         </button>
       </div>
     </header>
-
-    <!-- 筛选开关。搜索搬走后这一行只剩两个开关（它们仍然等宽平分）。
-         一个项目都没有时不渲染：没有可筛的东西，这一行只是占位 -->
-    <div v-if="projects.length > 0" class="proj__tools">
-      <div class="proj__toggles">
-        <button
-          type="button"
-          class="proj__toggle"
-          :class="{ 'is-on': onlyWithTasks }"
-          :aria-pressed="onlyWithTasks"
-          :title="$t('@WORKBENCH:只显示有任务的项目')"
-          @click="onlyWithTasks = !onlyWithTasks"
-        ><span>{{ $t('@WORKBENCH:只看有任务') }}</span></button>
-        <button
-          type="button"
-          class="proj__toggle"
-          :class="{ 'is-on': hideNonGit }"
-          :aria-pressed="hideNonGit"
-          :title="$t('@WORKBENCH:只显示 Git 仓库')"
-          @click="hideNonGit = !hideNonGit"
-        ><span>{{ $t('@WORKBENCH:隐藏非 Git') }}</span></button>
-      </div>
-    </div>
 
     <ul class="proj__list">
       <li
@@ -554,16 +595,39 @@ async function confirmRemove(p: ProjectSummary) {
   text-overflow: ellipsis;
 }
 
-/* ── 筛选区 ─────────────────────────────────────────── */
-/* 只剩一行开关（搜索 2026-10-16 搬到标题行右侧，见 .proj__head）。
-   整体是扁平的——只有 1px 边框，不额外加底色块，和下面项目行同一套语言。 */
-.proj__tools {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 0 12px 8px;
+/* ── 过滤入口（标题行，搜索左边）───────────────────────────────── */
+/* 与 .proj__search 同一套框式语言：同高 24px、同边框 / 底色令牌，
+   两者并排视觉上是一对；漏斗 14px 居中。 */
+.proj__filter-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: var(--text-meta);
   flex-shrink: 0;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast) var(--ease-custom),
+    border-color var(--transition-fast) var(--ease-custom),
+    background var(--transition-fast) var(--ease-custom);
 }
+.proj__filter-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-input-hover);
+}
+/* 有开关在生效：主色描边 + 淡底（与开关 is-on 同款信号语言）。
+   开关收进下拉后这是"列表被筛过"的唯一常驻提示。 */
+.proj__filter-btn.is-on {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: var(--tint-primary-12);
+}
+.proj__filter-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 /* 2026-10-11：这个搜索框跟着主题走。
    原先（2026-10-07）为了修"深色下白底白字"把底色写死成纯白、框内灰阶走本地变量，
    但纯白在深色面板里太扎眼（用户反馈"很突兀"）。现在改用随主题翻转的输入框令牌：
@@ -650,45 +714,47 @@ async function confirmRemove(p: ProjectSummary) {
   white-space: nowrap;
   flex-shrink: 0;
 }
+/* ── 过滤下拉（el-popover 内容，随 popover 一起 teleport 到 body）──
+   scoped 照样生效：弹层内容由本组件渲染，data-v 属性带着。
+   形态从"等宽平分按钮"改成菜单行：左标签 + 右侧勾（选中才出现）。 */
 .proj__toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.proj__toggle {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-/* 开关：等宽平分，选中只变颜色 + 一层很淡的主色底（和 .proj-item__action:hover 同款） */
-.proj__toggle {
-  flex: 1 1 0;
-  min-width: 0;
-  height: 22px;
+  width: 100%;
+  height: 28px;
   padding: 0 8px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border: none;
+  border-radius: var(--radius-base);
   background: transparent;
-  color: var(--text-meta);
+  color: var(--text-secondary);
   font-family: inherit;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   line-height: 1;
+  text-align: left;
   cursor: pointer;
   transition:
     color var(--transition-fast) var(--ease-custom),
-    border-color var(--transition-fast) var(--ease-custom),
     background var(--transition-fast) var(--ease-custom);
 }
-/* ⚠️ 省略号挂在 span 上，不挂在 button 上：button 要参与 flex 分配宽度，
-   文字长度不可控时外层撑不住的话会把兄弟按钮挤走 */
+/* ⚠️ 省略号挂在 span 上，不挂在 button 上（历史原因：按钮行形态时外层要参与
+   flex 分配宽度）；span 现在 flex:1 占住中间，勾固定在行尾 */
 .proj__toggle > span {
-  display: block;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.proj__toggle:hover { color: var(--text-secondary); border-color: var(--text-tertiary); }
-.proj__toggle.is-on {
-  color: var(--color-primary);
-  border-color: var(--color-primary);
-  background: var(--tint-primary-12);
-}
-.proj__toggle:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
+.proj__toggle-check { flex-shrink: 0; }
+.proj__toggle:hover { color: var(--text-primary); background: var(--bg-hover); }
+.proj__toggle.is-on { color: var(--color-primary); }
+.proj__toggle:focus-visible { outline: var(--focus-outline); outline-offset: -1px; }
 .proj__list {
   list-style: none;
   margin: 0;

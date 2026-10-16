@@ -2455,6 +2455,7 @@ export default {
   '@WORKBENCH:尚无项目': '尚无项目',
   '@WORKBENCH:常用目录与建过任务的目录都会出现在这里': '常用目录与建过任务的目录都会出现在这里',
   '@WORKBENCH:搜索项目名称或路径': '搜索项目名称或路径',
+  '@WORKBENCH:筛选项目': '筛选项目',
   '@WORKBENCH:只看有任务': '只看有任务',
   '@WORKBENCH:隐藏非 Git': '隐藏非 Git',
   '@WORKBENCH:只显示有任务的项目': '只显示有任务的项目',

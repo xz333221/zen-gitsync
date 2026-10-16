@@ -2,7 +2,9 @@
  * 左栏「项目列表」筛选 —— 浏览器交互验证。
  *
  * 守的契约（对应 WorkbenchProjectPanel.vue 的 visible / filtering）：
- *   P1  有项目时筛选条才渲染（没有项目时整块不占位）
+ *   P1  有项目时过滤入口（漏斗按钮）才渲染（没有项目时整块不占位）；
+ *       「只看有任务 / 隐藏非 Git」2026-10-16 起收进漏斗的下拉里 ——
+ *       点开关 / 读开关状态前一律先 openFilter()（EP popover 内容懒挂载）
  *   P2  搜索按项目名匹配；P3 大小写不敏感；P4 也匹配路径
  *   P5/P6 筛没了要**说出来**（「没有匹配的项目」+ 清除按钮），且不能和「尚无项目」混为一谈
  *   P7  「只看有任务」按 stats.total === 0 排除
@@ -86,7 +88,7 @@ function OBS() {
   const input = document.querySelector('.proj__search-input')
   return {
     names: rows.map(n => (n.querySelector('.proj-item__name')?.textContent || '').trim()),
-    hasTools: !!document.querySelector('.proj__tools'),
+    hasFilter: !!document.querySelector('.proj__filter-btn'),
     // 常驻项目数（标题右侧）2026-10-16 去掉；hasCount 守"真的没了"
     hasCount: !!document.querySelector('.proj__count'),
     count: (document.querySelector('.proj__count')?.textContent || '').replace(/\s+/g, ' ').trim(),
@@ -140,8 +142,17 @@ async function main() {
 
     const obs = () => page.evaluate(OBS)
     const search = page.locator('.proj__search-input')
+    const filterBtn = page.locator('.proj__filter-btn')
     const onlyTasks = page.locator('.proj__toggle').nth(0)
     const hideNonGit = page.locator('.proj__toggle').nth(1)
+
+    /* 两个开关 2026-10-16 起收进漏斗图标的下拉里：弹层关闭时内容不渲染，
+       点开关 / 读开关状态前一律先 openFilter()。已经开着时是 no-op。 */
+    async function openFilter() {
+      const vis = await page.locator('.proj__toggles').first().isVisible().catch(() => false)
+      if (!vis) await filterBtn.click()
+      await page.locator('.proj__toggles').first().waitFor({ state: 'visible', timeout: 3000 }).catch(() => {})
+    }
 
     /* 搜索 2026-10-16 起是"一枚放大镜、点开展开"（同看板标题行那枚）：
        input 默认 display:none，fill 之前必须先点开。点开后再点是收起，
@@ -156,8 +167,10 @@ async function main() {
     const ready = await waitUntil(async () => (await obs()).names.length >= FIXTURE.length)
     let s = await obs()
     check(`P0 夹具就绪：左栏渲染出 ${FIXTURE.length} 个合成项目`, ready, `实际 ${s.names.length} 行`)
-    check('P1a 有项目时筛选区渲染', s.hasTools)
-    check('P1b 两个开关文案正确（顺序：只看有任务 / 隐藏非 Git）',
+    check('P1a 有项目时过滤入口渲染（漏斗按钮）', s.hasFilter)
+    await openFilter()
+    s = await obs()
+    check('P1b 漏斗下拉里两个开关文案正确（顺序：只看有任务 / 隐藏非 Git）',
       s.toggles.length === 2 && s.toggles[0].text === '只看有任务' && s.toggles[1].text === '隐藏非 Git',
       JSON.stringify(s.toggles.map(t => t.text)))
     // 标题行那枚常驻项目数 2026-10-16 去掉（顶栏与「全部项目」行各还有一份）；
@@ -198,10 +211,13 @@ async function main() {
     s = await obs()
     check('P6a 清除筛选后项目全部回来', sameSet(s.names, NAMES), JSON.stringify(s.names))
     check('P6b 清除后搜索框被清空', s.query === '', `query="${s.query}"`)
+    await openFilter()
+    s = await obs()
     check('P6c 清除后两个开关都回到未选中',
       s.toggles.every(t => t.pressed === 'false' && !t.on), JSON.stringify(s.toggles))
 
     // ── P7：只看有任务 ──────────────────────────────────────────────
+    await openFilter()
     await onlyTasks.click()
     await waitUntil(async () => (await obs()).names.length === 2)
     s = await obs()
@@ -215,6 +231,7 @@ async function main() {
     await waitUntil(async () => (await obs()).names.length === FIXTURE.length)
 
     // ── P8：隐藏非 Git（本脚本最关键的一条） ────────────────────────
+    await openFilter()
     await hideNonGit.click()
     await waitUntil(async () => (await obs()).names.length === 3)
     s = await obs()
@@ -225,13 +242,21 @@ async function main() {
       s.names.includes('zen-verify-Alpha') && s.names.includes('zen-verify-Gamma'), JSON.stringify(s.names))
 
     // ── P9 / P10：叠加 ─────────────────────────────────────────────
+    await openFilter()
     await onlyTasks.click()
     await waitUntil(async () => (await obs()).names.length === 2)
     s = await obs()
     check('P9 只看有任务 + 隐藏非 Git 叠加：只剩两个有任务的 Git 仓库',
       sameSet(s.names, ['zen-verify-Alpha', 'zen-verify-Gamma']), JSON.stringify(s.names))
+    // P10 要搜索展开（meta 只在展开态渲染）；P11 要下拉开着（开关在弹层里）。
+    // 两者互斥（点漏斗会把空词搜索收起来），所以各读各的。
+    await ensureSearchOpen()
+    await waitUntil(async () => (await obs()).meta !== '')
+    s = await obs()
     check('P10 匹配数以「n/total」小字跟在展开的搜索框右边',
       s.meta === `${2}/${FIXTURE.length}`, `meta="${s.meta}" open=${s.searchOpen}`)
+    await openFilter()
+    s = await obs()
     check('P11 两个开关的 aria-pressed 与 is-on 同步',
       s.toggles.every(t => t.pressed === 'true' && t.on), JSON.stringify(s.toggles))
 
@@ -255,7 +280,7 @@ async function main() {
     s = await obs()
     check('P13a 一个项目都没有时显示「尚无项目」（正向锚：空状态还在）',
       s.emptyTitle === '尚无项目', `emptyTitle="${s.emptyTitle}"`)
-    check('P13b 一个项目都没有时筛选条整块不渲染（空状态不占位）', !s.hasTools)
+    check('P13b 一个项目都没有时过滤入口整块不渲染（空状态不占位）', !s.hasFilter)
   } catch (err) {
     check('脚本异常', false, String(err?.message || err))
   } finally {
