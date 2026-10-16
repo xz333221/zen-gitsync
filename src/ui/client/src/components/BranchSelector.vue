@@ -16,11 +16,10 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
 import { ref, computed } from 'vue'
-import { Plus, Menu, Check, Refresh } from '@element-plus/icons-vue'
+import { Plus, Menu, Check } from '@element-plus/icons-vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import { useGitStore } from '@stores/gitStore'
 import IconButton from '@components/IconButton.vue'
-import SvgIcon from '@components/SvgIcon/index.vue'
 
 const gitStore = useGitStore()
 
@@ -112,10 +111,19 @@ async function refreshCurrentBranch() {
       >
         <template #reference>
           <button class="branch-btn">
-            <svg-icon icon-class="git-branch" class-name="branch-btn-icon" />
+            <!-- git-branch.svg（Tabler icons，MIT） -->
+            <svg class="branch-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M5 18a2 2 0 1 0 4 0a2 2 0 1 0-4 0" />
+              <path d="M5 6a2 2 0 1 0 4 0a2 2 0 1 0-4 0" />
+              <path d="M15 6a2 2 0 1 0 4 0a2 2 0 1 0-4 0" />
+              <path d="M7 8l0 8" />
+              <path d="M9 18h6a2 2 0 0 0 2-2v-5" />
+              <path d="M14 14l3-3l3 3" />
+            </svg>
             <span class="branch-btn-name">{{ gitStore.currentBranch }}</span>
             <span class="branch-btn-caret">
-              <el-icon><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M831.872 340.864 512 652.672 192.128 340.864a30.592 30.592 0 0 0-42.752 0 29.12 29.12 0 0 0 0 41.6L489.664 714.24a32 32 0 0 0 44.672 0l340.288-331.776a29.12 29.12 0 0 0 0-41.6 30.592 30.592 0 0 0-42.752 0z"/></svg></el-icon>
+              <!-- chevron-down.svg（Tabler icons，MIT） -->
+              <el-icon><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M6 9l6 6l6 -6"/></svg></el-icon>
             </span>
           </button>
         </template>
@@ -146,7 +154,15 @@ async function refreshCurrentBranch() {
                 <Check />
               </el-icon>
               <span v-else class="branch-item-check-placeholder"></span>
-              <svg-icon icon-class="git-branch" class-name="branch-item-icon" />
+              <!-- git-branch.svg（Tabler icons，MIT） -->
+              <svg class="branch-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                <path d="M5 18a2 2 0 1 0 4 0a2 2 0 1 0-4 0" />
+                <path d="M5 6a2 2 0 1 0 4 0a2 2 0 1 0-4 0" />
+                <path d="M15 6a2 2 0 1 0 4 0a2 2 0 1 0-4 0" />
+                <path d="M7 8l0 8" />
+                <path d="M9 18h6a2 2 0 0 0 2-2v-5" />
+                <path d="M14 14l3-3l3 3" />
+              </svg>
               <span class="branch-item-name">{{ branch }}</span>
             </div>
             <div v-if="filteredBranches.length === 0" class="branch-empty">
@@ -169,7 +185,13 @@ async function refreshCurrentBranch() {
         :tooltip="$t('@CMDCON:刷新')"
         @click="refreshCurrentBranch"
       >
-        <el-icon :class="{ 'is-loading': isRefreshingBranch }"><Refresh /></el-icon>
+        <!-- refresh.svg（Tabler icons，MIT） -->
+        <el-icon :class="{ 'is-loading': isRefreshingBranch }">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M20 11a8.1 8.1 0 0 0-15.5-2m-.5-4v4h4" />
+            <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+          </svg>
+        </el-icon>
       </IconButton>
     </div>
 

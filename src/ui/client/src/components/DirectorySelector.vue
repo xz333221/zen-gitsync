@@ -18,7 +18,7 @@ import { $t } from '@/lang/static'
 import CommonDialog from "@components/CommonDialog.vue";
 import { FilePickerModal as FilePicker } from 'local-file-picker/client';
 import { ElMessage, ElMessageBox, ElPopover } from "element-plus";
-import { Folder, FolderOpened, Clock, ArrowDown, ArrowUp, CopyDocument } from "@element-plus/icons-vue";
+import { Folder, Clock } from "@element-plus/icons-vue";
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
@@ -880,7 +880,12 @@ function onBrowserSelect(path: string) {
         size="large"
         @click="onOpenExplorer"
       >
-        <el-icon aria-hidden="true"><FolderOpened /></el-icon>
+        <!-- folder-open.svg（Tabler icons，MIT） -->
+        <el-icon aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M5 19l2.757-7.351a1 1 0 0 1 .936-.649h12.307a1 1 0 0 1 .986 1.164l-.996 5.211a2 2 0 0 1-1.964 1.625h-14.026a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2h4l3 3h7a2 2 0 0 1 2 2v2" />
+          </svg>
+        </el-icon>
       </IconButton>
       <IconButton
         :tooltip="$t('@67CE7:在终端中打开')"
@@ -888,21 +893,20 @@ function onBrowserSelect(path: string) {
         size="large"
         @click="onOpenTerminal"
       >
-        <!-- 圆角命令行图标：不用 element-plus 的显示器图标，观感与控制台 tab 对齐。
-             尺寸绑定 --icon-glyph-size-lg（与同排图标字形同档），否则会明显小一圈。 -->
+        <!-- terminal-2.svg（Tabler icons，MIT）：与控制台 tab 同款命令行图标 -->
         <svg
           class="terminal-icon"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          stroke-width="1.7"
+          stroke-width="2"
           stroke-linecap="round"
           stroke-linejoin="round"
           aria-hidden="true"
         >
-          <rect x="2.5" y="4.5" width="19" height="15" rx="4.5" />
-          <path d="M7 10.2l3.1 2.3L7 14.8" />
-          <line x1="12.6" y1="14.8" x2="17" y2="14.8" />
+          <path d="M8 9l3 3l-3 3" />
+          <path d="M13 15l3 0" />
+          <path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2l0-12" />
         </svg>
       </IconButton>
       <!-- 复制目录路径：完整路径粘进终端就能 cd。（右键目录名复制的是文件夹名称，
@@ -914,7 +918,13 @@ function onBrowserSelect(path: string) {
         size="large"
         @click="onCopyDirectory"
       >
-        <el-icon aria-hidden="true"><CopyDocument /></el-icon>
+        <!-- copy.svg（Tabler icons，MIT） -->
+        <el-icon aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M7 9.667a2.667 2.667 0 0 1 2.667-2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1-2.667 2.667h-8.666a2.667 2.667 0 0 1-2.667-2.667l0-8.666" />
+            <path d="M4.012 16.737a2.005 2.005 0 0 1-1.012-1.737v-10c0-1.1.9-2 2-2h10c.75 0 1.158.385 1.5 1" />
+          </svg>
+        </el-icon>
       </IconButton>
       <IconButton
         icon-class="g-ai"
@@ -1106,8 +1116,13 @@ function onBrowserSelect(path: string) {
             >
               <span class="tools-more__btn">
                 <el-icon aria-hidden="true" class="tools-more__arrow">
-                  <ArrowUp v-if="moreToolsVisible" />
-                  <ArrowDown v-else />
+                  <!-- chevron-up / chevron-down（Tabler icons，MIT） -->
+                  <svg v-if="moreToolsVisible" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 15l6-6l6 6" />
+                  </svg>
+                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 9l6 6l6-6" />
+                  </svg>
                 </el-icon>
               </span>
             </IconButton>

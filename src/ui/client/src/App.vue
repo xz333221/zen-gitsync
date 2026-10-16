@@ -64,7 +64,7 @@ const MonitorView = defineAsyncComponent({ loader: () => import('@views/MonitorV
 const MindmapView = defineAsyncComponent({ loader: () => import('@views/MindmapView.vue'), ...asyncOpts })
 const AgentView = defineAsyncComponent({ loader: () => import('@views/AgentView.vue'), ...asyncOpts })
 import { ElConfigProvider, ElButton, ElTooltip, ElIcon } from 'element-plus'
-import { Setting, WarningFilled, Sunny, Moon } from '@element-plus/icons-vue'
+import { WarningFilled } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
@@ -707,9 +707,15 @@ function stopVResize() {
           <el-icon class="btn-icon" aria-hidden="true">
             <!-- 显示「下一步动作」对应的图标,贴合主流操作系统托盘的直觉:
                  当前 dark → 太阳(点了变亮);当前 light → 月亮(点了变暗)。
-                 之前 v-if/v-else 是「显示当前主题」,容易让人误点不下去。 -->
-            <Sunny v-if="isDarkTheme" />
-            <Moon v-else />
+                 之前 v-if/v-else 是「显示当前主题」,容易让人误点不下去。
+                 2026-10-16 换 Tabler（MIT）：sun / moon -->
+            <svg v-if="isDarkTheme" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 12a4 4 0 1 0 8 0a4 4 0 1 0-8 0" />
+              <path d="M3 12h1m8-9v1m8 8h1m-9 8v1m-6.4-15.4l.7.7m12.1-.7l-.7.7m0 11.4l.7.7m-12.1-.7l-.7.7" />
+            </svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1-8.313-12.454l0 .008" />
+            </svg>
           </el-icon>
         </button>
       </el-tooltip>
@@ -760,7 +766,13 @@ function stopVResize() {
         </template>
         <el-tooltip :content="$t('@F13B4:用户设置')" placement="bottom" effect="dark" :show-after="200">
           <button class="modern-btn btn-icon-28" :aria-label="$t('@F13B4:用户设置')" @click="openUserSettingsDialog()">
-            <el-icon class="btn-icon" aria-hidden="true"><Setting /></el-icon>
+            <el-icon class="btn-icon" aria-hidden="true">
+              <!-- settings.svg（Tabler icons，MIT） -->
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37c1 .608 2.296.07 2.572-1.065" />
+                <path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0-6 0" />
+              </svg>
+            </el-icon>
           </button>
         </el-tooltip>
       </div>
