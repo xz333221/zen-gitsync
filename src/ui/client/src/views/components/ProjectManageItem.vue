@@ -14,25 +14,21 @@
   ~ limitations under the License.
   -->
 <!--
-  「项目管理」视图里的一行：项目本体 + 工具快捷条 + 启动方式 + 打开方式 + 删除。
+  「项目管理」视图里的一张卡片：项目本体 + 启动方式 + 打开方式 + 删除。
 
-  三处刻意的设计（2026-10-16 按用户反馈改版）：
-    1. **不是卡片**：原来每行是"圆角 + 单层 border"，用户明确不喜欢。现在跟工作台左栏
-       同一套语言 —— 平铺行、hover/选中才出底色、不画边框。"当前"项目靠一条 3px 主色
-       竖条 + 淡渐变底表达。
-    2. **行内工具快捷条**：宽屏下每行直接摆出一排「用 X 打开」图标（原来这些都藏在「…」
-       菜单里，宽屏时每行中间一大片是空的 —— 用户拿红框圈出来了）。这也把
-       「工作台里的那些选项」变成一眼可见、一次点击。窄屏（< 1180px）自动收起，
-       功能仍可从「…」菜单进（那 20 项一个不少）。
+  三处刻意的设计（2026-10-16 前后按用户反馈定型）：
+    1. **不是卡片**：不画边框、不给常驻圆角，跟工作台左栏同一套语言 —— 平铺、hover/展开
+       才出底色；"当前"项目靠一条 3px 主色竖条 + 淡渐变底表达。
+    2. **卡片正面只留三颗管理按钮**（展开启动方式 / 打开方式 / 删除）。曾经在卡片上摆过
+       一排「用 X 打开」工具图标，用户反馈"这些图标不用展示在卡片外边，现在太多了，看着
+       好乱"（33 张卡 × 9 个图标 ≈ 一屏 300 个图标）—— 已全部收回「…」菜单（那 20 项一个
+       不少，含各工具的权限档）。
     3. 信息分三行（名字 / 分支+进度 / 完整路径）：路径是这页最有用的辨认线索
        （同名项目、同一仓库的多个克隆），宁可占一行也不缩成省略号。
 
   与工作台那一行的分工（形态相似但语义不同，刻意不合并）：那边的行"点一下 = 选中当看板
-  过滤器"，这边的行"点一下 = 展开启动方式"；这边的删除对**任何项目**都开着（管理语义），
+  过滤器"，这边的卡片"点一下 = 展开启动方式"；这边的删除对**任何项目**都开着（管理语义），
   那边只在 exists === false 时给删。两处不一样是有意为之，别为了"对齐"改掉。
-
-  ⚠️ 工具快捷条**自己不开安装弹窗**：ToolInstallDialog 走 CommonDialog（关掉后节点仍在
-  DOM），一行挂一个就是几十份。这里 emit('needInstall') 交给面板统一弹一份。
 -->
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
@@ -41,13 +37,9 @@ import { Delete, Folder, MoreFilled } from '@element-plus/icons-vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
 import ProjectOpenMenuList from '@components/ProjectOpenMenuList.vue'
 import ProjectStartupAiPanel from '@components/ProjectStartupAiPanel.vue'
-import claudeCodeIcon from '@/assets/icons/svg/claudecode-color.svg'
 import { useIconFallback } from '@/composables/useIconFallback'
-import { useOpenWithTool } from '@/composables/useOpenWithTool'
-import { OPEN_WITH_TOOLS } from '@/composables/useDirectoryOpenActions'
 import { $t } from '@/lang/static'
 import { relativeTimeFromIso } from '@/utils/relativeTime'
-import type { ToolId } from '@/stores/toolsStore'
 import type { ProjectSummary } from '@/types/workbench'
 
 const props = defineProps<{
@@ -58,27 +50,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   remove: [project: ProjectSummary]
-  /** 行内快捷条点了没装的工具 —— 交给面板弹那一份安装引导 */
-  needInstall: [tool: ToolId]
 }>()
 
 /** 目录在不在，决定"能不能打开 / 能不能分析启动方式" */
 const canOpen = computed(() => props.project.exists !== false)
 
 const { isIconBroken, markIconFailed } = useIconFallback()
-const { toolMissing, tryOpenWithTool } = useOpenWithTool()
-
-/**
- * 快捷条里的工具：claude 排最前（这里最常用的一个），其余按菜单里的顺序。
- * claude 不在 OPEN_WITH_TOOLS 里（它有三档权限、菜单里单独排布），快捷条只跑默认档。
- */
-const STRIP_CLAUDE = { id: 'claude' as ToolId, icon: 'claudecode', labelKey: '@67CE7:用 Claude Code 打开' }
-const STRIP_TOOLS = [STRIP_CLAUDE, ...OPEN_WITH_TOOLS]
-
-async function openWith(tool: ToolId) {
-  const status = await tryOpenWithTool(tool, props.project.path)
-  if (status === 'install') emit('needInstall', tool)
-}
 
 /** 「启动方式」展开态：展开才挂 ProjectStartupAiPanel（= 展开才请求模型） */
 const expanded = ref(false)
@@ -217,30 +194,10 @@ async function confirmRemove() {
       </div>
 
       <span class="pm-item__time">{{ relativeTimeFromIso(project.stats.lastActiveAt) }}</span>
-    </div>
 
-    <!-- 卡片第二行：工具快捷条 + 操作按钮。
-         刻意**不**塞进头行 —— 网格布局下每张卡只有 ~420px 宽，挤在一行里项目名会被压成
-         省略号；单列窄屏时这一行也只是往下多占 24px，比丢信息划算。 -->
-    <div class="pm-item__bar">
-      <!-- 工具快捷条：「用 X 打开」一眼可见，一次点击即用默认档 -->
-      <div v-if="canOpen" class="pm-item__tools">
-        <button
-          v-for="tool in STRIP_TOOLS"
-          :key="tool.id"
-          type="button"
-          class="pm-tool"
-          :class="{ 'is-missing': toolMissing(tool.id) }"
-          :title="toolMissing(tool.id) ? `${$t(tool.labelKey)} · ${$t('@67CE7:未安装')}` : $t(tool.labelKey)"
-          :aria-label="$t(tool.labelKey)"
-          @click.stop="openWith(tool.id)"
-        >
-          <img v-if="tool.id === 'claude'" :src="claudeCodeIcon" alt="" class="pm-tool__img" />
-          <svg-icon v-else :icon-class="tool.icon" :class="{ 'icon-invert-dark': tool.id === 'codex' }" />
-        </button>
-      </div>
-
-      <!-- 操作区常驻（不像工作台那样 hover 才出现）：「管理」语义下这些就是主操作 -->
+      <!-- 操作区常驻（不像工作台那样 hover 才出现）：「管理」语义下这些就是主操作。
+           2026-10-16 用户反馈：卡片正面不再摆那一排「用 X 打开」工具图标（33 张卡 × 9 个
+           图标 = 一屏 300 个图标，太乱）。工具打开全部回到「…」菜单里（20 项一个不少）。 -->
       <div class="pm-item__actions">
         <button
           v-if="canOpen"
@@ -440,47 +397,7 @@ async function confirmRemove() {
   text-align: left;
 }
 
-/* ── 卡片第二行：工具快捷条（左） + 操作按钮（右） ───────────────────── */
-.pm-item__bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 3px;
-  padding-left: 41px;   /* 与项目名左边缘对齐（图标槽 32 + gap 9） */
-}
-
-/* ── 工具快捷条 ────────────────────────────────────────────────────── */
-.pm-item__tools {
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
-  min-width: 0;
-}
-.pm-tool {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  border-radius: var(--radius-base);   /* 只在 hover 底色上看得见 */
-  transition:
-    color var(--transition-fast) var(--ease-custom),
-    background var(--transition-fast) var(--ease-custom);
-}
-.pm-tool :deep(svg) { width: 15px; height: 15px; }
-.pm-tool__img { width: 15px; height: 15px; object-fit: contain; -webkit-user-drag: none; }
-.pm-tool:hover { color: var(--color-primary); background: var(--tint-primary-12); }
-.pm-tool:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
-.pm-tool.is-missing { opacity: 0.42; filter: grayscale(0.75); }
-.pm-tool.is-missing:hover { opacity: 0.9; filter: grayscale(0.15); }
-
-/* ── 操作区 + 时间 ─────────────────────────────────────────────────── */
+/* ── 操作区（卡片右侧常驻） ─────────────────────────────────────────── */
 .pm-item__actions {
   flex-shrink: 0;
   display: inline-flex;

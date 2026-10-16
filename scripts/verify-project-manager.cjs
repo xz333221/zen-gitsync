@@ -217,40 +217,12 @@ async function main() {
     check('P1e 当前项目的行有当前标记', (await rowByName('alpha-repo').locator('.pm-chip--current').count()) === 1)
     await page.screenshot({ path: path.join(SHOT_DIR, 'pm-list.png') })
 
-    // ── P1f..P1i 行内工具快捷条 + 平铺（无边框）样式 ────────────────────
-    const alphaTools = rowByName('alpha-repo').locator('.pm-item__tools .pm-tool')
-    const toolCount = await alphaTools.count()
-    check('P1f 行内有工具快捷条（claude + 8 个工具 = 9 个）', toolCount === 9, `count=${toolCount}`)
-    const toolLabels = await page.evaluate(() => Array.from(document.querySelectorAll('.pm-item__tools .pm-tool')).map(b => b.getAttribute('aria-label')))
-    check('P1f2 快捷条覆盖 claude / VSCode / Pi Agent / DeepSeek Harness',
-      ['用 Claude Code 打开', '用 VSCode 打开', '用 Pi Agent 打开', '用 DeepSeek Harness 打开'].every(l => toolLabels.includes(l)),
-      JSON.stringify(toolLabels.slice(0, 9)))
-    // 检测结果是异步到的（toolsStore.startPolling → checkTools）：等"灰"真的落在 7 个上再判，
-    // 别在 lastCheckedAt 还是 null 的那一帧读（那会儿 toolMissing 一律 false，会误判成"都装了"）
-    const missingOk = await waitUntil(async () => (await rowByName('alpha-repo').locator('.pm-tool.is-missing').count()) === 7, 8000)
-    check('P1f3 未装的工具在快捷条里是"灰"的（is-missing，桩里 9 装 2）', missingOk,
-      `missing=${await rowByName('alpha-repo').locator('.pm-tool.is-missing').count()}`)
-    check('P1f4 快捷条常驻可见（点它就用默认档打开）', await alphaTools.first().isVisible())
-
-    // 已装工具 → 直接打开（默认档）
-    await rowByName('alpha-repo').locator('.pm-tool[aria-label="用 VSCode 打开"]').click()
-    const opened = await waitUntil(async () => vscodeOpenCalls.length === 1, 8000)
-    check('P1g 点快捷条的 VSCode → open-directory-with-vscode 收到该行路径',
-      opened && vscodeOpenCalls[0].path === P_ALPHA && !vscodeOpenCalls[0].permissionMode,
-      JSON.stringify(vscodeOpenCalls))
-    // 未装工具 → 弹安装引导，且**不发**打开请求
-    await rowByName('alpha-repo').locator('.pm-tool[aria-label="用 Pi Agent 打开"]').click()
-    const installShown = await waitUntil(async () => {
-      const dlg = page.locator('.tool-install-dialog')
-      return (await dlg.count()) > 0 && await dlg.first().isVisible()
-    }, 8000)
-    check('P1h 点未装工具 → 弹安装引导（行内不自己挂弹窗）', installShown)
-    check('P1h2 未装工具不发打开请求', piOpenCalls.length === 0, JSON.stringify(piOpenCalls))
-    await page.keyboard.press('Escape')
-    await waitUntil(async () => {
-      const dlg = page.locator('.tool-install-dialog')
-      return (await dlg.count()) === 0 || !(await dlg.first().isVisible())
-    }, 5000)
+    // ── P1f 卡片正面不再摆工具图标（用户 2026-10-16：太多了，看着好乱） ──
+    const cardToolIcons = await page.locator('.pm-item .pm-tool').count()
+    check('P1f 卡片正面没有工具图标（全部收回「…」菜单）', cardToolIcons === 0, `count=${cardToolIcons}`)
+    const cardActionCount = await rowByName('alpha-repo').locator('.pm-item__action').count()
+    check('P1f2 卡片上只剩 3 颗管理按钮（启动方式 / 打开方式 / 删除）',
+      cardActionCount === 3, `count=${cardActionCount}`)
 
     // 用户明确不要"圆角 + 单 border"的卡片：行与推荐带都不许有边框
     const borders = await page.evaluate(() => {
@@ -336,8 +308,30 @@ async function main() {
       check('P7b 菜单项与工作台同一份（含复制两项与用工具打开）',
         labels.includes('在文件管理器中打开') && labels.includes('复制文件夹名称') && labels.includes('用 VSCode 打开'),
         `共 ${labels.length} 项`)
+
+      // 工具打开这条链路现在只走菜单（卡片正面不再摆图标）—— 两条分支都在这里守：
+      // 已装工具（默认档）直开、未装工具弹安装引导且不发打开请求。
+      await page.locator('.proj-menu__item', { hasText: '用 VSCode 打开' }).first().click()
+      const menuOpened = await waitUntil(async () => vscodeOpenCalls.length === 1, 8000)
+      check('P7c 菜单里点「用 VSCode 打开」→ 对应端点收到该行路径（不带 permissionMode）',
+        menuOpened && vscodeOpenCalls[0].path === P_BETA && !vscodeOpenCalls[0].permissionMode,
+        JSON.stringify(vscodeOpenCalls))
+      await waitUntil(async () => (await page.locator('.proj-menu').count()) === 0, 5000)
+
+      await rowByName('beta-repo').locator('button[aria-label^="打开方式"]').click()
+      await waitUntil(async () => (await page.locator('.proj-menu').count()) === 1, 8000)
+      await page.locator('.proj-menu__item', { hasText: '用 Pi Agent 打开' }).first().click()
+      const installShown = await waitUntil(async () => {
+        const dlg = page.locator('.tool-install-dialog')
+        return (await dlg.count()) > 0 && await dlg.first().isVisible()
+      }, 8000)
+      check('P7d 菜单里点未装的工具 → 弹安装引导', installShown)
+      check('P7e 未装工具不发打开请求', piOpenCalls.length === 0, JSON.stringify(piOpenCalls))
       await page.keyboard.press('Escape')
-      await page.locator('.pm__title').click() // 点空白处关菜单
+      await waitUntil(async () => {
+        const dlg = page.locator('.tool-install-dialog')
+        return (await dlg.count()) === 0 || !(await dlg.first().isVisible())
+      }, 5000)
       await waitUntil(async () => (await page.locator('.proj-menu').count()) === 0, 5000)
     }
 

@@ -129,14 +129,19 @@ async function copyFolderPath() {
  * 用某个编辑器 / AI 工具打开项目目录。
  * 没装的走安装引导（和顶栏一致）：这里不直接打开，因为命令必然失败，
  * 而"为什么失败"用户只有看到安装方式才解决得了。
+ *
+ * ⚠️ 「没装」这条分支**不能**先 emit('done')：宿主收到就把菜单关掉，而菜单内容是
+ * `v-if` 挂的 —— 组件一卸载，下面这个安装弹窗连渲染的机会都没有（它的 state 在组件里）。
+ * 这条路径曾经因此整个失效（探针 P7d 抓到的就是它）。打开 / 失败两条分支照旧立刻关菜单。
  */
 async function openWithTool(tool: ToolId, permissionMode?: string) {
-  emit('done')
   const status = await tryOpenWithTool(tool, props.path, permissionMode)
   if (status === 'install') {
     installTool.value = tool
     installVisible.value = true
+    return
   }
+  emit('done')
 }
 </script>
 

@@ -24,11 +24,9 @@
   两处显示同一份清单，顺序不一样会让人以为数据不同步。
 -->
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { $t } from '@/lang/static'
 import ProjectManageItem from '@views/components/ProjectManageItem.vue'
-import ToolInstallDialog from '@components/ToolInstallDialog.vue'
-import type { ToolId } from '@/stores/toolsStore'
 import type { ProjectSummary } from '@/types/workbench'
 
 const props = defineProps<{
@@ -41,19 +39,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   remove: [project: ProjectSummary]
 }>()
-
-/**
- * 安装引导**只在这里挂一份**：ToolInstallDialog 走 CommonDialog，关掉之后节点仍留在
- * DOM（没开 destroy-on-close），每行挂一个就是几十份。行内的工具快捷条点了没装的工具时
- * emit('needInstall')，由这一层统一弹。
- */
-const installVisible = ref(false)
-const installTool = ref<ToolId | null>(null)
-
-function onNeedInstall(tool: ToolId) {
-  installTool.value = tool
-  installVisible.value = true
-}
 
 const ordered = computed(() => {
   return [...props.projects].sort((a, b) => {
@@ -93,12 +78,8 @@ const ordered = computed(() => {
         :project="p"
         :removing="p.key === removingKey"
         @remove="emit('remove', $event)"
-        @need-install="onNeedInstall"
       />
     </ul>
-
-    <!-- 安装引导：整个面板一份（行内快捷条点了没装的工具时弹它） -->
-    <ToolInstallDialog v-model="installVisible" :tool="installTool" />
   </div>
 </template>
 
@@ -141,7 +122,8 @@ const ordered = computed(() => {
      1280px ≈ 2 列，窄屏自然退回单列，不需要任何媒体查询。
    · 卡片之间不画分隔线、也不套边框 —— 靠 20px 列间距与 hover 底色区分
      （"圆角 + 单 border"的卡片样式是用户点名不要的）。
-   · 420 是"卡片里那一行 9 个工具图标 + 3 个操作按钮"还能放下、项目名不被压扁的下限。 */
+   · 420 是"项目名不被压成省略号、路径还能看出是哪个仓库"的下限（卡片正面没有那排工具
+     图标之后，这个下限由"图标 + 名字 + 分支/进度 + 路径"最宽的一行决定）。 */
 .pm-list__items {
   list-style: none;
   margin: 0;
