@@ -42,7 +42,6 @@ import {
   FolderOpened,
   Grid,
   MoreFilled,
-  Search,
 } from '@element-plus/icons-vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
 import ProjectOpenMenuList from '@components/ProjectOpenMenuList.vue'
@@ -338,7 +337,13 @@ async function confirmRemove(p: ProjectSummary) {
           @mousedown.prevent
           @click="toggleSearch"
         >
-          <el-icon class="proj__search-icon" aria-hidden="true"><Search /></el-icon>
+          <!-- search.svg（Tabler icons，MIT）。2026-10-16 从 EP <Search/> 换成 Tabler：
+               EP 图标是**实心填充**风，与左边漏斗（Tabler 描边）并排"颜色深浅不一样"
+               （用户反馈）——同为 14px / 描边 2 后两者才是一对。 -->
+          <svg class="proj__search-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
+            <path d="M21 21l-6 -6" />
+          </svg>
         </button>
       </div>
     </header>
@@ -694,7 +699,8 @@ async function confirmRemove(p: ProjectSummary) {
 }
 .proj__search-btn:hover { color: var(--text-primary); }
 .proj__search-icon {
-  font-size: var(--font-size-sm);
+  /* 与左侧漏斗同口径：14px 描边 svg（宽高在属性上），色走 --text-meta */
+  display: block;
   color: var(--text-meta);
   flex-shrink: 0;
 }

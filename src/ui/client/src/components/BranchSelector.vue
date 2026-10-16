@@ -180,8 +180,12 @@ async function refreshCurrentBranch() {
         </div>
       </el-popover>
 
-      <!-- 刷新按钮 -->
+      <!-- 刷新按钮（size=small：与 RemoteRepoCard 状态栏那两颗同档。
+           IconButton 默认走 medium = 38px 盒 / 20px 字形（--icon-glyph-size-md），
+           比邻居大一整档 —— 用户 2026-10-16 反馈"footer 这枚刷新比其他的都大"。
+           图标本身本来就是 Tabler refresh，不用换。） -->
       <IconButton
+        size="small"
         :tooltip="$t('@CMDCON:刷新')"
         @click="refreshCurrentBranch"
       >
