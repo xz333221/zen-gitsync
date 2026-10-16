@@ -11,7 +11,9 @@
  *   K4 图标全部 404 时（服务端重启 / 文件被删），行**当场退回**文件夹图标 ——
  *      不许留破图。这一条用 route 挡掉端点来造，是 K1 的反向对照。
  *   K5 几何：图标槽 32px 且两种形态同尺寸、项目名左边缘对齐；**图标真的占两行**
- *      （高度≈row1.top→row2.bottom 那一段）；文件夹字形比槽小（"这儿没图标"要更轻）
+ *      （高度≈row1.top→row2.bottom 那一段）；**回退"彩色片"铺满槽**（32px 淡主色底 +
+ *      主色实心文件夹，与 favicon 同存在感）—— 2026-10-16 用户推翻了旧约定
+ *      「文件夹字形要比槽小/更轻」：灰色小字形夹在彩色头像列里又小又弱。
  *   常用目录（RecentDirectoriesList，弹窗里的卡片）
  *   D1/D2 有图标的卡片渲染 <img> 且真的加载出来
  *   D3 图标槽 38px，两种形态同尺寸、名字左边缘对齐
@@ -38,6 +40,7 @@
  *   · 去掉 @error="markIconFailed" → K4 / D4 红（屏幕上留着破图）
  *   · CSS 里 .proj-item__icon--img 去掉 width/height → K5a 红（图标按原始尺寸铺开）
  *   · 图标槽退回塞进 row1（不跨两行）→ K5c 红（图标高度只有一行）
+ *   · 回退片改回"又小又灰"（去掉 .proj-item__icon--folder 的宽高/底色）→ K5d 红
  *   · 后端路由去掉 isKnownProjectKey 那道门 → K6c 红（任意路径都能读）
  *   · 顶栏去掉图标槽 / DirectorySelector 不再渲染 img → H1 / H2 / H4 / H5 红
  *   · /api/current_directory 不返回 iconUrl → H0a / H0b 红
@@ -94,6 +97,7 @@ const obsRows = (page) => page.evaluate(() => {
     const nameEl = r.querySelector('.proj-item__name')
     const row1 = r.querySelector('.proj-item__row1')
     const row2 = r.querySelector('.proj-item__row2')
+    const fcs = folder ? getComputedStyle(folder) : null
     return {
       name: nameEl ? (nameEl.textContent || '').trim() : '',
       hasImg: !!img,
@@ -103,6 +107,9 @@ const obsRows = (page) => page.evaluate(() => {
       slot: rect(r.querySelector('.proj-item__icon-slot')),
       imgBox: rect(img),
       folderBox: rect(folder),
+      // 回退"彩色片"：底色不能是透明、字形色要是主色（rgb(59,130,246)）
+      folderBg: fcs ? fcs.backgroundColor : '',
+      folderColor: fcs ? fcs.color : '',
       nameLeft: nameEl ? Math.round(nameEl.getBoundingClientRect().left) : 0,
       // row1 顶到 row2 底 = 「两行文字」的实际高度，图标该覆盖这一段
       textSpan: (row1 && row2)
@@ -296,9 +303,16 @@ async function main() {
     const spanOk = iconRows.every(r => r.textSpan && Math.abs(r.imgBox.h - r.textSpan) <= 8)
     check('K5c 图标真的占两行（高度≈名字行 + 分支行的总高）', spanOk,
       iconRows.map(r => `${r.name}:${r.imgBox.h}/${r.textSpan}`).slice(0, 3).join(' '))
-    check('K5d 文件夹字形比槽小（"这儿没有图标"该更轻，而不是撑满 32px）',
-      folderRows.length > 0 && folderRows.every(r => r.folderBox && r.folderBox.h <= 24),
-      folderRows.map(r => r.folderBox && r.folderBox.h).slice(0, 3).join(','))
+    // 2026-10-16 新契约：回退不再是"比槽小"的灰字形，而是铺满槽的彩色片
+    // （32px 淡主色底 + 主色实心文件夹）—— 与 favicon 同尺寸同存在感。
+    check('K5d 文件夹回退是彩色片：铺满 32px 槽、淡主色底、主色字形',
+      folderRows.length > 0 && folderRows.every(r =>
+        r.folderBox
+        && Math.abs(r.folderBox.w - 32) <= 1 && Math.abs(r.folderBox.h - 32) <= 1
+        && !/rgba\(0, 0, 0, 0\)/.test(r.folderBg)
+        && /59,\s*130,\s*246|0\.231373/.test(r.folderBg)
+        && /59,\s*130,\s*246|0\.231373/.test(r.folderColor)),
+      folderRows.map(r => `${r.name}:${r.folderBox ? r.folderBox.w + 'x' + r.folderBox.h : '?'} bg=${r.folderBg} fg=${r.folderColor}`).slice(0, 2).join(' | '))
 
     // ── 顶栏目录选择器：当前项目图标 ───────────────────────────────────
     // 当前项目（本仓库）自带 favicon，所以正向期望是 <img> 且真的加载出来。

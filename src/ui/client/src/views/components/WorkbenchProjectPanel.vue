@@ -39,7 +39,6 @@ import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Delete,
-  Folder,
   FolderOpened,
   Grid,
   MoreFilled,
@@ -428,7 +427,15 @@ async function confirmRemove(p: ProjectSummary) {
               alt=""
               @error="markIconFailed(p.iconUrl)"
             />
-            <el-icon v-else class="proj-item__icon"><Folder /></el-icon>
+            <el-icon v-else class="proj-item__icon proj-item__icon--folder" aria-hidden="true">
+              <!-- folder-filled.svg（Tabler icons，MIT）：回退"彩色片"—— 32px 淡主色底 +
+                   主色实心文件夹，与 favicon 同尺寸同存在感。
+                   2026-10-16 用户反馈：灰色小字形在彩色头像列里显得又小又弱，
+                   推翻旧约定（"这儿没图标"要更轻）。 -->
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 3a1 1 0 0 1 .608 .206l.1 .087l2.706 2.707h6.586a3 3 0 0 1 2.995 2.824l.005 .176v8a3 3 0 0 1 -2.824 2.995l-.176 .005h-14a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-11a3 3 0 0 1 2.824 -2.995l.176 -.005h4z" />
+              </svg>
+            </el-icon>
           </span>
 
           <div class="proj-item__row1">
@@ -883,6 +890,17 @@ async function confirmRemove(p: ProjectSummary) {
   object-fit: contain;
   border-radius: var(--radius-lg);
   background: var(--bg-subtle);
+}
+/* 回退"彩色片"（2026-10-16 用户要求）：没图标 / 加载失败的行不再是灰色小字形，
+   而是铺满 32px 槽的淡主色底 + 主色实心文件夹 —— 与 favicon 同尺寸同存在感，
+   与「常用目录」卡片的 .dir-card__icon 同一套语言。
+   ⚠️ 选择器带 .el-icon 前缀：EP 的 .el-icon{width/height:1em} 同权重，靠前缀提权。 */
+.el-icon.proj-item__icon--folder {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-lg);
+  background: var(--tint-primary-08);
+  color: var(--color-primary);
 }
 .proj-item.is-active .proj-item__icon { color: var(--color-primary); }
 .proj-item__name {

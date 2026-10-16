@@ -33,7 +33,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessageBox } from 'element-plus'
-import { Folder } from '@element-plus/icons-vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
 import ProjectOpenMenuList from '@components/ProjectOpenMenuList.vue'
 import ProjectStartupAiPanel from '@components/ProjectStartupAiPanel.vue'
@@ -161,7 +160,13 @@ async function confirmRemove() {
           alt=""
           @error="markIconFailed(project.iconUrl)"
         />
-        <el-icon v-else class="pm-item__icon"><Folder /></el-icon>
+        <el-icon v-else class="pm-item__icon pm-item__icon--folder" aria-hidden="true">
+          <!-- folder-filled.svg（Tabler icons，MIT）：回退"彩色片"—— 32px 淡主色底 +
+               主色实心文件夹，与 favicon 同尺寸同存在感（2026-10-16 用户要求） -->
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9 3a1 1 0 0 1 .608 .206l.1 .087l2.706 2.707h6.586a3 3 0 0 1 2.995 2.824l.005 .176v8a3 3 0 0 1 -2.824 2.995l-.176 .005h-14a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-11a3 3 0 0 1 2.824 -2.995l.176 -.005h4z" />
+          </svg>
+        </el-icon>
       </span>
 
       <div class="pm-item__meta">
@@ -342,6 +347,15 @@ async function confirmRemove() {
   object-fit: contain;
   border-radius: var(--radius-md);
   background: var(--bg-subtle);
+}
+/* 回退"彩色片"（2026-10-16 用户要求）：与工作台左栏同一套（那边圆角 radius-lg 配它的槽，
+   这边跟自家 favicon 同档用 radius-md） */
+.el-icon.pm-item__icon--folder {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-md);
+  background: var(--tint-primary-08);
+  color: var(--color-primary);
 }
 
 /* 身份块：吃掉卡片里除图标与时间之外的宽度 */

@@ -37,7 +37,7 @@
 // 目录家族文案(原 RecentProjectsList.vue 同样复用),不为此新建命名空间。
 import { computed, onMounted, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Delete, DocumentCopy, Folder, Loading, Search } from "@element-plus/icons-vue";
+import { Delete, DocumentCopy, Loading, Search } from "@element-plus/icons-vue";
 import { $t } from "@/lang/static";
 import { getFolderNameFromPath } from "@/utils/path";
 import { oncePerLoad } from "@/utils/oncePerLoad";
@@ -638,7 +638,12 @@ defineExpose({
             alt=""
             @error="markIconFailed(item.iconUrl)"
           />
-          <el-icon v-else class="dir-card__icon" aria-hidden="true"><Folder /></el-icon>
+          <el-icon v-else class="dir-card__icon" aria-hidden="true">
+            <!-- folder-filled.svg（Tabler icons，MIT）：与左栏/项目管理的回退片同款实心文件夹 -->
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <path d="M9 3a1 1 0 0 1 .608 .206l.1 .087l2.706 2.707h6.586a3 3 0 0 1 2.995 2.824l.005 .176v8a3 3 0 0 1 -2.824 2.995l-.176 .005h-14a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-11a3 3 0 0 1 2.824 -2.995l.176 -.005h4z" />
+            </svg>
+          </el-icon>
           <span class="dir-card__name">
             <span class="dir-card__name-base">{{ item.base }}</span>
             <span class="dir-card__name-path">{{ item.path }}</span>
