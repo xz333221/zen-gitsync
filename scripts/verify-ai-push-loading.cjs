@@ -91,6 +91,10 @@ async function measure() {
       () => (document.querySelector('#app')?.querySelectorAll('*').length || 0) > 100,
       null, { timeout: 30000 }
     )
+    // 提交表单是懒挂载的（要等 userInfo 等接口落地才渲染），固定 sleep 在冷编译/慢首屏
+    // 时会假阴（2026-10-16 实测：改完代码后首屏 >4.5s，按钮尚未挂载）。改为等按钮出现，
+    // 再留一段固定窗口给状态接口结算。
+    await page.waitForSelector('.one-ai-push-button', { timeout: 15000 }).catch(() => {})
     await sleep(4500)
 
     const btn = page.locator('.one-ai-push-button')

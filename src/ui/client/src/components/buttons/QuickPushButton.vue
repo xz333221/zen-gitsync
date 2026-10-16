@@ -236,8 +236,16 @@ async function handleQuickPush() {
   }
 }
 
+// 2026-10-16：按钮本体在表单里已被 QuickActionsDropdown 收进「提交并推送 ▾」，
+// 本组件以隐藏引擎形态挂在那里 —— expose 状态与文案，供菜单项直接读取（一处口径）。
+// drawer 侧（GitOperationsButton）仍以正常按钮形态在用，别删模板里的按钮。
 defineExpose({
-  triggerQuickPush: handleQuickPush
+  triggerQuickPush: handleQuickPush,
+  isDisabled,
+  isLoading,
+  buttonTitle,
+  buttonDesc,
+  tooltipText
 });
 
 // 处理进度完成

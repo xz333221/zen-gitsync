@@ -18,8 +18,7 @@ import { ref } from 'vue'
 import StageButton from '@/components/buttons/StageButton.vue'
 import CommitButton from '@/components/buttons/CommitButton.vue'
 import PushButton from '@/components/buttons/PushButton.vue'
-import QuickPushButton from '@/components/buttons/QuickPushButton.vue'
-import QuickCommitButton from '@/components/buttons/QuickCommitButton.vue'
+import QuickActionsDropdown from '@/components/buttons/QuickActionsDropdown.vue'
 import AiQuickPushButton from '@/components/buttons/AiQuickPushButton.vue'
 
 interface Props {
@@ -48,7 +47,7 @@ const emit = defineEmits<{
   aiQuickPush: []
 }>()
 
-const quickPushRef = ref<InstanceType<typeof QuickPushButton> | null>(null)
+const quickActionsRef = ref<InstanceType<typeof QuickActionsDropdown> | null>(null)
 
 // 处理提交后的事件
 function handleAfterCommit(success: boolean) {
@@ -82,7 +81,7 @@ function handleAiQuickPush() {
 }
 
 async function triggerQuickPush() {
-  return quickPushRef.value?.triggerQuickPush()
+  return quickActionsRef.value?.triggerQuickPush()
 }
 
 defineExpose({
@@ -120,23 +119,20 @@ defineExpose({
       </div>
       
       <div class="right-actions">
-        <QuickCommitButton 
+        <!-- 「一键提交 / 一键推送所有」合并进这一颗下拉（2026-10-16 走查 P2-1），
+             动作逻辑与禁用口径在 QuickActionsDropdown 内部的原按钮引擎里，
+             不在本层复制；triggerQuickPush 的 expose 链保持原样
+             （Enter 键 / AI 提交流程都经它） -->
+        <QuickActionsDropdown
+          ref="quickActionsRef"
           :from="from"
           :has-user-commit-message="hasUserCommitMessage"
           :final-commit-message="finalCommitMessage"
           :skip-hooks="skipHooks"
           @after-commit="handleAfterCommit"
-          @clear-fields="handleClearFields"
-        />
-        <QuickPushButton
-          ref="quickPushRef"
-          :from="from"
-          :has-user-commit-message="hasUserCommitMessage"
-          :final-commit-message="finalCommitMessage"
-          :skip-hooks="skipHooks"
+          @after-push="handleAfterPush"
           @before-push="handleBeforePush"
           @push-start="handlePushStart"
-          @after-push="handleAfterPush"
           @clear-fields="handleClearFields"
         />
         <AiQuickPushButton
@@ -200,25 +196,18 @@ defineExpose({
   color: white;
 }
 
-/* ── 动作区三档层级 ────────────────────────────────────────────────
-   改前：5 个按钮全是实心色块（暂存/提交/推送 = 主色，一键提交/一键推送所有 =
-   两种深蓝渐变），主次不分，扫视时不知道从哪个开始。
-   改后（原稿写的"主色浅底 + 描边"与实现不符，QuickPushButton 实际是纯
-   --color-primary-dark 实心，下面按实现写）：
-     一档 一键提交        —— 最重的一档，--color-primary-dark 实心（见 QuickCommitButton.vue）
-     二档 一键推送所有    —— --color-primary 实心（见 QuickPushButton.vue）
-     AI 档 AI 提交并推送   —— --role-ai-ink 实心紫（见 AiQuickPushButton.vue）
-     三档 暂存 / 提交 / 推送 —— 中性描边，保留逐步显式控制
-   2026-10-04 二次调整：AI 档原先被降级成"同二档、靠图标区分"，实测三颗按钮
-   变成两档几乎同明度的蓝，横扫过去分不出层级。真正的禁令对象是**渐变**
-   （135deg + 发光），不是色相 —— 紫色在仓库里本就是 --color-think 一族的状态色。
-   于是动作区现在是三个角色三档：一档 primary-dark、二档 primary、AI 档 role-ai，
-   三档描边中性。只改视觉权重，不动任何按钮的功能与位置。
-   ⚠️ 2026-10-06 复核：**上面这条"二档 = --color-primary"与实现不一致** ——
-   QuickPushButton.vue:287 写的是 `var(--color-primary-dark)`，跟一档 QuickCommitButton
-   同色，所以可用态实际只分得出两档（深蓝 ×2 + 紫）。本次只改禁用态，没动它；
-   要恢复三档需要先把这条口径和实现对齐（三档得选一个既非 primary-dark 又不与
-   role-ai 抢色的档）。 */
+/* ── 动作区层级（2026-10-16 走查 P2-1 重构后）───────────────────────
+   历史：2026-10-04 定了"三档"（一键提交 primary-dark / 一键推送所有 primary /
+   AI 紫），2026-10-06 复核发现前两颗实现同色，实际只分得出"深蓝 ×2 + 紫"；
+   加上更早的暂存/提交/推送中性档，一行 6 颗、5 种权重，主次扫不出来（走查实测）。
+   现结构（只改视觉权重与组织，功能一个不少）：
+     [暂存][提交][推送]        —— 中性描边，逐步显式控制（本文件 .left-actions）
+     [提交并推送 ▾]           —— 动作区唯一实心蓝（--color-primary-dark），
+                                下拉内收编原「一键提交 / 一键推送所有」
+                                （见 QuickActionsDropdown.vue）
+     [AI 提交并推送]          —— 降级为紫描边（--role-ai-ink），保留色相身份、
+                                不与实心蓝抢主位（见 AiQuickPushButton.vue）
+   禁用层（下一段）对这三档的承接关系不变。 */
 :deep(.left-actions .el-button) {
   background: var(--bg-container);
   border: 1px solid var(--border-color-medium);

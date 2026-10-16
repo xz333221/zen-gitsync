@@ -768,7 +768,7 @@ git config --global user.email "your.email@example.com"</pre
                 <IconButton
                   custom-class="ai-suffix-btn ai-suffix-btn--ta"
                   :tooltip="$t('@76872:AI生成提交信息')"
-                  :icon-class="aiGenerating ? '' : 'ai-commit'"
+                  :icon-class="aiGenerating ? '' : 'message-chatbot'"
                   size="small"
                   :disabled="aiGenerating"
                   @click="handleAiGenerateCommit"
@@ -831,7 +831,7 @@ git config --global user.email "your.email@example.com"</pre
                         <IconButton
                           custom-class="ai-suffix-btn"
                           :tooltip="$t('@76872:AI生成提交信息')"
-                          :icon-class="aiGenerating ? '' : 'ai-commit'"
+                          :icon-class="aiGenerating ? '' : 'message-chatbot'"
                           size="small"
                           :disabled="aiGenerating"
                           @click="handleAiGenerateCommit"

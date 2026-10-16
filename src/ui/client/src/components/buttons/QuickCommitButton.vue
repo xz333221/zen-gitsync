@@ -146,8 +146,15 @@ async function handleQuickCommit() {
   }
 }
 
+// 2026-10-16：按钮本体在表单里已被 QuickActionsDropdown 收进「提交并推送 ▾」，
+// 本组件以隐藏引擎形态挂在那里 —— expose 状态与文案，供菜单项直接读取（一处口径）
 defineExpose({
-  triggerQuickCommit: handleQuickCommit
+  triggerQuickCommit: handleQuickCommit,
+  isDisabled,
+  isLoading,
+  buttonTitle,
+  buttonDesc,
+  tooltipText
 });
 </script>
 

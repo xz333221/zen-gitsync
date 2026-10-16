@@ -2485,14 +2485,6 @@ const selectedTaskQueue = computed(() =>
   margin-left: 2px;
 }
 .wb-copy-btn--inline .wb-copy-btn__icon { font-size: var(--font-size-xs); }
-@media (prefers-reduced-motion: reduce) {
-}
-@keyframes wb-ai-sparkle-pulse {
-  0%, 100% { transform: scale(1);   opacity: 0.9; }
-  50%      { transform: scale(1.12); opacity: 1; }
-}
-@media (prefers-reduced-motion: reduce) {
-}
 
 /* 「执行日志」内联按钮：紧贴「执行任务」右侧，视觉重量接近 secondary */
 .wb-no-claude-hint {

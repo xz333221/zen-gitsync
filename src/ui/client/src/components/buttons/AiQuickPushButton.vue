@@ -155,10 +155,12 @@ function handleClick() {
         class="one-ai-push-button"
       >
         <div class="one-ai-push-content">
+          <!-- message-chatbot（Tabler icons，MIT）：2026-10-16 由它替换三连闪光
+               ai-commit.svg —— 与「AI 功能不用星星/闪光」的既定偏好对齐；
+               颜色交给样式层（描边档跟随 --role-ai-ink），别再写死行内白 -->
           <svg-icon
             class="one-ai-push-icon"
-            icon-class="ai-commit"
-            :style="{ color: '#fff' }"
+            icon-class="message-chatbot"
           />
           <div class="one-ai-push-text">
             <span class="one-ai-push-title">{{ buttonTitle }}</span>
@@ -173,26 +175,24 @@ function handleClick() {
 <style scoped lang="scss">
 .one-ai-push-button {
   height: 100%;
-  /* AI 档：实心紫（--role-ai），不是渐变。
-     2026-10-04 二次调整：上一轮把这里连同"紫色"一起降级成主色，结果三颗按钮
-     变成两档几乎同明度的蓝，工具栏一眼看过去是"三颗差不多的蓝按钮"——
-     层级只靠明度分，在 1600px 宽下根本分不出来。
-     真正该删的从来是**渐变**（135deg 蓝紫 + 发光），不是色相本身：
-     紫色在本仓库早就承担 --color-think（思考区）/ --color-info-light
-     （活动栏徽标）/ --git-status-untracked（未跟踪文件）三处状态色身份。
-     改回实心紫后：一档 primary-dark / 二档 primary / AI 档 role-ai，
-     三个角色三个色相，扫视时第一眼就知道哪颗是"让 AI 写"。 */
-  background: var(--role-ai-ink) !important;
-  border: none !important;
-  color: #fff !important;
+  /* AI 档：紫**描边**次级（2026-10-16 走查 P2-1）。
+     2026-10-04 曾把这里做成实心紫抢"让 AI 写"的扫视位；但走查实测与新的
+     唯一实心蓝「提交并推送 ▾」并列时两颗实心互抢主操作位（一行 5 种权重，
+     且旧实心紫在暗色下白字只有 2.7:1）。降级为描边：色相身份（--role-ai-ink
+     紫）保留，权重让给主按钮。对比度：浅色 #6d28d9 on 白 ≈ 7:1 /
+     暗色 #a78bfa on 深底 ≈ 7:1，两种主题都过 AA。 */
+  background: transparent !important;
+  border: 1px solid var(--role-ai-ink) !important;
+  color: var(--role-ai-ink) !important;
   &:hover:not(.is-disabled) {
-    background: color-mix(in srgb, var(--role-ai-ink) 86%, #000) !important;
+    background: var(--role-ai-wash) !important;
+    border-color: var(--role-ai-ink) !important;
   }
   /* EP 把 label 包在 span 里，父级 color 不保证落到文字节点，显式声明 */
   .one-ai-push-icon,
   .one-ai-push-title,
   .one-ai-push-desc {
-    color: #fff;
+    color: var(--role-ai-ink);
   }
   /* 禁用态的身份层：AI 档自己的 wash + 实心紫图标 —— 一行禁用时紫色仍然认得出来
      （第一版统一压成中性灰时，实测整条按钮带紫色像素为 0，用户反馈"全灰有点丑"）。
@@ -227,22 +227,13 @@ function handleClick() {
       }
       .one-ai-push-desc {
         font-size: var(--font-size-xs);
-        /* 11px 小字压在紫底上要保住 4.5:1，透明度不能压得太狠 */
+        /* 11px 小字：描边档是紫字压在页面底上（浅/深两主题都 ≈7:1），
+           0.9 的透明度仍余量充足 */
         opacity: 0.9;
         font-weight: 400;
         letter-spacing: 0.1px;
       }
     }
-  }
-}
-
-/* 暗色：--role-ai-ink 在暗色走的是**亮档**(#a78bfa)，当实心底会把白字压到 2.7:1
-   （2026-10-16 对比度走查实测）。实心紫改用色板深档 #6d28d9：
-   与浅色主题同一颗紫、白字 ~6.7:1，悬停提亮一档。禁用态走 --action-disabled-*，不受影响。 */
-[data-theme="dark"] .one-ai-push-button:not(.is-disabled) {
-  background: var(--color-think-dark) !important;
-  &:hover:not(.is-disabled) {
-    background: color-mix(in srgb, var(--color-think-dark) 88%, #fff) !important;
   }
 }
 </style>

@@ -124,6 +124,7 @@ export default {
   '@2E184:一键提交所选': 'Commit Selected',
   '@2E184:一键推送所选': 'Push Selected',
   '@2E184:暂存 + 提交 + 推送': 'Stage + Commit + Push',
+  '@2E184:提交并推送': 'Commit & Push',
   '@2E184:暂存所选 + 提交 + 推送': 'Stage Selected + Commit + Push',
   '@2E184:暂存 + 提交': 'Stage + Commit',
   '@2E184:暂存所选 + 提交': 'Stage Selected + Commit',

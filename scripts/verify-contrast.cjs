@@ -107,6 +107,11 @@ async function main() {
   for (const theme of ['light', 'dark']) {
     await setTheme(theme)
     await sleep(1600)
+    // A3/A4（领先徽标/同步角标）要等 /api/branch-status 落地才渲染 —— 固定 sleep
+    // 不够稳（2026-10-16 实测冷启动偶发 4.5s+），等到出现或超时后如实跳过；
+    // 不这样，反样本对账会被"未渲染"搅成假红。
+    await page.waitForSelector('.git-sync-badge', { timeout: 8000 }).catch(() => {})
+    await page.waitForSelector('.status-badge', { timeout: 4000 }).catch(() => {})
     const m = await page.evaluate(eval(MEASURE))
     console.log(`\n  [${theme}]`)
     failures = []
@@ -133,12 +138,13 @@ async function main() {
     console.log('\n  [反样本对账]')
     // 循环里那些 FAIL 是「预期红」，最终判定只认对账结果 —— 先清空
     failures = []
-    const want = ['A1 分支 chips 全部 ≥4.5', 'A2', 'A3', 'A4', 'A5']
-    const lightOk = want.every((k) => reds.light.some((n) => n.includes(k)))
+    // A3/A4（领先徽标/同步角标）在「本地与远端同步」的仓库态下合法不渲染
+    // （ahead=0 什么都不该显示）—— 对账按实际渲染项来要，跳过的条目不苛求变红。
+    const wasSkipped = (theme, tag) => skips.some((s) => s.startsWith(`${theme}·`) && s.includes(tag))
+    const wantTags = (theme) => ['A1', 'A2', 'A3', 'A4', 'A5'].filter((t) => !wasSkipped(theme, t))
+    const lightOk = wantTags('light').every((k) => reds.light.some((n) => n.includes(k)))
     check('亮色 A1~A5 恰好变红', lightOk, reds.light.join(' / ') || '(没有红的=反样本没咬住)')
-    // 暗色同样全红：其中 A1 的红来自 info 型（旧 EP 灰 #909399 在暗底只有 ~3.5:1），
-    // 恰好说明「亮色规则不泄漏进暗色」这条也需要覆写兜底
-    const darkOk = want.every((k) => reds.dark.some((n) => n.includes(k)))
+    const darkOk = wantTags('dark').every((k) => reds.dark.some((n) => n.includes(k)))
     check('暗色 A1~A5 恰好变红', darkOk, reds.dark.join(' / ') || '(没有红的=反样本没咬住)')
   }
 
