@@ -87,7 +87,12 @@ function OBS() {
   return {
     names: rows.map(n => (n.querySelector('.proj-item__name')?.textContent || '').trim()),
     hasTools: !!document.querySelector('.proj__tools'),
+    // 常驻项目数（标题右侧）2026-10-16 去掉；hasCount 守"真的没了"
+    hasCount: !!document.querySelector('.proj__count'),
     count: (document.querySelector('.proj__count')?.textContent || '').replace(/\s+/g, ' ').trim(),
+    // 筛选中的匹配数：搜索展开态下输入框右边那枚小字
+    meta: (document.querySelector('.proj__search-meta')?.textContent || '').trim(),
+    searchOpen: !!document.querySelector('.proj__search.is-open'),
     toggles: Array.from(document.querySelectorAll('.proj__toggle')).map(b => ({
       text: (b.textContent || '').trim(),
       pressed: b.getAttribute('aria-pressed'),
@@ -138,17 +143,31 @@ async function main() {
     const onlyTasks = page.locator('.proj__toggle').nth(0)
     const hideNonGit = page.locator('.proj__toggle').nth(1)
 
-    // ── P0 / P1：夹具与筛选条 ────────────────────────────────────────
+    /* 搜索 2026-10-16 起是"一枚放大镜、点开展开"（同看板标题行那枚）：
+       input 默认 display:none，fill 之前必须先点开。点开后再点是收起，
+       所以按 .is-open 条件点击，别无条件点。 */
+    async function ensureSearchOpen() {
+      if (await page.locator('.proj__search.is-open').count()) return
+      await page.locator('.proj__search-btn').click()
+      await page.waitForSelector('.proj__search-input', { state: 'visible', timeout: 3000 }).catch(() => {})
+    }
+
+    // ── P0 / P1：夹具与筛选区 ──────────────────────────────────────
     const ready = await waitUntil(async () => (await obs()).names.length >= FIXTURE.length)
     let s = await obs()
     check(`P0 夹具就绪：左栏渲染出 ${FIXTURE.length} 个合成项目`, ready, `实际 ${s.names.length} 行`)
-    check('P1a 有项目时筛选条渲染', s.hasTools)
+    check('P1a 有项目时筛选区渲染', s.hasTools)
     check('P1b 两个开关文案正确（顺序：只看有任务 / 隐藏非 Git）',
       s.toggles.length === 2 && s.toggles[0].text === '只看有任务' && s.toggles[1].text === '隐藏非 Git',
       JSON.stringify(s.toggles.map(t => t.text)))
-    check('P1c 未筛选时计数就是项目总数', s.count === String(FIXTURE.length), `count="${s.count}"`)
+    // 标题行那枚常驻项目数 2026-10-16 去掉（顶栏与「全部项目」行各还有一份）；
+    // 匹配数改成搜索展开态下的一枚小字（P10 验它）
+    check('P1c 标题行没有常驻项目数（.proj__count 已去掉）', s.hasCount === false,
+      s.hasCount ? `count="${s.count}"` : '不存在')
+    check('P1d 未筛选时展开态下也不显示匹配数（不常驻）', s.meta === '', `meta="${s.meta}"`)
 
     // ── P2 / P3 / P4：搜索 ──────────────────────────────────────────
+    await ensureSearchOpen()
     await search.fill('Alpha')
     await waitUntil(async () => (await obs()).names.length === 1)
     s = await obs()
@@ -211,12 +230,13 @@ async function main() {
     s = await obs()
     check('P9 只看有任务 + 隐藏非 Git 叠加：只剩两个有任务的 Git 仓库',
       sameSet(s.names, ['zen-verify-Alpha', 'zen-verify-Gamma']), JSON.stringify(s.names))
-    check('P10 计数改成「匹配 n/total」',
-      s.count === `匹配 2/${FIXTURE.length} 个项目`, `count="${s.count}"`)
+    check('P10 匹配数以「n/total」小字跟在展开的搜索框右边',
+      s.meta === `${2}/${FIXTURE.length}`, `meta="${s.meta}" open=${s.searchOpen}`)
     check('P11 两个开关的 aria-pressed 与 is-on 同步',
       s.toggles.every(t => t.pressed === 'true' && t.on), JSON.stringify(s.toggles))
 
     // ── P12：Esc 清空 ──────────────────────────────────────────────
+    await ensureSearchOpen()
     await search.fill('Gamma')
     await waitUntil(async () => (await obs()).names.length === 1)
     await search.press('Escape')

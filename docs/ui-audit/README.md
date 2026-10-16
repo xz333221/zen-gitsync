@@ -243,6 +243,47 @@ Element Plus 的 `--input-bg`（= `--bg-container`，白），父容器 `.board`
 所有按 `.kb__view-btn` 文字点击切视图的老探针已同步改为
 `getByRole('tab', { name })`（按钮无文字后文字定位失效，aria-label 是唯一稳定锚点）。
 
+### 第九轮：左栏去项目数、搜索上标题行收图标；右栏去执行数、报告默认展开（2026-10-16）
+
+用户三件事（截图圈了左栏标题旁的「33」、左栏搜索框、右栏「2 个执行中」）：
+
+1. **左栏「项目列表」标题右侧的项目数去掉**（`.proj__count`）。同一个数字顶栏
+   「项目 33」与「全部项目」行的 ●33 各还有一份 —— 一屏三处，去掉标题这处。
+   筛选中的「匹配 n/total」不跟着常驻，改成搜索展开态下输入框右边一枚小字
+   （`.proj__search-meta`）：只在筛选那一刻有人看，不占常驻位。
+2. **左栏搜索从筛选条搬到标题行右侧**，形态收成"一枚放大镜、点开展开"——
+   与上一轮看板标题行那枚（`.board__head-search`）同一交互：默认容器 34px
+   只露图标，点开 input 向左长出（`min(168px, calc(100% - 64px))`，
+   标题至少留 64px 且加了 ellipsis 三件套）；空词失焦收起、有词失焦不收起、
+   图标按钮 `@mousedown.prevent` 防 blur/click 互踩。
+   底色 / 描边 / 焦点环契约**原样保留**（容器仍是那个带 `--bg-input` 边框的框），
+   `verify:wb-proj-search` 只把主流程改成"先点开再量"，颜色类断言一条没动。
+3. **右栏删掉「{n} 个执行中」状态条**（`.oc__state` 整块）。执行数在看板
+   「进行中」列头与左栏「全部项目」行各有一份；`runningCount` 保留但只服务
+   空态那句话（"这批任务还没有进度报告" vs "当前没有正在执行的任务"）。
+4. **进度报告正文默认展开**（`textExpanded` 初值 + 换报告时的重置都改成 true）。
+   旧形态默认露 6 行、超长才给「展开全文」—— 用户每次都要多点一下才能看全，
+   而那段"任务1…任务2…"的汇报恰恰是报告的核心内容。现在默认摊开，
+   按钮给「收起」；`measureText` 在展开态不量（解开上限后量不出截断）。
+
+回归网：`verify:wb-proj-search` 37/37 + reverse 12 条必红；
+`verify:wb-proj-filter` 27/27（P1c 改守"标题行无常驻计数"、P10 改守 meta 小字）；
+`verify:wb-progress-report` 57/57（新增 P14 组守默认展开）；
+`verify:wb-panel-resize` 61/61；`verify:wb-head-actions` 16/16 回归；
+tsc 与 build 均通过。`verify:ui-consistency` 3 条红为存量
+（`--text-tertiary` 仅以 border-color 出现在未触碰的旧代码、SHOW_THEME_TOGGLE
+在 App.vue），与本轮无关。
+
+顺手修掉的两条**存量**探针病（都是别人的历史欠账，不是本轮引入）：
+`panel-resize` 的 P13d 期望与 2026-10-02「控制台 order:-1 排在看板前面」的
+设计相反（那次改动漏同步），改成现行契约；P26b 读到的是 is-report-empty 态
+（无 currentReport 时输入框 min-height 168）—— 改成先挂住 reports 接口造
+"无异步数据首屏"验 P26d、放行后等面板脱 empty 再量 P26a/b/c。
+
+![左栏搜索：默认一枚放大镜](./wb-proj-search-idle.png)
+![左栏搜索：点开展开](./wb-proj-search-open.png)
+![右栏：无执行数、报告默认展开](./wb-oc-report-open.png)
+
 
 
 ## 修复状态（2026-10-04 当轮）

@@ -2459,7 +2459,6 @@ export default {
   '@WORKBENCH:隐藏非 Git': '隐藏非 Git',
   '@WORKBENCH:只显示有任务的项目': '只显示有任务的项目',
   '@WORKBENCH:只显示 Git 仓库': '只显示 Git 仓库',
-  '@WORKBENCH:匹配 {n}/{total} 个项目': '匹配 {n}/{total} 个项目',
   '@WORKBENCH:没有匹配的项目': '没有匹配的项目',
   '@WORKBENCH:清除筛选': '清除筛选',
   '@WORKBENCH:展开项目列表': '展开项目列表',

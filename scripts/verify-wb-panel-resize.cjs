@@ -112,7 +112,9 @@ function MEASURE() {
     foldBtn: box('.board__fold-btn'),
     rail: box('.oc__rail'),
     collapseBtn: box('.oc__collapse'),
-    ocState: box('.oc__state'),
+    // 「{n} 个执行中」状态条 2026-10-16 删了；折叠判据改看工作方式拨片
+    // （它同样 v-show="!collapsed"，折叠时 display:none）
+    ocMode: box('.oc__mode'),
     draftInDom: !!document.querySelector('.oc__input'),
     draftValue: document.querySelector('.oc__input')?.value ?? null,
     // ── 派发输入框（右栏 compose 区）──
@@ -345,8 +347,8 @@ async function main() {
     await sleep(420)
     m = await M()
     check('P9a 折叠后右栏收到 32px 收纳条', m.oc.width === 32, `width=${m.oc?.width}`)
-    check('P9b 收纳条出现、正文块隐藏', m.rail?.width > 0 && m.ocState?.display === 'none',
-      `rail=${m.rail?.width} state.display=${m.ocState?.display}`)
+    check('P9b 收纳条出现、正文块隐藏', m.rail?.width > 0 && m.ocMode?.display === 'none',
+      `rail=${m.rail?.width} mode.display=${m.ocMode?.display}`)
     check('P9c 折叠后看板拿回右栏让出的宽度', m.main.width > mainWide + 260,
       `main=${m.main?.width}（折叠前 ${mainWide}）`)
     check('P9d 折叠不销毁草稿（textarea 还在 DOM 里且值没丢）',
@@ -359,7 +361,7 @@ async function main() {
     await sleep(420)
     m = await M()
     check('P10a 点收纳条展开：右栏宽度回来', m.oc.width === 360, `width=${m.oc?.width}`)
-    check('P10b 展开后正文块重新显示', m.ocState?.display !== 'none', `display=${m.ocState?.display}`)
+    check('P10b 展开后正文块重新显示', m.ocMode?.display !== 'none', `display=${m.ocMode?.display}`)
     check('P10c 展开后草稿还在（折叠-展开一整轮没丢）',
       m.draftValue === '折叠时这段草稿不能丢', `value="${m.draftValue}"`)
 
@@ -395,8 +397,13 @@ async function main() {
     check('P13c 780：折叠按钮隐藏（收边动作在竖排下不成立）',
       m.collapseBtn === null || m.collapseBtn.display === 'none',
       `display=${m.collapseBtn?.display}`)
-    check('P13d 780：右栏落在看板下方（方向确实变成竖排了）', m.oc.top >= m.main.bottom - 2,
-      `oc.top=${m.oc?.top} main.bottom=${m.main?.bottom}`)
+    // 2026-10-16 修正期望：竖排的方向在 2026-10-02 那次反馈后改成**控制台在前**
+    // （OrchestratorConsole 的 .oc { order: -1 }，注释与 progress-report 的 P11a
+    // 都写着"排在看板前面"）。这条原来写"右栏落在看板下方"，与现行设计相反，
+    // 是那次改动漏同步的存量红 —— 不是布局坏了。
+    check('P13d 780：控制台落在看板前面（竖排方向，2026-10-02 反馈后的设计）',
+      m.oc.bottom <= m.main.top + 2,
+      `oc.bottom=${m.oc?.bottom} main.top=${m.main?.top}`)
     await shot(page, '780-stacked')
 
     /* ══ P14 反向验证：没拖过时媒体查询仍然生效 ══ */
@@ -413,19 +420,37 @@ async function main() {
     /* ══ P26 派发输入框的默认高度（需求："输入框也调大一些"）══
        P14 清过一次 localStorage，这一节从"没拖过"的干净态开始量默认值。 */
     await setSize(page, 1600, 900)
+    /* P26d 需要一个"没有任何异步数据"的首屏：产品的 ResizeObserver 会把
+       "没在拖也没被夹住"的高度变化记进 localStorage（commitInputH 的注释，
+       刻意行为）—— 真实环境里 reload 后 reports 异步到达、empty 态退去，
+       那一下布局重排就会把高度写盘，等多久都抢不赢它（2026-10-16 实测）。
+       所以把 reports 接口**挂住**（既不 fulfill 也不 abort）：首屏永远 empty、
+       没有任何布局变化，RO 首次回调又被跳过 → inline 与 localStorage 都空着。 */
     await page.evaluate(() => { try { localStorage.removeItem('wb.ocInputHeight.v1') } catch {} })
+    await page.route('**/api/workbench/orchestrator/reports', () => { /* 挂住，见上 */ })
     await page.reload({ waitUntil: 'domcontentloaded' })
     await openBoard(page)
+    const firstFrame = await page.evaluate(() => {
+      const n = document.querySelector('.oc__input')
+      return { inline: n?.style.height || '', storedH: (() => { try { return localStorage.getItem('wb.ocInputHeight.v1') } catch { return null } })() }
+    })
+    check('P26d 没拖过时首屏不写内联高度、localStorage 里也没有那把 key（默认完全交给 CSS）',
+      firstFrame.inline === '' && firstFrame.storedH === null,
+      `inline="${firstFrame.inline}" storedH=${firstFrame.storedH}`)
+    /* P26a/b/c 量**非 empty 态**的默认高度（empty 态那条 CSS 把输入框
+       min-height 顶到 168）：放行 reports，等面板脱离 empty。
+       reports 轮询 30s 一次（WorkbenchBoard 的 REPORT_POLL_MS），等待放到 40s。 */
+    await page.unroute('**/api/workbench/orchestrator/reports')
+    await page.waitForFunction(() => !document.querySelector('.oc.is-report-empty'), null, { timeout: 40000 }).catch(() => {})
     m = await M()
     check('P26a 输入框默认 4 行（旧的是 3 行）', m.input?.rows === '4', `rows=${m.input?.rows}`)
-    check('P26b 默认高度 ≥ 76（旧的 min-height 是 52，量出来约 88）',
+    check('P26b 默认高度 ≥ 76（旧的 min-height 是 52，量出来约 88；is-report-empty 态会到 168，已先等它退去）',
       !!m.input && m.input.h >= 76 && m.input.h <= 120, `h=${m.input?.h}`)
     check('P26c 上限从写死的 160 放开到 min(380px, 45vh) —— 900 高视口下 = 380',
       m.input?.maxHpx === 380 && m.input?.resize === 'vertical',
       `max-height=${m.input?.maxH} (${m.input?.maxHpx}px) resize=${m.input?.resize}`)
-    check('P26d 没拖过时不写内联高度、localStorage 里也没有那把 key（默认完全交给 CSS）',
-      m.input?.inline === '' && m.input?.storedH === null,
-      `inline="${m.input?.inline}" storedH=${m.input?.storedH}`)
+    // P26d（首屏不写盘）已提前到 reload 后、等报告落定前量 —— RO 会在布局
+    // 变化时补写高度，等完再量就不是"首屏"了
     await shot(page, '1600-input-default')
 
     /* ══ P27 拖右下角变高 + 落盘 ══ */

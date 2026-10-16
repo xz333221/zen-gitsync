@@ -34,7 +34,7 @@
   那个地址（useIconFallback），不再重试。「常用目录」卡片用的是同一枚图标、同一套兜底。
 -->
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -126,6 +126,25 @@ function clearFilters() {
   query.value = ''
   onlyWithTasks.value = false
   hideNonGit.value = false
+}
+
+/* ── 搜索框的展开态（2026-10-16） ──────────────────────────────────
+   搜索从筛选条搬到了标题行右侧，形态收成"一枚放大镜、点开展开"——
+   与看板标题行那枚（WorkbenchBoard 的 .board__head-search）同一交互。
+   标题行是"这是哪个面板"的地方，常驻一个搜索框太吵；而项目数
+   （原标题旁的 .proj__count）去掉后，那个位置正好给这枚图标。
+   收起判据沿用看板那份：空词失焦收起，有词失焦不收起
+   （筛选结果还在屏幕上，收起来会让人以为筛选没了）。 */
+const searchOpen = ref(false)
+const searchInputRef = ref<HTMLInputElement | null>(null)
+function toggleSearch() {
+  searchOpen.value = !searchOpen.value
+  if (searchOpen.value) {
+    nextTick(() => searchInputRef.value?.focus())
+  }
+}
+function onSearchBlur() {
+  if (!query.value.trim()) searchOpen.value = false
 }
 
 const totals = computed(() => props.projects.reduce(
@@ -324,27 +343,41 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   <section class="proj">
     <header class="proj__head">
       <h3 class="proj__title">{{ $t('@WORKBENCH:项目列表') }}</h3>
-      <span class="proj__count">
-        <template v-if="filtering">
-          {{ $t('@WORKBENCH:匹配 {n}/{total} 个项目', { n: visible.length, total: projects.length }) }}
-        </template>
-        <template v-else>{{ projects.length }}</template>
-      </span>
-    </header>
-
-    <!-- 一个项目都没有时不渲染筛选条：没有可筛的东西，这一行只是占位 -->
-    <div v-if="projects.length > 0" class="proj__tools">
-      <div class="proj__search">
-        <el-icon class="proj__search-icon" aria-hidden="true"><Search /></el-icon>
+      <!-- 搜索（2026-10-16 从下面的筛选条搬到这里）：默认只露一枚放大镜，
+           点开输入框才展开。原标题右侧那枚常驻项目数（.proj__count）去掉 ——
+           同一个数字顶栏、左栏「全部项目」行各还有一份；筛选中的匹配数
+           不跟着常驻，改成展开态下输入框右边一枚小字（.proj__search-meta）。 -->
+      <div v-if="projects.length > 0" class="proj__search" :class="{ 'is-open': searchOpen }">
         <input
+          v-show="searchOpen"
+          ref="searchInputRef"
           v-model="query"
           class="proj__search-input"
           type="search"
           :placeholder="$t('@WORKBENCH:搜索项目名称或路径')"
           :aria-label="$t('@WORKBENCH:搜索项目名称或路径')"
           @keydown.esc="query = ''"
+          @blur="onSearchBlur"
         />
+        <span v-if="filtering" class="proj__search-meta">{{ visible.length }}/{{ projects.length }}</span>
+        <!-- mousedown.prevent：不让这一下先把输入框焦点弄丢，否则"点开 → 再点图标
+             想收起"会变成 blur 收起 + click 又重新展开（同看板标题行那枚） -->
+        <button
+          type="button"
+          class="proj__search-btn"
+          :title="$t('@WORKBENCH:搜索项目名称或路径')"
+          :aria-label="$t('@WORKBENCH:搜索项目名称或路径')"
+          @mousedown.prevent
+          @click="toggleSearch"
+        >
+          <el-icon class="proj__search-icon" aria-hidden="true"><Search /></el-icon>
+        </button>
       </div>
+    </header>
+
+    <!-- 筛选开关。搜索搬走后这一行只剩两个开关（它们仍然等宽平分）。
+         一个项目都没有时不渲染：没有可筛的东西，这一行只是占位 -->
+    <div v-if="projects.length > 0" class="proj__tools">
       <div class="proj__toggles">
         <button
           type="button"
@@ -791,16 +824,15 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   color: var(--text-secondary);
   flex: 1;
   min-width: 0;
-}
-.proj__count {
-  font-size: var(--font-size-xs);
-  color: var(--text-meta);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
+  /* 搜索展开时它要往右让位（左栏最窄 200px），长名往窄缩而不能把
+     搜索图标顶出面板 —— 这三件套让"项目列表"最短能缩成"项…" */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* ── 筛选条 ─────────────────────────────────────────── */
-/* 两行：搜索独占一行（挤到半行就短得没法用），两个开关并排一行。
+/* ── 筛选区 ─────────────────────────────────────────── */
+/* 只剩一行开关（搜索 2026-10-16 搬到标题行右侧，见 .proj__head）。
    整体是扁平的——只有 1px 边框，不额外加底色块，和下面项目行同一套语言。 */
 .proj__tools {
   display: flex;
@@ -815,19 +847,35 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
    --bg-input（light 白 / dark #24292e）、--border-input、--text-primary、--text-meta、
    --color-primary 焦点描边 —— 明暗两套都成立，字色与底色同向翻转，不会再白底白字。
    也因此**不再需要 color-scheme: light**：底色已随主题变深，原生清除按钮 / 光标
-   继承根的 color-scheme 即可，深浅两套下都看得见。 */
+   继承根的 color-scheme 即可，深浅两套下都看得见。
+
+   2026-10-16：形态从"常驻输入框"改成"一枚放大镜、点开展开"（与看板标题行
+   .board__head-search 同一交互）。容器自身仍是那个带边框/底色的框 —— 底色与
+   描边契约原样保留，只是默认宽 34px 只露图标，展开时才长到 168px。
+   ⚠️ overflow:hidden 是必须的：输入框 v-show 展开前 width 过渡从 34px 起，
+   不裁的话第一帧它会以全宽溢出到开关那一行。 */
 .proj__search {
   display: flex;
   align-items: center;
   gap: 4px;
   height: 24px;
+  width: 34px;
   padding: 0 8px;
   border: 1px solid var(--border-input);
   border-radius: var(--radius-md);
   background: var(--bg-input);
+  flex-shrink: 0;
+  overflow: hidden;
+  cursor: pointer;
   transition:
+    width var(--transition-base) var(--ease-custom),
     border-color var(--transition-fast) var(--ease-custom),
     box-shadow var(--transition-fast) var(--ease-custom);
+}
+/* 展开宽：最多 168px，且绝不把标题挤到看不见（标题至少留 64px） */
+.proj__search.is-open {
+  width: min(168px, calc(100% - 64px));
+  cursor: default;
 }
 .proj__search:hover:not(:focus-within) {
   border-color: var(--border-input-hover);
@@ -836,11 +884,27 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   border-color: var(--color-primary);
   box-shadow: var(--focus-ring-soft);
 }
+.proj__search-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  color: var(--text-meta);
+}
+.proj__search-btn:hover { color: var(--text-primary); }
 .proj__search-icon {
   font-size: var(--font-size-sm);
   color: var(--text-meta);
   flex-shrink: 0;
 }
+.proj__search-btn:hover .proj__search-icon { color: var(--text-primary); }
 .proj__search-input {
   flex: 1;
   min-width: 0;
@@ -853,6 +917,16 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
   caret-color: var(--color-primary);
 }
 .proj__search-input::placeholder { color: var(--text-meta); }
+/* 筛选中的匹配数：原来它在标题右侧常驻（.proj__count，已去掉）。
+   现在只在展开态露个"2/4"—— 顶栏和「全部项目」行已经有项目总数，
+   常驻一份是重复；而"筛出了几条"只在筛选那一刻有人看。 */
+.proj__search-meta {
+  font-size: var(--font-size-xs);
+  color: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 .proj__toggles {
   display: flex;
   align-items: center;

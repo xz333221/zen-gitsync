@@ -23,7 +23,7 @@
  *   P10 空正文的原因码：LLM_EMPTY（模型答了但没写正文）与通用失败说两句不同的话，
  *     悬停带服务端写的 errorDetail；认不出来的码仍然退回通用文案（反证）
  *   P11 小屏（780）：控制台排在看板**前面**、长正文不再被 6 行上限截断、
- *     没有「展开全文」入口；把旧写法注回去这批判据必须全部失败（反证）
+ *     没有「展开全文」入口（默认就摊开着，要收也是「收起」）；把旧写法注回去这批判据必须全部失败（反证）
  *   P12 「项目概览 / 历史报告」默认折成一行（标题行仍带份数 / 分支·工作区），
  *     折起来后报告窗口 ≥340px（原来只有 200 出头）；点标题行能开能合、
  *     选择记在 localStorage；**展开回去报告窗口必须掉回去**（反证高度出自这两块）
@@ -33,6 +33,8 @@
  *     P13a / P13b 是同一组断言的一对：唯一的差别就是那个 job 还在不在跑
  *   P8 无 JS 运行时异常 / 无控制台错误
  *   P9 截图存证
+ *   P14 报告正文**默认展开**（2026-10-16 用户要求）：is-expanded、按钮是「收起」；
+ *       换一份报告也保持展开
  *
  * 前置：dev server 已启动（npm run dev，后端 5545 / 前端 5544）。
  * 用法：node scripts/verify-wb-progress-report.cjs
@@ -97,8 +99,9 @@ async function readPanel(page) {
   emptyTitle: document.querySelector('.oc-empty')?.getAttribute('title') || '',
   /** 「已结束」那枚标：只有用户点开一份过期报告时才该出现 */
   stale: (document.querySelector('.rp__stale')?.textContent || '').trim(),
-  /** 控制台顶栏那个实时计数（「{n} 个执行中」），用来判断桩有没有生效 */
-  runningMeta: (document.querySelector('.oc__state-meta')?.textContent || '').trim(),
+  /** 报告正文的折叠态：2026-10-16 起默认展开（is-expanded / 按钮文案） */
+  textExpanded: !!document.querySelector('.rp__text.is-expanded'),
+  moreText: (document.querySelector('.rp__more')?.textContent || '').trim(),
       /** 进度条：卡片整体那条（每个任务各自的那条 2026-10-14 起在看板卡片上，别混） */
       hasBar: !!card?.querySelector('.rp__bar'),
       barRole: card?.querySelector('.rp__bar')?.getAttribute('role') || '',
@@ -238,21 +241,34 @@ async function installReportsStub(page) {
 /**
  * 换一份桩状态并等它生效。
  *
- * running 走的是 5s 轮询，所以只能等 —— 用顶栏那个实时计数当"桩已生效"的信号，
- * 而不是固定 sleep（慢机器上固定 sleep 会读到上一轮的旧状态，报出假 FAIL）。
+ * running 走的是 5s 轮询，所以只能等。2026-10-16 起不再看 DOM 里的
+ * 「{n} 个执行中」（那一行已删）—— 改成两步等：
+ *   ① 页面里 fetch 同一个接口（page.route 拦得到浏览器内的请求），等桩数据就位；
+ *   ② 传了 waitText 时再等空态那句话变成它（= 前端不仅拉到了新 running，
+ *      还据此重算了主位）—— ①只证明"桩换了"，前端还要最多 5s 轮询才拉得到。
+ *      ⚠️ 不能等"主位空了"（.oc-empty 出现）：上一轮跑完它本来就在，
+ *      那一刻恒真，等不到新状态（P13d 实测踩过）。
  */
-async function setRunning(page, jobs, { dropReal = true, want = null } = {}) {
+async function setRunning(page, jobs, { dropReal = true, want = null, waitText = null } = {}) {
   extraRunning = jobs
   dropRealRunning = dropReal
   if (want === null) { await sleep(300); return }
   await page.waitForFunction(
-    n => {
-      const el = document.querySelector('.oc__state-meta')
-      return !!el && /(\d+)/.test(el.textContent || '') && Number(el.textContent.match(/(\d+)/)[1]) === n
+    async (n) => {
+      try {
+        const r = await fetch('/api/workbench/orchestrator', { cache: 'no-store' }).then((x) => x.json())
+        return !!r && (r.running || []).length === n
+      } catch { return false }
     },
     want,
-    { timeout: 20000 }
+    { timeout: 20000, polling: 500 }
   ).catch(() => {})
+  if (waitText) {
+    await page.waitForFunction((re) => {
+      const el = document.querySelector('.oc-empty__text')
+      return !!el && new RegExp(re).test(el.textContent || '')
+    }, waitText, { timeout: 15000 }).catch(() => {})
+  }
   await sleep(300)
 }
 
@@ -584,12 +600,24 @@ async function main() {
       `notice="${em.notice}"`)
     await page.unroute('**/api/workbench/orchestrator/report')
 
+    /* ══ P14 报告正文默认展开（2026-10-16 用户要求：「进度报告默认展开」）══ */
+    // 旧形态：默认露 6 行、超长才给「展开全文」。用户每次都要多点一下才能看全，
+    // 而那段"任务1…任务2…"的汇报恰恰是报告的核心内容。现在默认整段摊开，
+    // 按钮给的是「收起」。换一份报告也保持展开（watch 里跟着重置，见组件注释）。
+    const LONG_TEXT = '桩：正在核对 zen-gitsync 的收尾验证。'.repeat(28)
+    await stubOnce(stubReport(STUB_PERCENT, [70], LONG_TEXT))
+    await sleep(400)
+    let dm = await readPanel(page)
+    check('P14a 报告正文默认展开（is-expanded，不用先点「展开全文」）',
+      dm.textExpanded === true, `expanded=${dm.textExpanded}`)
+    check('P14b 默认展开时按钮给的是「收起」而不是「展开全文」',
+      dm.moreText === '收起', `more="${dm.moreText}"`)
+
     /* ══ P11 小屏：报告是主角，别被压成"一截能滚的小窗口"（2026-10-02 反馈）══ */
     // 反馈原话："我在小屏上基本看不到任务报告"。两件事凑一起：
     //   ① 竖排时看板三列摞起来一万多像素（120 张卡），控制台排在它后面 → 够不着；
     //   ② 报告正文被 6 行上限截掉（宽屏那道限制是为 300px 窄栏设的，小屏不该沿用它）。
     // 宽度桩成 780（= WorkbenchBoard 的竖排断点以内），正文桩成一段肯定超过 6 行的长文。
-    const LONG_TEXT = '桩：正在核对 zen-gitsync 的收尾验证。'.repeat(28)
     await page.setViewportSize({ width: 780, height: 900 })
     await sleep(400)
     await stubOnce(stubReport(STUB_PERCENT, [70], LONG_TEXT))
@@ -606,6 +634,7 @@ async function main() {
         textScrollH: t ? t.scrollHeight : null,
         textClientH: t ? t.clientHeight : null,
         moreCount: document.querySelectorAll('.rp__more').length,
+        moreText: (document.querySelector('.rp__more')?.textContent || '').trim(),
         hasText: !!t,
       }
     })
@@ -617,9 +646,12 @@ async function main() {
     check('P11b 小屏：长正文不再被 6 行上限截断（scrollHeight = clientHeight）',
       sm.hasText && sm.textScrollH - sm.textClientH <= 2,
       `scrollH=${sm.textScrollH} clientH=${sm.textClientH}（差 ${sm.textScrollH - sm.textClientH}px）`)
-    // 判定是量出来的：上限解开后 measureText 自然量成"没截断"，按钮就不该再挂着
-    check('P11c 小屏：没有「展开全文」入口（正文没截就不该有它）',
-      sm.moreCount === 0, `数量=${sm.moreCount}`)
+    // 判定是量出来的：上限解开后 measureText 自然量成"没截断"。
+    // 2026-10-16 默认展开后小屏也摊着，按钮（若有）只能是「收起」——
+    // 出现「展开全文」说明又退回"先截断再让用户点开"的旧形态了
+    check('P11c 小屏：没有「展开全文」入口（正文默认摊开着，要收也是「收起」）',
+      sm.moreCount === 0 || sm.moreText === '收起',
+      `数量=${sm.moreCount} 文案="${sm.moreText}"`)
 
     /* 反证：把旧写法注回去（order 归 0 + 恢复 6 行上限），同一批判据必须**失败** ——
        否则上面那两条只是"页面没崩"，守不住这两条规则本身 */
@@ -633,9 +665,9 @@ async function main() {
     sm = await readSmall()
     check('P11d 反证：注回旧写法后，控制台重新掉到看板后面（P11a 不成立）',
       !(sm.ocBottom <= sm.mainTop + 2), `oc.bottom=${sm.ocBottom} main.top=${sm.mainTop}`)
-    check('P11e 反证：正文重新被 6 行截断（P11b 不成立），且「展开全文」重新出现',
+    check('P11e 反证：正文重新被 6 行截断（P11b 不成立），且「收起」按钮重新出现',
       sm.textScrollH - sm.textClientH > 2 && sm.moreCount > 0,
-      `差 ${sm.textScrollH - sm.textClientH}px，按钮=${sm.moreCount}`)
+      `差 ${sm.textScrollH - sm.textClientH}px，按钮=${sm.moreCount}（"${sm.moreText}"）`)
 
     await page.evaluate(() => document.getElementById('__oc_legacy')?.remove())
     await page.setViewportSize({ width: 1600, height: 950 })
@@ -742,13 +774,21 @@ async function main() {
     // 反馈原话："我现在任务完成的时候还显示之前的进度报告"。
     // 病根不在"报告留得太久"，而在主位**无条件**跟着最新那份走：报告是"生成那一刻"的
     // 事实快照，任务收工之后卡片头上那句「1 个任务进行中」就是一句谎话 ——
-    // 而顶栏同一处正写着「0 个执行中」，两个数自己打起来了。
+    // 而执行数在看板列头与左栏还各自显示着，三个数自己打起来了。
     // 修法：跟着最新走时只认"还活着"的那份（报告事实的 jobId 对上 running 里的 jobId，
     // 老记录没这个字段时退回 taskId）；用户从历史里点开的那份是明确的选择，照常显示。
     // 这一组四步只改一件事：**手上那份报告讲的 job 在不在跑** ——
     // P13a 与 P13d 就是同一组断言的一对，差别只有那一个变量。
     await setRunning(page, [PROBE_JOB])
     await stubOnce(stubReport(STUB_PERCENT, [70], '桩：这一轮还在跑。'))
+    // generateReport 是就地插入 + 主位随即重算的，但这一下还伴着一次 5s 轮询的
+    // 竞争（轮询回来的列表也会参与主位计算）—— 等主位换成新报告再断言，
+    // 别把"轮询还没到"读成功能没生效（2026-10-16 实测偶发红过一回）
+    await page.waitForFunction(
+      () => /这一轮还在跑/.test((document.querySelector('.rp__text')?.textContent) || ''),
+      null,
+      { timeout: 8000 }
+    ).catch(() => {})
     let xm = await readPanel(page)
     check('P13a 报告讲的 job 还在跑 → 挂在主位（不是一律藏起来）',
       xm.trigger !== '' && /桩：这一轮还在跑/.test(xm.text),
@@ -758,20 +798,20 @@ async function main() {
 
     // 换一个任务在跑（手上那份报告讲的还是已经收工的那个）→ 主位必须空出来，
     // 而且要说"这批还没报告"，不能说"没有任务在跑"（此刻确实有一个在跑）
-    await setRunning(page, [PROBE_OTHER_JOB], { want: 1 })
+    await setRunning(page, [PROBE_OTHER_JOB], { want: 1, waitText: '还没有进度报告' })
     await sleep(600)
     xm = await readPanel(page)
     check('P13c 有别的任务在跑、手上这份讲的不是它 → 不挂（否则又变成"之前的报告"）',
       xm.trigger === '' && /还没有进度报告/.test(xm.empty),
-      `trigger="${xm.trigger}" empty="${xm.empty}" 顶栏="${xm.runningMeta}"`)
+      `trigger="${xm.trigger}" empty="${xm.empty}"`)
 
     // 全跑完了 → 主位空着，并把话说清楚
-    await setRunning(page, [], { want: 0 })
+    await setRunning(page, [], { want: 0, waitText: '当前没有正在执行的任务' })
     await sleep(600)
     xm = await readPanel(page)
     check('P13d 任务跑完之后不再显示之前那份进度报告（这次反馈的那一条）',
       xm.trigger === '' && /当前没有正在执行的任务/.test(xm.empty),
-      `trigger="${xm.trigger}" empty="${xm.empty}" 顶栏="${xm.runningMeta}"`)
+      `trigger="${xm.trigger}" empty="${xm.empty}"`)
     check('P13e 空闲时那句话带一句说明（上一份去哪了，不会被当成加载失败）',
       /已经跑完/.test(xm.emptyTitle), `title="${xm.emptyTitle.slice(0, 60)}"`)
     // 存证：空闲态长什么样（用户反馈的就是这个画面）

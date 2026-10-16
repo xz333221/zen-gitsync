@@ -420,7 +420,9 @@ onBeforeUnmount(() => {
 /** 当前展示的是哪一份。null = 跟着最新走（新报告落地后自动换上来） */
 const selectedReportId = ref<string | null>(null)
 
-/** 「{n} 个执行中」那个数。唯一的出处是 props.running 的长度（见 props 上的注释） */
+/** 在跑的执行体个数。2026-10-16 起只服务于空态那句话（"这批任务还没有进度报告"
+ *  vs "当前没有正在执行的任务"）—— 面板上那行「{n} 个执行中」已删，
+ * 执行数看板列头与左栏「全部项目」行各有一份。 */
 const runningCount = computed(() => (props.running || []).length)
 
 /**
@@ -528,21 +530,21 @@ const idleHintTitle = computed(() =>
 function pickReport(r: ProgressReport) { selectedReportId.value = r.id }
 
 /**
- * 报告正文的折叠态（默认露 6 行）。
+ * 报告正文的折叠态（2026-10-16 起**默认展开**，用户：「进度报告默认展开」）。
  *
- * 为什么折：右栏只有 ~300px 宽，模型那种"任务1…任务2…任务3…"连着几段的汇报
- * 不截一下，光这段正文就能把整张报告卡撑满 —— 而卡下面还有历史报告 / 项目概览
- * 要占位，它们会被挤到看不见的地方去（2026-10-14 之前挤掉的是「任务事实」那一区，
- * 那一区已搬去看板卡片，但"正文别独占整张卡"这条不变）。
+ * 历史：最初默认露 6 行、超长才出现「展开全文」—— 那条限制是为 300px 窄栏设的，
+ * 但用户实际每次都要多点一下才能看全，而模型那种"任务1…任务2…"连着几段的汇报
+ * 恰恰是报告的核心内容。现在默认整段摊开，想收的人点「收起」。
  *
  * 截没截断**不猜**：量真实高度（scrollHeight > clientHeight）。宽度是工作台给的
  * --wb-right-w，同一段文字在宽窄两栏下截断点不一样，所以用 ResizeObserver 跟着重算。
+ * ⚠️ 展开态下不量（measureText 直接返回）：解开上限后高度本就等于内容高度。
  *
  * ⚠️ 高度上限是**常驻**的（收起时才解开），不是"判定为超长才加"：反过来写就成了
  * "没截断 → 量出没截断 → 不截断"的死循环，按钮永远不出现（本仓库第一次实现就栽在这儿）。
  */
 const textEl = ref<HTMLElement | null>(null)
-const textExpanded = ref(false)
+const textExpanded = ref(true)
 const textClamped = ref(false)
 
 function measureText() {
@@ -570,9 +572,9 @@ watch(textEl, (el) => {
 })
 onBeforeUnmount(() => { textRO?.disconnect(); textRO = null })
 
-// 换一份报告就重新收起来：上一份点开的「全文」不该跟着走到下一份上
+// 换一份报告也保持展开：默认展开是用户要的形态，不该因为轮询换了份报告就缩回去
 watch(() => currentReport.value?.id, () => {
-  textExpanded.value = false
+  textExpanded.value = true
   textClamped.value = false
   nextTick(measureText)
 })
@@ -755,12 +757,10 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
       </button>
     </header>
 
-    <div v-show="!collapsed" class="oc__state">
-      <span class="oc__state-meta">{{ $t('@WORKBENCH:{n} 个执行中', { n: runningCount }) }}</span>
-    </div>
-
     <!-- 工作方式：对话 = g ai 边聊边派（可以多轮、可以反问你）；指令 = 你自己敲一句话派一条。
-         两种方式落到的是**同一条派发链路、同一条指令流水**，变的只是"谁决定派什么"。 -->
+         两种方式落到的是**同一条派发链路、同一条指令流水**，变的只是"谁决定派什么"。
+         （标题行下方原来还有一条「{n} 个执行中」状态栏，2026-10-16 删掉 ——
+         执行数看板「进行中」列与左栏「全部项目」行各有，用户要求这里不再重复。） -->
     <div
       v-show="!collapsed"
       class="oc__mode"
@@ -1222,28 +1222,10 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 .oc__collapse:hover { color: var(--color-primary); }
 .oc__collapse:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
-/* 状态读数条。原来底色是 --gradient-accent-soft（一层极淡的主色渐变），
-   而右下角那块栏底本身就是 #f5f7fa —— 渐变叠上去只是让它"偏蓝一点点"，
-   既不像一条有身份的读数，又让这一屏多出一种没有名字的底色。
-   现在底色退回与拨片同一支中性 --bg-subtle。
-   这一行原来还有「调度状态 / 调度中」两枚（暂停时整条转角色色），2026-10-14
-   随调度开关一起删了 —— 剩「{n} 个执行中」一项，靠 margin-left:auto 靠右。 */
-.oc__state {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 9px 12px;
-  font-size: var(--font-size-xs);
-  color: var(--text-secondary);
-  background: var(--bg-subtle);
-  border-bottom: 1px solid var(--border-color-light);
-  flex-shrink: 0;
-}
-.oc__state-meta {
-  margin-left: auto;
-  color: var(--text-meta);
-  font-variant-numeric: tabular-nums;
-}
+/* 状态读数条（「{n} 个执行中」那一行）2026-10-16 整条删除 ——
+   执行数在看板「进行中」列头与左栏「全部项目」行各有一份，用户要求右栏不再重复。
+   （它原来的样式与两段演化史留此存证：底色从 --gradient-accent-soft 退回 --bg-subtle；
+   「调度状态 / 调度中」两枚 2026-10-14 随调度开关删除；最后一项也没活过 10-16。） */
 
 /* 工作方式切换：一个两段式拨片。
    为什么不做成两个独立按钮：它们互斥且只有两档，拨片能一眼看出"现在是哪一档"，

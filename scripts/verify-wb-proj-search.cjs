@@ -16,6 +16,14 @@
  *   R4  静止态描边可见（非透明、非零宽）且无焦点环；聚焦态描边 = --color-primary + --focus-ring-soft
  *   R5  正文 / placeholder 对**各自底色**都 ≥ 4.5:1（WCAG AA）
  *   R6  两个开关仍完整落在筛选条内、等宽不重叠、搜索框内无横向溢出
+ *   R0a 默认态只露一枚放大镜（容器 ≈34px 宽、未展开）
+ *   R0b 点开后输入框展开（容器明显变宽）
+ *
+ * ⚠️ 2026-10-16：搜索从"常驻输入框"改成"一枚放大镜、点开展开"（与看板标题行
+ *    .board__head-search 同一交互）。底色 / 描边 / 焦点环契约原样（容器仍是
+ *    那个带边框的框），只是默认 34px 只露图标；因此主流程先点开再量
+ *    （input 默认 display:none，fill 会打空），静止态不再 fill('')+blur
+ *    （空词失焦会按新交互收起）。
  *
  * ⚠️ 断言用**实测计算样式 + WCAG 对比度**，不是"截图看着白"。--reverse 把旧写法
  *   （固定 #fff 白底 + 写死灰阶 + color-scheme: light + 28% 实蓝焦点环）注回去，
@@ -201,15 +209,6 @@ const isPrimarySoftRing = (shadow) =>
   && (/59,\s*130,\s*246|0\.231373\s+0\.509804\s+0\.964706/.test(shadow))
   && /[\/,]\s*0\.12\s*\)/.test(shadow) // 12% alpha（.28 的实蓝环不会命中）
 
-/** 等焦点环的过渡彻底退完再量 —— 否则读到的是过渡中的中间值 */
-async function settleIdle(page) {
-  await page.waitForFunction(() => {
-    const b = document.querySelector('.proj__search')
-    return b && getComputedStyle(b).boxShadow === 'none'
-  }, null, { timeout: 3000 }).catch(() => {})
-  await sleep(100)
-}
-
 async function main() {
   const alive = await fetch(`${API}/api/app-version`).then((r) => r.ok).catch(() => false)
   if (!alive) {
@@ -234,13 +233,46 @@ async function main() {
   await page.waitForSelector('.activity-bar', { timeout: 20000 })
   await page.locator('.activity-btn[aria-label^="工作台"]').first().click()
   await page.waitForSelector('.board', { timeout: 15000 })
-  await page.waitForSelector('.proj__search-input', { timeout: 15000 })
+  // 2026-10-16：搜索改成"一枚放大镜、点开展开"（同看板标题行那枚），
+  // input 默认 display:none —— 等容器而不是等 input（visible 会超时）
+  await page.waitForSelector('.proj__search', { timeout: 15000 })
+
+  // 新契约：默认态只露一枚图标（容器 ≈34px），点开才长出输入框
+  const idleBox = await page.evaluate(() => {
+    const el = document.querySelector('.proj__search')
+    if (!el) return null
+    return { w: +el.getBoundingClientRect().width.toFixed(1), open: el.classList.contains('is-open') }
+  })
+  check('R0a 默认态只露一枚放大镜（容器 ≈34px、未展开）',
+    !!idleBox && idleBox.w >= 20 && idleBox.w <= 40 && !idleBox.open,
+    idleBox ? `w=${idleBox.w} open=${idleBox.open}` : '容器不在')
 
   const obs = () => page.evaluate(OBS)
   const setTheme = (t) => page.evaluate((v) => {
     if (v === 'dark') document.documentElement.setAttribute('data-theme', 'dark')
     else document.documentElement.removeAttribute('data-theme')
   }, t)
+  /** 点开搜索并等 width 过渡落定（过渡 260ms，立即量会读到中间值） */
+  async function openSearchAndSettle() {
+    await page.locator('.proj__search-btn').click()
+    await page.waitForSelector('.proj__search-input', { state: 'visible', timeout: 5000 })
+    await page.waitForFunction(() => {
+      const el = document.querySelector('.proj__search')
+      return el && el.getBoundingClientRect().width > 100
+    }, null, { timeout: 3000 }).catch(() => {})
+    // 点完鼠标还悬在按钮上：图标在按钮里，:hover 会把它染成 --text-primary，
+    // 污染后面所有颜色读数 —— 挪到面板外（中栏看板区域）再量
+    await page.mouse.move(700, 300)
+    await sleep(120)
+  }
+  /** 收回搜索（空词失焦即收起，与产品交互同一条判据） */
+  async function closeSearch() {
+    const open = await page.locator('.proj__search.is-open').count()
+    if (!open) return
+    await page.locator('.proj__search-input').fill('')
+    await page.locator('.proj__search-input').blur()
+    await page.waitForFunction(() => !document.querySelector('.proj__search.is-open'), null, { timeout: 3000 }).catch(() => {})
+  }
 
   try {
     console.log('── B. 运行时断言（两套主题）──')
@@ -262,10 +294,17 @@ async function main() {
       const tag = theme === 'light' ? 'L' : 'D'
       const exp = EXPECT[theme]
 
-      // 静止态：placeholder / 描边 / 焦点环
-      await page.locator('.proj__search-input').fill('')
-      await page.locator('.proj__search-input').blur()
-      await settleIdle(page)
+      // 每轮都从**收起态**开始（dark 轮开始时上一轮是展开+聚焦的）。
+      // ⚠️ 收起态的 input 是 display:none —— 但颜色 / caret / placeholder 的
+      // 计算样式照常可读（getComputedStyle 不要求元素渲染出来），
+      // 所以静止态整套可以在收起态量；这也正是用户的默认所见。
+      await closeSearch()
+      // 等焦点环过渡彻底退完再量静止态 —— blur 后 box-shadow 从蓝环过渡回 none
+      // 要 260ms，过渡中间值（2.47px / alpha 0.1 的淡环）会被 D4b 当成"有环"
+      await page.waitForFunction(() => {
+        const b = document.querySelector('.proj__search')
+        return b && getComputedStyle(b).boxShadow === 'none'
+      }, null, { timeout: 3000 }).catch(() => {})
       let s = await obs()
       if (!s) { check(`${tag}0 搜索框 + 筛选条都在 DOM 里`, false); continue }
 
@@ -281,9 +320,14 @@ async function main() {
       check(`${tag}4b 静止态无焦点环`, s.boxShadow === 'none', s.boxShadow)
       await page.locator('.proj__search').screenshot({ path: path.join(SHOT_DIR, `search-${theme}-idle${REVERSE ? '-legacy' : ''}.png`) })
 
-      // 已输入 + 聚焦：正文色 / caret / 焦点环
+      // 点开 → 输入框展开（R0b），鼠标挪开 → 已输入 + 聚焦
+      await openSearchAndSettle()
+      const openW = await page.evaluate(() => {
+        const el = document.querySelector('.proj__search')
+        return el ? +el.getBoundingClientRect().width.toFixed(1) : -1
+      })
+      check('R0b 点开后输入框展开（容器明显变宽）', openW > 100, `w=${openW}`)
       await page.locator('.proj__search-input').fill('Alpha')
-      await page.locator('.proj__search-input').focus()
       await sleep(250)
       s = await obs()
       check(`${tag}5a 已输入文字色跟随 --text-primary`, s.textColor === exp.ink,
