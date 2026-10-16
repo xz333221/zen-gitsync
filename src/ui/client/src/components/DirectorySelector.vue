@@ -33,6 +33,7 @@ import SvgIcon from "@components/SvgIcon/index.vue";
 import ToolInstallDialog from "@components/ToolInstallDialog.vue";
 import claudeCodeIcon from "@/assets/icons/svg/claudecode-color.svg";
 import { getFolderNameFromPath } from "@/utils/path";
+import { useMcpInstallStore } from "@/stores/mcpInstallStore";
 // 打开方式(文件管理器 / 终端 / 各编辑器与 AI 工具 / 新标签页跑 g ui)统一走这个 composable：
 // 编排台的项目列表用的是同一份端点映射和工具展示名，避免同一个工具在顶栏叫一个名、
 // 在项目列表里叫另一个名。这里只负责把结果翻译成 toast，交互(安装引导、版本 tooltip)仍在本组件。
@@ -253,6 +254,7 @@ async function onClaudeContextMenu() {
   }
   if (toolsStore.claudeAvailable) {
     void toolsStore.fetchLatestVersions() // 右键打开菜单时顺带查最新版(5 分钟缓存)
+    void mcpInstall.fetchStatuses() // MCP 登记状态：菜单里「添加 zen-gitsync MCP」的提示要用
     openClaudeMenu()
   } else {
     openToolInstall('claude')
@@ -550,6 +552,40 @@ async function onOpenInPi() {
   );
 }
 
+// ── 添加 zen-gitsync MCP（右键菜单里的一键登记） ──────────────────────
+// 入口只对 mcpInstall 白名单里的工具显示（targetOf 非空）；右侧提示用菜单打开时
+// 拉到的登记状态（已添加 / 一键安装 / 检测中…）。写配置文件的真相在服务端
+// src/mcp/install.js（与 CLI 的 `g mcp install` 同一份），这里只调 API。
+const mcpInstall = useMcpInstallStore()
+const mcpInstalling = ref<ToolId | null>(null)
+
+/** 菜单项右侧的状态提示 key（存 key 不存译好的字符串，理由同 SimpleTool.labelKey） */
+function mcpHintKey(tool: ToolId): string {
+  const state = mcpInstall.installedState(tool)
+  if (state === 'yes') return '@67CE7:已添加'
+  if (state === 'no') return '@67CE7:一键安装'
+  return '@67CE7:检测中…'
+}
+
+/** 点「添加 zen-gitsync MCP」：装成功后刷新状态，提示从「一键安装」翻成「已添加」 */
+async function onInstallMcp(tool: ToolId) {
+  closeSimpleMenu()
+  closeClaudeMenu()
+  if (mcpInstalling.value) return
+  mcpInstalling.value = tool
+  try {
+    const r = await mcpInstall.installFor(tool)
+    if (r.success) {
+      ElMessage.success(r.message || $t('@67CE7:已添加 zen-gitsync MCP'))
+      await mcpInstall.fetchStatuses(true)
+    } else {
+      ElMessage.error(`${$t('@67CE7:添加 MCP 失败: ')}${r.error ?? ''}`)
+    }
+  } finally {
+    mcpInstalling.value = null
+  }
+}
+
 // 右键菜单（el-popover manual 模式）—— 避开 el-dropdown 在 el-tooltip 嵌套下的 contextmenu 失效问题
 const claudeMenuVisible = ref(false)
 const claudeTriggerRef = ref<HTMLElement | null>(null)
@@ -653,6 +689,7 @@ async function onSimpleToolContextMenu(tool: SimpleTool) {
   }
   simpleMenuTool.value = tool
   void toolsStore.fetchLatestVersions() // 右键打开菜单时顺带查最新版(5 分钟缓存)
+  void mcpInstall.fetchStatuses() // MCP 登记状态：菜单里「添加 zen-gitsync MCP」的提示要用
   simpleMenuVisible.value = !simpleMenuVisible.value
 }
 
@@ -988,6 +1025,22 @@ function onBrowserSelect(path: string) {
               </li>
               <li class="claude-menu__sep" role="separator" />
             </template>
+            <!-- 添加 zen-gitsync MCP：只对白名单里的工具显示（mcpTargetOf 非空）。
+                 排在档位之后、「更新」之前 —— 它和更新同属"往这个工具里加东西"，
+                 与"用什么权限打开"不是一类事。 -->
+            <li
+              v-if="mcpInstall.targetOf(tool.id)"
+              class="claude-menu__item"
+              role="menuitem"
+              tabindex="-1"
+              :aria-disabled="mcpInstalling === tool.id"
+              @click="onInstallMcp(tool.id)"
+              @keydown.enter.prevent="onInstallMcp(tool.id)"
+              @keydown.space.prevent="onInstallMcp(tool.id)"
+            >
+              <span class="claude-menu__label">{{ $t('@67CE7:添加 zen-gitsync MCP') }}</span>
+              <span class="claude-menu__hint">{{ mcpInstalling === tool.id ? $t('@67CE7:正在添加…') : $t(mcpHintKey(tool.id)) }}</span>
+            </li>
             <li
               class="claude-menu__item"
               role="menuitem"
@@ -1072,6 +1125,21 @@ function onBrowserSelect(path: string) {
             <span class="claude-menu__hint">真·完全批准（含 Shell）</span>
           </li>
           <li class="claude-menu__sep" role="separator" />
+          <!-- claude 按钮的 MCP 目标是与 CLI 直连的 ~/.claude.json（不是 Claude Desktop
+               那份配置），所以这颗按钮同样给「添加 zen-gitsync MCP」入口。 -->
+          <li
+            v-if="mcpInstall.targetOf('claude')"
+            class="claude-menu__item"
+            role="menuitem"
+            tabindex="-1"
+            :aria-disabled="mcpInstalling === 'claude'"
+            @click="onInstallMcp('claude')"
+            @keydown.enter.prevent="onInstallMcp('claude')"
+            @keydown.space.prevent="onInstallMcp('claude')"
+          >
+            <span class="claude-menu__label">{{ $t('@67CE7:添加 zen-gitsync MCP') }}</span>
+            <span class="claude-menu__hint">{{ mcpInstalling === 'claude' ? $t('@67CE7:正在添加…') : $t(mcpHintKey('claude')) }}</span>
+          </li>
           <li
             class="claude-menu__item"
             role="menuitem"

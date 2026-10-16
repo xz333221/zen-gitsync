@@ -31,11 +31,17 @@
  *      不是就不能谎称（免批准要在界面上看得见，也不能反过来吓人）
  *   B  编排台项目「打开方式」菜单：各档位项都在，点对了就发对的 token
  *      （编排台**不做**直点改造 —— 那里逐档平铺，默认档仍单独成项）
- *   R  反向锚：没有档位的工具（vscode）菜单里**只有「更新」**——
+ *   M  「添加 zen-gitsync MCP」入口（2026-10-16 加）：每个支持 MCP 的工具
+ *      （vscode / codex / opencode / codebuddy / pi + claude 独立菜单）右键菜单里
+ *      都有这一项、状态提示按 /api/mcp-install/targets 的 mock 翻（已添加 / 一键安装）、
+ *      点在「更新」之前、点击 POST /api/mcp-install/install 且 target 正确、点完关菜单；
+ *      白名单外工具（kimi）**没有**这一项（反向锚）。POST 全被拦截，绝不写真实配置文件。
+ *   R  反向锚：没有档位的工具（vscode）菜单里**没有档位项**、且 = MCP 项 + 更新项——
  *      这是最容易写错的地方（一个 v-if 写错就让所有工具都长出档位项）
  *
  * 请求体怎么断言：`page.route` 直接拦掉这些 POST 并 fulfill 一个假成功 ——
  * 既拿到 body，又避免真去 spawn 一个终端 / TUI 窗口（那种副作用不该出现在验证里）。
+ * MCP 安装端点同样拦截（探针**绝不**真写用户的 mcp 配置）。
  *
  * 反向验证（把改动撤掉后哪几条会红）：
  *   · 删掉模板里那段 `v-for="tier in permissionTiersOf(tool.id)"` → A2/A3/A4 红
@@ -44,6 +50,8 @@
  *   · 让 v-if 条件恒真 → R 红
  *   · 默认档也传 token → A4 的"默认档不带字段"那条红
  *   · 把 TOOL_PRIMARY_MODE 里的 codex / opencode 删掉（回到默认档直点）→ A6 红
+ *   · 删掉菜单里的 MCP 项 → M1 红；把 TOOL_MCP_TARGETS 里某项删掉 → 对应 M1/M6 红
+ *   · 把 MCP 项挪到「更新」之后 → M3 红；点击发的 target 写错 → M4 红
  *
  * 用法：先 `npm run dev`（后端 5545 + vite 5544），再
  *   node scripts/verify-open-with-permission-menus.cjs
@@ -115,6 +123,23 @@ const PROJECT_CASES = [
   { label: '用 Kimi Code 打开（完全批准）', mode: 'auto' },
 ]
 
+/**
+ * 「添加 zen-gitsync MCP」入口要逐一验的工具。
+ * expectedHint 来自下面 GET /api/mcp-install/targets 的 mock（vscode=已添加，其余=一键安装）。
+ * target 是点击后应发给 /api/mcp-install/install 的 id —— 与服务端 TARGETS 对齐，
+ * 错位就点错人（比如 claude 应指向 claude-code 而不是 Claude Desktop 的 claude）。
+ */
+const MCP_CASES = [
+  { id: 'vscode', aria: 'VSCode', buttonPrefix: '用 VSCode 打开', target: 'vscode', expectedHint: '已添加' },
+  { id: 'codex', aria: 'Codex', buttonPrefix: '用 Codex 打开', target: 'codex', expectedHint: '一键安装' },
+  { id: 'opencode', aria: 'OpenCode', buttonPrefix: '用 OpenCode 打开', target: 'opencode', expectedHint: '一键安装' },
+  { id: 'codebuddy', aria: 'CodeBuddy Code', buttonPrefix: '用 CodeBuddy Code 打开', target: 'codebuddy', expectedHint: '一键安装' },
+  { id: 'pi', aria: 'Pi Agent', buttonPrefix: '用 Pi Agent 打开', target: 'pi', expectedHint: '一键安装' },
+]
+
+/** 白名单外的工具（没核实 MCP 支持）—— 菜单里不许出现 MCP 项 */
+const MCP_NEGATIVE_CASE = { aria: 'Kimi Code', buttonPrefix: '用 Kimi Code 打开' }
+
 const results = []
 const consoleErrors = []
 const pageErrors = []
@@ -158,7 +183,7 @@ async function main() {
   // 因此写入侧（save-ui-settings）也要吞掉：store 加载完会把 ui 整体替换一次，
   // headerToolsHidden 的 watch 可能跟着回写一份，那份是被我们改过的可见名单，
   // 真写下去就把用户的偏好改了。
-  const needPinned = [...TOPBAR_CASES.map(c => c.id), 'vscode'] // vscode 是 R 那条反向锚的对照组
+  const needPinned = [...TOPBAR_CASES.map(c => c.id), 'vscode', 'claude', 'pi'] // vscode 是 R 的对照组；claude / pi 给 M 段用
   await context.route('**/api/config/getConfig', async (route) => {
     const resp = await route.fetch()
     let data = null
@@ -189,6 +214,37 @@ async function main() {
           ? `已用 X 打开目录（mode=${body.permissionMode}）`
           : '已用 X 打开目录',
       }),
+    })
+  })
+
+  // 「添加 zen-gitsync MCP」的两个端点：GET targets 回一份固定状态（vscode 已添加、
+  // 其余未添加 —— 让菜单提示可预测）；POST 只记 body，**绝不真的写用户 mcp 配置**。
+  const mcpBodies = []
+  await context.route('**/api/mcp-install/**', async (route) => {
+    const req = route.request()
+    if (req.method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          targets: [
+            { id: 'vscode', label: 'VS Code', file: 'C:\\x\\mcp.json', installed: true, parent_exists: true },
+            { id: 'claude-code', label: 'Claude Code（CLI）', file: 'C:\\x\\.claude.json', installed: false, parent_exists: true },
+            { id: 'codex', label: 'Codex CLI', file: 'C:\\x\\config.toml', installed: false, parent_exists: true },
+            { id: 'opencode', label: 'OpenCode', file: 'C:\\x\\opencode.json', installed: false, parent_exists: true },
+            { id: 'codebuddy', label: 'CodeBuddy Code', file: 'C:\\x\\.mcp.json', installed: false, parent_exists: true },
+            { id: 'pi', label: 'Pi Agent', file: 'C:\\x\\mcp.json', installed: false, parent_exists: true },
+          ],
+        }),
+      })
+      return
+    }
+    try { mcpBodies.push(req.postDataJSON()) } catch { /* 非法 JSON 就当没有 */ }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, changed: true, message: '已写入（探针拦截，未落盘）' }),
     })
   })
 
@@ -223,6 +279,21 @@ async function main() {
       })),
     }
   }, ariaLabel)
+
+  /** claude 的菜单挂在 .claude-menu-popover（与 simple 工具的 popper 不同类），单独查 */
+  const claudeMenuItems = () => page.evaluate(() => {
+    const menu = Array.from(document.querySelectorAll('.claude-menu-popover .claude-menu'))
+      .filter(m => m.getBoundingClientRect().width > 0)[0]
+    if (!menu) return null
+    return {
+      items: Array.from(menu.children).map((k, i) => ({
+        i,
+        kind: k.classList.contains('claude-menu__sep') ? 'sep' : (k.querySelector('.claude-menu__label') ? 'item' : 'other'),
+        label: (k.querySelector('.claude-menu__label')?.textContent || '').replace(/\s+/g, ' ').trim(),
+        hint: (k.querySelector('.claude-menu__hint')?.textContent || '').replace(/\s+/g, ' ').trim(),
+      })),
+    }
+  })
 
   const openTopbarMenu = async (c) => {
     await triggerOf(c.buttonPrefix).click({ button: 'right' })
@@ -333,19 +404,112 @@ async function main() {
       await closeMenus()
     }
 
-    // ── R 反向锚：没有档位的工具菜单里只有「更新」 ─────────────────
+    // ── R 反向锚：没有档位的工具菜单 = MCP 项 + 更新项 ─────────────
     const vscodeBtn = page.locator('.simple-tool-trigger button[aria-label^="用 VSCode 打开"]')
     if ((await vscodeBtn.count()) === 1) {
       await triggerOf('用 VSCode 打开').click({ button: 'right' })
       await waitUntil(async () => (await menuItems('VSCode')) !== null, 8000)
       const vscodeMenu = await menuItems('VSCode')
       const labels = (vscodeMenu?.items || []).map(i => i.label)
-      check('R 反向锚：无档位的工具菜单里只有「更新」（档位表没漏成对所有工具生效）',
-        !!vscodeMenu && labels.length === 1 && labels[0].startsWith('更新'),
+      check('R 反向锚：无档位的工具菜单 = MCP 项 + 更新项（档位表没漏成对所有工具生效）',
+        !!vscodeMenu && labels.length === 2 && labels[0] === '添加 zen-gitsync MCP' && labels[1].startsWith('更新'),
         JSON.stringify(vscodeMenu?.items.map(i => i.label + '/' + i.hint)))
       await closeMenus()
     } else {
-      check('R 反向锚：无档位的工具菜单里只有「更新」', false, 'vscode 不在顶栏，无法做这条反向锚')
+      check('R 反向锚：无档位的工具菜单 = MCP 项 + 更新项', false, 'vscode 不在顶栏，无法做这条反向锚')
+    }
+
+    // ── M 「添加 zen-gitsync MCP」入口（顶栏右键菜单的一键登记） ────
+    // 每个支持 MCP 的工具菜单里都该有；状态提示按 GET targets 的 mock 翻；
+    // 点击 POST /api/mcp-install/install 且 target 与服务端 TARGETS 对齐。
+    for (const c of MCP_CASES) {
+      const tag = `[${c.aria}]`
+      const btn = page.locator(`.simple-tool-trigger button[aria-label^="${c.buttonPrefix}"]`)
+      if ((await btn.count()) !== 1) {
+        check(`M0${tag} 固定在顶栏`, false, '该工具没出现在顶栏（没装 / 检测没跑完）')
+        continue
+      }
+      if (!(await openTopbarMenu(c))) {
+        check(`M1${tag} 右键弹出菜单`, false)
+        continue
+      }
+      // 状态提示是发了 GET targets 之后才翻的（初始是「检测中…」），等它落定再看
+      const hintOk = await waitUntil(async () => {
+        const m = await menuItems(c.aria)
+        return m?.items.find(it => it.label === '添加 zen-gitsync MCP')?.hint === c.expectedHint
+      }, 8000)
+      const menu = await menuItems(c.aria)
+      const item = menu?.items.find(it => it.kind === 'item' && it.label === '添加 zen-gitsync MCP')
+      check(`M1${tag} 菜单里有「添加 zen-gitsync MCP」项`, !!item,
+        `items=${JSON.stringify(menu?.items.map(i => i.label))}`)
+      check(`M2${tag} 状态提示 = ${c.expectedHint}`, hintOk, `hint=${item?.hint}`)
+      const updateItem = menu?.items.find(it => it.kind === 'item' && it.label.startsWith('更新'))
+      check(`M3${tag} MCP 项排在「更新」之前`, !!item && !!updateItem && item.i < updateItem.i,
+        `mcp@${item?.i} 更新@${updateItem?.i}`)
+
+      if (item) {
+        mcpBodies.length = 0
+        await clickMenuItem(c.aria, '添加 zen-gitsync MCP')
+        const got = await waitUntil(async () => mcpBodies.length > 0, 8000)
+        check(`M4${tag} 点击 → POST /api/mcp-install/install target=${c.target}`,
+          got && mcpBodies[0]?.target === c.target, JSON.stringify(mcpBodies[0] || null))
+        check(`M5${tag} 点完菜单关闭`, await waitUntil(async () => (await menuItems(c.aria)) === null, 5000))
+      }
+      await dismissToasts()
+      await closeMenus()
+    }
+
+    // M6 负向锚：白名单外的工具（kimi）菜单里没有 MCP 项（一个 v-if 写错就会长出来）
+    {
+      const btn = page.locator(`.simple-tool-trigger button[aria-label^="${MCP_NEGATIVE_CASE.buttonPrefix}"]`)
+      if ((await btn.count()) === 1) {
+        if (await openTopbarMenu({ aria: MCP_NEGATIVE_CASE.aria, buttonPrefix: MCP_NEGATIVE_CASE.buttonPrefix })) {
+          const menu = await menuItems(MCP_NEGATIVE_CASE.aria)
+          const has = !!menu?.items.some(it => it.label === '添加 zen-gitsync MCP')
+          check('M6 反向锚：白名单外工具（kimi）没有 MCP 项', !has,
+            `items=${JSON.stringify(menu?.items.map(i => i.label))}`)
+        } else {
+          check('M6 反向锚：白名单外工具（kimi）没有 MCP 项', false, '菜单没弹出来')
+        }
+        await closeMenus()
+      } else {
+        check('M6 反向锚：白名单外工具（kimi）没有 MCP 项', false, 'kimi 不在顶栏，无法做这条反向锚')
+      }
+    }
+
+    // M7/M8 Claude Code 的独立菜单：MCP 项也在「更新」之前，点击 → target=claude-code
+    // （登记进 Claude Code CLI 的 ~/.claude.json，而不是 Claude Desktop 那份）
+    {
+      const claudeTrigger = page.locator('.claude-code-trigger')
+      if ((await claudeTrigger.count()) === 1) {
+        await claudeTrigger.click({ button: 'right' })
+        const opened = await waitUntil(async () => (await claudeMenuItems()) !== null, 8000)
+        check('M7[Claude Code] 右键弹出菜单', opened)
+        if (opened) {
+          await waitUntil(async () => {
+            const m = await claudeMenuItems()
+            return m?.items.find(it => it.label === '添加 zen-gitsync MCP')?.hint === '一键安装'
+          }, 8000)
+          const menu = await claudeMenuItems()
+          const item = menu?.items.find(it => it.label === '添加 zen-gitsync MCP')
+          const updateItem = menu?.items.find(it => it.label.startsWith('更新'))
+          check('M7[Claude Code] 菜单里有「添加 zen-gitsync MCP」且在「更新」之前',
+            !!item && !!updateItem && item.i < updateItem.i,
+            `items=${JSON.stringify(menu?.items.map(i => i.label))}`)
+          if (item) {
+            mcpBodies.length = 0
+            await page.locator('.claude-menu-popover .claude-menu__item', { hasText: '添加 zen-gitsync MCP' })
+              .first().click({ timeout: 4000 }).catch(() => {})
+            const got = await waitUntil(async () => mcpBodies.length > 0, 8000)
+            check('M8[Claude Code] 点击 → POST target=claude-code',
+              got && mcpBodies[0]?.target === 'claude-code', JSON.stringify(mcpBodies[0] || null))
+          }
+        }
+        await dismissToasts()
+        await closeMenus()
+      } else {
+        check('M7[Claude Code] 右键弹出菜单', false, 'claude 按钮不在顶栏')
+      }
     }
 
     // ── B 编排台项目菜单 ───────────────────────────────────────────

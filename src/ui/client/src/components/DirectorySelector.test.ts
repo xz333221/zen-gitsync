@@ -3,6 +3,7 @@ import { flushPromises } from '@vue/test-utils'
 import { ElMessage } from 'element-plus'
 import { mountWithSetup } from '@/test-utils/mount'
 import { useConfigStore } from '@/stores/configStore'
+import { useToolsStore } from '@/stores/toolsStore'
 import DirectorySelector from './DirectorySelector.vue'
 
 vi.mock('local-file-picker/client', () => ({ FilePickerModal: { template: '<div />' } }))
@@ -157,4 +158,173 @@ test('常用目录为空时「刷新全部」禁用,不发任何 fetch', async (
   await btn.trigger('click')
   await flushPromises()
   expect(calls).toHaveLength(0)
+})
+
+// ── 顶栏右键菜单：「添加 zen-gitsync MCP」 ──────────────────────────
+// 入口只对支持 MCP 的工具显示（mcpInstallStore 的 TOOL_MCP_TARGETS 白名单）；
+// 点击走 /api/mcp-install/install，写配置文件的真相在服务端。
+// 这里必须**全量挂载**：shallow 会把 el-popover 换成桩，菜单内容根本不在 DOM 里
+// （前四个用例只测 g ai 按钮和弹窗，用 shallow 就够）。Teleport 由 mountWithSetup
+// 默认内联到 wrapper 树。
+
+/** 把工具检测结果直接置成"已安装"，省掉 check-tools 往返 */
+function markToolsInstalled() {
+  const tools = useToolsStore()
+  tools.lastCheckedAt = Date.now()
+  tools.codexAvailable = true
+  tools.vscodeAvailable = true
+  tools.claudeAvailable = true
+  tools.opencodeAvailable = true
+  tools.codebuddyAvailable = true
+  tools.piAvailable = true
+  tools.kimiAvailable = true // 白名单外工具，用作反向对照
+}
+
+/** 桩掉 MCP 登记相关端点；返回记录到的 install 调用（{ target }） */
+function stubMcpFetch(targets: any[] = [], installResult: any = { success: true, changed: true, message: 'Codex CLI: 已写入 C:\\Users\\x\\.codex\\config.toml' }) {
+  const installCalls: Array<{ target: string }> = []
+  vi.stubGlobal('fetch', vi.fn(async (input: any, init?: any) => {
+    const url = typeof input === 'string' ? input : input.url
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if (url.includes('/api/mcp-install/targets')) return json({ success: true, targets })
+    if (url.includes('/api/mcp-install/install')) {
+      installCalls.push(JSON.parse(init?.body ?? '{}'))
+      return json(installResult)
+    }
+    if (url.includes('/api/latest-tool-versions')) return json({ success: true, latest: {} })
+    return json({ success: true })
+  }))
+  return installCalls
+}
+
+function mountFull() {
+  wrapper = mountWithSetup(DirectorySelector, {
+    props: { variant: 'header' },
+    global: { stubs: { ...baseStubs } },
+  })
+  return wrapper
+}
+
+/**
+ * 从 document.body 上找某个工具的菜单。
+ *
+ * ⚠️ el-popover 的 popper 内容是真 teleport 到 body 的（VTU 的 Teleport stub 拦不住
+ * 组件内部直接 import 的 Teleport），wrapper 树里看不到 —— 与探针
+ * verify-open-with-permission-menus.cjs 一样按 aria-label 在 document 上找。
+ * 同一工具只有一份菜单，aria-label 就够区分；其余工具的菜单也全在 DOM 里（藏着）。
+ */
+function menuInBody(ariaLabel: string): HTMLElement | undefined {
+  return Array.from(document.querySelectorAll<HTMLElement>('.claude-menu'))
+    .find(m => m.getAttribute('aria-label') === ariaLabel)
+}
+
+/** 右键某个顶栏工具按钮，返回它那份菜单（trigger 自身在 wrapper 里，用 VTU 触发） */
+async function openToolMenu(view: ReturnType<typeof mountFull>, ariaPrefix: string, menuAria: string) {
+  const trigger = view.findAll('.simple-tool-trigger')
+    .find((s: any) => s.find('button').attributes('aria-label')?.startsWith(ariaPrefix))
+  expect(trigger, `顶栏找不到 ${ariaPrefix} 按钮`).toBeTruthy()
+  await trigger!.trigger('contextmenu')
+  await flushPromises()
+  const menu = menuInBody(menuAria)
+  expect(menu, `${menuAria} 的右键菜单没渲染`).toBeTruthy()
+  return menu!
+}
+
+/** 菜单里的「添加 zen-gitsync MCP」项（没有就是 undefined） */
+function mcpItemIn(menu: HTMLElement): HTMLElement | undefined {
+  return Array.from(menu.querySelectorAll<HTMLElement>('.claude-menu__item'))
+    .find(li => li.textContent?.includes('@67CE7:添加 zen-gitsync MCP'))
+}
+
+/** teleport 出去的菜单项用原生 click（Vue 的监听挂在元素本身，会照常触发） */
+async function clickEl(el: HTMLElement) {
+  el.click()
+  await flushPromises()
+}
+
+test('右键 Codex:菜单含「添加 zen-gitsync MCP」,点击后一键登记并提示', async () => {
+  const installCalls = stubMcpFetch([
+    { id: 'codex', label: 'Codex CLI', file: 'C:\\Users\\x\\.codex\\config.toml', installed: false, parent_exists: true },
+  ])
+  const view = mountFull()
+  markToolsInstalled()
+  await flushPromises()
+
+  const menu = await openToolMenu(view, '@67CE7:用 Codex 打开', 'Codex')
+  const item = mcpItemIn(menu)
+  expect(item, 'Codex 菜单里没有 MCP 安装项').toBeTruthy()
+  expect(item!.textContent).toContain('@67CE7:一键安装') // 没登记过 → 一键安装
+
+  await clickEl(item!)
+  expect(installCalls).toEqual([{ target: 'codex' }])
+  expect(ElMessage.success).toHaveBeenCalledWith(expect.stringContaining('已写入'))
+})
+
+test('已登记的工具,菜单项提示翻成「已添加」', async () => {
+  stubMcpFetch([
+    { id: 'codex', label: 'Codex CLI', file: 'C:\\Users\\x\\.codex\\config.toml', installed: true, parent_exists: true },
+  ])
+  const view = mountFull()
+  markToolsInstalled()
+  await flushPromises()
+
+  const menu = await openToolMenu(view, '@67CE7:用 Codex 打开', 'Codex')
+  expect(mcpItemIn(menu)!.textContent).toContain('@67CE7:已添加')
+})
+
+test('登记失败 → 错误提示带服务端给的原因', async () => {
+  stubMcpFetch([], { success: false, error: '配置文件不是合法 JSON,已跳过: C:\\Users\\x\\.claude.json' })
+  const view = mountFull()
+  markToolsInstalled()
+  await flushPromises()
+
+  const menu = await openToolMenu(view, '@67CE7:用 Codex 打开', 'Codex')
+  await clickEl(mcpItemIn(menu)!)
+  expect(ElMessage.error).toHaveBeenCalledWith(expect.stringContaining('不是合法 JSON'))
+})
+
+test('白名单外工具(kimi)的菜单没有 MCP 安装项', async () => {
+  stubMcpFetch([])
+  const view = mountFull()
+  markToolsInstalled()
+  await flushPromises()
+
+  // kimi 的 MCP 支持没核实过（mcpInstallStore 白名单里没有它）→ 不给入口
+  const menu = await openToolMenu(view, '@67CE7:用 Kimi Code 打开', 'Kimi Code')
+  expect(mcpItemIn(menu)).toBeUndefined()
+})
+
+test('没有权限档的 vscode 菜单 = MCP 项 + 更新项（档位表没漏成对所有工具生效）', async () => {
+  stubMcpFetch([
+    { id: 'vscode', label: 'VS Code', file: 'C:\\Users\\x\\AppData\\Roaming\\Code\\User\\mcp.json', installed: false, parent_exists: true },
+  ])
+  const view = mountFull()
+  markToolsInstalled()
+  await flushPromises()
+
+  const menu = await openToolMenu(view, '@67CE7:用 VSCode 打开', 'VSCode')
+  const labels = Array.from(menu.querySelectorAll('.claude-menu__item')).map(li => li.textContent || '')
+  expect(labels).toHaveLength(2)
+  expect(labels[0]).toContain('@67CE7:添加 zen-gitsync MCP')
+  expect(labels[1]).toContain('@67CE7:更新')
+})
+
+test('右键 Claude Code 按钮:MCP 入口登记到 claude-code（CLI 的 ~/.claude.json，不是 Desktop 那份）', async () => {
+  const installCalls = stubMcpFetch([
+    { id: 'claude-code', label: 'Claude Code（CLI）', file: 'C:\\Users\\x\\.claude.json', installed: false, parent_exists: true },
+  ])
+  const view = mountFull()
+  markToolsInstalled()
+  await flushPromises()
+
+  await view.get('.claude-code-trigger').trigger('contextmenu')
+  await flushPromises()
+  const menu = menuInBody('@67CE7:Claude Code 启动模式')
+  expect(menu, 'Claude Code 的右键菜单没渲染').toBeTruthy()
+
+  const item = mcpItemIn(menu!)
+  expect(item, 'Claude Code 菜单里没有 MCP 安装项').toBeTruthy()
+  await clickEl(item!)
+  expect(installCalls).toEqual([{ target: 'claude-code' }])
 })

@@ -63,6 +63,7 @@ npm install -g zen-gitsync
 - **Workbench** — a multi-project board with a kanban view and a master-agent dispatch console; task-driven agent execution (Claude Code or OpenCode) with prompt presets, isolated per-task processes, live streaming output, AI-generated presets and task-level attachments
 - **Repository cloning** — clone any GitHub / Gitee repository into a folder straight from the repo browser, with an *Already cloned* badge (and its local path(s), including the count when a repo lives in several folders) backed by a whole-disk local-repository scan
 - **Skill / MCP marketplace** — install skills and MCP servers from the Agent view into the current project or the `g ai` agent
+- **One-click MCP install** — right-click an editor / AI tool button in the header (VS Code, Claude Code, Codex, OpenCode, CodeBuddy Code, Pi Agent) and choose *Add zen-gitsync MCP* to register zen-gitsync as that tool's MCP server: merged into its config in place with a `.bak` backup (never hand-edit config files again), and the menu shows whether it is already added. The same registry is available from the CLI via `g mcp install`
 - **Reset to remote** — One-click `git reset --hard origin/<branch>` from the Git panel (auto-refreshes branch info first to avoid wrong-target resets)
 - **AI commit message** — Generate commit message from staged diff automatically
 - **AI commit & push** — One click does the whole loop: AI writes the commit message from the diff, then stages → commits → pushes (no need to type a message first)
@@ -768,6 +769,7 @@ npm install -g zen-gitsync
 - **工作台** — 多项目看板 + 主 Agent 派发控制台；任务驱动的智能体执行（Claude Code 或 OpenCode），支持提示词预置、任务级附件、独立进程、实时流式回传与 AI 生成预置提示词
 - **仓库克隆** — 在仓库浏览器里把任意 GitHub / Gitee 仓库直接克隆到指定文件夹，卡片带「已克隆」徽标与本地路径（同一仓库克隆到多处时会显示条数，由全盘本地仓库扫描得出）
 - **Skill / MCP 广场** — 在智能体页把 Skill 与 MCP 服务安装到当前项目或 `g ai` 智能体
+- **一键添加 MCP** — 右键顶栏的编辑器 / AI 工具按钮（VS Code、Claude Code、Codex、OpenCode、CodeBuddy Code、Pi Agent），选「添加 zen-gitsync MCP」即可把 zen-gitsync 登记为那个工具的 MCP 服务 —— 合并式写入 + `.bak` 备份，不用手改配置文件；菜单里会标出是否已添加。同一份登记逻辑在 CLI 侧是 `g mcp install`
 - **重置到远程** — 在 Git 面板一键执行 `git reset --hard origin/<branch>`（点击前会先自动刷新分支信息，避免重置到陈旧分支）
 - **AI 生成提交信息** — 基于 staged diff 自动生成提交消息
 - **AI 提交并推送** — 一键跑完整条链路：AI 从 diff 写好提交信息 → 暂存 → 提交 → 推送（不必先自己敲一条提交信息）

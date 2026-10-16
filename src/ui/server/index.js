@@ -55,6 +55,7 @@ import { registerHealthRoutes } from './routes/health.js';
 import { registerMonitorRoutes } from './routes/monitor.js';
 import { registerMindmapRoutes } from './routes/mindmap.js';
 import { registerMemoryRoutes } from './routes/memory.js';
+import { registerMcpInstallRoutes } from './routes/mcpInstall.js';
 import { registerAgentRoutes } from './routes/workbench/agentRoutes.js';
 import { createWorkspaceSnapshotter } from './routes/aiContext/wiring.js';
 // jobStore 只借两个读函数:让 MCP 能用**本进程内存**里的 job 表(完整输出),
@@ -548,6 +549,11 @@ async function startUIServer(noOpen = false, savePort = false) {
       if (level === 'error' || level === 'warn') logger.warn?.(`[mcp] ${message}`);
     },
   }));
+
+  // 「添加 zen-gitsync MCP」：顶栏编辑器按钮右键菜单的一键登记。安装逻辑与 CLI 的
+  // `g mcp install` 共用 src/mcp/install.js（白名单目标 + 合并式写入 + .bak 备份），
+  // 这里只是它的 HTTP 门面。
+  registerMcpInstallRoutes({ app });
 
   perfMark('全部 API 路由注册完成')
 

@@ -16,8 +16,9 @@
 //
 // 为什么要有它:MCP 的接入方式本质上是"在那个 Agent 的配置文件里加一段",而
 // 每个产品的配置**文件路径与格式都不一样**(Claude Desktop 是 json、Codex 是 toml、
-// Cursor 又是另一个 json)。让用户自己手抄路径是最容易出错的一步 —— 写错位置的表现
-// 是"配了但没生效",而错误日志往往指向别处。
+// VS Code 的 mcp.json 用 servers 键、OpenCode 的 server 直接挂在 mcp 下且 command
+// 是数组)。让用户自己手抄路径是最容易出错的一步 —— 写错位置的表现是"配了但没生效",
+// 而错误日志往往指向别处。
 //
 // 三条设计约束:
 //   1. **只加不覆盖**:合并式写入,保留文件里原有的 server 与其它配置项。
@@ -26,10 +27,17 @@
 //      并跳过(除非显式 --force)。免得凭空造出一堆没人用的配置文件。
 //   3. **幂等**:已经登记过且命令一致 → 报告"已存在",不重复写。
 //
+// 这个模块有**两个消费者**:
+//   · CLI 的 `g mcp install`(runMcpInstall,普通命令行,往 stdout 打印人看的文本);
+//   · g ui 的「顶栏编辑器按钮右键 → 添加 zen-gitsync MCP」(routes/mcpInstall.js,
+//     同一份 install/uninstall/listTargets,不另写一套)。
+// 所以下面所有函数都不碰 console(除 runMcpInstall 自己),也不假设调用方是终端。
+//
 // ⚠️ 这个入口是**普通命令行**,往 stdout 打印正常文本。这与 `g mcp`(stdio)不同 ——
 // 那条路 stdout 是协议通道,一句多余输出就会让客户端解析失败。两者靠 argv[3] 分流。
 import os from 'node:os';
 import path from 'node:path';
+import { existsSync } from 'node:fs';
 import { promises as fs } from 'node:fs';
 
 import { AI_MCP_FILE } from '../paths.js';
@@ -41,21 +49,99 @@ export const SERVER_ID = 'zen-gitsync';
 const COMMAND = 'g';
 const ARGS = ['mcp'];
 
+/**
+ * 默认 server 条目:stdio 形态的 command + args。
+ * Claude 系(Claude Desktop / Claude Code CLI / Cursor / Windsurf)、VS Code、
+ * Pi Agent 都是这个形状;形状不同的目标用自己的 `entry` 覆盖(见 TARGETS)。
+ */
+const DEFAULT_ENTRY = { command: COMMAND, args: ARGS };
+
+/**
+ * 家目录解析。测试用 ZEN_MCP_HOME 指到临时目录(与 paths.js 里
+ * ZEN_LOCAL_REPOS_CACHE 同一套路):TARGETS 的 file() 全是**调用时求值**,
+ * 所以 import 之后设环境变量也来得及,不需要像 paths.js 那样抢在 import 前。
+ */
+function homeDir() {
+  return process.env.ZEN_MCP_HOME || os.homedir();
+}
+
+/** Windows 的 APPDATA(Claude Desktop / VS Code 的用户级配置都在它下面)。ZEN_MCP_APPDATA 为测试钩子。 */
+function appDataDir() {
+  return process.env.ZEN_MCP_APPDATA || process.env.APPDATA || '';
+}
+
 /** 平台相关的配置文件位置。返回 null 表示该平台不支持这个目标。 */
 function claudeConfigPath() {
   if (process.platform === 'win32') {
-    return process.env.APPDATA ? path.join(process.env.APPDATA, 'Claude', 'claude_desktop_config.json') : null;
+    return appDataDir() ? path.join(appDataDir(), 'Claude', 'claude_desktop_config.json') : null;
   }
   if (process.platform === 'darwin') {
-    return path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+    return path.join(homeDir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
   }
-  return path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json');
+  return path.join(homeDir(), '.config', 'Claude', 'claude_desktop_config.json');
+}
+
+/**
+ * VS Code **用户级** mcp.json —— 命令面板 "MCP: Open User Configuration" 打开的
+ * 就是它(用户 profile 目录下),对所有工作区生效。注意键名是 `servers` 而不是
+ * `mcpServers`(VS Code 自己的格式;工作区里那份可移植的 .mcp.json 才用 mcpServers)。
+ */
+function vscodeConfigPath() {
+  if (process.platform === 'win32') {
+    return appDataDir() ? path.join(appDataDir(), 'Code', 'User', 'mcp.json') : null;
+  }
+  if (process.platform === 'darwin') {
+    return path.join(homeDir(), 'Library', 'Application Support', 'Code', 'User', 'mcp.json');
+  }
+  return path.join(homeDir(), '.config', 'Code', 'User', 'mcp.json');
+}
+
+/** OpenCode 全局配置。XDG 路径,全平台一个样(~/.config/opencode/opencode.json)。 */
+function opencodeConfigPath() {
+  return path.join(homeDir(), '.config', 'opencode', 'opencode.json');
+}
+
+/**
+ * CodeBuddy 的 MCP 配置:官方优先级 ~/.codebuddy/.mcp.json > ~/.codebuddy/mcp.json
+ * (deprecated) > ~/.codebuddy.json(legacy),**同作用域只读第一个存在的**。
+ * ⚠️ 所以不能无脑建 .mcp.json:用户有 ~/.codebuddy.json 时建新文件,旧文件里的
+ * 其他 server 会从 CodeBuddy 视野里消失(它不合并多个文件)。这里按"第一个存在的,
+ * 都没有就建优先级最高的"来选,与官方写入规则一致。
+ */
+function codebuddyConfigPath() {
+  const candidates = [
+    path.join(homeDir(), '.codebuddy', '.mcp.json'),
+    path.join(homeDir(), '.codebuddy', 'mcp.json'),
+    path.join(homeDir(), '.codebuddy.json'),
+  ];
+  return candidates.find(existsSync) || candidates[0];
+}
+
+/**
+ * Pi Agent 的全局 MCP 配置:<agentDir>/mcp.json。agentDir 默认 ~/.pi/agent,
+ * 可被官方环境变量 PI_CODING_AGENT_DIR 覆盖(executorModels.js 读 settings.json
+ * 用的就是同一个口径,两处不能分叉)。
+ */
+function piConfigPath() {
+  const dir = process.env.PI_CODING_AGENT_DIR
+    ? path.resolve(process.env.PI_CODING_AGENT_DIR)
+    : path.join(homeDir(), '.pi', 'agent');
+  return path.join(dir, 'mcp.json');
 }
 
 /**
  * 已知目标。
- * kind: 'json' = 顶层有 mcpServers 对象(与 Claude / Cursor / Windsurf / 自家同形);
+ * kind: 'json' = 顶层(或 jsonPath 指定的那层)有 server 表;
  *       'toml' = Codex 的 TOML,用 [mcp_servers.<id>] 段。
+ *
+ * 两个可选字段(不给就走默认):
+ *   jsonPath —— server 表在 JSON 里的路径。默认 ['mcpServers'](Claude 系);
+ *              VS Code 是 ['servers'];OpenCode 是 ['mcp'](server 名直接挂在 mcp 下,
+ *              v1 配置格式;当前 stable schema 同时兼容 mcp.servers,写 v1 形状
+ *              1.x/2.x 都认)。
+ *   entry    —— 写进去的 server 条目。默认 { command:'g', args:['mcp'] };
+ *              OpenCode 的 command 是**数组**且要 type/enabled;CodeBuddy 官方建议
+ *              显式 type。各家形状不同,不硬凑一个公共词。
  */
 export const TARGETS = [
   {
@@ -73,22 +159,59 @@ export const TARGETS = [
     note: '重启 Claude Desktop 生效',
   },
   {
+    id: 'claude-code',
+    label: 'Claude Code（CLI）',
+    kind: 'json',
+    file: () => path.join(homeDir(), '.claude.json'),
+    note: '重开 claude 会话生效',
+  },
+  {
     id: 'cursor',
     label: 'Cursor',
     kind: 'json',
-    file: () => path.join(os.homedir(), '.cursor', 'mcp.json'),
+    file: () => path.join(homeDir(), '.cursor', 'mcp.json'),
+  },
+  {
+    id: 'vscode',
+    label: 'VS Code',
+    kind: 'json',
+    file: vscodeConfigPath,
+    jsonPath: ['servers'],
+    note: '命令面板运行 MCP: List Servers 可查看',
   },
   {
     id: 'windsurf',
     label: 'Windsurf',
     kind: 'json',
-    file: () => path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json'),
+    file: () => path.join(homeDir(), '.codeium', 'windsurf', 'mcp_config.json'),
+  },
+  {
+    id: 'opencode',
+    label: 'OpenCode',
+    kind: 'json',
+    file: opencodeConfigPath,
+    jsonPath: ['mcp'],
+    entry: { type: 'local', command: [COMMAND, ...ARGS], enabled: true },
+  },
+  {
+    id: 'codebuddy',
+    label: 'CodeBuddy Code',
+    kind: 'json',
+    file: codebuddyConfigPath,
+    entry: { type: 'stdio', ...DEFAULT_ENTRY },
+    note: '认第一个存在的配置文件，都没建过就建 ~/.codebuddy/.mcp.json',
+  },
+  {
+    id: 'pi',
+    label: 'Pi Agent',
+    kind: 'json',
+    file: piConfigPath,
   },
   {
     id: 'codex',
     label: 'Codex CLI',
     kind: 'toml',
-    file: () => path.join(os.homedir(), '.codex', 'config.toml'),
+    file: () => path.join(homeDir(), '.codex', 'config.toml'),
   },
 ];
 
@@ -102,6 +225,22 @@ async function parentExists(file) {
   }
 }
 
+/** server 表在 JSON 里的路径(没配 jsonPath 的目标走 Claude 系的 mcpServers) */
+function jsonKeysOf(target) {
+  return target.jsonPath || ['mcpServers'];
+}
+
+/** 顺着 jsonPath 下沉到 server 表本身;中间任何一层不是对象就回 null */
+function walkToServerMap(root, keys) {
+  let node = root;
+  for (const key of keys) {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return null;
+    node = node[key];
+  }
+  if (!node || typeof node !== 'object' || Array.isArray(node)) return null;
+  return node;
+}
+
 /** 配置里当前是否已经登记了 zen-gitsync(只为判断"装过没有") */
 function currentServerConfig(raw, target) {
   if (!raw) return null;
@@ -110,8 +249,7 @@ function currentServerConfig(raw, target) {
     return re.test(raw) ? { command: COMMAND } : null;
   }
   try {
-    const parsed = JSON.parse(raw);
-    return parsed?.mcpServers?.[SERVER_ID] || null;
+    return walkToServerMap(JSON.parse(raw), jsonKeysOf(target))?.[SERVER_ID] || null;
   } catch {
     return null;
   }
@@ -159,7 +297,7 @@ async function ensureDir(file) {
 }
 
 /** JSON 型:合并式写入,保留原有内容 */
-async function installJson(file, { force }) {
+async function installJson(file, target, { force }) {
   const exists = await fileExists(file);
   const raw = exists ? await fs.readFile(file, 'utf8').catch(() => '') : '';
   let parsed = null;
@@ -167,17 +305,35 @@ async function installJson(file, { force }) {
     try {
       parsed = JSON.parse(raw);
     } catch {
-      // 文件内容坏了 —— 不擅自覆盖用户的东西,除非他显式 --force
+      // 文件内容坏了 —— 不擅自覆盖用户的东西,除非他显式 --force。
+      // (CodeBuddy 的配置允许 JSONC 注释,那种文件也会走到这里:宁可跳过并告知,
+      //  也不要写坏。)
       if (!force) return { ok: false, error: `配置文件不是合法 JSON,已跳过(要覆盖请加 --force): ${file}` };
       parsed = null;
     }
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) parsed = {};
-  if (!parsed.mcpServers || typeof parsed.mcpServers !== 'object') parsed.mcpServers = {};
 
-  const before = JSON.stringify(parsed.mcpServers[SERVER_ID] || null);
-  parsed.mcpServers[SERVER_ID] = { command: COMMAND, args: ARGS };
-  const after = JSON.stringify(parsed.mcpServers[SERVER_ID]);
+  const keys = jsonKeysOf(target);
+  // 逐级下沉:中间层不存在就建对象;已存在但不是对象 → 宁可跳过也不覆盖用户数据。
+  let node = parsed;
+  for (let i = 0; i < keys.length - 1; i++) {
+    const key = keys[i];
+    if (node[key] === undefined || node[key] === null) node[key] = {};
+    if (typeof node[key] !== 'object' || Array.isArray(node[key])) {
+      return { ok: false, error: `配置文件的 ${keys.slice(0, i + 1).join('.')} 不是对象,已跳过: ${file}` };
+    }
+    node = node[key];
+  }
+  const mapKey = keys[keys.length - 1];
+  if (node[mapKey] === undefined || node[mapKey] === null) node[mapKey] = {};
+  if (typeof node[mapKey] !== 'object' || Array.isArray(node[mapKey])) {
+    return { ok: false, error: `配置文件的 ${keys.join('.')} 不是对象,已跳过: ${file}` };
+  }
+
+  const before = JSON.stringify(node[mapKey][SERVER_ID] || null);
+  node[mapKey][SERVER_ID] = target.entry || DEFAULT_ENTRY;
+  const after = JSON.stringify(node[mapKey][SERVER_ID]);
   const changed = before !== after;
 
   if (changed && exists) await backup(file);
@@ -212,10 +368,13 @@ async function installToml(file) {
     let next = start + 1;
     while (next < lines.length && !isTomlSectionStart(lines[next])) next += 1;
     const merged = [...lines.slice(0, start), ...block.trimEnd().split('\n'), ...lines.slice(next)];
-    const changed = merged.join('\n') !== raw;
+    // ⚠️ 幂等比较必须拿**归一化之后**的文本比:merged 丢掉了行尾那个空串,
+    // 直接和 raw 比会永远差一个换行 → 每次重装都报 changed、都重写 + 备份。
+    const nextText = `${merged.join('\n').replace(/\s*$/, '')}\n`;
+    const changed = nextText !== raw;
     if (changed && exists) await backup(file);
     await ensureDir(file);
-    await fs.writeFile(file, `${merged.join('\n').replace(/\s*$/, '')}\n`, 'utf8');
+    await fs.writeFile(file, nextText, 'utf8');
     return { ok: true, changed, backup: changed && exists };
   }
 
@@ -224,6 +383,25 @@ async function installToml(file) {
   const prefix = raw.trim() ? `${raw.replace(/\s*$/, '')}\n\n` : '';
   await fs.writeFile(file, `${prefix}${block}`, 'utf8');
   return { ok: true, changed: true, backup: exists };
+}
+
+/** 从 JSON 配置里移除 zen-gitsync 这一段(顺着 jsonPath 下沉后再删) */
+async function uninstallJson(file, target) {
+  const raw = await fs.readFile(file, 'utf8');
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { ok: false, error: `配置文件不是合法 JSON,不敢动: ${file}` };
+  }
+  const map = walkToServerMap(parsed, jsonKeysOf(target));
+  if (!map || !(SERVER_ID in map)) {
+    return { ok: true, id: target.id, file, skipped: true, reason: '本来就没登记' };
+  }
+  delete map[SERVER_ID];
+  await backup(file);
+  await fs.writeFile(file, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+  return { ok: true, id: target.id, file, changed: true, backup: true };
 }
 
 /**
@@ -243,7 +421,7 @@ export async function install(targetId, { force = false } = {}) {
   }
 
   try {
-    const result = target.kind === 'toml' ? await installToml(file) : await installJson(file, { force });
+    const result = target.kind === 'toml' ? await installToml(file) : await installJson(file, target, { force });
     return { ...result, id: target.id, file };
   } catch (err) {
     return { ok: false, id: target.id, file, error: err?.message || String(err) };
@@ -258,8 +436,8 @@ export async function uninstall(targetId) {
   if (!file || !(await fileExists(file))) return { ok: true, id: target.id, file, skipped: true, reason: '配置文件不存在,无需移除' };
 
   try {
-    const raw = await fs.readFile(file, 'utf8');
     if (target.kind === 'toml') {
+      const raw = await fs.readFile(file, 'utf8');
       const lines = raw.split(/\r?\n/);
       const start = lines.findIndex(l => isTomlSectionStart(l) && l.includes(`mcp_servers.${SERVER_ID}`));
       if (start < 0) return { ok: true, id: target.id, file, skipped: true, reason: '本来就没有这一段' };
@@ -270,13 +448,7 @@ export async function uninstall(targetId) {
       await fs.writeFile(file, `${merged.join('\n').replace(/\n{3,}/g, '\n\n').replace(/\s*$/, '')}\n`, 'utf8');
       return { ok: true, id: target.id, file, changed: true, backup: true };
     }
-
-    const parsed = JSON.parse(raw);
-    if (!parsed?.mcpServers?.[SERVER_ID]) return { ok: true, id: target.id, file, skipped: true, reason: '本来就没登记' };
-    delete parsed.mcpServers[SERVER_ID];
-    await backup(file);
-    await fs.writeFile(file, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
-    return { ok: true, id: target.id, file, changed: true, backup: true };
+    return await uninstallJson(file, target);
   } catch (err) {
     return { ok: false, id: target.id, file, error: err?.message || String(err) };
   }
