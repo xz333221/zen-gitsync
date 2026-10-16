@@ -23,10 +23,10 @@
   - 会话持久化：后端自动保存到 ~/.zen-gitsync/agent-sessions/
 -->
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount, defineComponent, h } from 'vue'
 import { $t } from '@/lang/static'
 import { ElIcon } from 'element-plus'
-import { Loading, ChatDotRound, Goods, Connection, Timer, Setting } from '@element-plus/icons-vue'
+import { Loading } from '@element-plus/icons-vue'
 import { ChatContainer, ConversationList } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { useConfigStore } from '@/stores/configStore'
@@ -60,14 +60,42 @@ const chatPage = ref<'list' | 'chat'>('chat')
 type AgentTab = 'chat' | 'schedule' | 'skill' | 'mcp' | 'settings'
 const activeTab = ref<AgentTab>('chat')
 const marketplaceType = computed(() => (activeTab.value === 'mcp' ? 'mcp' : 'skill'))
+
+/** Tabler 图标（MIT）→ el-icon 可消费的组件（tabs 数组原来直接放 EP 图标组件，
+ *  换成官方线稿后保持同一形态：`<component :is="tab.icon" />` 不用动） */
+const tablerIcon = (...paths: string[]) => defineComponent({
+  render: () => h('svg', {
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    'stroke-width': 2,
+    'stroke-linecap': 'round',
+    'stroke-linejoin': 'round',
+  }, paths.map((d) => h('path', { d }))),
+})
+
 const tabs = computed(() => [
-  { id: 'chat' as const, label: $t('@AGENT:对话'), icon: ChatDotRound },
-  { id: 'schedule' as const, label: $t('@AGENT:定时任务'), icon: Timer },
-  { id: 'skill' as const, label: $t('@AGENT:Skill 广场'), icon: Goods },
-  { id: 'mcp' as const, label: $t('@AGENT:MCP 广场'), icon: Connection },
+  { id: 'chat' as const, label: $t('@AGENT:对话'), icon: tablerIcon(
+    'M12 11v.01', 'M8 11v.01', 'M16 11v.01',
+    'M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-5l-5 3v-3h-2a3 3 0 0 1-3-3v-8a3 3 0 0 1 3-3l12 0',
+  ) },
+  { id: 'schedule' as const, label: $t('@AGENT:定时任务'), icon: tablerIcon(
+    'M5 13a7 7 0 1 0 14 0a7 7 0 0 0-14 0', 'M14.5 10.5l-2.5 2.5', 'M17 8l1-1', 'M14 3h-4',
+  ) },
+  { id: 'skill' as const, label: $t('@AGENT:Skill 广场'), icon: tablerIcon(
+    'M6.331 8h11.339a2 2 0 0 1 1.977 2.304l-1.255 8.152a3 3 0 0 1-2.966 2.544h-6.852a3 3 0 0 1-2.965-2.544l-1.255-8.152a2 2 0 0 1 1.977-2.304',
+    'M9 11v-5a3 3 0 0 1 6 0v5',
+  ) },
+  { id: 'mcp' as const, label: $t('@AGENT:MCP 广场'), icon: tablerIcon(
+    'M7 12l5 5l-1.5 1.5a3.536 3.536 0 1 1-5-5l1.5-1.5', 'M17 12l-5-5l1.5-1.5a3.536 3.536 0 1 1 5 5l-1.5 1.5',
+    'M3 21l2.5-2.5', 'M18.5 5.5l2.5-2.5', 'M10 11l-2 2', 'M13 14l-2 2',
+  ) },
   // 设置放最后：它是配置项，不是日常入口。里面目前只有提示词设置
   //（两块：g ai 默认提示词 + 派发任务的提示词，见 AgentPromptSettings.vue）
-  { id: 'settings' as const, label: $t('@AGENT:设置'), icon: Setting },
+  { id: 'settings' as const, label: $t('@AGENT:设置'), icon: tablerIcon(
+    'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37c1 .608 2.296.07 2.572-1.065',
+    'M9 12a3 3 0 1 0 6 0a3 3 0 0 0-6 0',
+  ) },
 ])
 
 const {
