@@ -1645,28 +1645,31 @@ function stopPreviewResize() {
         <div class="sidebar-actions">
           <el-tooltip :content="$t('@EDITOR:新建文件')" placement="bottom" :show-after="300">
             <button class="sidebar-action-btn" @click="startNewFile">
-              <!-- new-file icon -->
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="12" y1="13" x2="12" y2="19"/><line x1="9" y1="16" x2="15" y2="16"/>
+              <!-- file-plus.svg（Tabler icons，MIT） -->
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+                <path d="M17 21h-10a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2" />
+                <path d="M12 11l0 6" />
+                <path d="M9 14l6 0" />
               </svg>
             </button>
           </el-tooltip>
           <el-tooltip :content="$t('@EDITOR:新建文件夹')" placement="bottom" :show-after="300">
             <button class="sidebar-action-btn" @click="startNewFolder">
-              <!-- new-folder icon -->
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                <line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>
+              <!-- folder-plus.svg（Tabler icons，MIT） -->
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 19h-7a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2h4l3 3h7a2 2 0 0 1 2 2v3.5" />
+                <path d="M16 19h6" />
+                <path d="M19 16v6" />
               </svg>
             </button>
           </el-tooltip>
           <el-tooltip :content="$t('@EDITOR:刷新')" placement="bottom" :show-after="300">
             <button class="sidebar-action-btn" @click="refreshTree({ notifyOnError: true })">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/>
-                <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+              <!-- refresh.svg（Tabler icons，MIT） -->
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                <path d="M20 11a8.1 8.1 0 0 0-15.5-2m-.5-4v4h4" />
+                <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
               </svg>
             </button>
           </el-tooltip>
@@ -1860,9 +1863,10 @@ function stopPreviewResize() {
           :title="showPreview ? $t('@EDITOR:关闭预览') : $t('@EDITOR:打开预览')"
           @click="togglePreview"
         >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-            <circle cx="12" cy="12" r="3"/>
+          <!-- eye.svg（Tabler icons，MIT） -->
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0-4 0" />
+            <path d="M21 12c-2.4 4-5.4 6-9 6c-3.6 0-6.6-2-9-6c2.4-4 5.4-6 9-6c3.6 0 6.6 2 9 6" />
           </svg>
           <span>{{ $t('@EDITOR:预览') }}</span>
         </button>
@@ -1875,16 +1879,17 @@ function stopPreviewResize() {
           :title="isMindmapable ? (showMindmap ? $t('@EDITOR:关闭思维导图') : $t('@EDITOR:打开思维导图')) : $t('@EDITOR:需要至少一个 # 标题')"
           @click="toggleMindmap"
         >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="2"/>
-            <circle cx="5" cy="6" r="1.6"/>
-            <circle cx="19" cy="6" r="1.6"/>
-            <circle cx="5" cy="18" r="1.6"/>
-            <circle cx="19" cy="18" r="1.6"/>
-            <line x1="11" y1="11" x2="6.4" y2="7"/>
-            <line x1="13" y1="11" x2="17.6" y2="7"/>
-            <line x1="11" y1="13" x2="6.4" y2="17"/>
-            <line x1="13" y1="13" x2="17.6" y2="17"/>
+          <!-- topology-star.svg（Tabler icons，MIT）：中心节点 + 四向辐射（与左栏「思维导图」同款） -->
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 18a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
+            <path d="M20 6a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
+            <path d="M8 6a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
+            <path d="M20 18a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
+            <path d="M14 12a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
+            <path d="M7.5 7.5l3 3" />
+            <path d="M7.5 16.5l3-3" />
+            <path d="M13.5 13.5l3 3" />
+            <path d="M16.5 7.5l-3 3" />
           </svg>
           <span>{{ $t('@EDITOR:思维导图') }}</span>
         </button>
@@ -1895,9 +1900,13 @@ function stopPreviewResize() {
           :title="showAgentChat ? $t('@EDITOR:关闭 g ai 对话') : $t('@EDITOR:打开 g ai 对话')"
           @click="toggleAgentChat"
         >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/>
-            <path d="M18 16.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/>
+          <!-- message-chatbot.svg（Tabler icons，MIT）：对话气泡+机器人脸。
+               原来是自绘双星闪光 —— 用户偏好「AI 功能不用星星/闪光贴标签」，顺带换掉 -->
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-5l-5 3v-3h-2a3 3 0 0 1-3-3v-8a3 3 0 0 1 3-3h12" />
+            <path d="M9.5 9h.01" />
+            <path d="M14.5 9h.01" />
+            <path d="M9.5 13a3.5 3.5 0 0 0 5 0" />
           </svg>
           <span>{{ $t('@EDITOR:g ai 对话') }}</span>
         </button>
@@ -2070,49 +2079,59 @@ function stopPreviewResize() {
       @click.stop
     >
       <button class="ctx-menu-item" @click="ctxNewFile">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="12" y1="13" x2="12" y2="19"/><line x1="9" y1="16" x2="15" y2="16"/>
+        <!-- file-plus.svg（Tabler icons，MIT） -->
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+          <path d="M17 21h-10a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2" />
+          <path d="M12 11l0 6" />
+          <path d="M9 14l6 0" />
         </svg>
         {{ $t('@EDITOR:新建文件') }}
       </button>
       <button class="ctx-menu-item" @click="ctxNewFolder">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-          <line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>
+        <!-- folder-plus.svg（Tabler icons，MIT） -->
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 19h-7a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2h4l3 3h7a2 2 0 0 1 2 2v3.5" />
+          <path d="M16 19h6" />
+          <path d="M19 16v6" />
         </svg>
         {{ $t('@EDITOR:新建文件夹') }}
       </button>
       <div class="ctx-menu-sep" />
       <button class="ctx-menu-item" @click="ctxCopyAbsolutePath">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        <!-- copy.svg（Tabler icons，MIT） -->
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M7 9.667a2.667 2.667 0 0 1 2.667-2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1-2.667 2.667h-8.666a2.667 2.667 0 0 1-2.667-2.667l0-8.666" />
+          <path d="M4.012 16.737a2.005 2.005 0 0 1-1.012-1.737v-10c0-1.1.9-2 2-2h10c.75 0 1.158.385 1.5 1" />
         </svg>
         {{ $t('@EDITOR:复制绝对路径') }}
       </button>
       <button class="ctx-menu-item" @click="ctxCopyRelativePath">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+        <!-- link.svg（Tabler icons，MIT） -->
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9 15l6-6" />
+          <path d="M11 6l.463-.536a5 5 0 0 1 7.071 7.072l-.534.464" />
+          <path d="M13 18l-.397.534a5.068 5.068 0 0 1-7.127 0a4.972 4.972 0 0 1 0-7.071l.524-.463" />
         </svg>
         {{ $t('@EDITOR:复制相对路径') }}
       </button>
       <div class="ctx-menu-sep" />
       <!-- 只有 HTML 才有"用浏览器打开"：浏览器能直接渲染出结果 -->
       <button v-if="ctxMenuCanOpenInBrowser" class="ctx-menu-item" @click="ctxOpenInBrowser">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="9"/>
-          <line x1="3" y1="12" x2="21" y2="12"/>
-          <path d="M12 3a13 13 0 0 1 3.5 9 13 13 0 0 1-3.5 9 13 13 0 0 1-3.5-9A13 13 0 0 1 12 3z"/>
+        <!-- world.svg（Tabler icons，MIT） -->
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0-18 0" />
+          <path d="M3.6 9h16.8" />
+          <path d="M3.6 15h16.8" />
+          <path d="M11.5 3a17 17 0 0 0 0 18" />
+          <path d="M12.5 3a17 17 0 0 1 0 18" />
         </svg>
         {{ $t('@EDITOR:在浏览器中打开') }}
       </button>
       <button class="ctx-menu-item" @click="ctxRevealInExplorer">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-          <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2"/>
+        <!-- folder-open.svg（Tabler icons，MIT） -->
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M5 19l2.757-7.351a1 1 0 0 1 .936-.649h12.307a1 1 0 0 1 .986 1.164l-.996 5.211a2 2 0 0 1-1.964 1.625h-14.026a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2h4l3 3h7a2 2 0 0 1 2 2v2" />
         </svg>
         {{ $t('@EDITOR:在资源管理器中打开') }}
       </button>
@@ -2121,17 +2140,22 @@ function stopPreviewResize() {
         {{ $t('@EDITOR:在 VSCode 中打开') }}
       </button>
       <button class="ctx-menu-item" @click="ctxRename">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        <!-- edit.svg（Tabler icons，MIT） -->
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M7 7h-1a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-1" />
+          <path d="M20.385 6.585a2.1 2.1 0 0 0-2.97-2.97l-8.415 8.385v3h3l8.385-8.415" />
+          <path d="M16 5l3 3" />
         </svg>
         {{ $t('@EDITOR:重命名') }}
       </button>
       <button class="ctx-menu-item ctx-menu-item--danger" @click="ctxDelete">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-          <path d="M10 11v6"/><path d="M14 11v6"/>
-          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+        <!-- trash.svg（Tabler icons，MIT） -->
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 7l16 0" />
+          <path d="M10 11l0 6" />
+          <path d="M14 11l0 6" />
+          <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12" />
+          <path d="M9 7v-3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3" />
         </svg>
         {{ $t('@EDITOR:删除') }}
       </button>
