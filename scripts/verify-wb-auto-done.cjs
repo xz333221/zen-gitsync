@@ -329,7 +329,9 @@ async function main() {
     await page.locator('.kb-col--done').first().screenshot({ path: shot })
 
     // ── E 列表视图：同一行也有，且不吃边框（那一格有"只占一行"的断言）────
-    await page.locator('.kb__view-btn', { hasText: /列表视图|List/ }).first().click()
+    // 视图切换钮 2026-10-16 起收成标题行右侧的纯图标按钮（无文字），
+    // 定位走 role=tab + aria-label，不能再按按钮文字找。
+    await page.getByRole('tab', { name: /列表视图|List/ }).first().click()
     await page.waitForSelector('.kb-table__row', { timeout: 10000 })
     await sleep(400)
     const readRow = (title) => page.evaluate((t) => {

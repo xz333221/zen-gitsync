@@ -331,7 +331,9 @@ async function main() {
     }
 
     // ── F 列表视图：同一批任务的另一种画法 ────────────────────────────
-    await page.locator('.kb__view-btn', { hasText: /列表视图|List/ }).first().click()
+    // 视图切换钮 2026-10-16 起收成标题行右侧的纯图标按钮（无文字），
+    // 定位走 role=tab + aria-label，不能再按按钮文字找。
+    await page.getByRole('tab', { name: /列表视图|List/ }).first().click()
     await page.waitForSelector('.kb-table__row', { timeout: 10000 })
     await sleep(400)
     const readRow = (title) => page.evaluate((t) => {

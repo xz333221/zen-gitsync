@@ -321,9 +321,10 @@ async function main() {
       prev.hasRow && prev.text.includes('90%'), `row=${prev.hasRow} text="${prev.text || ''}"`)
 
     /* ══ E 列表视图：同一份数字以文字出现 ══ */
-    // ⚠️ 走工具栏那颗「列表视图」（不是改 localStorage 再 reload）：本脚本的
-    //    addInitScript 每次导航都把视图写回 kanban，reload 会把设置冲掉
-    await page.locator('.kb__view-btn').filter({ hasText: '列表视图' }).first().click()
+    // ⚠️ 走标题行那颗「列表视图」图标（不是改 localStorage 再 reload）：本脚本的
+    //    addInitScript 每次导航都把视图写回 kanban，reload 会把设置冲掉。
+    //    2026-10-16 起切换钮收成纯图标（无文字），定位走 role=tab + aria-label。
+    await page.getByRole('tab', { name: /列表视图|List/ }).first().click()
     await page.waitForSelector('.kb-table__row', { timeout: 15000 })
     await sleep(800)
     const listRow = await page.evaluate(() => {
@@ -338,7 +339,7 @@ async function main() {
       `found=${listRow.found} text="${listRow.text || ''}" names=${JSON.stringify(listRow.names || []).slice(0, 120)}`)
 
     // 回看板视图（截图与 F 组都在看板这边）
-    await page.locator('.kb__view-btn').filter({ hasText: '看板视图' }).first().click()
+    await page.getByRole('tab', { name: /看板视图|Board/ }).first().click()
     await page.waitForSelector('.kb-card', { timeout: 15000 })
     await sleep(400)
 

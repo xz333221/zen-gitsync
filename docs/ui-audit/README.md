@@ -202,6 +202,47 @@ Element Plus 的 `--input-bg`（= `--bg-container`，白），父容器 `.board`
 回归：`verify:ui-consistency` 22/22（背景色棘轮 33，红线 36，未涨）、
 `verify:wb-card-cover` 30/30（含 D1 封面出血几何）、tsc 与 build 均通过。
 
+### 第八轮：看板工具条上移标题行，收成图标（2026-10-16）
+
+用户要求三件事：**去掉标题行那枚「80/82 任务完成」徽章**；
+**视图切换与搜索放到标题行那一行**（原来它们单独占着看板顶部一行）；
+**形态收成图标** —— 视图切换平常只显示两枚图标，搜索平常只显示一枚放大镜、点开才展开搜索框。
+
+结构变化（一次"搬家"，不是两套并存）：
+
+- `.kb__toolbar` / `.kb__views` / `.kb__view-btn` / `.kb__filters` / `.kb__search*`
+  从 `WorkbenchKanban.vue` **整体删除**（含样式）。上面第七轮描述的这些选择器
+  保留作历史记录，现行实现见下。
+- 标题行（`WorkbenchBoard.vue` 的 `.board__main-head`）右侧新增
+  `.board__head-actions`：`.board__view-switch`（两枚 `.board__view-btn` 图标 tab）
+  + `.board__head-search`（`.board__search-input` + 常驻的 `.board__search-btn`）。
+  徽章 `.board__project-meta`（`{done}/{total} 任务完成`）删除 —— 同一个数字
+  左栏项目行仍在显示，标题行这一份是重复信息。
+- `view` / `search` 状态从 Kanban **上移到 Board**（Kanban 改 props +
+  `update:view` / `update:search` 事件，只管按值渲染）。localStorage key
+  `wb.boardView.v1` 原样沿用，老用户的视图偏好不丢。
+
+交互上值得记的两条：
+
+- 搜索的收起判据是**空词失焦**：有词时失焦不收起（筛选结果还在屏幕上，
+  收起来会让人以为筛选没了）；Esc 无条件收框、不动词。
+- 放大镜按钮带 `@mousedown.prevent`：不让这一下先把输入框焦点弄丢，
+  否则"点开 → 再点图标想收起"会变成 blur 收起 + click 又重新展开。
+
+视觉口径全部沿用既有令牌，没有新色：搜索框 `--input-bg` / `--input-border` /
+`--focus-ring-soft`（第七轮那套，搬家不改色）；视图拨片仍是 `--bg-subtle` 轨道
++ `--surface-elevated` 选中块（第七轮"故意没动"的理由依然成立）。
+未展开的输入框 `width: 0` 且 `border-width: 0` —— 只置 `width: 0` 会留下
+2px 透明边框残余（border-box 下 border 不吃 width），"收起到 0"必须连边框一起归零。
+
+回归网：新增 `verify:wb-head-actions` 16/16（含 `--reverse` 七条必红：
+假徽章 / 移除视图 tab / 钉住"永不收起"三种旧样子各得其咎）；
+`verify:wb-list-view` 4/4、`verify:wb-card-cover` 30/30、
+`verify:wb-card-reply` 23/24（唯一红的 F1 是 fixture 与后端口径漂移 2 条，
+其中一条正是当轮执行中的任务自身，环境性、与本轮无关）；tsc 与 build 均通过。
+所有按 `.kb__view-btn` 文字点击切视图的老探针已同步改为
+`getByRole('tab', { name })`（按钮无文字后文字定位失效，aria-label 是唯一稳定锚点）。
+
 
 
 ## 修复状态（2026-10-04 当轮）

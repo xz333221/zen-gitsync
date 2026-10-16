@@ -422,7 +422,9 @@ async function main() {
     log('截图:', shot)
 
     // ── E 列表视图：同一行也有，且不换行 ──────────────────────────────
-    await page.locator('.kb__view-btn', { hasText: /列表视图|List/ }).first().click()
+    // 视图切换钮 2026-10-16 起收成标题行右侧的纯图标按钮（无文字），
+    // 定位走 role=tab + aria-label，不能再按按钮文字找。
+    await page.getByRole('tab', { name: /列表视图|List/ }).first().click()
     await page.waitForSelector('.kb-table__row', { timeout: 10000 })
     await sleep(400)
     const readRow = (title) => page.evaluate((t) => {
@@ -454,7 +456,7 @@ async function main() {
     // 字符串逐字比对 —— 弹窗开着时卡片仍在 DOM 里，两边读到的是同一瞬间的值。
     //
     // 三个分支各验一条：跑过（用时）/ 正在跑（已运行 x，随轮询长，不是 0）/ 从没跑过（只有时间）。
-    await page.locator('.kb__view-btn', { hasText: /看板视图|Board/ }).first().click()
+    await page.getByRole('tab', { name: /看板视图|Board/ }).first().click()
     await page.waitForSelector('.kb-card', { timeout: 10000 })
     await sleep(500)
 

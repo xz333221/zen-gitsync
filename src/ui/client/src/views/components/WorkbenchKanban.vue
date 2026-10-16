@@ -37,7 +37,16 @@
    其中「停止」是 2026-09-30 补的：一条任务卡了半小时，用户在看板上看着它转，
    想停却只能点进编辑器翻到那一栏 —— 「就地处理」在"任务正在跑"这个最需要它的场景上恰恰是缺的。）
 
-  工具条上只有一个搜索框：原来并排的「仅看报错」勾选框 2026-09-29 去掉——
+  工具条（视图切换 + 搜索）2026-10-16 整体搬到看板头部标题行
+  （WorkbenchBoard 的 .board__main-head 右侧）：那一行原本只有
+  「80/82 任务完成」一枚统计徽章，去掉它之后位置正好，视图与筛选
+  从此贴着项目名，不用再单独占一行。形态也收成图标：
+  视图切换只留两枚图标（看板 / 列表，aria-label 说话），
+  搜索默认只显示一枚放大镜，点开才展开输入框。
+  view / search 的状态随之**上移到上层**（props 下发 + update 事件），
+  持久化 key（wb.boardView.v1）也在上层 —— 本组件只管按 props 画。
+
+  搜索框原来并排的「仅看报错」勾选框 2026-09-29 去掉——
   "哪条任务报过错"卡片自己就有标记（.kb-card.has-error + 小红点），
   真要筛也就少数几次，为此常驻一个勾选框占着工具条不划算。
 
@@ -57,7 +66,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
-import { Search } from '@element-plus/icons-vue'
 import TaskExecutorIcon from '@/components/TaskExecutorIcon.vue'
 import type { BoardImage, BoardTask, TaskColumn } from '@/types/workbench'
 import { taskExecutorName, type TaskExecutorId } from '@/utils/taskExecutor'
@@ -68,7 +76,7 @@ import { REPORT_PERCENT_HINT_KEY, REPORT_PERCENT_LABEL_KEY, reportSilentMs } fro
 
 const props = defineProps<{
   tasks: BoardTask[]
-  /** 视图为「全部项目」时在卡片上标出项目名，避免同名任务分不清 */
+  /** 项目列表（左栏）里的项目 key → 显示名，供「全部项目」视图在卡片上标出归属 */
   projectLabels: Record<string, string>
   /**
    * 「这条任务现在几成」：任务 id → 百分比（0–100）。
@@ -80,6 +88,17 @@ const props = defineProps<{
    */
   taskPercents?: Record<string, number>
   showProjectLabel: boolean
+  /**
+   * 当前视图：'kanban' 三列看板 / 'list' 表格。
+   * 2026-10-16 起由上层（WorkbenchBoard 的 board__main-head）掌管并持久化
+   * （wb.boardView.v1），这里只按它渲染 —— 工具条搬上去之后切换钮不在本组件里。
+   */
+  view: 'kanban' | 'list'
+  /**
+   * 搜索词（标题 + 描述的包含匹配）。同样由上层掌管：搜索框是头部那枚
+   * 「点开展开」的放大镜，展开态留在上层，本组件只负责按词过滤。
+   */
+  search: string
   /**
    * 用户从看板上点开过的任务 id（null = 还没点开过任何一条）。
    * 只用来给那张卡片挂一枚「你最后点开的是这条」的标记，与 hover 无关 —— 见文件头那段说明。
@@ -101,23 +120,11 @@ const emit = defineEmits<{
   'reopen-task': [task: BoardTask]
   'delete-task': [task: BoardTask]
   'create-task': []
+  /** 视图切换（v-model:view）：持久化与图标切换钮都在上层 */
+  'update:view': [view: 'kanban' | 'list']
+  /** 搜索词变更（v-model:search）：输入框的展开态留在上层 */
+  'update:search': [search: string]
 }>()
-
-const VIEW_KEY = 'wb.boardView.v1'
-
-const view = ref<'kanban' | 'list'>((() => {
-  try {
-    const v = localStorage.getItem(VIEW_KEY)
-    return v === 'list' ? 'list' : 'kanban'
-  } catch {
-    return 'kanban'
-  }
-})())
-watch(view, (v) => {
-  try { localStorage.setItem(VIEW_KEY, v) } catch { /* 隐私模式：不落地也不影响使用 */ }
-})
-
-const search = ref('')
 
 const COLUMNS: { key: TaskColumn; labelKey: string }[] = [
   { key: 'todo', labelKey: '@WORKBENCH:待处理' },
@@ -126,7 +133,7 @@ const COLUMNS: { key: TaskColumn; labelKey: string }[] = [
 ]
 
 const filtered = computed(() => {
-  const q = search.value.trim().toLowerCase()
+  const q = props.search.trim().toLowerCase()
   return props.tasks.filter(t => {
     if (!q) return true
     return (t.title || '').toLowerCase().includes(q) || (t.desc || '').toLowerCase().includes(q)
@@ -143,7 +150,7 @@ const DONE_PAGE = 30
 const doneLimit = ref(DONE_PAGE)
 /* 只跟着**搜索词**重置，不跟着 tasks 重置：tasks 每 5s 轮询换一次数组身份，
    跟着它重置会让用户点开的「显示更早的」在 5 秒内自己缩回去。 */
-watch(search, () => { doneLimit.value = DONE_PAGE })
+watch(() => props.search, () => { doneLimit.value = DONE_PAGE })
 
 const columns = computed(() => {
   const raw = COLUMNS.map(c => {
@@ -452,40 +459,6 @@ function coverTitle(img: BoardImage): string {
 
 <template>
   <div class="kb">
-    <div class="kb__toolbar">
-      <div class="kb__views" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          class="kb__view-btn"
-          :class="{ 'is-active': view === 'kanban' }"
-          :aria-selected="view === 'kanban'"
-          @click="view = 'kanban'"
-        >{{ $t('@WORKBENCH:看板视图') }}</button>
-        <button
-          type="button"
-          role="tab"
-          class="kb__view-btn"
-          :class="{ 'is-active': view === 'list' }"
-          :aria-selected="view === 'list'"
-          @click="view = 'list'"
-        >{{ $t('@WORKBENCH:列表视图') }}</button>
-      </div>
-
-      <div class="kb__filters">
-        <div class="kb__search">
-          <el-icon class="kb__search-icon"><Search /></el-icon>
-          <input
-            class="kb__search-input"
-            type="search"
-            v-model="search"
-            :placeholder="$t('@WORKBENCH:搜索任务标题或描述')"
-            :aria-label="$t('@WORKBENCH:搜索任务标题或描述')"
-          />
-        </div>
-      </div>
-    </div>
-
     <!-- 看板视图。
          空列的宽度由 columnsStyle 给 0fr、由 .kb-col.is-collapsed 负责裁掉内容，
          轨道宽度本身走 .kb__columns 的 transition（is-animated 挡住首屏那次抖动）。 -->
@@ -1002,86 +975,6 @@ function coverTitle(img: BoardImage): string {
   min-height: 0;
   min-width: 0;
 }
-
-/* ── 工具条 ─────────────────────────────────────────── */
-.kb__toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-  flex-wrap: wrap;
-}
-.kb__views {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 3px;
-  border-radius: var(--radius-lg);
-  background: var(--bg-subtle);
-  flex-shrink: 0;
-}
-.kb__view-btn {
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  line-height: 20px;
-  padding: 0 10px;
-  border-radius: var(--radius-base);
-  cursor: pointer;
-  transition: background var(--transition-fast) var(--ease-custom), color var(--transition-fast) var(--ease-custom);
-}
-.kb__view-btn:hover { color: var(--text-primary); }
-.kb__view-btn.is-active {
-  background: var(--surface-elevated);
-  box-shadow: var(--shadow-card-rest);
-  color: var(--color-primary);
-  font-weight: 500;
-}
-.kb__filters {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-left: auto;
-  flex-wrap: wrap;
-}
-.kb__search { position: relative; display: inline-flex; align-items: center; }
-.kb__search-icon {
-  position: absolute;
-  left: 7px;
-  font-size: var(--font-size-sm);
-  color: var(--text-meta);
-  pointer-events: none;
-}
-/* 2026-10-05：这一栏原来自己写 `background: var(--bg-subtle)` ——
-   也就是白底上再叠 2% 黑（合成后约 #fafafa）。但同一工具条上的项目 / 标签下拉
-   走的是 Element Plus 的 `--input-bg`（= --bg-container，白），父容器 .board
-   本身也是白：于是这个**原生 input 成了那一行里唯一一块灰**，像蒙了层雾，
-   底色与旁边的下拉框对不上（用户圈的就是它）。
-   现在直接复用 `--input-bg` / `--input-border` —— 与 el-input / el-select
-   同一支口径，连描边深浅都不用自己定。加 hover 是补上原生 input 少的半截
-   （Element Plus 那套本来就有），focus 态原本就有主色描边 + 焦点环，不动。 */
-.kb__search-input {
-  width: 168px;
-  height: 24px;
-  padding: 0 8px 0 24px;
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
-  background: var(--input-bg);
-  border: 1px solid var(--input-border);
-  border-radius: var(--radius-md);
-  outline: none;
-  transition: border-color var(--transition-fast) var(--ease-custom), width var(--transition-base) var(--ease-custom);
-}
-.kb__search-input:hover:not(:focus) { border-color: var(--input-border-hover); }
-.kb__search-input:focus {
-  border-color: var(--color-primary);
-  box-shadow: var(--focus-ring-soft);
-  width: 216px;
-}
-.kb__search-input::placeholder { color: var(--text-meta); }
 
 /* ── 看板列 ─────────────────────────────────────────── */
 .kb__columns {

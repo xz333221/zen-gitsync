@@ -33,10 +33,10 @@
     顶栏这个只是第三个入口，还把标题栏右侧占得满满的。
 -->
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Fold, Expand, Folder, Grid } from '@element-plus/icons-vue'
+import { Fold, Expand, Folder, Grid, Menu, Search } from '@element-plus/icons-vue'
 import type { Attachment, BoardTask, ProjectSummary, Task } from '@/types/workbench'
 import { canonicalProjectPath } from '@/utils/path'
 import { taskPercentIndex } from '@/utils/progressReport'
@@ -117,6 +117,42 @@ const selectedKey = ref<string>(savedSelection || '')
 watch(selectedKey, (k) => {
   try { localStorage.setItem(SELECTED_KEY, k) } catch { /* 隐私模式：不落地也不影响使用 */ }
 })
+
+// ── 看板视图与搜索（2026-10-16 从 WorkbenchKanban 的工具条上移到标题行） ──
+// 切换钮和搜索框现在是标题行右侧的两枚/一枚图标（board__head-actions），
+// 状态放这儿：Kanban 是纯渲染组件，只管按 v-model 下来的值画。
+// localStorage key 沿用原看板那份（wb.boardView.v1），老用户的视图偏好不丢。
+const VIEW_KEY = 'wb.boardView.v1'
+const view = ref<'kanban' | 'list'>((() => {
+  try {
+    const v = localStorage.getItem(VIEW_KEY)
+    return v === 'list' ? 'list' : 'kanban'
+  } catch {
+    return 'kanban'
+  }
+})())
+watch(view, (v) => {
+  try { localStorage.setItem(VIEW_KEY, v) } catch { /* 隐私模式：不落地也不影响使用 */ }
+})
+
+const search = ref('')
+/* 搜索框的展开态：标题行默认只露一枚放大镜。
+   空词失焦就收起 —— 标题行挂个空框比不挂更碍眼；
+   有词时失焦不收起：筛选结果还在屏幕上，收起来会让人以为筛选没了。 */
+const searchOpen = ref(false)
+const searchInputRef = ref<HTMLInputElement | null>(null)
+function toggleSearch() {
+  searchOpen.value = !searchOpen.value
+  if (searchOpen.value) {
+    nextTick(() => searchInputRef.value?.focus())
+  }
+}
+function closeSearch() {
+  searchOpen.value = false
+}
+function onSearchBlur() {
+  if (!search.value.trim()) searchOpen.value = false
+}
 
 const selectedProject = computed<ProjectSummary | null>(() => {
   if (!selectedKey.value) return null
@@ -858,9 +894,64 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
               {{ $t('@WORKBENCH:共 {n} 个项目的任务', { n: projects.length }) }}
             </span>
           </div>
-          <span v-if="selectedProject" class="board__project-meta">
-            {{ $t('@WORKBENCH:{done}/{total} 任务完成', { done: selectedProject.stats.done, total: selectedProject.stats.total }) }}
-          </span>
+          <!-- 头部右侧动作区：视图切换 + 搜索。
+               2026-10-16 从看板自己的工具条（原 .kb__toolbar）搬上来的 ——
+               那一行原来只有一枚「80/82 任务完成」徽章（已去掉），
+               位置正好，视图与筛选从此贴着项目名，不再单独占一行。
+               形态收成图标：切换两枚（aria-label 说话），搜索默认只露一枚放大镜。 -->
+          <div class="board__head-actions">
+            <div class="board__view-switch" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                class="board__view-btn"
+                :class="{ 'is-active': view === 'kanban' }"
+                :aria-selected="view === 'kanban'"
+                :aria-label="$t('@WORKBENCH:看板视图')"
+                :title="$t('@WORKBENCH:看板视图')"
+                @click="view = 'kanban'"
+              >
+                <el-icon><Grid /></el-icon>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                class="board__view-btn"
+                :class="{ 'is-active': view === 'list' }"
+                :aria-selected="view === 'list'"
+                :aria-label="$t('@WORKBENCH:列表视图')"
+                :title="$t('@WORKBENCH:列表视图')"
+                @click="view = 'list'"
+              >
+                <el-icon><Menu /></el-icon>
+              </button>
+            </div>
+
+            <div class="board__head-search" :class="{ 'is-open': searchOpen }">
+              <input
+                ref="searchInputRef"
+                class="board__search-input"
+                type="search"
+                v-model="search"
+                :placeholder="$t('@WORKBENCH:搜索任务标题或描述')"
+                :aria-label="$t('@WORKBENCH:搜索任务标题或描述')"
+                @blur="onSearchBlur"
+                @keydown.esc="closeSearch"
+              />
+              <!-- mousedown.prevent：不让这一下先把输入框的焦点弄丢，
+                   否则"点开 → 再点图标想收起"会变成 blur 收起 + click 又重新展开 -->
+              <button
+                type="button"
+                class="board__search-btn"
+                :aria-label="$t('@WORKBENCH:搜索任务标题或描述')"
+                :title="$t('@WORKBENCH:搜索任务标题或描述')"
+                @mousedown.prevent
+                @click="toggleSearch"
+              >
+                <el-icon><Search /></el-icon>
+              </button>
+            </div>
+          </div>
         </div>
 
         <WorkbenchKanban
@@ -869,6 +960,8 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
           :task-percents="taskPercents"
           :show-project-label="!selectedProject"
           :opened-task-id="props.openedTaskId"
+          v-model:view="view"
+          v-model:search="search"
           @open-task="onOpenTask"
           @run-task="runTask"
           @stop-task="stopTask"
@@ -1143,12 +1236,113 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   text-overflow: ellipsis;
   min-width: 0;
 }
-.board__project-meta {
+
+/* ══ 头部右侧动作区（视图切换 + 搜索） ══════════════════════════════
+   2026-10-16 从看板自己的工具条（原 WorkbenchKanban 的 .kb__toolbar）搬上来。
+   那一行原来只有一枚「80/82 任务完成」徽章（用户要求去掉），位置正好。
+   形态收成图标：切换两枚、搜索默认一枚 —— 标题行是"这是哪个项目"的
+   地方，不是操作台，常驻一排文字按钮和一整个搜索框都太吵。
+   展开的搜索框向左挤，项目名 / 路径可压缩（.board__main-title 有
+   flex:1 + min-width:0，路径自己会省略号），actions 本身永不缩。 */
+.board__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-shrink: 0;
-  font-size: var(--font-size-xs);
-  color: var(--text-meta);
-  font-variant-numeric: tabular-nums;
+  min-width: 0;
 }
+.board__view-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
+  flex-shrink: 0;
+}
+/* 24px 一枚：与标题行那枚 24px 项目图标同槽同高，整行不抬高。
+   aria-label / title 说话 —— 图标没有文字，读屏和悬停提示都靠它。 */
+.board__view-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  transition: background var(--transition-fast) var(--ease-custom), color var(--transition-fast) var(--ease-custom);
+}
+.board__view-btn .el-icon { font-size: var(--font-size-sm); }
+.board__view-btn:hover { color: var(--text-primary); }
+.board__view-btn.is-active {
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-card-rest);
+  color: var(--color-primary);
+}
+/* 搜索：图标按钮常驻，输入框默认 width:0 收在按钮左边，点一下才展开。
+   过渡同时管 width / padding / border-color —— border-width 也过渡，
+   否则 0 宽那一瞬会闪一道边框。 */
+.board__head-search {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.board__search-input {
+  width: 0;
+  height: 24px;
+  padding: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  background: var(--input-bg);
+  border: 1px solid transparent;
+  border-width: 0;
+  border-radius: var(--radius-md);
+  outline: none;
+  opacity: 0;
+  pointer-events: none;
+  caret-color: var(--color-primary);
+  transition:
+    width var(--transition-base) var(--ease-custom),
+    padding var(--transition-base) var(--ease-custom),
+    border-width var(--transition-base) var(--ease-custom),
+    border-color var(--transition-fast) var(--ease-custom),
+    opacity var(--transition-fast) var(--ease-custom);
+}
+.board__head-search.is-open .board__search-input {
+  width: 200px;
+  padding: 0 8px;
+  border-width: 1px;
+  border-color: var(--input-border);
+  opacity: 1;
+  pointer-events: auto;
+}
+.board__head-search.is-open .board__search-input:hover:not(:focus) { border-color: var(--input-border-hover); }
+.board__search-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring-soft);
+}
+.board__search-input::placeholder { color: var(--text-meta); }
+/* 展开时放大镜染主色：它现在是"这一片正在筛"的开关，不只是颗图标 */
+.board__head-search.is-open .board__search-btn { color: var(--color-primary); }
+.board__search-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-meta);
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color var(--transition-fast) var(--ease-custom);
+}
+.board__search-btn .el-icon { font-size: var(--font-size-sm); }
+.board__search-btn:hover { color: var(--text-primary); }
 
 /* ══ 响应式 ══════════════════════════════════════════════════════════
    下面这些是**默认值**：用户没拖过分隔条时（layout 里是 null，一个内联变量都不写）

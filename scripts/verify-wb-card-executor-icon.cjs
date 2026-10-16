@@ -390,7 +390,9 @@ async function main() {
     log('截图:', shot)
 
     // ── E 列表视图：同一行也有 ────────────────────────────────────────
-    await page.locator('.kb__view-btn', { hasText: /列表视图|List/ }).first().click()
+    // 视图切换钮 2026-10-16 起收成标题行右侧的纯图标按钮（无文字），
+    // 定位走 role=tab + aria-label，不能再按按钮文字找。
+    await page.getByRole('tab', { name: /列表视图|List/ }).first().click()
     await page.waitForSelector('.kb-table__row', { timeout: 10000 })
     await sleep(400)
     // 列表行没有分列，标题就必须唯一 —— 合成用例的标题都带【合成】前缀，不会和真实任务撞
