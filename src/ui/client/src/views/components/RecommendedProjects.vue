@@ -142,13 +142,13 @@ defineExpose({ reload })
 </template>
 
 <style scoped>
+/* 这一区现在是**项目列表上面**的一条带子（用户要求把扫描添加挪上来）：不画边框、
+   不套卡片，只用一层极淡的底色把它与下面的列表分开 —— 底+字同向翻转，深色下同样成立。 */
 .pm-rec {
-  margin-top: 16px;
-  padding: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  background: var(--bg-subtle);
   flex-shrink: 0;
+  margin-bottom: 6px;
+  padding: 8px 10px 6px;
+  background: var(--bg-subtle);
 }
 .pm-rec__head {
   display: flex;
@@ -169,22 +169,16 @@ defineExpose({ reload })
   font-variant-numeric: tabular-nums;
 }
 .pm-rec__hint {
-  margin: 4px 0 8px;
+  margin: 2px 0 4px;
   font-size: var(--font-size-xs);
   line-height: 1.5;
   color: var(--text-meta);
 }
 .pm-rec__state {
-  padding: 12px;
-  border: 1px dashed var(--border-card);
-  border-radius: var(--radius-md);
+  padding: 8px;
   text-align: center;
 }
-.pm-rec__state--error {
-  border-style: solid;
-  border-color: var(--color-danger);
-  background: var(--tint-danger-08);
-}
+.pm-rec__state--error .pm-rec__state-text { color: var(--color-danger-dark); }
 .pm-rec__state-text {
   margin: 0;
   font-size: var(--font-size-xs);
@@ -192,41 +186,45 @@ defineExpose({ reload })
   color: var(--text-meta);
   word-break: break-word;
 }
-.pm-rec__state--error .pm-rec__state-text { color: var(--color-danger-dark); }
 
 .pm-rec__items {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: 260px;
+  flex-wrap: wrap;
+  gap: 0 10px;              /* 横向平铺：宽屏一屏看全，不竖着排一长条 */
+  max-height: 132px;        /* 最多三行左右，别把下面的项目列表挤下去 */
   overflow-y: auto;
 }
 .pm-rec__item {
+  flex: 0 1 auto;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 8px;
-  border-radius: var(--radius-md);
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 3px 6px 3px 8px;
+  border-radius: var(--radius-md);   /* 只在 hover 底色上看得见 */
+  transition: background var(--transition-fast) var(--ease-custom);
 }
 .pm-rec__item:hover { background: var(--bg-container-hover); }
 .pm-rec__info {
-  flex: 1;
-  min-width: 0;
+  flex: 0 1 auto;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
 }
 .pm-rec__name {
+  flex-shrink: 0;
   font-size: var(--font-size-sm);
   color: var(--text-primary);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .pm-rec__path {
+  min-width: 0;
+  max-width: 320px;
   font-size: var(--font-size-xs);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   color: var(--text-meta);
@@ -234,13 +232,15 @@ defineExpose({ reload })
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 「添加」是文字按钮：原来那种"圆角 + 单层 border"的小方块是用户点名不要的样式；
+   现在静息只有主色文字，hover 才浮出一层淡底。 */
 .pm-rec__add {
   flex-shrink: 0;
-  height: 24px;
-  padding: 0 10px;
-  border: 1px solid var(--tint-primary-30);
+  height: 22px;
+  padding: 0 8px;
+  border: none;
   border-radius: var(--radius-md);
-  background: var(--tint-primary-12);
+  background: transparent;
   color: var(--color-primary);
   font-family: inherit;
   font-size: var(--font-size-xs);
@@ -249,7 +249,7 @@ defineExpose({ reload })
     background var(--transition-fast) var(--ease-custom),
     color var(--transition-fast) var(--ease-custom);
 }
-.pm-rec__add:hover:not(:disabled) { background: var(--tint-primary-18); }
+.pm-rec__add:hover:not(:disabled) { background: var(--tint-primary-12); }
 .pm-rec__add:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 .pm-rec__add:disabled { cursor: default; opacity: 0.6; }
 .pm-rec__added {

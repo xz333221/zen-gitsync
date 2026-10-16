@@ -42,15 +42,13 @@ import SvgIcon from '@components/SvgIcon/index.vue'
 import ToolInstallDialog from '@components/ToolInstallDialog.vue'
 import claudeCodeIcon from '@/assets/icons/svg/claudecode-color.svg'
 import { $t } from '@/lang/static'
-import { useToolsStore, type ToolId } from '@/stores/toolsStore'
+import type { ToolId } from '@/stores/toolsStore'
+import { useOpenWithTool } from '@/composables/useOpenWithTool'
 import {
   OPEN_WITH_TOOLS,
-  TOOL_DISPLAY_NAMES,
-  ensureToolsChecked,
   launchGuiInNewTab,
   openPathInFileManager,
   openPathInTerminal,
-  openPathWithTool,
 } from '@/composables/useDirectoryOpenActions'
 
 const props = defineProps<{
@@ -63,17 +61,10 @@ const props = defineProps<{
 /** 任何一个动作执行后通知宿主关闭菜单 */
 const emit = defineEmits<{ done: [] }>()
 
-const toolsStore = useToolsStore()
+// 「打开方式」的判定与请求走公共 composable（工具快捷条也用同一份）
+const { toolMissing, tryOpenWithTool } = useOpenWithTool()
 const installVisible = ref(false)
 const installTool = ref<ToolId | null>(null)
-
-/**
- * 工具是否"确认未安装"：检测没跑完（lastCheckedAt === null）一律按未知处理 ——
- * 那时 isToolAvailable 全是 false，直接信它会在装了 VSCode 的机器上挂一排「未安装」。
- */
-function toolMissing(tool: ToolId): boolean {
-  return toolsStore.lastCheckedAt !== null && !toolsStore.isToolAvailable(tool)
-}
 
 /** 在系统文件管理器里打开项目目录 */
 async function openInFileManager() {
@@ -141,20 +132,10 @@ async function copyFolderPath() {
  */
 async function openWithTool(tool: ToolId, permissionMode?: string) {
   emit('done')
-  if (!(await ensureToolsChecked())) {
-    ElMessage.warning($t('@67CE7:工具检测失败，请稍后重试'))
-    return
-  }
-  if (!toolsStore.isToolAvailable(tool)) {
+  const status = await tryOpenWithTool(tool, props.path, permissionMode)
+  if (status === 'install') {
     installTool.value = tool
     installVisible.value = true
-    return
-  }
-  const r = await openPathWithTool(tool, props.path, permissionMode)
-  if (r.success) {
-    ElMessage.success(r.message || $t('@67CE7:已用 {tool} 打开目录', { tool: TOOL_DISPLAY_NAMES[tool] }))
-  } else {
-    ElMessage.error(`${$t('@67CE7:打开失败: ')}${r.error ?? ''}`)
   }
 }
 </script>

@@ -121,8 +121,11 @@ async function onRemove(p: ProjectSummary) {
       </button>
     </header>
 
-    <!-- 单一滚动容器：项目列表可以很长，推荐区跟着它一起滚（不给列表单独加滚动条，
-         否则「滚到底看推荐」会变成"滚两次"） -->
+    <!-- 推荐添加在**项目列表上面**（用户要求把扫描添加挪上来）：它是一块固定不滚的带子，
+         下面的项目列表自己滚 —— 这样"扫到的新仓库"永远在视线里，不会滚下去就忘了。 -->
+    <RecommendedProjects ref="recommendedRef" :on-add="onAddFromRecommended" />
+
+    <!-- 只有项目列表参与滚动：不给它单独加滚动条的话，"滚到底看推荐"会变成滚两次 -->
     <div class="pm__body">
       <ProjectManagePanel
         :projects="projects"
@@ -130,8 +133,6 @@ async function onRemove(p: ProjectSummary) {
         :removing-key="removingKey"
         @remove="onRemove"
       />
-
-      <RecommendedProjects ref="recommendedRef" :on-add="onAddFromRecommended" />
     </div>
 
     <AddProjectDialog

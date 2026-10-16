@@ -24,9 +24,11 @@
   两处显示同一份清单，顺序不一样会让人以为数据不同步。
 -->
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { $t } from '@/lang/static'
 import ProjectManageItem from '@views/components/ProjectManageItem.vue'
+import ToolInstallDialog from '@components/ToolInstallDialog.vue'
+import type { ToolId } from '@/stores/toolsStore'
 import type { ProjectSummary } from '@/types/workbench'
 
 const props = defineProps<{
@@ -39,6 +41,19 @@ const props = defineProps<{
 const emit = defineEmits<{
   remove: [project: ProjectSummary]
 }>()
+
+/**
+ * 安装引导**只在这里挂一份**：ToolInstallDialog 走 CommonDialog，关掉之后节点仍留在
+ * DOM（没开 destroy-on-close），每行挂一个就是几十份。行内的工具快捷条点了没装的工具时
+ * emit('needInstall')，由这一层统一弹。
+ */
+const installVisible = ref(false)
+const installTool = ref<ToolId | null>(null)
+
+function onNeedInstall(tool: ToolId) {
+  installTool.value = tool
+  installVisible.value = true
+}
 
 const ordered = computed(() => {
   return [...props.projects].sort((a, b) => {
@@ -68,7 +83,7 @@ const ordered = computed(() => {
     <!-- 一个项目都没有：这是这个视图最该说话的时候 —— 告诉用户下一步去哪 -->
     <div v-else-if="projects.length === 0" class="pm-list__state">
       <p class="pm-list__state-title">{{ $t('@PROJM:尚无项目') }}</p>
-      <p class="pm-list__state-text">{{ $t('@PROJM:用「添加项目」把仓库加进来，或看看下面的推荐列表') }}</p>
+      <p class="pm-list__state-text">{{ $t('@PROJM:用「添加项目」把仓库加进来，或看看上面的推荐列表') }}</p>
     </div>
 
     <ul v-else class="pm-list__items">
@@ -78,8 +93,12 @@ const ordered = computed(() => {
         :project="p"
         :removing="p.key === removingKey"
         @remove="emit('remove', $event)"
+        @need-install="onNeedInstall"
       />
     </ul>
+
+    <!-- 安装引导：整个面板一份（行内快捷条点了没装的工具时弹它） -->
+    <ToolInstallDialog v-model="installVisible" :tool="installTool" />
   </div>
 </template>
 
@@ -117,12 +136,13 @@ const ordered = computed(() => {
   color: var(--color-primary);
 }
 
+/* 平铺列表：行与行之间不留间隙、也不画分隔线 —— 靠 hover 底色与行内左右两块内容
+   区分（这是工作台左栏的同一套语言；用户明确不要"圆角 + 单 border"的卡片）。 */
 .pm-list__items {
   list-style: none;
   margin: 0;
-  padding: 0 4px 4px;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 </style>

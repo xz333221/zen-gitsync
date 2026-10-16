@@ -3188,7 +3188,7 @@ export default {
   '@PROJM:添加项目': 'Add project',
   '@PROJM:正在读取项目列表…': 'Loading projects…',
   '@PROJM:尚无项目': 'No projects yet',
-  '@PROJM:用「添加项目」把仓库加进来，或看看下面的推荐列表': 'Use "Add project" to bring a repository in, or check the recommendations below',
+  '@PROJM:用「添加项目」把仓库加进来，或看看上面的推荐列表': 'Use "Add project" to bring a repository in, or check the suggestions above',
   '@PROJM:展开启动方式': 'Show startup commands',
   '@PROJM:收起启动方式': 'Hide startup commands',
   '@PROJM:推荐添加': 'Suggested',

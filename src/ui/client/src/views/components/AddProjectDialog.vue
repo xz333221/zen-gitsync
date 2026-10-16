@@ -150,30 +150,24 @@ function submit() {
   gap: 8px;
 }
 .pm-add__input { flex: 1; min-width: 0; }
+/* 「浏览」是文字按钮（不画 border/不套方块）：与列表里那颗「添加」同一套语言 */
 .pm-add__browse {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--border-input);
+  padding: 0 10px;
+  border: none;
   border-radius: var(--radius-md);
-  background: var(--bg-input);
-  color: var(--text-secondary);
+  background: transparent;
+  color: var(--color-primary);
   font-family: inherit;
   font-size: var(--font-size-sm);
   cursor: pointer;
-  transition:
-    color var(--transition-fast) var(--ease-custom),
-    border-color var(--transition-fast) var(--ease-custom),
-    background var(--transition-fast) var(--ease-custom);
+  transition: background var(--transition-fast) var(--ease-custom);
 }
-.pm-add__browse:hover {
-  color: var(--color-primary);
-  border-color: var(--color-primary);
-  background: var(--tint-primary-12);
-}
+.pm-add__browse:hover { background: var(--tint-primary-12); }
 .pm-add__browse:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 .pm-add__note {
   margin: 0;

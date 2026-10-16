@@ -14,19 +14,25 @@
   ~ limitations under the License.
   -->
 <!--
-  「项目管理」视图里的一行：项目本体 + 启动方式 + 打开方式 + 删除。
+  「项目管理」视图里的一行：项目本体 + 工具快捷条 + 启动方式 + 打开方式 + 删除。
 
-  和工作台左栏那一行的分工（两处形态相似但语义不同，刻意不合并）：
-    · 工作台的行：点一下 = 把这行当看板过滤器（选中态），打开方式收在 hover 才出现的「…」里；
-    · 这一行：点一下 = 展开这块的「启动方式」（AI 启动建议），打开方式与删除都常驻可见。
-  所以这里的删除**对任何项目都开着**（不只是目录已不存在的那些）：这个视图的语义就是
-  "管理清单"，活项目的"从清单移除"同样正当（任务不删、目录还在、随时能加回来）。
-  工作台那边只在 exists === false 时给删除，是因为它的用途是清理死条目 —— 两处不一样是
-  有意为之，别为了"对齐"把这条改掉。
+  三处刻意的设计（2026-10-16 按用户反馈改版）：
+    1. **不是卡片**：原来每行是"圆角 + 单层 border"，用户明确不喜欢。现在跟工作台左栏
+       同一套语言 —— 平铺行、hover/选中才出底色、不画边框。"当前"项目靠一条 3px 主色
+       竖条 + 淡渐变底表达。
+    2. **行内工具快捷条**：宽屏下每行直接摆出一排「用 X 打开」图标（原来这些都藏在「…」
+       菜单里，宽屏时每行中间一大片是空的 —— 用户拿红框圈出来了）。这也把
+       「工作台里的那些选项」变成一眼可见、一次点击。窄屏（< 1180px）自动收起，
+       功能仍可从「…」菜单进（那 20 项一个不少）。
+    3. 信息分三行（名字 / 分支+进度 / 完整路径）：路径是这页最有用的辨认线索
+       （同名项目、同一仓库的多个克隆），宁可占一行也不缩成省略号。
 
-  「启动方式」直接复用 ProjectStartupAiPanel（同一个面板、同一份 i18n），挂在
-  `v-if="expanded"` 后面 —— 展开才挂载 = 展开才发请求（十几个项目不可能一起分析）。
-  服务端会按项目清单白名单校验传过去的路径（见 routes/projectStartupAi.js）。
+  与工作台那一行的分工（形态相似但语义不同，刻意不合并）：那边的行"点一下 = 选中当看板
+  过滤器"，这边的行"点一下 = 展开启动方式"；这边的删除对**任何项目**都开着（管理语义），
+  那边只在 exists === false 时给删。两处不一样是有意为之，别为了"对齐"改掉。
+
+  ⚠️ 工具快捷条**自己不开安装弹窗**：ToolInstallDialog 走 CommonDialog（关掉后节点仍在
+  DOM），一行挂一个就是几十份。这里 emit('needInstall') 交给面板统一弹一份。
 -->
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
@@ -35,9 +41,13 @@ import { Delete, Folder, MoreFilled } from '@element-plus/icons-vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
 import ProjectOpenMenuList from '@components/ProjectOpenMenuList.vue'
 import ProjectStartupAiPanel from '@components/ProjectStartupAiPanel.vue'
+import claudeCodeIcon from '@/assets/icons/svg/claudecode-color.svg'
 import { useIconFallback } from '@/composables/useIconFallback'
+import { useOpenWithTool } from '@/composables/useOpenWithTool'
+import { OPEN_WITH_TOOLS } from '@/composables/useDirectoryOpenActions'
 import { $t } from '@/lang/static'
 import { relativeTimeFromIso } from '@/utils/relativeTime'
+import type { ToolId } from '@/stores/toolsStore'
 import type { ProjectSummary } from '@/types/workbench'
 
 const props = defineProps<{
@@ -48,12 +58,27 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   remove: [project: ProjectSummary]
+  /** 行内快捷条点了没装的工具 —— 交给面板弹那一份安装引导 */
+  needInstall: [tool: ToolId]
 }>()
 
 /** 目录在不在，决定"能不能打开 / 能不能分析启动方式" */
 const canOpen = computed(() => props.project.exists !== false)
 
 const { isIconBroken, markIconFailed } = useIconFallback()
+const { toolMissing, tryOpenWithTool } = useOpenWithTool()
+
+/**
+ * 快捷条里的工具：claude 排最前（这里最常用的一个），其余按菜单里的顺序。
+ * claude 不在 OPEN_WITH_TOOLS 里（它有三档权限、菜单里单独排布），快捷条只跑默认档。
+ */
+const STRIP_CLAUDE = { id: 'claude' as ToolId, icon: 'claudecode', labelKey: '@67CE7:用 Claude Code 打开' }
+const STRIP_TOOLS = [STRIP_CLAUDE, ...OPEN_WITH_TOOLS]
+
+async function openWith(tool: ToolId) {
+  const status = await tryOpenWithTool(tool, props.project.path)
+  if (status === 'install') emit('needInstall', tool)
+}
 
 /** 「启动方式」展开态：展开才挂 ProjectStartupAiPanel（= 展开才请求模型） */
 const expanded = ref(false)
@@ -64,12 +89,10 @@ function toggleExpanded() {
 
 // ── 打开方式菜单 ──────────────────────────────────────────────────────
 // 每行自己持有一份状态，但**只在自己打开时才挂 document 监听**：
-// 33 行各注册一个常驻监听纯属浪费（工作台那边把状态提到面板级就是为了这个，
-// 但它一行只有一个 popover，这里自管更好读）。关闭判据与工作台同口径：
+// 33 行各注册一个常驻监听纯属浪费。关闭判据与工作台同口径：
 // 触发按钮不算"外面"，popper 里的点击也不算。
 const menuOpen = ref(false)
 const triggerEl = ref<HTMLElement | null>(null)
-const popoverWrap = ref<HTMLElement | null>(null)
 
 function toggleMenu(e: MouseEvent) {
   if (menuOpen.value) {
@@ -186,12 +209,28 @@ async function confirmRemove() {
             <span v-if="project.stats.total > 0" class="pm-item__progress">
               {{ $t('@WORKBENCH:{done}/{total} 任务完成', { done: project.stats.done, total: project.stats.total }) }}
             </span>
-            <span class="pm-item__time">{{ relativeTimeFromIso(project.stats.lastActiveAt) }}</span>
           </template>
         </div>
 
         <!-- 完整路径：管理工作最需要的辨认线索（同名项目 / 同一仓库的多个克隆） -->
         <div class="pm-item__path">{{ project.path }}</div>
+      </div>
+
+      <!-- 工具快捷条：宽屏才出（窄屏靠「…」菜单，功能不缺） -->
+      <div v-if="canOpen" class="pm-item__tools">
+        <button
+          v-for="tool in STRIP_TOOLS"
+          :key="tool.id"
+          type="button"
+          class="pm-tool"
+          :class="{ 'is-missing': toolMissing(tool.id) }"
+          :title="toolMissing(tool.id) ? `${$t(tool.labelKey)} · ${$t('@67CE7:未安装')}` : $t(tool.labelKey)"
+          :aria-label="$t(tool.labelKey)"
+          @click.stop="openWith(tool.id)"
+        >
+          <img v-if="tool.id === 'claude'" :src="claudeCodeIcon" alt="" class="pm-tool__img" />
+          <svg-icon v-else :icon-class="tool.icon" :class="{ 'icon-invert-dark': tool.id === 'codex' }" />
+        </button>
       </div>
 
       <!-- 操作区常驻（不像工作台那样 hover 才出现）：「管理」语义下这些就是主操作 -->
@@ -224,7 +263,6 @@ async function confirmRemove() {
         >
           <template #reference>
             <button
-              ref="popoverWrap"
               type="button"
               class="pm-item__action"
               :class="{ 'is-on': menuOpen }"
@@ -256,6 +294,8 @@ async function confirmRemove() {
           <el-icon aria-hidden="true" :class="{ 'is-rotating': removing }"><Delete /></el-icon>
         </button>
       </div>
+
+      <span class="pm-item__time">{{ relativeTimeFromIso(project.stats.lastActiveAt) }}</span>
     </div>
 
     <!-- 启动方式（AI 启动建议）：展开才挂载 = 展开才请求 -->
@@ -266,31 +306,47 @@ async function confirmRemove() {
 </template>
 
 <style scoped>
+/* ── 平铺行（跟工作台左栏 .proj-item 同一套语言：不画边框、hover/态才出底色） ──
+   用户明确不喜欢"圆角 + 单层 border"的卡片样子，所以这里连圆角都只在有底色时才有意义
+   （透明底上圆角看不出来）。"当前"项目靠一条 3px 主色竖条 + 淡渐变底表达。 */
 .pm-item {
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  background: var(--bg-container);
-  overflow: hidden;
-  transition: border-color var(--transition-fast) var(--ease-custom);
+  position: relative;
+  transition: background var(--transition-fast) var(--ease-custom);
 }
-.pm-item:hover { border-color: var(--border-card-hover); }
-.pm-item.is-open { border-color: var(--tint-primary-30); }
-.pm-item.is-missing { border-color: color-mix(in srgb, var(--color-danger) 30%, transparent); }
-.pm-item.is-current { box-shadow: inset 3px 0 0 var(--color-primary); }
+.pm-item:hover { background: var(--bg-container-hover); }
+.pm-item.is-open { background: var(--bg-subtle); }
+.pm-item.is-current {
+  background: linear-gradient(90deg, var(--tint-primary-12), transparent 55%);
+}
+/* 竖条走 ::before 而不是 border-left：border 会挤进内容盒，把图标槽与项目名整体右移，
+   有图标与没图标的行就对不齐（工作台那次为这条踩过坑）。 */
+.pm-item.is-current::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  background: var(--color-primary);
+  border-radius: 0 2px 2px 0;
+}
+.pm-item.is-missing .pm-item__name { color: var(--text-meta); }
 
 .pm-item__head {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) auto;
-  column-gap: 10px;
+  display: flex;
   align-items: center;
-  padding: 10px 12px;
+  gap: 16px;
+  /* space-between：宽屏时把富余宽度摊到几处间隙里，而不是在末尾留一个大洞
+     （用户圈的就是"每行中间一大片是空的"） */
+  justify-content: space-between;
+  padding: 9px 12px 9px 14px;
   cursor: pointer;
   outline: none;
 }
-.pm-item__head:hover { background: var(--bg-container-hover); }
 .pm-item__head:focus-visible { outline: var(--focus-outline); outline-offset: -2px; }
 
 .pm-item__icon-slot {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -302,11 +358,13 @@ async function confirmRemove() {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--bg-subtle);
 }
 
-.pm-item__meta { min-width: 0; }
+/* 身份块：宽度按内容取（min 保证名字不被压扁，max 防超长路径把整行撑破），
+   剩下宽度留给工具快捷条与操作区。 */
+.pm-item__meta { flex: 0 1 auto; min-width: 260px; max-width: 620px; }
 .pm-item__row1 {
   display: flex;
   align-items: center;
@@ -328,6 +386,7 @@ async function confirmRemove() {
   border-radius: 50%;
   background: var(--color-warning);
   box-shadow: var(--dot-glow-warning);
+  animation: pm-pulse 1.4s ease-in-out infinite;
 }
 .pm-item__row2 {
   display: flex;
@@ -343,8 +402,8 @@ async function confirmRemove() {
   align-items: center;
   gap: 4px;
   min-width: 0;
-  max-width: 180px;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  max-width: 160px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 .pm-item__branch-name {
   min-width: 0;
@@ -361,9 +420,9 @@ async function confirmRemove() {
   color: currentColor;
 }
 .pm-item__progress { flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.pm-item__time { margin-left: auto; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 
-/* 完整路径：等宽字体 + 省略号（全文在行 title 与这里自己的 title 里） */
+/* 完整路径：等宽 + 省略。direction:rtl 让省略发生在**前面**、保住目录名与最后两级
+   （长路径里最有用的那一段）；行有 title 兜底全路径。 */
 .pm-item__path {
   margin-top: 3px;
   font-size: var(--font-size-xs);
@@ -372,11 +431,43 @@ async function confirmRemove() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  direction: rtl;   /* 长路径截前面、留结尾（目录名 + 最后两级最有用） */
+  direction: rtl;
   text-align: left;
 }
 
+/* ── 工具快捷条（宽屏才出） ────────────────────────────────────────── */
+.pm-item__tools {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+.pm-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: var(--radius-base);   /* 只在 hover 底色上看得见 */
+  transition:
+    color var(--transition-fast) var(--ease-custom),
+    background var(--transition-fast) var(--ease-custom);
+}
+.pm-tool :deep(svg) { width: 15px; height: 15px; }
+.pm-tool__img { width: 15px; height: 15px; object-fit: contain; -webkit-user-drag: none; }
+.pm-tool:hover { color: var(--color-primary); background: var(--tint-primary-12); }
+.pm-tool:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
+.pm-tool.is-missing { opacity: 0.42; filter: grayscale(0.75); }
+.pm-tool.is-missing:hover { opacity: 0.9; filter: grayscale(0.15); }
+
+/* ── 操作区 + 时间 ─────────────────────────────────────────────────── */
 .pm-item__actions {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -401,36 +492,52 @@ async function confirmRemove() {
 .pm-item__action:hover { color: var(--color-primary); background: var(--tint-primary-12); }
 .pm-item__action:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 .pm-item__action.is-on { color: var(--color-primary); background: var(--tint-primary-12); }
-.pm-item__action--danger { color: var(--color-danger-dark); }
+/* 危险动作（删除）静息是普通灰，hover 才转红：33 行各挂一枚常驻红图标太吵，
+   而 hover 时的红已经足够说清"这一下是破坏性的"。 */
+.pm-item__action--danger { color: var(--text-meta); }
 .pm-item__action--danger:hover {
   color: var(--color-danger-dark);
   background: color-mix(in srgb, var(--color-danger) 14%, transparent);
 }
 .pm-item__action:disabled { cursor: default; opacity: 0.55; }
+
+.pm-item__time {
+  flex-shrink: 0;
+  min-width: 62px;
+  text-align: right;
+  font-size: var(--font-size-xs);
+  color: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 启动方式：复用 ProjectStartupAiPanel，但它是"面板"形态（自带外边距/阴影）——
+   嵌在行里时去掉外边距与阴影，让它看起来是这一行的下半段，不套第二层卡片。 */
+.pm-item__startup {
+  padding: 0 12px 10px 14px;
+}
+.pm-item__startup :deep(.startup-ai-panel) {
+  margin-top: 0;
+  box-shadow: none;
+  background: var(--bg-container);
+}
+
+/* 窄屏：工具快捷条收起来（功能仍在「…」菜单里，20 项一个不少）。
+   1180px 是实测阈值：再窄下去，"路径上限 620 + 快捷条 ~220 + 操作 72 + 时间 62 +
+   四道 16px 间隙"就会开始挤掉项目名。 */
+@media (max-width: 1180px) {
+  .pm-item__tools { display: none; }
+  .pm-item__meta { max-width: none; }
+}
+
+@keyframes pm-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(1.3); }
+}
 .is-rotating { animation: rotating 1s linear infinite; }
 @keyframes rotating {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
-
-/* 启动方式：复用 ProjectStartupAiPanel，但它是"面板"形态（自带外边距/阴影/折叠头）——
-   嵌在行里时去掉外边距与阴影，让它看起来是这一行的下半段。 */
-.pm-item__startup {
-  padding: 0 12px 12px;
-}
-.pm-item__startup :deep(.startup-ai-panel) {
-  margin-top: 0;
-  box-shadow: none;
-  border: 1px solid var(--border-card);
-  border-radius: var(--radius-md);
-}
-
-/* 运行中呼吸点：与工作台同一条动画 */
-@keyframes pm-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.45; transform: scale(1.3); }
-}
-.pm-item__running { animation: pm-pulse 1.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
   .pm-item__running,
   .is-rotating { animation: none; }

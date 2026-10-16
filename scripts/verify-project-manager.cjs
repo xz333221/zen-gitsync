@@ -142,6 +142,26 @@ async function main() {
     npmLaunchCalls.push(JSON.parse(route.request().postData() || '{}'))
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true }) })
   })
+  // 工具检测：**桩死**，否则"已装/未装"取决于跑探针的那台机器，断言会飘。
+  // vscode/claude 装、其余没装 → 一次跑完"能打开"与"弹安装引导"两条路径。
+  await page.route('**/api/check-tools', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({
+      success: true, vscode: true, claude: true, codex: false, opencode: false,
+      codebuddy: false, pi: false, kimi: false, zcode: false, dsh: false,
+      platform: 'win32', installers: {}, versions: {},
+    }),
+  }))
+  const vscodeOpenCalls = []
+  await page.route('**/api/open-directory-with-vscode', (route) => {
+    vscodeOpenCalls.push(JSON.parse(route.request().postData() || '{}'))
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, message: '已用 VSCode 打开目录' }) })
+  })
+  const piOpenCalls = []
+  await page.route('**/api/open-directory-with-pi', (route) => {
+    piOpenCalls.push(JSON.parse(route.request().postData() || '{}'))
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true }) })
+  })
 
   const toasts = () => page.evaluate(() => Array.from(document.querySelectorAll('.el-message')).map(n => (n.textContent || '').trim()))
   const hasToast = async (s) => (await toasts()).some(t => t.includes(s))
@@ -173,6 +193,20 @@ async function main() {
     check('P0c 护栏：应用外壳仍在（不是整页挂掉）', (await page.locator('.activity-bar').count()) === 1)
     if (!pmOk) throw new Error('项目管理视图没渲染出来')
 
+    // ── P0d 推荐区在项目列表**上面**（本轮用户明确要求） ────────────────
+    const recAbove = await page.evaluate(() => {
+      const rec = document.querySelector('.pm-rec')
+      const list = document.querySelector('.pm-list__items') || document.querySelector('.pm-list')
+      if (!rec || !list) return null
+      // DOM 顺序 + 几何各判一次：只看 DOM 顺序会被 CSS 的 order/direction 骗过，
+      // 只看几何会在"两边都还没渲染完"时给出假绿
+      const domBefore = !!(rec.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING)
+      return { domBefore, recTop: rec.getBoundingClientRect().top, listTop: list.getBoundingClientRect().top }
+    })
+    check('P0d 推荐添加上移：在项目列表上方（DOM 顺序 + 几何）',
+      !!recAbove && recAbove.domBefore && recAbove.recTop < recAbove.listTop,
+      JSON.stringify(recAbove))
+
     // ── P1 列表 ───────────────────────────────────────────────────────
     await waitUntil(async () => (await pmRows.count()) >= 3, 15000)
     check('P1a 渲染出 3 个项目行', (await pmRows.count()) === 3, `rows=${await pmRows.count()}`)
@@ -182,6 +216,55 @@ async function main() {
     check('P1d 目录不存在的项目标了 chip', (await rowByName('gone-repo').locator('.pm-chip--missing').count()) === 1)
     check('P1e 当前项目的行有当前标记', (await rowByName('alpha-repo').locator('.pm-chip--current').count()) === 1)
     await page.screenshot({ path: path.join(SHOT_DIR, 'pm-list.png') })
+
+    // ── P1f..P1i 行内工具快捷条 + 平铺（无边框）样式 ────────────────────
+    const alphaTools = rowByName('alpha-repo').locator('.pm-item__tools .pm-tool')
+    const toolCount = await alphaTools.count()
+    check('P1f 行内有工具快捷条（claude + 8 个工具 = 9 个）', toolCount === 9, `count=${toolCount}`)
+    const toolLabels = await page.evaluate(() => Array.from(document.querySelectorAll('.pm-item__tools .pm-tool')).map(b => b.getAttribute('aria-label')))
+    check('P1f2 快捷条覆盖 claude / VSCode / Pi Agent / DeepSeek Harness',
+      ['用 Claude Code 打开', '用 VSCode 打开', '用 Pi Agent 打开', '用 DeepSeek Harness 打开'].every(l => toolLabels.includes(l)),
+      JSON.stringify(toolLabels.slice(0, 9)))
+    // 检测结果是异步到的（toolsStore.startPolling → checkTools）：等"灰"真的落在 7 个上再判，
+    // 别在 lastCheckedAt 还是 null 的那一帧读（那会儿 toolMissing 一律 false，会误判成"都装了"）
+    const missingOk = await waitUntil(async () => (await rowByName('alpha-repo').locator('.pm-tool.is-missing').count()) === 7, 8000)
+    check('P1f3 未装的工具在快捷条里是"灰"的（is-missing，桩里 9 装 2）', missingOk,
+      `missing=${await rowByName('alpha-repo').locator('.pm-tool.is-missing').count()}`)
+    check('P1f4 快捷条宽屏下可见（窄屏由 CSS 收起）', await alphaTools.first().isVisible())
+
+    // 已装工具 → 直接打开（默认档）
+    await rowByName('alpha-repo').locator('.pm-tool[aria-label="用 VSCode 打开"]').click()
+    const opened = await waitUntil(async () => vscodeOpenCalls.length === 1, 8000)
+    check('P1g 点快捷条的 VSCode → open-directory-with-vscode 收到该行路径',
+      opened && vscodeOpenCalls[0].path === P_ALPHA && !vscodeOpenCalls[0].permissionMode,
+      JSON.stringify(vscodeOpenCalls))
+    // 未装工具 → 弹安装引导，且**不发**打开请求
+    await rowByName('alpha-repo').locator('.pm-tool[aria-label="用 Pi Agent 打开"]').click()
+    const installShown = await waitUntil(async () => {
+      const dlg = page.locator('.tool-install-dialog')
+      return (await dlg.count()) > 0 && await dlg.first().isVisible()
+    }, 8000)
+    check('P1h 点未装工具 → 弹安装引导（行内不自己挂弹窗）', installShown)
+    check('P1h2 未装工具不发打开请求', piOpenCalls.length === 0, JSON.stringify(piOpenCalls))
+    await page.keyboard.press('Escape')
+    await waitUntil(async () => {
+      const dlg = page.locator('.tool-install-dialog')
+      return (await dlg.count()) === 0 || !(await dlg.first().isVisible())
+    }, 5000)
+
+    // 用户明确不要"圆角 + 单 border"的卡片：行与推荐带都不许有边框
+    const borders = await page.evaluate(() => {
+      const read = (sel) => {
+        const el = document.querySelector(sel)
+        if (!el) return null
+        const cs = getComputedStyle(el)
+        return { top: cs.borderTopWidth, left: cs.borderLeftWidth, right: cs.borderRightWidth, bottom: cs.borderBottomWidth }
+      }
+      return { item: read('.pm-item'), rec: read('.pm-rec') }
+    })
+    const noBorder = (b) => !!b && [b.top, b.left, b.right, b.bottom].every(w => w === '0px')
+    check('P1i 项目行与推荐带都是平铺（无 border），不是"圆角卡片"',
+      noBorder(borders.item) && noBorder(borders.rec), JSON.stringify(borders))
 
     // ── P6 启动方式懒加载（先量"初始 0 次"，再展开） ───────────────────
     const withPath = () => startupCalls.filter(b => b.projectPath)
