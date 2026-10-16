@@ -19,7 +19,6 @@ import { ElMessage } from 'element-plus'
 import { CopyDocument } from '@element-plus/icons-vue'
 import { $t } from '@/lang/static'
 import IconButton from '@components/IconButton.vue'
-import SvgIcon from '@components/SvgIcon/index.vue'
 import CustomCommandManager from '@components/CustomCommandManager.vue'
 import { useConfigStore } from '@stores/configStore'
 import { useGitStore } from '@stores/gitStore'
@@ -416,11 +415,20 @@ async function runCommand(cmd: any) {
     <div class="panel-header accordion-header" @click="toggleCollapsed">
       <div class="header-left">
         <el-icon class="accordion-chevron" :class="{ 'is-collapsed': collapsed }">
-          <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-            <path fill="currentColor" d="M340.864 149.312a30.592 30.592 0 0 0 0 42.752L652.736 512 340.864 831.872a30.592 30.592 0 0 0 0 42.752 29.12 29.12 0 0 0 41.728 0L714.24 534.336a32 32 0 0 0 0-44.672L382.592 149.376a29.12 29.12 0 0 0-41.728 0z"/>
+          <!-- chevron-right.svg（Tabler icons，MIT）：展开态由 CSS 旋转 90° -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9 6l6 6l-6 6" />
           </svg>
         </el-icon>
-        <SvgIcon icon-class="command-list" class-name="cmd-panel-icon" />
+        <!-- list-details.svg（Tabler icons，MIT）：原 command-list 精灵 -->
+        <svg class="cmd-panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M13 5h8" />
+          <path d="M13 9h5" />
+          <path d="M13 15h8" />
+          <path d="M13 19h5" />
+          <path d="M3 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1l0-4" />
+          <path d="M3 15a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1l0-4" />
+        </svg>
         <span class="panel-title">{{ $t('@CMDPANEL:自定义命令') }}</span>
       </div>
       <div class="header-right" @click.stop>
@@ -430,8 +438,10 @@ async function runCommand(cmd: any) {
           @click="openManager"
         >
           <el-icon>
-            <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-              <path fill="currentColor" d="M600.704 64a32 32 0 0 1 30.464 22.208l35.2 109.376c14.784 7.232 28.928 15.36 42.432 24.512l112.384-24.192a32 32 0 0 1 34.432 15.36L944.32 364.8a32 32 0 0 1-4.032 37.504l-77.12 85.12a357.12 357.12 0 0 1 0 49.024l77.12 85.248a32 32 0 0 1 4.032 37.504l-88.704 153.6a32 32 0 0 1-34.432 15.296L708.8 803.904c-13.44 9.088-27.648 17.28-42.368 24.512l-35.264 109.376A32 32 0 0 1 600.704 960H423.296a32 32 0 0 1-30.464-22.208L357.696 828.48a351.616 351.616 0 0 1-42.56-24.64l-112.32 24.256a32 32 0 0 1-34.432-15.36L79.68 659.2a32 32 0 0 1 4.032-37.504l77.12-85.248a357.12 357.12 0 0 1 0-48.896l-77.12-85.248A32 32 0 0 1 79.68 364.8l88.704-153.6a32 32 0 0 1 34.432-15.296L315.2 220.096c13.568-9.152 27.776-17.408 42.56-24.64l35.2-109.312A32 32 0 0 1 423.232 64H600.64zm-23.424 64H446.72l-36.352 113.088-24.512 11.968a294.113 294.113 0 0 0-34.816 20.096l-22.656 15.36-116.224-25.088-65.28 113.152 79.68 88.192-1.92 27.136a293.12 293.12 0 0 0 0 40.192l1.92 27.136-79.808 88.192 65.344 113.152 116.224-25.024 22.656 15.296a294.113 294.113 0 0 0 34.816 20.096l24.512 11.968L446.72 896h130.688l36.48-113.152 24.448-11.904a288.282 288.282 0 0 0 34.752-20.096l22.592-15.296 116.288 25.024 65.28-113.152-79.744-88.192 1.92-27.136a293.12 293.12 0 0 0 0-40.256l-1.92-27.136 79.808-88.128-65.344-113.152-116.288 24.96-22.592-15.232a287.616 287.616 0 0 0-34.752-20.096l-24.448-11.904L577.344 128zM512 320a192 192 0 1 1 0 384 192 192 0 0 1 0-384zm0 64a128 128 0 1 0 0 256 128 128 0 0 0 0-256z"/>
+            <!-- settings.svg（Tabler icons，MIT） -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37c1 .608 2.296.07 2.572-1.065" />
+              <path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0-6 0" />
             </svg>
           </el-icon>
         </IconButton>
@@ -473,12 +483,20 @@ async function runCommand(cmd: any) {
       >
         <div class="command-left">
           <el-icon class="play-icon" :class="{ 'is-loading': isRunning[String(cmd.id || cmd.name)] }">
-            <svg v-if="!isRunning[String(cmd.id || cmd.name)]" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-              <path fill="currentColor" d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372z"/>
-              <path fill="currentColor" d="M719.4 499.1l-296.1-215A15.9 15.9 0 0 0 398 297v430c0 13.1 14.8 20.5 25.3 12.9l296.1-215a15.9 15.9 0 0 0 0-25.8zm-257.6 134V390.9L628.5 512 461.8 633.1z"/>
+            <!-- player-play.svg / loader.svg（Tabler icons，MIT）：
+                 空闲 = 播放；运行中 = 辐射状 busy 图标（点击运行中的条目无操作，纯状态） -->
+            <svg v-if="!isRunning[String(cmd.id || cmd.name)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M7 4v16l13-8l-13-8" />
             </svg>
-            <svg v-else viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-              <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z"/>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 6l0-3" />
+              <path d="M16.25 7.75l2.15-2.15" />
+              <path d="M18 12l3 0" />
+              <path d="M16.25 16.25l2.15 2.15" />
+              <path d="M12 18l0 3" />
+              <path d="M7.75 16.25l-2.15 2.15" />
+              <path d="M6 12l-3 0" />
+              <path d="M7.75 7.75l-2.15-2.15" />
             </svg>
           </el-icon>
           <div class="command-info">
@@ -495,9 +513,10 @@ async function runCommand(cmd: any) {
       <div class="schedule-header">
         <div class="schedule-header-left">
           <el-icon class="schedule-icon">
-            <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-              <path fill="currentColor" d="M512 896a384 384 0 1 0 0-768 384 384 0 0 0 0 768zm0 64a448 448 0 1 1 0-896 448 448 0 0 1 0 896z"/>
-              <path fill="currentColor" d="M480 256a32 32 0 0 1 32 32v224a32 32 0 0 1-14.08 26.56l-128 85.312a32 32 0 1 1-35.456-53.248L448 495.168V288a32 32 0 0 1 32-32z"/>
+            <!-- clock.svg（Tabler icons，MIT） -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0-18 0" />
+              <path d="M12 7v5l3 3" />
             </svg>
           </el-icon>
           <span class="schedule-title">{{ $t('@CMDPANEL:定时提交') }}</span>

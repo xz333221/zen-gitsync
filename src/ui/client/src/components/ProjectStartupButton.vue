@@ -17,7 +17,6 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconButton from '@components/IconButton.vue'
-import SvgIcon from '@components/SvgIcon/index.vue'
 import ProjectStartupDialog from '@components/ProjectStartupDialog.vue'
 
 const { t } = useI18n()
@@ -50,7 +49,10 @@ function handleExecuteWorkflow(workflow: any) {
       @click="openDialog"
       custom-class="project-startup-btn"
     >
-      <SvgIcon icon-class="start-run-command" class-name="icon-btn" />
+      <!-- player-play.svg（Tabler icons，MIT）：原 start-run-command 精灵（文档+播放）的等价物 -->
+      <svg class="icon-btn" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+        <path d="M7 4v16l13-8l-13-8" />
+      </svg>
     </IconButton>
 
     <ProjectStartupDialog 

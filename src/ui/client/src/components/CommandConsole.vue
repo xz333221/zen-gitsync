@@ -15,9 +15,8 @@
   -->
 <script setup lang="ts">
 import { ref, onMounted, onActivated, onDeactivated, watch, onUnmounted, nextTick, computed, defineAsyncComponent } from 'vue';
-import { ArrowDown, FullScreen, VideoPlay, Loading, Close, Position, Monitor, Document, Timer, Ticket, Delete, RefreshRight, Folder } from '@element-plus/icons-vue';
+import { ArrowDown, VideoPlay, Loading, Close, Position, Monitor, Document, Timer, Ticket, Delete, RefreshRight, Folder } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import SvgIcon from '@components/SvgIcon/index.vue';
 import IconButton from '@components/IconButton.vue';
 import EmptyState from '@components/EmptyState.vue';
 import CommonDialog from '@components/CommonDialog.vue'
@@ -2479,7 +2478,12 @@ onActivated(() => {
           custom-class="terminal-toggle-btn"
         >
           <el-icon :size="20">
-            <Monitor />
+            <!-- terminal-2.svg（Tabler icons，MIT）：终端执行开关 -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 9l3 3l-3 3" />
+              <path d="M13 15l3 0" />
+              <path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2l0-12" />
+            </svg>
           </el-icon>
         </IconButton>
         <IconButton
@@ -2488,7 +2492,15 @@ onActivated(() => {
           @click="openCommandManager"
           custom-class="command-manager-btn"
         >
-          <SvgIcon icon-class="command-list" class-name="icon-btn" />
+          <!-- list-details.svg（Tabler icons，MIT）：原 command-list 精灵 -->
+          <svg class="icon-btn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M13 5h8" />
+            <path d="M13 9h5" />
+            <path d="M13 15h8" />
+            <path d="M13 19h5" />
+            <path d="M3 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1l0-4" />
+            <path d="M3 15a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1l0-4" />
+          </svg>
         </IconButton>
         <ProjectStartupButton 
           @execute-command="executeCustomCommand"
@@ -2500,15 +2512,29 @@ onActivated(() => {
           @click="openFlowOrchestrationWorkspace"
           custom-class="flow-orchestrator-btn"
         >
-          <SvgIcon icon-class="workflow" class-name="icon-btn" />
+          <!-- route.svg（Tabler icons，MIT）：原 workflow 精灵（两节点+路径 = 编排） -->
+          <svg class="icon-btn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3 19a2 2 0 1 0 4 0a2 2 0 0 0-4 0" />
+            <path d="M19 7a2 2 0 1 0 0-4a2 2 0 0 0 0 4" />
+            <path d="M11 19h5.5a3.5 3.5 0 0 0 0-7h-8a3.5 3.5 0 0 1 0-7h4.5" />
+          </svg>
         </IconButton>
         <IconButton
           :tooltip="isFullscreen ? $t('@CF05E:退出全屏') : $t('@CF05E:全屏显示')"
           @click="isFullscreen = !isFullscreen"
         >
-          <el-icon v-if="!isFullscreen"><FullScreen /></el-icon>
-          <svg v-else viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" style="display:block">
-            <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
+          <!-- maximize / minimize.svg（Tabler icons，MIT） -->
+          <svg v-if="!isFullscreen" class="icon-btn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 8v-2a2 2 0 0 1 2-2h2" />
+            <path d="M4 16v2a2 2 0 0 0 2 2h2" />
+            <path d="M16 4h2a2 2 0 0 1 2 2v2" />
+            <path d="M16 20h2a2 2 0 0 0 2-2v-2" />
+          </svg>
+          <svg v-else class="icon-btn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M15 19v-2a2 2 0 0 1 2-2h2" />
+            <path d="M15 5v2a2 2 0 0 0 2 2h2" />
+            <path d="M5 15h2a2 2 0 0 1 2 2v2" />
+            <path d="M5 9h2a2 2 0 0 0 2-2v-2" />
           </svg>
         </IconButton>
 
@@ -2535,12 +2561,23 @@ onActivated(() => {
                   <div class="terminal-sessions-actions">
                     <el-tooltip :content="$t('@CMDCON:刷新')" placement="bottom">
                       <el-button text size="small" @click="loadTerminalSessions" :disabled="terminalSessionsLoading">
-                        <el-icon><RefreshRight /></el-icon>
+                        <el-icon>
+                          <!-- refresh.svg（Tabler icons，MIT） -->
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M20 11a8.1 8.1 0 0 0-15.5-2m-.5-4v4h4" />
+                            <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+                          </svg>
+                        </el-icon>
                       </el-button>
                     </el-tooltip>
                     <el-tooltip :content="$t('@CMDCON:隐藏')" placement="bottom">
                       <el-button text size="small" @click="showTerminalSessions = false">
-                        <el-icon><ArrowDown /></el-icon>
+                        <el-icon>
+                          <!-- chevron-down.svg（Tabler icons，MIT） -->
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M6 9l6 6l6-6" />
+                          </svg>
+                        </el-icon>
                       </el-button>
                     </el-tooltip>
                   </div>
@@ -2554,10 +2591,11 @@ onActivated(() => {
                     :hint="$t('@CMDCON:从左侧「自定义命令」运行一条命令，会话会出现在这里')"
                   >
                     <template #icon>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="2" y="4" width="20" height="16" rx="2" />
-                        <path d="M6 9l3 3-3 3" />
-                        <line x1="12" y1="15" x2="17" y2="15" />
+                      <!-- terminal-2.svg（Tabler icons，MIT） -->
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M8 9l3 3l-3 3" />
+                        <path d="M13 15l3 0" />
+                        <path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2l0-12" />
                       </svg>
                     </template>
                   </EmptyState>
