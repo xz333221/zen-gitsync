@@ -33,7 +33,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessageBox } from 'element-plus'
-import { Delete, Folder, MoreFilled } from '@element-plus/icons-vue'
+import { Folder } from '@element-plus/icons-vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
 import ProjectOpenMenuList from '@components/ProjectOpenMenuList.vue'
 import ProjectStartupAiPanel from '@components/ProjectStartupAiPanel.vue'
@@ -209,8 +209,10 @@ async function confirmRemove() {
           :aria-expanded="expanded"
           @click.stop="toggleExpanded"
         >
-          <svg viewBox="0 0 1024 1024" width="14" height="14" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-            <path d="M64 192h896v192L512 702 64 384z" />
+          <!-- caret-down.svg（Tabler icons，MIT，filled 版）：展开/收起启动方式。
+               20px（默认 24 网格里三角只占一半，14px 会显得比旁边两颗弱） -->
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path d="M18 9c.852 0 1.297 .986 .783 1.623l-.076 .084l-6 6a1 1 0 0 1 -1.32 .083l-.094 -.083l-6 -6l-.083 -.094l-.054 -.077l-.054 -.096l-.017 -.036l-.027 -.067l-.032 -.108l-.01 -.053l-.01 -.06l-.004 -.057v-.118l.005 -.058l.009 -.06l.01 -.052l.032 -.108l.027 -.067l.07 -.132l.065 -.09l.073 -.081l.094 -.083l.077 -.054l.096 -.054l.036 -.017l.067 -.027l.108 -.032l.053 -.01l.06 -.01l.057 -.004l12.059 -.002z" />
           </svg>
         </button>
 
@@ -236,7 +238,14 @@ async function confirmRemove() {
               aria-haspopup="menu"
               @click.stop="toggleMenu"
             >
-              <el-icon aria-hidden="true"><MoreFilled /></el-icon>
+              <el-icon aria-hidden="true">
+                <!-- dots.svg（Tabler icons，MIT）：三点菜单（原 EP MoreFilled） -->
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M4 12a1 1 0 1 0 2 0a1 1 0 1 0-2 0" />
+                  <path d="M11 12a1 1 0 1 0 2 0a1 1 0 1 0-2 0" />
+                  <path d="M18 12a1 1 0 1 0 2 0a1 1 0 1 0-2 0" />
+                </svg>
+              </el-icon>
             </button>
           </template>
           <ProjectOpenMenuList
@@ -255,7 +264,16 @@ async function confirmRemove() {
           :aria-label="`${$t('@WORKBENCH:从清单移除')} ${project.name}`"
           @click.stop="confirmRemove"
         >
-          <el-icon aria-hidden="true" :class="{ 'is-rotating': removing }"><Delete /></el-icon>
+          <el-icon aria-hidden="true" :class="{ 'is-rotating': removing }">
+            <!-- trash.svg（Tabler icons，MIT）：从清单移除（原 EP Delete） -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 7l16 0" />
+              <path d="M10 11l0 6" />
+              <path d="M14 11l0 6" />
+              <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12" />
+              <path d="M9 7v-3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3" />
+            </svg>
+          </el-icon>
         </button>
       </div>
     </div>

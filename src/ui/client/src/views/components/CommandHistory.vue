@@ -17,7 +17,7 @@
 import { $t } from '@/lang/static'
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Delete, CopyDocument, ArrowDown, ArrowUp, Clock, Loading, Search } from '@element-plus/icons-vue';
+import { Delete, CopyDocument, ArrowDown, ArrowUp, Loading, Search } from '@element-plus/icons-vue';
 import { useGitStore } from '@stores/gitStore';
 import CommonDialog from '@/components/CommonDialog.vue';
 import IconButton from '@/components/IconButton.vue';
@@ -479,7 +479,13 @@ onUnmounted(() => {
     :size="size"
     @click="openCommandHistory"
   >
-    <el-icon><Clock /></el-icon>
+    <el-icon>
+      <!-- history.svg（Tabler icons，MIT）：时钟 + 回拨箭头 = 「历史」（原 EP Clock，语义升级） -->
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 8l0 4l2 2" />
+        <path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5" />
+      </svg>
+    </el-icon>
   </IconButton>
 
   <!-- 命令历史弹窗（使用 CommonDialog） -->

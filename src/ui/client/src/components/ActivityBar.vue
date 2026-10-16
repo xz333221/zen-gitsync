@@ -171,11 +171,11 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
         :aria-label="terminalSessionsStore.hasActive ? `${$t('@ACTBAR:控制台')} · ${terminalSessionsStore.count} ${$t('@ACTBAR:个终端会话')}` : $t('@ACTBAR:控制台')"
         :aria-pressed="props.activeView === 'console'"
       >
-        <!-- terminal.svg: 终端窗口 + 光标 -->
+        <!-- terminal-2.svg（Tabler icons，MIT）：终端窗口 + 光标 -->
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-          <rect x="2" y="4" width="20" height="16" rx="2" />
-          <path d="M6 9l3 3-3 3" />
-          <line x1="12" y1="15" x2="17" y2="15" />
+          <path d="M8 9l3 3l-3 3" />
+          <path d="M13 15l3 0" />
+          <path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2l0-12" />
         </svg>
         <span
           v-if="terminalSessionsStore.hasActive"
@@ -199,13 +199,17 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
         :aria-label="agentStatus.hasRunning ? `${$t('@ACTBAR:智能体')} · ${agentStatus.runningCount} ${$t('@ACTBAR:个对话正在生成')}` : $t('@ACTBAR:智能体')"
         :aria-pressed="props.activeView === 'agent'"
       >
-        <!-- robot/bot.svg: 智能体图标 -->
+        <!-- robot.svg（Tabler icons，MIT）：智能体图标 -->
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-          <rect x="3" y="11" width="18" height="10" rx="2" />
-          <circle cx="12" cy="5" r="2" />
-          <path d="M12 7v4" />
-          <line x1="8" y1="16" x2="8" y2="16" />
-          <line x1="16" y1="16" x2="16" y2="16" />
+          <path d="M6 6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2l0-4" />
+          <path d="M12 2v2" />
+          <path d="M9 12v9" />
+          <path d="M15 12v9" />
+          <path d="M5 16l4-2" />
+          <path d="M15 14l4 2" />
+          <path d="M9 18h6" />
+          <path d="M10 8v.01" />
+          <path d="M14 8v.01" />
         </svg>
         <span
           v-if="agentStatus.hasRunning"
@@ -229,9 +233,11 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
         :aria-label="editorTabsStore.hasDirty ? `${$t('@ACTBAR:编辑器')} · ${editorTabsStore.dirtyCount} ${$t('@ACTBAR:个未保存文件')}` : $t('@ACTBAR:编辑器')"
         :aria-pressed="props.activeView === 'editor'"
       >
-        <!-- code-folder.svg -->
-        <svg viewBox="0 0 1024 1024" width="20" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-          <path d="M928 687.9c-17.8 0-32.2 14.4-32.2 32.1v80.7c0 35.3-28.7 64-64 64H192.5c-35.3 0-64-28.7-64-64V225c0-35.3 28.7-64 64-64H415l82.7 143.3c6.6 11.4 19.2 17.2 31.5 15.8h302.5c35.3 0 64 28.7 64 64v80c0 17.7 14.4 32.1 32.2 32.1s32.2-14.4 32.2-32.1c0-0.8 0-1.6-0.1-2.4v-77.5C960 329 925.1 282 876.1 264v-1c0-68.2-55.8-124-124-124H476.2l-14.8-25.7c-7.4-12.9-18-16.2-27.3-16l-0.1-0.1H192.1c-70.7 0-128 57.3-128 128v574.1c0 70.7 57.3 128 128 128h640c70.7 0 128-57.3 128-128v-76.9c0.1-0.8 0.1-1.6 0.1-2.4 0-17.7-14.4-32.1-32.2-32.1zM747.1 202.8c31.6 0 58 23.2 63.1 53.4H543.9l-30.8-53.4h234z"/>
+        <!-- folder-code.svg（Tabler icons，MIT）：文件夹 + 代码角标 -->
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M11 19h-6a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2h4l3 3h7a2 2 0 0 1 2 2v4" />
+          <path d="M20 21l2-2l-2-2" />
+          <path d="M17 17l-2 2l2 2" />
         </svg>
         <span
           v-if="editorTabsStore.hasDirty"
@@ -314,9 +320,9 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
         :aria-label="$t('@ACTBAR:系统监控')"
         :aria-pressed="props.activeView === 'monitor'"
       >
-        <!-- activity.svg: 心跳/波形监控图标 -->
+        <!-- activity.svg（Tabler icons，MIT）：心跳/波形监控图标 -->
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-          <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+          <path d="M3 12h4l3 8l4-16l3 8h4" />
         </svg>
       </button>
     </el-tooltip>
@@ -330,17 +336,17 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
         :aria-label="$t('@ACTBAR:思维导图')"
         :aria-pressed="props.activeView === 'mindmap'"
       >
-        <!-- mindmap.svg: 中心节点 + 四向辐射的节点拓扑 -->
+        <!-- topology-star.svg（Tabler icons，MIT）：中心节点 + 四向辐射的节点拓扑 -->
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="12" cy="12" r="2.2" />
-          <circle cx="4.5" cy="5" r="1.8" />
-          <circle cx="19.5" cy="5" r="1.8" />
-          <circle cx="4.5" cy="19" r="1.8" />
-          <circle cx="19.5" cy="19" r="1.8" />
-          <line x1="10.3" y1="10.6" x2="6" y2="6.2" />
-          <line x1="13.7" y1="10.6" x2="18" y2="6.2" />
-          <line x1="10.3" y1="13.4" x2="6" y2="17.8" />
-          <line x1="13.7" y1="13.4" x2="18" y2="17.8" />
+          <path d="M8 18a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
+          <path d="M20 6a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
+          <path d="M8 6a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
+          <path d="M20 18a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
+          <path d="M14 12a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
+          <path d="M7.5 7.5l3 3" />
+          <path d="M7.5 16.5l3-3" />
+          <path d="M13.5 13.5l3 3" />
+          <path d="M16.5 7.5l-3 3" />
         </svg>
       </button>
     </el-tooltip>
