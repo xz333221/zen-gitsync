@@ -2792,7 +2792,9 @@ export default {
   // @ACTBAR: file path: components/ActivityBar.vue (追加: 智能体)
   '@ACTBAR:智能体': '智能体',
   '@ACTBAR:个对话正在生成': '个对话正在生成',
-  // @ACTBAR: file end (追加4)
+  // 追加5：项目管理入口（与「工作台」分开 —— 那边管任务，这里管项目本身）
+  '@ACTBAR:项目管理': '项目管理',
+  // @ACTBAR: file end (追加5)
 
   // @AGENT: file path: views/AgentView.vue
   '@AGENT:新建会话': '新建会话',
@@ -3187,4 +3189,36 @@ export default {
   '@REPOLIST:Fork': 'Fork',
   '@REPOLIST:点击卡片在浏览器中打开仓库主页': '点击卡片在浏览器中打开仓库主页',
   // @REPOLIST: file end
+
+  // @PROJM: file path: views/ProjectManagerView.vue + views/components/ProjectManage*.vue
+  //           + components/AddProjectDialog.vue + components/RecommendedProjects.vue
+  //           + composables/useWorkbenchProjects.ts
+  '@PROJM:项目管理': '项目管理',
+  '@PROJM:共 {n} 个项目': '共 {n} 个项目',
+  '@PROJM:添加项目': '添加项目',
+  '@PROJM:正在读取项目列表…': '正在读取项目列表…',
+  '@PROJM:尚无项目': '尚无项目',
+  '@PROJM:用「添加项目」把仓库加进来，或看看下面的推荐列表': '用「添加项目」把仓库加进来，或看看下面的推荐列表',
+  '@PROJM:展开启动方式': '展开启动方式',
+  '@PROJM:收起启动方式': '收起启动方式',
+  '@PROJM:推荐添加': '推荐添加',
+  '@PROJM:重新扫描': '重新扫描',
+  '@PROJM:扫描已有项目所在的目录，列出还没加进来、且含 .git 的仓库': '扫描已有项目所在的目录，列出还没加进来、且含 .git 的仓库',
+  '@PROJM:正在扫描…': '正在扫描…',
+  '@PROJM:读取推荐列表失败': '读取推荐列表失败',
+  '@PROJM:没有发现可以添加的仓库，可以直接用「添加项目」指定路径': '没有发现可以添加的仓库，可以直接用「添加项目」指定路径',
+  '@PROJM:添加': '添加',
+  '@PROJM:添加中…': '添加中…',
+  '@PROJM:已添加': '已添加',
+  '@PROJM:已添加到项目列表': '已添加到项目列表',
+  '@PROJM:该目录已在项目列表中': '该目录已在项目列表中',
+  '@PROJM:添加项目失败': '添加项目失败',
+  '@PROJM:已移除「{name}」': '已移除「{name}」',
+  '@PROJM:已移除「{name}」，它的 {n} 条任务仍保留': '已移除「{name}」，它的 {n} 条任务仍保留',
+  '@PROJM:选择或粘贴一个项目目录（绝对路径），它会加进项目列表与常用目录': '选择或粘贴一个项目目录（绝对路径），它会加进项目列表与常用目录',
+  '@PROJM:粘贴项目目录的绝对路径': '粘贴项目目录的绝对路径',
+  '@PROJM:浏览': '浏览',
+  '@PROJM:浏览目录': '浏览目录',
+  '@PROJM:目录必须已经存在（克隆、创建完之后再来添加）': '目录必须已经存在（克隆、创建完之后再来添加）',
+  // @PROJM: file end
 }

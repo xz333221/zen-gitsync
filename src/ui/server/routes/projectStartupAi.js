@@ -27,16 +27,22 @@
 //      会变成一个点了就报错的按钮,比少给一条建议更糟。
 //
 // 路由:POST /api/project-startup/suggestions
-//   body: { locale?: 'zh' | 'en' }
+//   body: { locale?: 'zh' | 'en', projectPath?: string }
+//     · 不带 projectPath:分析**当前项目**(Git 视图那个面板的用法,行为不变)。
+//     · 带 projectPath:分析指定目录(「项目管理」视图里逐个项目展开时的用法)。
+//       必须是绝对路径、目录存在、且**命中项目清单白名单**——否则这个端点就成了
+//       "把任意目录的文件名与 README 摘发送给模型"的通道(与 /projects 的安全边界一致)。
 //   200: { success: true, suggestions: [...], model, analyzedAt, scannedDirs }
 //   200: { success: false, code: 'NO_MODEL', error }
-//   400: { success: false, code: 'NO_PROJECT' | 'NO_FACTS', error }
+//   400: { success: false, code: 'NO_PROJECT' | 'NO_FACTS' | 'BAD_PATH' | 'NOT_FOUND' | 'PROJECT_NOT_LISTED', error }
 //   500: { success: false, code: 'CONFIG_ERR' | 'LLM_ERR' | 'PARSE_FAILED', error }
 import express from 'express';
 import fs from 'fs/promises';
 import path from 'path';
 import { callLlmJson } from './workbench/llmClient.js';
 import { stripThinkingBlocks } from './workbench/jsonParse.js';
+import { buildProjectEntries, canonicalProjectPath } from './workbench/projectRegistry.js';
+import { TASKS_FILE, readJson } from './workbench/shared.js';
 import logger from '../utils/logger.js';
 
 /** 扫描深度与 npm 面板保持一致,否则模型会推荐面板里根本点不到的包 */
@@ -464,15 +470,75 @@ export function validateSuggestions(rawSuggestions, facts, projectRoot, locale) 
   return out.slice(0, MAX_SUGGESTIONS).map((item, index) => ({ ...item, order: index + 1 }));
 }
 
-export function registerProjectStartupAiRoutes({ app, configManager, getCurrentProjectPath }) {
+/**
+ * 默认的「这个路径在不在项目清单里」判据：最近目录 ∪ 任务里出现过的 projectPath。
+ *
+ * 刻意**不加 TTL 缓存**：这个端点每次调用后面都跟着一次目录扫描 + 一次模型调用（秒级），
+ * 为省一次小 JSON 读盘引入 10s 窗口，只会换来"刚在项目管理里添加完、立刻展开启动方式
+ * 却报'项目不在清单里'"这种极难排查的边界（workbench/index.js 那份 10s 缓存是为
+ * 图标端点 ~35 次/页的请求准备的，两处的代价不一样）。
+ *
+ * 判定失败（配置读不出来之类）按"不在清单里"处理并记日志：宁可这个 panel 显示一次
+ * "请先添加"，也不把清单外的路径放进去扫描。
+ */
+function createDefaultProjectChecker(configManager) {
+  return async function isKnownProject(key) {
+    const data = await readJson(TASKS_FILE, { tasks: [] });
+    let recentDirs = [];
+    try {
+      recentDirs = (await configManager?.getRecentDirectories?.()) || [];
+    } catch {
+      recentDirs = [];
+    }
+    return buildProjectEntries({ recentDirs, tasks: data.tasks || [] }).some(e => e.key === key);
+  };
+}
+
+export function registerProjectStartupAiRoutes({ app, configManager, getCurrentProjectPath, isKnownProject }) {
+  const knownProject = typeof isKnownProject === 'function'
+    ? isKnownProject
+    : createDefaultProjectChecker(configManager);
+
   app.post('/api/project-startup/suggestions', express.json(), async (req, res) => {
     const locale = String(req.body?.locale || '').trim();
+    const requestedPath = String(req.body?.projectPath || '').trim();
 
     let projectRoot = '';
-    try {
-      projectRoot = getCurrentProjectPath?.() || process.cwd();
-    } catch {
-      projectRoot = process.cwd();
+    if (requestedPath) {
+      // 指定了目录（「项目管理」视图逐个项目展开）：先过路径体检，再确认它在清单里
+      if (!path.isAbsolute(requestedPath)) {
+        return res.status(400).json({ success: false, code: 'BAD_PATH', error: '项目路径必须是绝对路径' });
+      }
+      let stat = null;
+      try {
+        stat = await fs.stat(requestedPath);
+      } catch {
+        stat = null;
+      }
+      if (!stat || !stat.isDirectory()) {
+        return res.status(400).json({ success: false, code: 'NOT_FOUND', error: '目录不存在' });
+      }
+      let known = false;
+      try {
+        known = await knownProject(canonicalProjectPath(requestedPath));
+      } catch (err) {
+        logger.warn('[project-startup] 校验项目是否在清单里失败:', err?.message || err);
+        known = false;
+      }
+      if (!known) {
+        return res.status(400).json({
+          success: false,
+          code: 'PROJECT_NOT_LISTED',
+          error: '这个目录不在项目清单里，请先添加为项目',
+        });
+      }
+      projectRoot = requestedPath;
+    } else {
+      try {
+        projectRoot = getCurrentProjectPath?.() || process.cwd();
+      } catch {
+        projectRoot = process.cwd();
+      }
     }
     if (!projectRoot || !path.isAbsolute(projectRoot)) {
       return res.status(400).json({ success: false, code: 'NO_PROJECT', error: '无法确定当前项目目录' });

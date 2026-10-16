@@ -100,8 +100,10 @@ import {
   buildTaskDetail,
   buildProjectEntries,
   canonicalProjectPath,
+  projectName,
 } from './projectRegistry.js';
 import { getProjectIcon } from './projectIcon.js';
+import { buildRecommendRoots, scanRecommendedProjects } from './projectRecommend.js';
 import { buildEnvContextBlock } from './envContext.js';
 import { readHiddenProjects, hideProject, filterHiddenProjects } from './hiddenProjects.js';
 import { ensureMemoryStore } from '../../../../memory/store.js';
@@ -1339,6 +1341,101 @@ export function registerWorkbenchRoutes({
       // 回给前端说清楚"任务一条都没删"，好让它把这句话原样讲给用户听
       keptTasks: tasks.filter(t => canonicalProjectPath(t.projectPath) === key).length,
     });
+  }));
+
+  /**
+   * 「推荐添加的项目」—— 找出磁盘上已有、却不在项目清单里的仓库。
+   *
+   * 起因：写 recentDirectories 的地方只有两处（GUI 启动 + /api/change_directory），
+   * 所以让智能体克隆 / 新建的项目不会自己进清单。这个端点扫一遍"已有项目的父目录"，
+   * 把旁边那些没加进来的仓库列出来，让用户一键加。
+   *
+   * 扫描范围与预算都在 projectRecommend.js 里（那里有完整的取舍说明）；这里只负责
+   * 组装事实：清单（最近目录 ∪ 任务路径）→ 扫描根 → 候选。
+   *
+   * 不传任何客户端参数：roots 全部来自用户自己的配置，所以这个端点没有
+   * "按客户端给的路径扫盘"的口子（与 /projects 那条安全边界一致）。
+   */
+  app.get('/api/workbench/projects/recommended', asyncRoute(async (_req, res) => {
+    const data = await readJson(TASKS_FILE, { tasks: [] });
+    const tasks = data.tasks || [];
+    let recentDirs = [];
+    try {
+      if (configManager && typeof configManager.getRecentDirectories === 'function') {
+        recentDirs = (await configManager.getRecentDirectories()) || [];
+      }
+    } catch (err) {
+      // 读不到最近目录就退化成"只按任务里的路径推扫描根"，不至于整个推荐功能挂掉
+      logger.warn('[workbench] 推荐项目时读取最近目录失败，扫描根只按任务路径推断:', err?.message || err);
+    }
+
+    const entries = buildProjectEntries({ recentDirs, tasks });
+    const currentPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
+    const roots = buildRecommendRoots(entries.map(e => e.path), currentPath);
+    const hidden = await readHiddenProjects();
+    const recommendations = await scanRecommendedProjects({
+      roots,
+      knownKeys: entries.map(e => e.key),
+      hiddenKeys: hidden,
+    });
+
+    res.json({ success: true, recommendations, roots });
+  }));
+
+  /**
+   * 把一个目录加进项目清单（左栏「项目管理」视图的「添加项目」）。
+   *
+   * 与 /projects/remove 对称，但方向相反、安全边界也不同：remove 只动清单里已有的条目，
+   * add 天生要接受清单外的路径，所以存在性 / 类型校验只能落在它自己头上 ——
+   * 不能顺着 /api/save_recent_directory 走，那个端点对路径不做任何检查。
+   *
+   * 落盘仍走 configManager.saveRecentDirectory（与 GUI 启动 / 切目录同一个写入点）：
+   * 它内部会做小写归一、去重与 50 条上限，**落盘的是归一后的路径**——
+   * 所以这里回 `name` 就够了，不回显归一后的 path（用户输的大小写形态会被改写，
+   * 前端若拿它回显会看起来像"路径被改坏了"）。
+   *
+   * 不做 unhide：隐藏名单只在"目录已不存在"时生效（hiddenProjects.js），
+   * 而这里刚校验过目录存在 —— 重新加回来它自己就可见了。
+   */
+  app.post('/api/workbench/projects/add', asyncRoute(async (req, res) => {
+    const rawPath = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
+    if (!rawPath) throw new HttpError(400, '缺少项目路径');
+    if (!path.isAbsolute(rawPath)) throw new HttpError(400, '项目路径必须是绝对路径');
+
+    let stat = null;
+    try {
+      stat = await fsp.stat(rawPath);
+    } catch {
+      stat = null;
+    }
+    if (!stat || !stat.isDirectory()) throw new HttpError(400, '该路径不是一个存在的目录');
+
+    if (!configManager || typeof configManager.saveRecentDirectory !== 'function') {
+      throw new HttpError(500, '配置管理不可用，无法添加项目');
+    }
+
+    const key = canonicalProjectPath(rawPath);
+    const data = await readJson(TASKS_FILE, { tasks: [] });
+    const tasks = data.tasks || [];
+    let recentDirs = [];
+    try {
+      recentDirs = (await configManager.getRecentDirectories()) || [];
+    } catch (err) {
+      logger.warn('[workbench] 添加项目时读取最近目录失败:', err?.message || err);
+    }
+    // 已经在清单里（常用目录 ∪ 任务路径）就不用再写一次 —— 前端据此提示"已在列表中"，
+    // 而不是弹一句会让人以为重复添加了的"添加成功"
+    const alreadyKnown = buildProjectEntries({ recentDirs, tasks }).some(e => e.key === key);
+
+    await configManager.saveRecentDirectory(rawPath);
+    // ⚠️ 立刻作废图标端点的清单白名单缓存（10s TTL）：用户"添加完马上展开这一行"时，
+    // 图标与启动方式都要按新清单去认这个路径，不失效会拿到 404 / 400。
+    knownProjectKeys.at = 0;
+    // 与 projects:removed 对称 —— 别的 g ui 实例的看板 5s 轮询本会自愈，这条只是让它们
+    // 第一时间知道（将来若有基于它的即时刷新，不必再补事件）
+    publish('projects:added', { key, path: rawPath });
+
+    res.json({ success: true, key, name: projectName(rawPath), alreadyKnown });
   }));
 
   /**

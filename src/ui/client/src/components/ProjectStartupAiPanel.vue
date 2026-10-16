@@ -33,24 +33,33 @@
   · 真报错(网关挂了之类)照旧显示错误态,不藏。
 -->
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { onMounted, ref } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import IconButton from '@components/IconButton.vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
 import { $t } from '@/lang/static'
 import { useConfigStore } from '@stores/configStore'
-import {
-  dropStartupSuggestions,
-  pendingStartupSuggestions,
-  readStartupSuggestions,
-  startupSuggestionsKey,
-  trackPendingStartupSuggestions,
-  writeStartupSuggestions,
-  type StartupSuggestion,
-} from '@/utils/projectStartupCache'
+import { useProjectStartupSuggestions } from '@/composables/useProjectStartupSuggestions'
 
 const configStore = useConfigStore()
+
+/**
+ * 要分析哪个项目。
+ *   · 不传（Git 视图左栏的用法）：分析**当前项目** —— 与抽出 composable 之前逐字一致。
+ *   · 传路径（「项目管理」视图逐个项目展开的用法）：分析指定项目，服务端会拿项目清单
+ *     白名单校验这个路径。挂在 `v-if="expanded"` 后面时，组件挂载才发请求 = 展开才分析。
+ */
+const props = defineProps<{ projectPath?: string }>()
+
+// 状态机与请求逻辑全在 composable 里（与「项目管理」视图共用同一份实现）
+const { status, suggestions, errorText, runningId, launchedIds, hasModel, sync, analyze, launch } =
+  useProjectStartupSuggestions(() => ({
+    // 缓存键始终用真实目录（不传 prop 时就是当前项目）
+    cachePath: props.projectPath || configStore.currentDirectory,
+    // 请求体里的 projectPath 只在"分析指定项目"时才给：不传 = 服务端分析当前项目，
+    // 这正是 Git 视图这个面板原来的行为（带上它反而会多走一层清单白名单校验）
+    requestPath: props.projectPath || '',
+  }))
 
 // 手风琴折叠状态 —— 与 NPM 脚本面板相反:**默认展开**(这个面板空着就没有存在意义)
 const collapsed = ref(false)
@@ -58,17 +67,6 @@ const collapsed = ref(false)
 function toggleCollapsed() {
   collapsed.value = !collapsed.value
 }
-
-type Status = 'idle' | 'loading' | 'done' | 'empty' | 'no-facts' | 'error' | 'no-model'
-
-const status = ref<Status>('idle')
-const suggestions = ref<StartupSuggestion[]>([])
-const errorText = ref('')
-const runningId = ref('')
-/** 本次会话里已经点过启动的条目 —— 只是视觉反馈,不进缓存 */
-const launchedIds = ref<Set<string>>(new Set())
-
-const hasModel = computed(() => Array.isArray(configStore.models) && configStore.models.length > 0)
 
 /**
  * 面板**恒显示**:没有事实(NO_FACTS)或模型没排出建议(empty)时显示的是一句明确的
@@ -81,184 +79,12 @@ const hasModel = computed(() => Array.isArray(configStore.models) && configStore
  * 而这个面板藏着会让"AI 启动建议"在整个界面上凭空消失。
  */
 
-const locale = computed(() => (String(configStore.locale || '').startsWith('en') ? 'en' : 'zh'))
-const modelKey = computed(() => {
-  const models = Array.isArray(configStore.models) ? configStore.models : []
-  const model = models.find((m: any) => m?.isDefault) || models[0]
-  return String(model?.model || model?.id || '')
-})
-/** 换目录 / 换语言 / 换模型都不能读到上一份 —— SPA 切目录不刷新页面,路径必须进 key */
-const cacheKey = computed(() => startupSuggestionsKey(configStore.currentDirectory, locale.value, modelKey.value))
-
-let controller: AbortController | null = null
-let requestToken = 0
-
-function applyResult(list: StartupSuggestion[]) {
-  suggestions.value = list
-  launchedIds.value = new Set()
-  status.value = list.length ? 'done' : 'empty'
-}
-
-/** 挂载 / 换目录时走这里:能命中缓存就直接换上,否则发起一次分析 */
-function sync() {
-  if (!hasModel.value) {
-    status.value = 'no-model'
-    return
-  }
-  const key = cacheKey.value
-  const cached = readStartupSuggestions(key)
-  if (cached) {
-    // 换 key 时先把在跑的那次作废(它的响应回来会覆盖掉这份命中缓存的旧结果)
-    requestToken++
-    applyResult(cached)
-    return
-  }
-  const pending = pendingStartupSuggestions(key)
-  if (pending) {
-    // 另一个实例已经在问了(切目录后又切回来),挂上去等结果,不重复花一次模型调用
-    status.value = 'loading'
-    const token = ++requestToken
-    void pending.then(() => {
-      if (token !== requestToken) return
-      applyResult(readStartupSuggestions(key) || [])
-    })
-    return
-  }
-  void analyze()
-}
-
-async function analyze() {
-  if (!hasModel.value) {
-    status.value = 'no-model'
-    return
-  }
-
-  controller?.abort()
-  const myController = new AbortController()
-  controller = myController
-  const token = ++requestToken
-  const key = cacheKey.value
-  status.value = 'loading'
-  errorText.value = ''
-  dropStartupSuggestions(key)
-
-  const task = (async () => {
-    try {
-      const response = await fetch('/api/project-startup/suggestions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ locale: locale.value }),
-        signal: myController.signal,
-      })
-      const result = await response.json().catch(() => null)
-      if (token !== requestToken) return
-
-      if (!result) {
-        status.value = 'error'
-        errorText.value = $t('@NPM02:分析失败，请稍后重试')
-        return
-      }
-
-      if (result.success === false) {
-        // NO_MODEL / NO_FACTS 是本地语义,用本地语义表达;其余(网关报错)原样带出 —— 那句话本身就是排查线索
-        if (result.code === 'NO_MODEL') {
-          status.value = 'no-model'
-          return
-        }
-        if (result.code === 'NO_FACTS') {
-          // 不是错误,是"这个目录压根没有能起的东西" —— 面板直接不出现
-          status.value = 'no-facts'
-          return
-        }
-        errorText.value = result.error || $t('@NPM02:分析失败，请稍后重试')
-        status.value = 'error'
-        return
-      }
-
-      const list = Array.isArray(result.suggestions) ? result.suggestions as StartupSuggestion[] : []
-      writeStartupSuggestions(key, list)
-      applyResult(list)
-    } catch (error: any) {
-      if (error?.name === 'AbortError') return
-      if (token !== requestToken) return
-      status.value = 'error'
-      errorText.value = error?.message || $t('@NPM02:分析失败，请稍后重试')
-    } finally {
-      if (controller === myController) controller = null
-    }
-  })()
-
-  trackPendingStartupSuggestions(key, task)
-  await task
-}
-
-function markLaunched(id: string) {
-  const next = new Set(launchedIds.value)
-  next.add(id)
-  launchedIds.value = next
-}
-
-async function launch(item: StartupSuggestion) {
-  runningId.value = item.id
-  try {
-    if (item.kind === 'npm' && item.packagePath && item.scriptName) {
-      const response = await fetch('/api/run-npm-script', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ packagePath: item.packagePath, scriptName: item.scriptName }),
-      })
-      const result = await response.json().catch(() => null)
-      if (result?.success) {
-        markLaunched(item.id)
-        ElMessage.success(`${$t('@NPM02:已在新终端中启动')}: ${item.command}`)
-      } else {
-        ElMessage.error(result?.error || $t('@NPM02:启动失败'))
-      }
-      return
-    }
-
-    // shell 类:命令是模型给的原话,执行前必须让用户过目
-    try {
-      await ElMessageBox.confirm(
-        item.command,
-        $t('@NPM02:确认在 {dir} 里执行这条命令？', { dir: item.cwdLabel || item.cwd || '.' }),
-        {
-          confirmButtonText: $t('@NPM02:执行'),
-          cancelButtonText: $t('@NPM02:取消'),
-          type: 'warning',
-        }
-      )
-    } catch {
-      return // 用户取消
-    }
-
-    const response = await fetch('/api/exec-in-terminal', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ command: item.command, workingDirectory: item.cwd }),
-    })
-    const result = await response.json().catch(() => null)
-    if (result?.success) {
-      markLaunched(item.id)
-      ElMessage.success(`${$t('@NPM02:已在新终端中启动')}: ${item.command}`)
-    } else {
-      ElMessage.error(result?.error || $t('@NPM02:启动失败'))
-    }
-  } catch (error: any) {
-    ElMessage.error(`${$t('@NPM02:启动失败')}: ${error?.message || error}`)
-  } finally {
-    runningId.value = ''
-  }
-}
-
 onMounted(() => {
-  // 默认展开 + 自动分析:打开界面就能看到"这项目怎么起",不用再点一次
+  // 默认展开 + 自动分析:打开界面就能看到"这项目怎么起",不用再点一次。
+  // 传了 projectPath 时（「项目管理」视图逐个项目展开），这一句就是"展开才分析"的落点 ——
+  // 面板挂在 `v-if="expanded"` 后面，展开才挂载、挂载才走这里。
   sync()
 })
-
-// 切工作目录**不会刷新页面**(只清空列表),所以这里得自己跟着换 ——
-// 顺带覆盖"在设置里刚加完模型回来"的情况(hasModel 变了)
-watch([cacheKey, hasModel], () => sync())
 </script>
 
 <template>

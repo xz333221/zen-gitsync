@@ -24,11 +24,11 @@ import { useEditorTabsStore } from '@stores/editorTabs'
 import { useTerminalSessionsStore } from '@stores/terminalSessions'
 
 const props = defineProps<{
-  activeView: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap' | 'agent'
+  activeView: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'projects' | 'monitor' | 'mindmap' | 'agent'
 }>()
 
 const emit = defineEmits<{
-  'update:activeView': [view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap' | 'agent']
+  'update:activeView': [view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'projects' | 'monitor' | 'mindmap' | 'agent']
 }>()
 
 const wbStatus = useWorkbenchStatusStore()
@@ -117,7 +117,7 @@ const agentRunningBadge = computed(() => {
   return n > 99 ? '99+' : String(n)
 })
 
-function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap' | 'agent') {
+function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'projects' | 'monitor' | 'mindmap' | 'agent') {
   emit('update:activeView', view)
 }
 </script>
@@ -279,6 +279,27 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
           :title="$t('@ACTBAR:有任务正在执行')"
           aria-hidden="true"
         >{{ wbStatus.runningCount > 99 ? '99+' : wbStatus.runningCount }}</span>
+      </button>
+    </el-tooltip>
+
+    <!-- 项目管理：把项目清单当"资产"管理（添加 / 删除 / 看启动方式与打开方式）。
+         与「工作台」分开是刻意的：工作台管任务（选中项目 = 过滤看板），
+         这里管项目本身，两种语义混在一个面板里会让"点一下"的含义变得不确定。
+         不加角标：48px 活动栏已经挂满了（见 lessons/activity-bar-badges）。 -->
+    <el-tooltip :content="$t('@ACTBAR:项目管理')" placement="right" :show-after="300">
+      <button
+        class="activity-btn"
+        :class="{ active: props.activeView === 'projects' }"
+        @click="select('projects')"
+        :aria-label="$t('@ACTBAR:项目管理')"
+        :aria-pressed="props.activeView === 'projects'"
+      >
+        <!-- project-manage.svg: 文件夹 + 两条内容线（"管理清单"的意象） -->
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l1.8 2.2H19.5A1.5 1.5 0 0 1 21 9.7V17.5A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-10z" />
+          <path d="M8 12.5h8" />
+          <path d="M8 15.8h5" />
+        </svg>
       </button>
     </el-tooltip>
 

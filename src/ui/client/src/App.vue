@@ -59,6 +59,7 @@ const asyncOpts = {
 const EditorView = defineAsyncComponent({ loader: () => import('@/views/EditorView.vue'), ...asyncOpts })
 const SourceMapView = defineAsyncComponent({ loader: () => import('@views/SourceMapView.vue'), ...asyncOpts })
 const WorkbenchView = defineAsyncComponent({ loader: () => import('@views/WorkbenchView.vue'), ...asyncOpts })
+const ProjectManagerView = defineAsyncComponent({ loader: () => import('@views/ProjectManagerView.vue'), ...asyncOpts })
 const MonitorView = defineAsyncComponent({ loader: () => import('@views/MonitorView.vue'), ...asyncOpts })
 const MindmapView = defineAsyncComponent({ loader: () => import('@views/MindmapView.vue'), ...asyncOpts })
 const AgentView = defineAsyncComponent({ loader: () => import('@views/AgentView.vue'), ...asyncOpts })
@@ -328,7 +329,7 @@ function handleBranchChanged() {
 }
 
 // 活动视图切换
-const activeView = ref<'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap' | 'agent'>('git')
+const activeView = ref<'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'projects' | 'monitor' | 'mindmap' | 'agent'>('git')
 
 // Git 视图内的三个 Tab:
 //   current → 当前项目(原有的 GitStatus + CommitForm/最近项目 + LogList 布局,原样保留)
@@ -1026,6 +1027,14 @@ function stopVResize() {
       <div v-show="activeView === 'workbench'" class="view-pane workbench-pane">
         <KeepAlive>
           <WorkbenchView v-if="activeView === 'workbench'" />
+        </KeepAlive>
+      </div>
+
+      <!-- 项目管理视图（懒加载 + KeepAlive 缓存：项目清单/展开态切走不丢）
+           与「工作台」刻意分开：那边管任务，这边管项目本身（添加/删除/启动方式/打开方式） -->
+      <div v-show="activeView === 'projects'" class="view-pane projects-pane">
+        <KeepAlive>
+          <ProjectManagerView v-if="activeView === 'projects'" />
         </KeepAlive>
       </div>
 
@@ -2103,6 +2112,12 @@ h1 {
 
 /* 控制台面板:CustomCommandsPanel + CommandConsole 自管内部布局,外层 flex 即可 */
 .console-pane {
+  display: flex;
+  overflow: hidden;
+}
+
+/* 项目管理面板：ProjectManagerView 自管内部布局（标题栏 + 可滚动列表 + 推荐区） */
+.projects-pane {
   display: flex;
   overflow: hidden;
 }

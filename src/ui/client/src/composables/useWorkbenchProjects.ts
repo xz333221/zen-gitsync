@@ -86,5 +86,36 @@ export function useWorkbenchProjects() {
     }
   }
 
-  return { projects, boardTasks, currentProjectPath, loading, loaded, loadProjects, removeProject }
+  /**
+   * 把一个目录加进项目清单（「项目管理」视图的「添加项目」与「推荐添加」）。
+   *
+   * 与 removeProject 对称：服务端先校验路径（绝对路径 + 目录存在）再写进常用目录，
+   * 于是它会出现在项目清单（以及「最近项目」）里。
+   *
+   * **不切换当前项目** —— 添加 ≠ 切过去看。切目录会改全局共享状态，
+   * 波及其他视图与其他 g ui 实例（见 lessons/recent-directories-write-paths）。
+   *
+   * 返回结果对象（不抛异常，与 removeProject 同风格）：alreadyKnown 用来区分
+   * "加进去了"和"它本来就在清单里"，好让调用方说对那句话。
+   */
+  async function addProject(dirPath: string): Promise<{ ok: boolean; alreadyKnown: boolean }> {
+    if (!dirPath) return { ok: false, alreadyKnown: false }
+    try {
+      const res = await fetch('/api/workbench/projects/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: dirPath }),
+      }).then(r => r.json()).catch(() => null)
+      if (!res?.success) {
+        ElMessage.error(res?.error || $t('@PROJM:添加项目失败'))
+        return { ok: false, alreadyKnown: false }
+      }
+      return { ok: true, alreadyKnown: !!res.alreadyKnown }
+    } catch (err: any) {
+      ElMessage.error($t('@WORKBENCH:网络错误: ') + (err?.message || err))
+      return { ok: false, alreadyKnown: false }
+    }
+  }
+
+  return { projects, boardTasks, currentProjectPath, loading, loaded, loadProjects, removeProject, addProject }
 }

@@ -358,15 +358,17 @@ function stubLlm(content) {
 
 const MODEL = { model: 'fixture-model', baseURL: 'https://api.example.com/v1', apiKey: 'k', isDefault: true }
 
-async function runRoute({ models, root, locale = 'zh' }) {
+async function runRoute({ models, root, locale = 'zh', body = {}, isKnownProject }) {
   const app = createFakeApp()
   registerProjectStartupAiRoutes({
     app,
     configManager: { readRawConfigFile: async () => ({ models }) },
     getCurrentProjectPath: () => root,
+    // 不传就交给实现自己的默认判据（读真实 tasks.json / config）——测试里一律注入
+    ...(isKnownProject ? { isKnownProject } : {}),
   })
   const res = createFakeRes()
-  await app.routes.get('/api/project-startup/suggestions')({ body: { locale } }, res)
+  await app.routes.get('/api/project-startup/suggestions')({ body: { locale, ...body } }, res)
   return res
 }
 
@@ -433,6 +435,109 @@ test('路由: 模型返回非 JSON → LLM_ERR(前端据此提示,而不是显�
     const res = await runRoute({ models: [MODEL], root })
     assert.equal(res.statusCode, 500)
     assert.equal(res.body.code, 'LLM_ERR')
+  } finally {
+    restore()
+  }
+})
+
+// ── projectPath:「项目管理」视图逐个项目分析 ───────────────────────────────
+
+/** 铺一个名字可辨识的最小项目（用来证明"扫的确实是传进来的那个目录"） */
+function makeNamedFixture(pkgName) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'zen-startup-named-'))
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+    name: pkgName,
+    scripts: { dev: 'vite' },
+  }), 'utf8')
+  return root
+}
+
+test('路由: 带 projectPath 且命中清单 → 分析的是那个目录,不是当前项目', async () => {
+  const current = makeNamedFixture('current-project')
+  const target = makeNamedFixture('target-project')
+  const [restore, calls] = stubLlm('{"suggestions":[]}')
+  try {
+    const res = await runRoute({
+      models: [MODEL],
+      root: current,
+      body: { projectPath: target },
+      isKnownProject: async () => true,
+    })
+
+    assert.equal(res.statusCode, 200)
+    assert.equal(res.body.success, true)
+    // prompt 里出现的是目标项目的包名 —— 证明分析对象换了
+    assert.ok(calls[0].body.messages.at(-1).content.includes('target-project'))
+    assert.ok(!calls[0].body.messages.at(-1).content.includes('current-project'))
+  } finally {
+    restore()
+  }
+})
+
+test('路由: projectPath 不在清单里 → 400 PROJECT_NOT_LISTED,一次网络请求都不发', async () => {
+  const current = makeNamedFixture('current-project')
+  const outside = makeNamedFixture('outside-project')
+  const [restore, calls] = stubLlm('{"suggestions":[]}')
+  try {
+    const res = await runRoute({
+      models: [MODEL],
+      root: current,
+      body: { projectPath: outside },
+      isKnownProject: async () => false,
+    })
+
+    assert.equal(res.statusCode, 400)
+    assert.equal(res.body.success, false)
+    assert.equal(res.body.code, 'PROJECT_NOT_LISTED')
+    assert.equal(calls.length, 0)
+  } finally {
+    restore()
+  }
+})
+
+test('路由: projectPath 不存在 → NOT_FOUND;相对路径 → BAD_PATH(都不联网)', async () => {
+  const current = makeNamedFixture('current-project')
+  const [restore, calls] = stubLlm('{"suggestions":[]}')
+  try {
+    const missing = await runRoute({
+      models: [MODEL],
+      root: current,
+      body: { projectPath: path.join(current, 'no-such-dir') },
+      isKnownProject: async () => true,
+    })
+    assert.equal(missing.statusCode, 400)
+    assert.equal(missing.body.code, 'NOT_FOUND')
+
+    const relative = await runRoute({
+      models: [MODEL],
+      root: current,
+      body: { projectPath: 'some/relative/dir' },
+      isKnownProject: async () => true,
+    })
+    assert.equal(relative.statusCode, 400)
+    assert.equal(relative.body.code, 'BAD_PATH')
+
+    assert.equal(calls.length, 0)
+  } finally {
+    restore()
+  }
+})
+
+test('路由: 不带 projectPath 时行为不变 —— 走当前项目,不查清单', async () => {
+  const current = makeNamedFixture('current-project')
+  let checkerCalls = 0
+  const [restore, calls] = stubLlm('{"suggestions":[]}')
+  try {
+    const res = await runRoute({
+      models: [MODEL],
+      root: current,
+      isKnownProject: async () => { checkerCalls += 1; return true },
+    })
+
+    assert.equal(res.statusCode, 200)
+    assert.equal(res.body.success, true)
+    assert.ok(calls[0].body.messages.at(-1).content.includes('current-project'))
+    assert.equal(checkerCalls, 0)
   } finally {
     restore()
   }

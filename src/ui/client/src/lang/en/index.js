@@ -2785,7 +2785,9 @@ export default {
   // @ACTBAR: file path: components/ActivityBar.vue (追加: 智能体)
   '@ACTBAR:智能体': 'Agent',
   '@ACTBAR:个对话正在生成': 'conversations generating',
-  // @ACTBAR: file end (追加4)
+  // 追加5：项目管理入口（与「工作台」分开 —— 那边管任务，这里管项目本身）
+  '@ACTBAR:项目管理': 'Projects',
+  // @ACTBAR: file end (追加5)
 
   // @AGENT: file path: views/AgentView.vue
   '@AGENT:新建会话': 'New Session',
@@ -3177,4 +3179,36 @@ export default {
   '@REPOLIST:Fork': 'Fork',
   '@REPOLIST:点击卡片在浏览器中打开仓库主页': 'Click a card to open the repository page in your browser',
   // @REPOLIST: file end
+
+  // @PROJM: file path: views/ProjectManagerView.vue + views/components/ProjectManage*.vue
+  //           + components/AddProjectDialog.vue + components/RecommendedProjects.vue
+  //           + composables/useWorkbenchProjects.ts
+  '@PROJM:项目管理': 'Project management',
+  '@PROJM:共 {n} 个项目': '{n} projects',
+  '@PROJM:添加项目': 'Add project',
+  '@PROJM:正在读取项目列表…': 'Loading projects…',
+  '@PROJM:尚无项目': 'No projects yet',
+  '@PROJM:用「添加项目」把仓库加进来，或看看下面的推荐列表': 'Use "Add project" to bring a repository in, or check the recommendations below',
+  '@PROJM:展开启动方式': 'Show startup commands',
+  '@PROJM:收起启动方式': 'Hide startup commands',
+  '@PROJM:推荐添加': 'Suggested',
+  '@PROJM:重新扫描': 'Rescan',
+  '@PROJM:扫描已有项目所在的目录，列出还没加进来、且含 .git 的仓库': 'Scans the folders your projects live in and lists repositories (folders with .git) that are not added yet',
+  '@PROJM:正在扫描…': 'Scanning…',
+  '@PROJM:读取推荐列表失败': 'Failed to load suggestions',
+  '@PROJM:没有发现可以添加的仓库，可以直接用「添加项目」指定路径': 'No repositories to add — use "Add project" to pick a path directly',
+  '@PROJM:添加': 'Add',
+  '@PROJM:添加中…': 'Adding…',
+  '@PROJM:已添加': 'Added',
+  '@PROJM:已添加到项目列表': 'Added to the project list',
+  '@PROJM:该目录已在项目列表中': 'That folder is already in the project list',
+  '@PROJM:添加项目失败': 'Failed to add project',
+  '@PROJM:已移除「{name}」': 'Removed "{name}"',
+  '@PROJM:已移除「{name}」，它的 {n} 条任务仍保留': 'Removed "{name}" — its {n} task(s) are kept',
+  '@PROJM:选择或粘贴一个项目目录（绝对路径），它会加进项目列表与常用目录': 'Pick or paste a project folder (absolute path); it is added to the project list and recent folders',
+  '@PROJM:粘贴项目目录的绝对路径': 'Paste the absolute path of the project folder',
+  '@PROJM:浏览': 'Browse',
+  '@PROJM:浏览目录': 'Browse folders',
+  '@PROJM:目录必须已经存在（克隆、创建完之后再来添加）': 'The folder must already exist (clone or create it first)',
+  // @PROJM: file end
 }

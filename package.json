@@ -115,6 +115,8 @@
     "verify:startup-ai-panel:reverse": "node scripts/verify-startup-ai-panel.cjs --reverse",
     "verify:startup-ai-panel:empty": "node scripts/verify-startup-ai-panel.cjs --empty",
     "verify:startup-ai-panel:non-git": "node scripts/verify-startup-ai-panel.cjs --non-git",
+    "verify:project-manager": "node scripts/verify-project-manager.cjs",
+    "verify:project-manager:reverse": "node scripts/verify-project-manager.cjs --reverse",
     "verify:instance-close-hover": "node scripts/verify-instance-close-hover.cjs",
     "verify:instance-close-hover:reverse": "node scripts/verify-instance-close-hover.cjs --reverse",
     "verify:schedule": "node scripts/verify-schedule.cjs",
