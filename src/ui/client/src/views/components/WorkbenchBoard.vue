@@ -36,7 +36,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Fold, Expand, Folder, Grid, Menu, Search } from '@element-plus/icons-vue'
+import { Fold, Expand } from '@element-plus/icons-vue'
 import type { Attachment, BoardTask, ProjectSummary, Task } from '@/types/workbench'
 import { canonicalProjectPath } from '@/utils/path'
 import { taskPercentIndex } from '@/utils/progressReport'
@@ -867,8 +867,8 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
       <main class="board__main">
         <div class="board__main-head">
           <!-- 项目图标槽：和左栏项目行、顶栏目录胶囊同一个形态契约 ——
-               有 favicon 画 <img>，加载失败 / 没有就退回字形（这里是 Folder）；
-               「全部项目」没有单一项目可画，退回 Grid，与左栏「全部项目」那一行同款。 -->
+               有 favicon 画 <img>，加载失败 / 没有就退回字形（folder / layout-grid，
+               均已 Tabler 化）；「全部项目」没有单一项目可画，退回宫格字形。 -->
           <span class="board__project-icon-slot" aria-hidden="true">
             <img
               v-if="selectedProject && selectedProject.iconUrl && !isIconBroken(selectedProject.iconUrl)"
@@ -878,8 +878,18 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
               @error="markIconFailed(selectedProject.iconUrl)"
             />
             <el-icon v-else class="board__project-icon-glyph">
-              <Folder v-if="selectedProject" />
-              <Grid v-else />
+              <!-- folder / layout-grid（Tabler icons，MIT）。2026-10-16 从 EP <Folder/>
+                   <Grid/> 换 Tabler：这一行（槽 + 标题 + 视图切换 + 搜索）现在全部同族。
+                   字形尺寸保持 16px（槽 24px，比槽小一档的"身份轻档"，不跟 32px 行看齐）。 -->
+              <svg v-if="selectedProject" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M5 4h4l3 3h7a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M4 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4" />
+                <path d="M14 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4" />
+                <path d="M4 15a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4" />
+                <path d="M14 15a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4" />
+              </svg>
             </el-icon>
           </span>
 
@@ -911,7 +921,16 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
                 :title="$t('@WORKBENCH:看板视图')"
                 @click="view = 'kanban'"
               >
-                <el-icon><Grid /></el-icon>
+                <el-icon>
+                  <!-- layout-kanban（Tabler icons，MIT）。2026-10-16 从 EP <Grid/> 换 Tabler：
+                       与同排的列表/搜索/左侧漏斗同族（EP 实心 vs Tabler 描边混排有"色差感"） -->
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M4 4l6 0" />
+                    <path d="M14 4l6 0" />
+                    <path d="M4 10a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2l0 -8" />
+                    <path d="M14 10a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v2a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2l0 -2" />
+                  </svg>
+                </el-icon>
               </button>
               <button
                 type="button"
@@ -923,7 +942,17 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
                 :title="$t('@WORKBENCH:列表视图')"
                 @click="view = 'list'"
               >
-                <el-icon><Menu /></el-icon>
+                <el-icon>
+                  <!-- list（Tabler icons，MIT）：从 EP <Menu/> 换 Tabler -->
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M9 6l11 0" />
+                    <path d="M9 12l11 0" />
+                    <path d="M9 18l11 0" />
+                    <path d="M5 6l0 .01" />
+                    <path d="M5 12l0 .01" />
+                    <path d="M5 18l0 .01" />
+                  </svg>
+                </el-icon>
               </button>
             </div>
 
@@ -948,7 +977,14 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
                 @mousedown.prevent
                 @click="toggleSearch"
               >
-                <el-icon><Search /></el-icon>
+                <el-icon>
+                  <!-- search（Tabler icons，MIT）：从 EP <Search/> 换 Tabler，与左栏项目列表
+                       那枚同一形状（14/描边 2）—— 用户 2026-10-16 反馈「这个也改一下」 -->
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
+                    <path d="M21 21l-6 -6" />
+                  </svg>
+                </el-icon>
               </button>
             </div>
           </div>
@@ -1275,7 +1311,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   cursor: pointer;
   transition: background var(--transition-fast) var(--ease-custom), color var(--transition-fast) var(--ease-custom);
 }
-.board__view-btn .el-icon { font-size: var(--font-size-sm); }
+.board__view-btn .el-icon { font-size: var(--font-size-base); }
 .board__view-btn:hover { color: var(--text-primary); }
 .board__view-btn.is-active {
   background: var(--surface-elevated);
@@ -1341,7 +1377,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   flex-shrink: 0;
   transition: color var(--transition-fast) var(--ease-custom);
 }
-.board__search-btn .el-icon { font-size: var(--font-size-sm); }
+.board__search-btn .el-icon { font-size: var(--font-size-base); }
 .board__search-btn:hover { color: var(--text-primary); }
 
 /* ══ 响应式 ══════════════════════════════════════════════════════════

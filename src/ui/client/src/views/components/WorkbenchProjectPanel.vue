@@ -40,7 +40,6 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Delete,
   FolderOpened,
-  Grid,
   MoreFilled,
 } from '@element-plus/icons-vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
@@ -365,7 +364,17 @@ async function confirmRemove(p: ProjectSummary) {
       >
         <div class="proj-item__body">
           <span class="proj-item__icon-slot">
-            <el-icon class="proj-item__icon"><Grid /></el-icon>
+            <el-icon class="proj-item__icon">
+              <!-- layout-grid（Tabler icons，MIT）：全部项目 = 四方格。
+                   2026-10-16 从 EP <Grid/> 换成 Tabler —— 与回退文件夹、行内其余
+                   图标同族；EP 实心填充与 Tabler 描边混排会有"色差感"。 -->
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M4 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4" />
+                <path d="M14 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4" />
+                <path d="M4 15a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4" />
+                <path d="M14 15a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4" />
+              </svg>
+            </el-icon>
           </span>
 
           <div class="proj-item__row1">
@@ -433,11 +442,11 @@ async function confirmRemove(p: ProjectSummary) {
               @error="markIconFailed(p.iconUrl)"
             />
             <el-icon v-else class="proj-item__icon proj-item__icon--folder" aria-hidden="true">
-              <!-- folder-filled.svg（Tabler icons，MIT）：回退"彩色片"—— 32px 淡主色底 +
-                   主色实心文件夹，与 favicon 同尺寸同存在感。
-                   2026-10-16 用户反馈：灰色小字形在彩色头像列里显得又小又弱，
-                   推翻旧约定（"这儿没图标"要更轻）。 -->
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <!-- folder-filled.svg（Tabler icons，MIT）：回退 = **直接一枚主色实心文件夹**。
+                   2026-10-16 晚用户反馈：不要"外框方块 + 小文件夹"两层套——纯字形、而且要大
+                   （凌晨那版 20px 字形放进 32px 淡主色底里，本体还是显小）。
+                   现在是 24px 字形裸放（承载的 el-icon 仍是 32px 的透明槽，几何契约不变）。 -->
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                 <path d="M9 3a1 1 0 0 1 .608 .206l.1 .087l2.706 2.707h6.586a3 3 0 0 1 2.995 2.824l.005 .176v8a3 3 0 0 1 -2.824 2.995l-.176 .005h-14a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-11a3 3 0 0 1 2.824 -2.995l.176 -.005h4z" />
               </svg>
             </el-icon>
@@ -897,15 +906,16 @@ async function confirmRemove(p: ProjectSummary) {
   border-radius: var(--radius-lg);
   background: var(--bg-subtle);
 }
-/* 回退"彩色片"（2026-10-16 用户要求）：没图标 / 加载失败的行不再是灰色小字形，
-   而是铺满 32px 槽的淡主色底 + 主色实心文件夹 —— 与 favicon 同尺寸同存在感，
-   与「常用目录」卡片的 .dir-card__icon 同一套语言。
+/* 回退文件夹（2026-10-16 晚用户要求二次调整）：**去掉外框底**，直接一枚 24px 主色实心
+   文件夹字形 —— 上一版是"32px 淡主色底片 + 20px 字形"，用户觉得字形本体还是太小、
+   两层套也多余。承载元素仍是 32px 的槽（透明、几何契约不动），只有字形变大小去底。
+   ⚠️ 字形尺寸走 **font-size**：el-icon 里的 svg 被 `.el-icon svg{width/height:1em}` 接管，
+   svg 自己的 width/height 属性会被 CSS 压掉（实测改属性不生效、量出来还是 20px）。
    ⚠️ 选择器带 .el-icon 前缀：EP 的 .el-icon{width/height:1em} 同权重，靠前缀提权。 */
 .el-icon.proj-item__icon--folder {
   width: 100%;
   height: 100%;
-  border-radius: var(--radius-lg);
-  background: var(--tint-primary-08);
+  font-size: 24px;
   color: var(--color-primary);
 }
 .proj-item.is-active .proj-item__icon { color: var(--color-primary); }

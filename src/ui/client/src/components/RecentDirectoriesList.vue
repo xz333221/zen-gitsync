@@ -638,9 +638,11 @@ defineExpose({
             alt=""
             @error="markIconFailed(item.iconUrl)"
           />
-          <el-icon v-else class="dir-card__icon" aria-hidden="true">
-            <!-- folder-filled.svg（Tabler icons，MIT）：与左栏/项目管理的回退片同款实心文件夹 -->
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+          <el-icon v-else class="dir-card__icon dir-card__icon--folder" aria-hidden="true">
+            <!-- folder-filled.svg（Tabler icons，MIT）：回退 = 直接一枚 28px 主色实心文件夹
+                 （2026-10-16 晚二次调整：去外框底、字形加大 —— 38px 槽里裸放 28px 字形，
+                 与左栏 32 槽放 24 字形同一比例；底只留给 favicon 变体）。 -->
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
               <path d="M9 3a1 1 0 0 1 .608 .206l.1 .087l2.706 2.707h6.586a3 3 0 0 1 2.995 2.824l.005 .176v8a3 3 0 0 1 -2.824 2.995l-.176 .005h-14a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-11a3 3 0 0 1 2.824 -2.995l.176 -.005h4z" />
             </svg>
           </el-icon>
@@ -1005,7 +1007,10 @@ defineExpose({
   outline-offset: 2px;
   border-radius: var(--radius-base);
 }
-/* 图标做成 tinted 色块,与卡片层级匹配 */
+/* 图标槽 38px：两种形态共用同一个槽（favicon 铺满 / 回退 28px 字形居中）。
+   2026-10-16 晚：底不再给回退片铺了 —— 回退 = 直接一枚主色实心文件夹字形，
+   底只留给 favicon 变体（--img 自带 --bg-subtle，防止深色 logo 在深色主题下糊掉）。
+   槽尺寸/圆角不变：几何契约（D3）靠承载元素，不靠底色。 */
 .dir-card__icon {
   flex-shrink: 0;
   display: inline-flex;
@@ -1015,7 +1020,6 @@ defineExpose({
   height: 38px;
   font-size: var(--font-size-xl);
   border-radius: var(--radius-lg);
-  background: var(--tint-primary-08);
   color: var(--color-primary);
 }
 /* 目录自己的图标（favicon）：铺满那个 38px 的槽（原来里面是一枚主色文件夹字形）。
@@ -1028,9 +1032,15 @@ defineExpose({
   object-fit: contain;
   background: var(--bg-subtle);
 }
-/* 失效目录:图标色块退成中性灰,与"不存在"语义一致 */
+/* 回退字形尺寸（2026-10-16 晚）：28px —— 从 base 的 20px（--font-size-xl）提上来。
+   ⚠️ 走 font-size：el-icon 里的 svg 被 `.el-icon svg{width/height:1em}` 接管，
+   svg 自己的 width/height 属性会被 CSS 压掉（实测改属性无效）。 */
+.el-icon.dir-card__icon--folder {
+  font-size: 28px;
+}
+/* 失效目录:字形退成中性灰,与"不存在"语义一致（2026-10-16 晚：底已整个去掉，
+   只留色信号 —— 上一版这里还有一层灰底） */
 .dir-card.is-missing .dir-card__icon {
-  background: var(--bg-component-hover);
   color: var(--text-secondary);
 }
 .dir-card__name {

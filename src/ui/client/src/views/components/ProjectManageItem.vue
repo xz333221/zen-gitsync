@@ -161,9 +161,10 @@ async function confirmRemove() {
           @error="markIconFailed(project.iconUrl)"
         />
         <el-icon v-else class="pm-item__icon pm-item__icon--folder" aria-hidden="true">
-          <!-- folder-filled.svg（Tabler icons，MIT）：回退"彩色片"—— 32px 淡主色底 +
-               主色实心文件夹，与 favicon 同尺寸同存在感（2026-10-16 用户要求） -->
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+          <!-- folder-filled.svg（Tabler icons，MIT）：回退 = 直接一枚 24px 主色实心文件夹
+               （2026-10-16 晚二次调整：去外框底、字形加大，与工作台左栏同一套）。
+               承载 el-icon 仍是 32px 透明槽，几何契约不变。 -->
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
             <path d="M9 3a1 1 0 0 1 .608 .206l.1 .087l2.706 2.707h6.586a3 3 0 0 1 2.995 2.824l.005 .176v8a3 3 0 0 1 -2.824 2.995l-.176 .005h-14a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-11a3 3 0 0 1 2.824 -2.995l.176 -.005h4z" />
           </svg>
         </el-icon>
@@ -348,13 +349,14 @@ async function confirmRemove() {
   border-radius: var(--radius-md);
   background: var(--bg-subtle);
 }
-/* 回退"彩色片"（2026-10-16 用户要求）：与工作台左栏同一套（那边圆角 radius-lg 配它的槽，
-   这边跟自家 favicon 同档用 radius-md） */
+/* 回退文件夹（2026-10-16 晚二次调整）：去掉外框底，直接 24px 主色实心文件夹字形
+   （与工作台左栏同一套口径；承载 el-icon 仍是 32px 透明槽，几何契约不变）。
+   ⚠️ 字形尺寸走 font-size：el-icon 里的 svg 被 `.el-icon svg{width/height:1em}` 接管，
+   svg 属性会被 CSS 压掉（实测改属性无效）。 */
 .el-icon.pm-item__icon--folder {
   width: 100%;
   height: 100%;
-  border-radius: var(--radius-md);
-  background: var(--tint-primary-08);
+  font-size: 24px;
   color: var(--color-primary);
 }
 

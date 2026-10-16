@@ -11,9 +11,10 @@
  *   K4 图标全部 404 时（服务端重启 / 文件被删），行**当场退回**文件夹图标 ——
  *      不许留破图。这一条用 route 挡掉端点来造，是 K1 的反向对照。
  *   K5 几何：图标槽 32px 且两种形态同尺寸、项目名左边缘对齐；**图标真的占两行**
- *      （高度≈row1.top→row2.bottom 那一段）；**回退"彩色片"铺满槽**（32px 淡主色底 +
- *      主色实心文件夹，与 favicon 同存在感）—— 2026-10-16 用户推翻了旧约定
- *      「文件夹字形要比槽小/更轻」：灰色小字形夹在彩色头像列里又小又弱。
+ *      （高度≈row1.top→row2.bottom 那一段）；**回退是纯主色实心文件夹字形**（无底、
+ *      24px）—— 2026-10-16 两轮反馈的终态：先废「字形要比槽小/更轻」（灰色小字形
+ *      夹在彩色头像列里又小又弱），再废「彩色片」（外框方块 + 里面小文件夹两层套，
+ *      字形本体还是显小）。
  *   常用目录（RecentDirectoriesList，弹窗里的卡片）
  *   D1/D2 有图标的卡片渲染 <img> 且真的加载出来
  *   D3 图标槽 38px，两种形态同尺寸、名字左边缘对齐
@@ -40,7 +41,8 @@
  *   · 去掉 @error="markIconFailed" → K4 / D4 红（屏幕上留着破图）
  *   · CSS 里 .proj-item__icon--img 去掉 width/height → K5a 红（图标按原始尺寸铺开）
  *   · 图标槽退回塞进 row1（不跨两行）→ K5c 红（图标高度只有一行）
- *   · 回退片改回"又小又灰"（去掉 .proj-item__icon--folder 的宽高/底色）→ K5d 红
+ *   · 回退字形压回 20px（把 svg 宽高压回去）→ K5d 红（字形尺寸下限）
+ *   · 给 .proj-item__icon--folder 加回底色 / 圆角（"彩色片"旧版）→ K5d 红（无底断言）
  *   · 后端路由去掉 isKnownProjectKey 那道门 → K6c 红（任意路径都能读）
  *   · 顶栏去掉图标槽 / DirectorySelector 不再渲染 img → H1 / H2 / H4 / H5 红
  *   · /api/current_directory 不返回 iconUrl → H0a / H0b 红
@@ -107,7 +109,9 @@ const obsRows = (page) => page.evaluate(() => {
       slot: rect(r.querySelector('.proj-item__icon-slot')),
       imgBox: rect(img),
       folderBox: rect(folder),
-      // 回退"彩色片"：底色不能是透明、字形色要是主色（rgb(59,130,246)）
+      // 2026-10-16 晚新契约：回退 = 纯主色实心文件夹字形（无底色）。"字形又太小了"
+      // 这类反馈只能量里层 svg —— 承载的 el-icon 恒为 32px 的槽，量它没意义。
+      folderGlyph: rect(folder ? folder.querySelector('svg') : null),
       folderBg: fcs ? fcs.backgroundColor : '',
       folderColor: fcs ? fcs.color : '',
       nameLeft: nameEl ? Math.round(nameEl.getBoundingClientRect().left) : 0,
@@ -303,16 +307,18 @@ async function main() {
     const spanOk = iconRows.every(r => r.textSpan && Math.abs(r.imgBox.h - r.textSpan) <= 8)
     check('K5c 图标真的占两行（高度≈名字行 + 分支行的总高）', spanOk,
       iconRows.map(r => `${r.name}:${r.imgBox.h}/${r.textSpan}`).slice(0, 3).join(' '))
-    // 2026-10-16 新契约：回退不再是"比槽小"的灰字形，而是铺满槽的彩色片
-    // （32px 淡主色底 + 主色实心文件夹）—— 与 favicon 同尺寸同存在感。
-    check('K5d 文件夹回退是彩色片：铺满 32px 槽、淡主色底、主色字形',
+    // 2026-10-16 晚二次契约：回退 = **纯主色实心文件夹字形**（去掉了"彩色片"的底），
+    // 字形加大到 24px —— 用户两轮反馈的终态：先废「又小又灰」，再废「外框方块 +
+    // 里面小文件夹」两层套。承载 el-icon 仍是 32px 的槽（几何契约不动），量里层 svg。
+    check('K5d 文件夹回退是纯字形：无底色、主色、字形 ≥22px',
       folderRows.length > 0 && folderRows.every(r =>
         r.folderBox
         && Math.abs(r.folderBox.w - 32) <= 1 && Math.abs(r.folderBox.h - 32) <= 1
-        && !/rgba\(0, 0, 0, 0\)/.test(r.folderBg)
-        && /59,\s*130,\s*246|0\.231373/.test(r.folderBg)
-        && /59,\s*130,\s*246|0\.231373/.test(r.folderColor)),
-      folderRows.map(r => `${r.name}:${r.folderBox ? r.folderBox.w + 'x' + r.folderBox.h : '?'} bg=${r.folderBg} fg=${r.folderColor}`).slice(0, 2).join(' | '))
+        && /rgba\(0, 0, 0, 0\)/.test(r.folderBg)
+        && /59,\s*130,\s*246|0\.231373/.test(r.folderColor)
+        && r.folderGlyph
+        && r.folderGlyph.w >= 22 && r.folderGlyph.h >= 22),
+      folderRows.map(r => `${r.name}:槽${r.folderBox ? r.folderBox.w + 'x' + r.folderBox.h : '?'} 字形${r.folderGlyph ? r.folderGlyph.w + 'x' + r.folderGlyph.h : '?'} bg=${r.folderBg} fg=${r.folderColor}`).slice(0, 2).join(' | '))
 
     // ── 顶栏目录选择器：当前项目图标 ───────────────────────────────────
     // 当前项目（本仓库）自带 favicon，所以正向期望是 <img> 且真的加载出来。
