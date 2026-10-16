@@ -40,6 +40,19 @@ vi.mock('@/utils/agentTurnNotify', () => ({
   },
 }))
 
+// $t 按文件覆盖成「最小插值」桩：全局桩（vitest.setup.ts）是恒等函数，params 直接
+// 丢弃，而本文件有一条断言要看「原文经 {reason} 插槽落进气泡」（SSE 被浏览器掐断
+// 那条用例）—— 恒等桩下原文永远不可见，用例从落笔起就必红。实现抄仓库既有先例
+// （RecentDirectoriesList.test.ts 等几处同款 $tInterp）。
+const { $tInterp } = vi.hoisted(() => ({
+  $tInterp: (key: string, params?: Record<string, unknown>) =>
+    params
+      ? key.replace(/\{(\w+)\}/g, (_m, k) => String((params as Record<string, unknown>)[k] ?? `{${k}}`))
+      : key,
+}))
+
+vi.mock('@/lang/static', () => ({ $t: $tInterp }))
+
 interface SseStream {
   stream: ReadableStream<Uint8Array>
   send: (obj: Record<string, unknown>) => void
