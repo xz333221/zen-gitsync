@@ -202,17 +202,18 @@ async function confirmRemove() {
         <button
           v-if="canOpen"
           type="button"
-          class="pm-item__action"
+          class="pm-item__action pm-item__action--caret"
           :class="{ 'is-on': expanded }"
           :title="expanded ? $t('@PROJM:收起启动方式') : $t('@PROJM:展开启动方式')"
           :aria-label="`${expanded ? $t('@PROJM:收起启动方式') : $t('@PROJM:展开启动方式')} ${project.name}`"
           :aria-expanded="expanded"
           @click.stop="toggleExpanded"
         >
-          <!-- caret-down.svg（Tabler icons，MIT，filled 版）：展开/收起启动方式。
-               20px（默认 24 网格里三角只占一半，14px 会显得比旁边两颗弱） -->
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-            <path d="M18 9c.852 0 1.297 .986 .783 1.623l-.076 .084l-6 6a1 1 0 0 1 -1.32 .083l-.094 -.083l-6 -6l-.083 -.094l-.054 -.077l-.054 -.096l-.017 -.036l-.027 -.067l-.032 -.108l-.01 -.053l-.01 -.06l-.004 -.057v-.118l.005 -.058l.009 -.06l.01 -.052l.032 -.108l.027 -.067l.07 -.132l.065 -.09l.073 -.081l.094 -.083l.077 -.054l.096 -.054l.036 -.017l.067 -.027l.108 -.032l.053 -.01l.06 -.01l.057 -.004l12.059 -.002z" />
+          <!-- chevron-down.svg（Tabler icons，MIT）：展开/收起启动方式。
+               用户反馈实心三角夹在两根描边图标（dots / trash）中间太扎眼 → 改描边折角同笔触；
+               展开态由 CSS 翻 180°（见 .pm-item__action--caret.is-on）。 -->
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M6 9l6 6l6-6" />
           </svg>
         </button>
 
@@ -442,6 +443,15 @@ async function confirmRemove() {
 .pm-item__action:hover { color: var(--color-primary); background: var(--tint-primary-12); }
 .pm-item__action:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 .pm-item__action.is-on { color: var(--color-primary); background: var(--tint-primary-12); }
+
+/* 展开/收起的 disclosure 箭头：展开时翻 180°。
+   只挂 caret 按钮 ——「⋯」菜单也吃 is-on（menuOpen），不能对它按 is-on 全局旋转。 */
+.pm-item__action--caret svg {
+  transition: transform var(--transition-fast) var(--ease-custom);
+}
+.pm-item__action--caret.is-on svg {
+  transform: rotate(180deg);
+}
 /* 危险动作（删除）静息是普通灰，hover 才转红：33 行各挂一枚常驻红图标太吵，
    而 hover 时的红已经足够说清"这一下是破坏性的"。 */
 .pm-item__action--danger { color: var(--text-meta); }
@@ -484,5 +494,6 @@ async function confirmRemove() {
 @media (prefers-reduced-motion: reduce) {
   .pm-item__running,
   .is-rotating { animation: none; }
+  .pm-item__action--caret svg { transition: none; }
 }
 </style>
