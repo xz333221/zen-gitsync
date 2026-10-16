@@ -639,10 +639,10 @@ defineExpose({
             @error="markIconFailed(item.iconUrl)"
           />
           <el-icon v-else class="dir-card__icon dir-card__icon--folder" aria-hidden="true">
-            <!-- folder-filled.svg（Tabler icons，MIT）：回退 = 直接一枚 28px 主色实心文件夹
-                 （2026-10-16 晚二次调整：去外框底、字形加大 —— 38px 槽里裸放 28px 字形，
-                 与左栏 32 槽放 24 字形同一比例；底只留给 favicon 变体）。 -->
-            <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <!-- folder-filled.svg（Tabler icons，MIT）：回退 = 直接一枚主色实心文件夹
+                 （2026-10-16 晚连续调大终态：38px 槽里裸放 38px 字形 = 顶满槽，
+                 与左栏同为"槽满"口径；字形自带边距，实际形宽 ≈28px）。 -->
+            <svg viewBox="0 0 24 24" width="38" height="38" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
               <path d="M9 3a1 1 0 0 1 .608 .206l.1 .087l2.706 2.707h6.586a3 3 0 0 1 2.995 2.824l.005 .176v8a3 3 0 0 1 -2.824 2.995l-.176 .005h-14a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-11a3 3 0 0 1 2.824 -2.995l.176 -.005h4z" />
             </svg>
           </el-icon>
@@ -1032,11 +1032,11 @@ defineExpose({
   object-fit: contain;
   background: var(--bg-subtle);
 }
-/* 回退字形尺寸（2026-10-16 晚）：28px —— 从 base 的 20px（--font-size-xl）提上来。
+/* 回退字形尺寸（2026-10-16 晚连续调大终态）：38px = 顶满槽（从 base 的 20px 一路提上来）。
    ⚠️ 走 font-size：el-icon 里的 svg 被 `.el-icon svg{width/height:1em}` 接管，
    svg 自己的 width/height 属性会被 CSS 压掉（实测改属性无效）。 */
 .el-icon.dir-card__icon--folder {
-  font-size: 28px;
+  font-size: 38px;
 }
 /* 失效目录:字形退成中性灰,与"不存在"语义一致（2026-10-16 晚：底已整个去掉，
    只留色信号 —— 上一版这里还有一层灰底） */

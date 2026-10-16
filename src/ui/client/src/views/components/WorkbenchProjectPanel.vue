@@ -443,10 +443,10 @@ async function confirmRemove(p: ProjectSummary) {
             />
             <el-icon v-else class="proj-item__icon proj-item__icon--folder" aria-hidden="true">
               <!-- folder-filled.svg（Tabler icons，MIT）：回退 = **直接一枚主色实心文件夹**。
-                   2026-10-16 晚用户反馈：不要"外框方块 + 小文件夹"两层套——纯字形、而且要大
-                   （凌晨那版 20px 字形放进 32px 淡主色底里，本体还是显小）。
-                   现在是 24px 字形裸放（承载的 el-icon 仍是 32px 的透明槽，几何契约不变）。 -->
-              <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                   2026-10-16 晚用户连提两轮"再大一点"：不要"外框方块 + 小文件夹"两层套，
+                   字形一路调大 20 → 24 → 32（顶满槽；字形自带边距，实际形宽 ≈24px）。
+                   承载的 el-icon 仍是 32px 的透明槽（几何契约不变）。 -->
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                 <path d="M9 3a1 1 0 0 1 .608 .206l.1 .087l2.706 2.707h6.586a3 3 0 0 1 2.995 2.824l.005 .176v8a3 3 0 0 1 -2.824 2.995l-.176 .005h-14a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-11a3 3 0 0 1 2.824 -2.995l.176 -.005h4z" />
               </svg>
             </el-icon>
@@ -906,16 +906,17 @@ async function confirmRemove(p: ProjectSummary) {
   border-radius: var(--radius-lg);
   background: var(--bg-subtle);
 }
-/* 回退文件夹（2026-10-16 晚用户要求二次调整）：**去掉外框底**，直接一枚 24px 主色实心
-   文件夹字形 —— 上一版是"32px 淡主色底片 + 20px 字形"，用户觉得字形本体还是太小、
-   两层套也多余。承载元素仍是 32px 的槽（透明、几何契约不动），只有字形变大小去底。
+/* 回退文件夹（2026-10-16 晚用户要求二次调整）：**去掉外框底**，直接一枚主色实心
+   文件夹字形。三轮调大的终态：20（片内）→ 24 → **32 = 顶满槽位** —— 文件夹字形在
+   24 视框里自带边距（画出来的形约占 75%），盒 32 时实际形宽 ≈24px，与 favicon 同量级。
+   承载元素仍是 32px 的槽（透明、几何契约不动），只有字形大小与底色在变。
    ⚠️ 字形尺寸走 **font-size**：el-icon 里的 svg 被 `.el-icon svg{width/height:1em}` 接管，
    svg 自己的 width/height 属性会被 CSS 压掉（实测改属性不生效、量出来还是 20px）。
    ⚠️ 选择器带 .el-icon 前缀：EP 的 .el-icon{width/height:1em} 同权重，靠前缀提权。 */
 .el-icon.proj-item__icon--folder {
   width: 100%;
   height: 100%;
-  font-size: 24px;
+  font-size: 32px;
   color: var(--color-primary);
 }
 .proj-item.is-active .proj-item__icon { color: var(--color-primary); }

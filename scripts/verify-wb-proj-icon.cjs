@@ -307,17 +307,18 @@ async function main() {
     const spanOk = iconRows.every(r => r.textSpan && Math.abs(r.imgBox.h - r.textSpan) <= 8)
     check('K5c 图标真的占两行（高度≈名字行 + 分支行的总高）', spanOk,
       iconRows.map(r => `${r.name}:${r.imgBox.h}/${r.textSpan}`).slice(0, 3).join(' '))
-    // 2026-10-16 晚二次契约：回退 = **纯主色实心文件夹字形**（去掉了"彩色片"的底），
-    // 字形加大到 24px —— 用户两轮反馈的终态：先废「又小又灰」，再废「外框方块 +
-    // 里面小文件夹」两层套。承载 el-icon 仍是 32px 的槽（几何契约不动），量里层 svg。
-    check('K5d 文件夹回退是纯字形：无底色、主色、字形 ≥22px',
+    // 2026-10-16 晚终态契约：回退 = **纯主色实心文件夹字形**（无底），且**顶满承载槽**
+    // （32 槽放 32px 字形；字形自带边距，实际形宽 ≈24px）。用户对"字太小"连提两轮，
+    // 20 → 24 → 32 一路调上来 —— 下限守"别又变小了"，上限守"别溢出槽"。
+    check('K5d 文件夹回退是纯字形：无底色、主色、字形 ≥22px 且不溢出承载槽',
       folderRows.length > 0 && folderRows.every(r =>
         r.folderBox
         && Math.abs(r.folderBox.w - 32) <= 1 && Math.abs(r.folderBox.h - 32) <= 1
         && /rgba\(0, 0, 0, 0\)/.test(r.folderBg)
         && /59,\s*130,\s*246|0\.231373/.test(r.folderColor)
         && r.folderGlyph
-        && r.folderGlyph.w >= 22 && r.folderGlyph.h >= 22),
+        && r.folderGlyph.w >= 22 && r.folderGlyph.h >= 22
+        && r.folderGlyph.w <= r.folderBox.w + 1 && r.folderGlyph.h <= r.folderBox.h + 1),
       folderRows.map(r => `${r.name}:槽${r.folderBox ? r.folderBox.w + 'x' + r.folderBox.h : '?'} 字形${r.folderGlyph ? r.folderGlyph.w + 'x' + r.folderGlyph.h : '?'} bg=${r.folderBg} fg=${r.folderColor}`).slice(0, 2).join(' | '))
 
     // ── 顶栏目录选择器：当前项目图标 ───────────────────────────────────
