@@ -294,18 +294,13 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
         :aria-label="$t('@ACTBAR:项目管理')"
         :aria-pressed="props.activeView === 'projects'"
       >
-        <!-- project-manage.svg: 文件夹（项目容器）+ 圆点清单（被管理的项目条目）。
-             2026-10-16 重绘。旧版三处毛病：Tab 坡角 50.8° 过陡、右上角像被裁掉一块；
-             两条裸线一长一短且下条离底边仅 1.2 单位（≈1px@20px），下半挤上半空；
-             裸线无锚点，读起来更像"文本文档"而不是"清单"。
-             新版：Tab 坡度收到 ~36°、四角 r1.5 与终端/机器人/监控/导图同族；
-             清单改圆点+线，垂直间距按 interior 中线重新配平。 -->
+        <!-- project-manage.svg: 叠层文件夹（Tabler icons 「folders」官方线稿，MIT）——
+             "多个项目目录" 的意象。2026-10-16 二次换稿：前两版手绘（文件夹+裸线 / 圆点清单）
+             用户反馈观感不达标，改用 Tabler 成品。选叠层而不是单文件夹：本栏编辑器图标
+             已是文件夹（code-folder），单文件夹会与之撞脸；叠层 = 集合，和"单个"区分开。 -->
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-          <path d="M3 17.5V7a1.5 1.5 0 0 1 1.5-1.5H9.5l3.5 2.5H19.5A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5H4.5A1.5 1.5 0 0 1 3 17.5z" />
-          <circle cx="7.6" cy="10.8" r="1.2" fill="currentColor" stroke="none" />
-          <path d="M10.2 10.8H16" />
-          <circle cx="7.6" cy="14.4" r="1.2" fill="currentColor" stroke="none" />
-          <path d="M10.2 14.4H14" />
+          <path d="M9 3h3l2 2h5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2" />
+          <path d="M17 16v2a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h2" />
         </svg>
       </button>
     </el-tooltip>
