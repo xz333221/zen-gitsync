@@ -12,23 +12,25 @@
   ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
   ~ See the License for the specific language governing permissions and
   ~ limitations under the License.
-  -->
+-->
 <!--
   「AI 启动建议」面板(挂在 NPM 脚本面板**上面**,与它同一个手风琴家族,默认展开)。
 
   下面的 NPM 脚本面板把项目里所有 package.json 脚本平铺出来,但一个 monorepo 十几个包、
   上百条脚本时,「哪条才是入口、按什么顺序跑」只能靠人认。这个面板让默认模型读一遍
-  **服务端实测扫到的**事实(各目录脚本 / 标志文件 / README 摘要),把答案按启动顺序列出来,
-  每条一个按钮,点了就在新终端里跑起来(后端 routes/projectStartupAi.js)。
+  **服务端实测扫到的**事实(各目录脚本 / 标志文件 / 可执行文件 / README 摘要),
+  把答案按启动顺序列出来,每条一个按钮,点了就在新终端里跑起来(后端 routes/projectStartupAi.js)。
 
-  四条交互口径:
+  五条交互口径:
   · 配了模型才自动分析;没配就只显示一句"先去添加模型",不发请求。
-  · **没内容就不出现**:这个目录没有 package.json / 启动相关文件(NO_FACTS),或者模型
-    一条都没排出来,面板整块不渲染 —— 与下面的 NPM 脚本面板同一口径,空壳只占地方。
+  · **面板恒显示**(含非 Git 仓库目录):没扫到事实(NO_FACTS)或模型没排出建议时,
+    显示的是一句明确的空态提示,而不是整块消失 —— 用户要求"非 git 的仓库也展示出来",
+    而且空壳面板恰好是告诉用户"这个功能在、只是这个目录看不出怎么起"的唯一地方。
   · 结果按 项目路径 + 语言 + 模型 缓存(utils/projectStartupCache),切目录/重挂载都不会
     重复问模型;刷新按钮是**显式**的强制重跑入口。
   · npm 类建议直接跑(服务端已校验脚本名真实存在);shell 类是模型给的原话,
     执行前必须再弹一次确认 —— 命令的每个字都由用户过目后才落到终端里。
+  · 真报错(网关挂了之类)照旧显示错误态,不藏。
 -->
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
@@ -69,12 +71,15 @@ const launchedIds = ref<Set<string>>(new Set())
 const hasModel = computed(() => Array.isArray(configStore.models) && configStore.models.length > 0)
 
 /**
- * 这个目录压根没有 package.json / 启动相关文件,或者模型没排出任何一条可执行的:
- * **整块面板不渲染**。理由同 NpmScriptsPanel —— 一个点开只有一句"看不出来"的空壳,
- * 在左栏里既占地方又让人以为是自己哪里配错了。
- * 只藏"没内容",不藏真报错:网关挂了之类得让人看见。
+ * 面板**恒显示**:没有事实(NO_FACTS)或模型没排出建议(empty)时显示的是一句明确的
+ * 空态提示,而不是整块不渲染。理由:
+ * · 用户要求"非 git 的仓库也展示出来" —— 非 Git 目录(发布产物 / 下载的应用)恰恰是
+ *   最容易命中 NO_FACTS 的一类,整块藏掉等于这个功能在那里的用户体验就是"不存在"。
+ * · 空壳面板是告诉用户"功能在、只是这个目录看不出怎么起"的唯一地方;藏掉它,
+ *   用户只会以为自己哪里配错了,或者根本没这个功能。
+ * 注意与 NpmScriptsPanel 的口径区分:那个面板藏掉没问题(脚本扫不到就是真没有可点的),
+ * 而这个面板藏着会让"AI 启动建议"在整个界面上凭空消失。
  */
-const visible = computed(() => status.value !== 'empty' && status.value !== 'no-facts')
 
 const locale = computed(() => (String(configStore.locale || '').startsWith('en') ? 'en' : 'zh'))
 const modelKey = computed(() => {
@@ -257,7 +262,7 @@ watch([cacheKey, hasModel], () => sync())
 </script>
 
 <template>
-  <div v-if="visible" class="startup-ai-panel">
+  <div class="startup-ai-panel">
     <div class="panel-header accordion-header" @click="toggleCollapsed">
       <div class="header-left">
         <el-icon class="accordion-chevron" :class="{ 'is-collapsed': collapsed }">
@@ -299,6 +304,15 @@ watch([cacheKey, hasModel], () => sync())
 
       <div v-else-if="status === 'error'" class="state-box state-box--error">
         <p class="state-text">{{ errorText }}</p>
+      </div>
+
+      <!-- 没有事实 / 没排出建议:明确的空态提示,而不是整块面板消失 -->
+      <div v-else-if="status === 'no-facts'" class="state-box">
+        <p class="state-text">{{ $t('@NPM02:这个目录里没有识别到启动相关的文件') }}</p>
+      </div>
+
+      <div v-else-if="status === 'empty'" class="state-box">
+        <p class="state-text">{{ $t('@NPM02:没有分析出启动方式，可以点右上角刷新重试') }}</p>
       </div>
 
       <div v-if="status === 'done'" class="suggestion-list">

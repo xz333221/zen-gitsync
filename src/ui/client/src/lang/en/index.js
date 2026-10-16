@@ -809,6 +809,8 @@ export default {
   '@NPM02:确认在 {dir} 里执行这条命令？': 'Run this command in {dir}?',
   '@NPM02:执行': 'Run',
   '@NPM02:取消': 'Cancel',
+  '@NPM02:这个目录里没有识别到启动相关的文件': 'No startup-related files found in this directory',
+  '@NPM02:没有分析出启动方式，可以点右上角刷新重试': 'No startup method found — click refresh above to retry',
   // @NPM02: file end
   // @0883F: file path: components\FileActionButtons.vue
   '@0883F:处理中...': 'Processing...',

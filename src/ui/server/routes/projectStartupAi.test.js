@@ -112,6 +112,67 @@ test('collectProjectFacts: package.json 坏掉只丢这个包,不炸整个扫描
   assert.ok(facts.dirs.some(d => d.relativePath === 'server'), '后面还有目录,扫描没被中断')
 })
 
+/**
+ * 铺一份"非 Git 风格"夹具:下下来的 Windows 应用发布目录 ——
+ * 没有 package.json、不是 Git 仓库,但根目录有 .cmd、子目录里有 .exe。
+ * 这类目录必须能扫出事实,否则前端在它里面永远只看到 NO_FACTS 空态。
+ */
+function makeNonGitFixture() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'zen-startup-ai-nongit-'))
+  const write = (rel, content) => {
+    const full = path.join(root, rel)
+    fs.mkdirSync(path.dirname(full), { recursive: true })
+    fs.writeFileSync(full, content, 'utf8')
+  }
+
+  write('README.txt', 'StoryForge\n\n双击 Start-StoryForge.cmd 启动。\n')
+  write('Start-StoryForge.cmd', '@echo off\n')
+  write('release.json', '{"version": "4.0.0"}\n')
+  write('scripts/reset.cmd', '@echo off\n')
+  write('runtime/app.exe', 'MZ binary')
+  return root
+}
+
+test('collectProjectFacts: 非 Git 风格的发布目录靠可执行文件进事实', async () => {
+  const root = makeNonGitFixture()
+  const facts = await factsOf(root)
+
+  // 根(README.txt + .cmd)、runtime(.exe)、scripts(.cmd)都进;没有 package.json 也无妨
+  assert.deepEqual(facts.dirs.map(d => d.relativePath), ['.', 'runtime', 'scripts'])
+  const rootDir = facts.dirs[0]
+  assert.ok(rootDir.markers.includes('README.txt'))
+  assert.ok(rootDir.executables.includes('Start-StoryForge.cmd'))
+  assert.equal(facts.dirs.find(d => d.relativePath === 'runtime').executables[0], 'app.exe')
+  assert.ok(facts.readmeHead.includes('双击'), 'README.txt 的开头照样进摘要')
+})
+
+test('buildStartupPrompt: 可执行文件进 prompt(中英各一套)', async () => {
+  const facts = await factsOf(makeNonGitFixture())
+  const zh = buildStartupPrompt(facts, 'zh')
+  const en = buildStartupPrompt(facts, 'en')
+
+  assert.ok(zh.includes('可执行文件:'))
+  assert.ok(zh.includes('Start-StoryForge.cmd'))
+  assert.ok(en.includes('executables:'))
+  assert.ok(en.includes('app.exe'))
+})
+
+test('validateSuggestions: 非 Git 目录里 shell 建议可落在扫到的目录,npm 建议一律丢掉', async () => {
+  const root = makeNonGitFixture()
+  const facts = await factsOf(root)
+  const kept = validateSuggestions([
+    { title: '启动', kind: 'shell', command: 'Start-StoryForge.cmd', cwd: '.', order: 1 },
+    { title: '跑 exe', kind: 'shell', command: '.\\app.exe', cwd: 'runtime', order: 2 },
+    { title: '假 npm', kind: 'npm', package: '.', script: 'dev', order: 3 },   // 这个目录没有 package.json
+    { title: '越界', kind: 'shell', command: 'ls', cwd: 'C:\\Windows', order: 4 },
+  ], facts, root, 'zh')
+
+  assert.deepEqual(kept.map(k => k.command), ['Start-StoryForge.cmd', '.\\app.exe'])
+  assert.equal(kept[0].cwd, root)
+  assert.equal(kept[0].cwdLabel, '.')
+  assert.equal(kept[1].cwd, path.join(root, 'runtime'))
+})
+
 // ── 纯函数 ────────────────────────────────────────────────────────────────
 
 test('pickScripts: 名字像"启动"的排前面,超量截断', () => {

@@ -16,14 +16,21 @@
  *      按钮与标题同一行、pill 与命令同一行、说明也长在命令行行尾(放不下按行尾宽度截断),
  *      且不存在任何独立底栏 —— 这些都曾经各占一行,用户先后圈着说"空太多"「2 行就够了」
  *
- * 空态(--empty):两个面板都没有内容时**整块不渲染** —— 一个点开只有"没找到/没看出"
- *   的空壳在左栏既占地方又像自己配错了。
- *   E1 NO_FACTS 时 AI 面板不存在 · E2 扫不到带 scripts 的 package.json 时 NPM 面板不存在
- *   E3 护栏:同一时刻外壳(.activity-bar)还在 —— 证明"面板不见了"不是"整页挂了"
+ * 空态(--empty):NO_FACTS 时 AI 面板**仍在**,显示的是一句明确的空态提示;
+ *   NPM 脚本面板维持"没内容就不渲染"的老口径。
+ *   E1 NO_FACTS 时 AI 面板在且提示"没有识别到" · E2 扫不到带 scripts 的 package.json 时 NPM 面板不存在
+ *   E3 护栏:同一时刻外壳(.activity-bar)还在 —— 证明"面板不在了"不是"整页挂了"
+ *   (2026-10-16 起 E1 从"整块不存在"改成"仍在 + 空态":用户要求非 Git 仓库也展示出来,
+ *    而 NO_FACTS 恰恰是非 Git 目录(发布产物 / 下载的应用)最常命中的状态。)
+ *
+ * 非 Git 模式(--non-git):劫持 /api/current_directory 把 isGitRepo 改成 false,
+ *   验证"当前目录不是 Git 仓库"时空态卡片与 AI 面板**同时在**,且面板仍渲染建议。
+ *   N1 非 Git 空态卡片在 · N2 AI 面板在且 3 条建议照常渲染 · N3 面板在非 Git 卡片之后
+ *   N4 护栏:应用外壳仍在
  *
  * 反证(--reverse):把接口换成 NO_MODEL,列表必须消失、只剩"未配置模型"的提示。
  *   如果面板无视接口硬渲染一份列表,这一条会红 —— 用来证明 P3 不是空断言。
- *   (NO_MODEL 是**可操作的指引**,所以面板仍在;只有"没内容"才隐藏。)
+ *   (NO_MODEL 是**可操作的指引**,所以面板仍在;空态/没内容显示提示,不隐藏。)
  *
  * ⚠️ 全程 stub 掉 /api/config/getConfig、/api/project-startup/suggestions 与
  *    /api/scan-npm-scripts:建议接口真调一次要花钱、还要等模型;脚本扫描依赖跑探针时
@@ -35,6 +42,7 @@
  * 用法:node scripts/verify-startup-ai-panel.cjs
  *      node scripts/verify-startup-ai-panel.cjs --reverse
  *      node scripts/verify-startup-ai-panel.cjs --empty
+ *      node scripts/verify-startup-ai-panel.cjs --non-git
  * 退出码:0 全通过,1 有失败项,2 脚本异常。
  */
 const path = require('node:path')
@@ -47,6 +55,7 @@ const { chromium } = require('playwright')
 const BASE = process.env.ZEN_BASE || 'http://127.0.0.1:5544'
 const REVERSE = process.argv.includes('--reverse')
 const EMPTY = process.argv.includes('--empty')
+const NONGIT = process.argv.includes('--non-git')
 const SHOT = process.env.ZEN_SHOT || ''
 
 const PROJECT = path.join(os.tmpdir(), 'zen-ai-panel-demo')
@@ -183,26 +192,90 @@ async function main() {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true }) })
   })
 
+  /**
+   * 非 Git 模式:劫持 /api/current_directory 把 isGitRepo 改成 false。
+   * 先 route.fetch() 拿真实响应再合并(只填 isGitRepo 会把 directory 等字段抹成 undefined),
+   * 后端没起 / 502 时兜底一份最小可用 JSON —— 本探针其余接口本来就全 stub,不依赖后端。
+   * 参照 scripts/verify-header-git-buttons.cjs 的同款劫持。
+   */
+  if (NONGIT) {
+    await page.route('**/api/current_directory*', async (route) => {
+      let json = {}
+      try {
+        const res = await route.fetch()
+        json = await res.json()
+      } catch { /* 后端没起:用兜底字段 */ }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ...json,
+          directory: json.directory || PROJECT,
+          isGitRepo: false,
+        }),
+      })
+    })
+  }
+
   await page.goto(BASE, { waitUntil: 'domcontentloaded' })
-  // 首屏 vite 预构建可能慢;空态下面板压根不渲染,只能等外壳
-  await page.waitForSelector(EMPTY ? '.activity-bar' : '.startup-ai-panel', { timeout: 90000 })
+  // 首屏 vite 预构建可能慢;NO_FACTS 空态下面板也在,统一等面板落定
+  await page.waitForSelector('.startup-ai-panel', { timeout: 90000 })
   await sleep(1500) // 等桩接口回来并渲染
 
   if (EMPTY) {
-    // ── E1/E2 没内容就不渲染 ────────────────────────────────────────────
+    // ── E1/E2 没内容的面板表现 ────────────────────────────────────────
     const aiCount = await page.locator('.startup-ai-panel').count()
+    const aiBodyText = (await page.locator('.startup-ai-panel .panel-body').innerText().catch(() => ''))
+      .replace(/\s+/g, ' ')
     const npmCount = await page.locator('.npm-scripts-panel').count()
     const suggestionItems = await page.locator('.suggestion-item').count()
-    check('E1 NO_FACTS 时 AI 启动建议面板整块不存在', aiCount === 0, `count=${aiCount}`)
+    check('E1 NO_FACTS 时 AI 面板仍在,显示"没有识别到"的空态提示',
+      aiCount === 1 && aiBodyText.includes('没有识别到'), `count=${aiCount} text=${aiBodyText.slice(0, 80)}`)
+    check('E1 顺带:空态下没有任何建议条目', suggestionItems === 0, `count=${suggestionItems}`)
     check('E2 扫不到带 scripts 的 package.json 时 NPM 脚本面板整块不存在', npmCount === 0, `count=${npmCount}`)
-    check('E2 顺带确认没有建议条目漏在面板外', suggestionItems === 0, `count=${suggestionItems}`)
 
     // ── E3 护栏:外壳还在,证明"面板不见了"是规则生效而不是整页炸了 ──────
     const shell = await page.locator('.activity-bar').first().isVisible().catch(() => false)
     check('E3 护栏:应用外壳仍在(空面板不是整页挂掉)', shell)
 
     if (SHOT) {
-      // 空态没法截"面板"(面板没了),截左栏整块 —— 看得出那两个位置是空的
+      // 截左栏整块 —— 看得出 AI 面板显示空态、NPM 面板不在
+      await page.locator('.git-status-card').first().screenshot({ path: SHOT })
+      console.log(`  截图: ${SHOT}`)
+    }
+
+    check('没有未捕获的页面异常', pageErrors.length === 0, pageErrors.join(' | ').slice(0, 300))
+
+    await browser.close()
+    return
+  }
+
+  if (NONGIT) {
+    // ── N1 非 Git 空态卡片在 ──────────────────────────────────────────
+    const nonGitCard = await page.locator('.not-git-repo').first().isVisible().catch(() => false)
+    check('N1 "当前目录不是Git仓库"空态卡片在(证明确实造出了非 Git 形态)', nonGitCard)
+
+    // ── N2 AI 面板照常渲染 ────────────────────────────────────────────
+    const aiCount = await page.locator('.startup-ai-panel').count()
+    const items = await page.locator('.startup-ai-panel .suggestion-item').count()
+    check('N2 非 Git 目录下 AI 启动建议面板仍在', aiCount === 1, `count=${aiCount}`)
+    check('N2 非 Git 目录下 3 条建议照常渲染', items === 3, `count=${items}`)
+
+    // ── N3 DOM 顺序:面板挂在非 Git 空态卡片之后 ───────────────────────
+    const order = await page.evaluate(() => {
+      const card = document.querySelector('.not-git-repo-content')
+      const ai = document.querySelector('.startup-ai-panel')
+      if (!card || !ai) return null
+      return !!(card.compareDocumentPosition(ai) & Node.DOCUMENT_POSITION_FOLLOWING)
+    })
+    check('N3 AI 面板在"当前目录不是Git仓库"卡片之后(DOM 顺序)', !!order, JSON.stringify(order))
+
+    // ── N4 护栏 ──────────────────────────────────────────────────────
+    const shell = await page.locator('.activity-bar').first().isVisible().catch(() => false)
+    check('N4 护栏:应用外壳仍在(非 Git 分支不是整页挂掉)', shell)
+
+    if (SHOT) {
+      // 截左栏整块 —— 看得出空态卡片在上、AI 面板在下
       await page.locator('.git-status-card').first().screenshot({ path: SHOT })
       console.log(`  截图: ${SHOT}`)
     }
