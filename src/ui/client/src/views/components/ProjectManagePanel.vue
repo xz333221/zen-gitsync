@@ -136,13 +136,20 @@ const ordered = computed(() => {
   color: var(--color-primary);
 }
 
-/* 平铺列表：行与行之间不留间隙、也不画分隔线 —— 靠 hover 底色与行内左右两块内容
-   区分（这是工作台左栏的同一套语言；用户明确不要"圆角 + 单 border"的卡片）。 */
+/* 平铺**网格**：一行按可用宽度放多张卡片（用户 2026-10-16：「每行多展示一些卡片」）。
+   · auto-fill + minmax(420px)：1900px 屏 ≈ 4 列（33 个项目 8~9 行看完），
+     1280px ≈ 2 列，窄屏自然退回单列，不需要任何媒体查询。
+   · 卡片之间不画分隔线、也不套边框 —— 靠 20px 列间距与 hover 底色区分
+     （"圆角 + 单 border"的卡片样式是用户点名不要的）。
+   · 420 是"卡片里那一行 9 个工具图标 + 3 个操作按钮"还能放下、项目名不被压扁的下限。 */
 .pm-list__items {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  column-gap: 20px;
+  row-gap: 6px;
+  align-items: start;
 }
 </style>

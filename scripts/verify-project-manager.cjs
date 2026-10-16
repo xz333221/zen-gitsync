@@ -230,7 +230,7 @@ async function main() {
     const missingOk = await waitUntil(async () => (await rowByName('alpha-repo').locator('.pm-tool.is-missing').count()) === 7, 8000)
     check('P1f3 未装的工具在快捷条里是"灰"的（is-missing，桩里 9 装 2）', missingOk,
       `missing=${await rowByName('alpha-repo').locator('.pm-tool.is-missing').count()}`)
-    check('P1f4 快捷条宽屏下可见（窄屏由 CSS 收起）', await alphaTools.first().isVisible())
+    check('P1f4 快捷条常驻可见（点它就用默认档打开）', await alphaTools.first().isVisible())
 
     // 已装工具 → 直接打开（默认档）
     await rowByName('alpha-repo').locator('.pm-tool[aria-label="用 VSCode 打开"]').click()
@@ -265,6 +265,44 @@ async function main() {
     const noBorder = (b) => !!b && [b.top, b.left, b.right, b.bottom].every(w => w === '0px')
     check('P1i 项目行与推荐带都是平铺（无 border），不是"圆角卡片"',
       noBorder(borders.item) && noBorder(borders.rec), JSON.stringify(borders))
+
+    // ── P1j..P1l 一行多张卡片（响应式网格） ─────────────────────────────
+    // 「每行多展示一些卡片」是用户明确要求（2026-10-16 澄清：不是卡片里多塞内容）。
+    const gridInfo = () => page.evaluate(() => {
+      const items = Array.from(document.querySelectorAll('.pm-item'))
+      if (!items.length) return null
+      const rows = new Map()
+      for (const el of items) {
+        const r = el.getBoundingClientRect()
+        const key = Math.round(r.top)
+        if (!rows.has(key)) rows.set(key, [])
+        rows.get(key).push({ left: r.left, right: r.right })
+      }
+      const first = rows.get(Math.round(items[0].getBoundingClientRect().top)) || []
+      first.sort((a, b) => a.left - b.left)
+      return {
+        perRow: first.length,
+        rowCount: rows.size,
+        itemCount: items.length,
+        // 同一行里的卡片不许压在一起
+        overlaps: first.some((c, i) => i > 0 && c.left < first[i - 1].right - 0.5),
+      }
+    })
+
+    // 探针视口 1500px（含 48px 活动栏）→ 网格 minmax(420px) 应当排出多列
+    const wide = await gridInfo()
+    check('P1j 宽屏下一行放多张卡片（每行 ≥2 张、行数 < 卡片数）',
+      !!wide && wide.perRow >= 2 && wide.rowCount < wide.itemCount,
+      JSON.stringify(wide))
+    check('P1k 同一行的卡片互不重叠', !!wide && !wide.overlaps, JSON.stringify(wide))
+
+    // 响应式：窄下来自然回到单列（证明列数是"按页面宽度"来的，不是写死的）
+    await page.setViewportSize({ width: 900, height: 950 })
+    await sleep(400)
+    const narrow = await gridInfo()
+    check('P1l 窄屏（900px）退回单列', !!narrow && narrow.perRow === 1, JSON.stringify(narrow))
+    await page.setViewportSize({ width: 1500, height: 950 })
+    await sleep(400)
 
     // ── P6 启动方式懒加载（先量"初始 0 次"，再展开） ───────────────────
     const withPath = () => startupCalls.filter(b => b.projectPath)

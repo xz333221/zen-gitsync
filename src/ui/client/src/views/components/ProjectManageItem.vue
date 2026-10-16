@@ -216,7 +216,14 @@ async function confirmRemove() {
         <div class="pm-item__path">{{ project.path }}</div>
       </div>
 
-      <!-- 工具快捷条：宽屏才出（窄屏靠「…」菜单，功能不缺） -->
+      <span class="pm-item__time">{{ relativeTimeFromIso(project.stats.lastActiveAt) }}</span>
+    </div>
+
+    <!-- 卡片第二行：工具快捷条 + 操作按钮。
+         刻意**不**塞进头行 —— 网格布局下每张卡只有 ~420px 宽，挤在一行里项目名会被压成
+         省略号；单列窄屏时这一行也只是往下多占 24px，比丢信息划算。 -->
+    <div class="pm-item__bar">
+      <!-- 工具快捷条：「用 X 打开」一眼可见，一次点击即用默认档 -->
       <div v-if="canOpen" class="pm-item__tools">
         <button
           v-for="tool in STRIP_TOOLS"
@@ -294,8 +301,6 @@ async function confirmRemove() {
           <el-icon aria-hidden="true" :class="{ 'is-rotating': removing }"><Delete /></el-icon>
         </button>
       </div>
-
-      <span class="pm-item__time">{{ relativeTimeFromIso(project.stats.lastActiveAt) }}</span>
     </div>
 
     <!-- 启动方式（AI 启动建议）：展开才挂载 = 展开才请求 -->
@@ -306,26 +311,31 @@ async function confirmRemove() {
 </template>
 
 <style scoped>
-/* ── 平铺行（跟工作台左栏 .proj-item 同一套语言：不画边框、hover/态才出底色） ──
-   用户明确不喜欢"圆角 + 单层 border"的卡片样子，所以这里连圆角都只在有底色时才有意义
-   （透明底上圆角看不出来）。"当前"项目靠一条 3px 主色竖条 + 淡渐变底表达。 */
+/* ── 平铺卡片（跟工作台左栏 .proj-item 同一套语言：不画边框、只在有底色时才有圆角） ──
+   用户明确不喜欢"圆角 + 单层 border"的卡片样子，也明确要求"一行里多放几张卡片"
+   （见 ProjectManagePanel 的网格）。所以一张卡 = 一小块平铺内容：
+   hover/选中才出底色，"当前"项目靠一条 3px 主色竖条 + 淡渐变底表达。 */
 .pm-item {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 7px 8px 5px 12px;
+  border-radius: var(--radius-md);
   transition: background var(--transition-fast) var(--ease-custom);
 }
 .pm-item:hover { background: var(--bg-container-hover); }
 .pm-item.is-open { background: var(--bg-subtle); }
 .pm-item.is-current {
-  background: linear-gradient(90deg, var(--tint-primary-12), transparent 55%);
+  background: linear-gradient(90deg, var(--tint-primary-12), transparent 60%);
 }
 /* 竖条走 ::before 而不是 border-left：border 会挤进内容盒，把图标槽与项目名整体右移，
-   有图标与没图标的行就对不齐（工作台那次为这条踩过坑）。 */
+   有图标与没图标的卡片就对不齐（工作台那次为这条踩过坑）。 */
 .pm-item.is-current::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 6px;
-  bottom: 6px;
+  top: 2px;
+  bottom: 2px;
   width: 3px;
   background: var(--color-primary);
   border-radius: 0 2px 2px 0;
@@ -334,12 +344,8 @@ async function confirmRemove() {
 
 .pm-item__head {
   display: flex;
-  align-items: center;
-  gap: 16px;
-  /* space-between：宽屏时把富余宽度摊到几处间隙里，而不是在末尾留一个大洞
-     （用户圈的就是"每行中间一大片是空的"） */
-  justify-content: space-between;
-  padding: 9px 12px 9px 14px;
+  align-items: flex-start;
+  gap: 9px;
   cursor: pointer;
   outline: none;
 }
@@ -362,9 +368,8 @@ async function confirmRemove() {
   background: var(--bg-subtle);
 }
 
-/* 身份块：宽度按内容取（min 保证名字不被压扁，max 防超长路径把整行撑破），
-   剩下宽度留给工具快捷条与操作区。 */
-.pm-item__meta { flex: 0 1 auto; min-width: 260px; max-width: 620px; }
+/* 身份块：吃掉卡片里除图标与时间之外的宽度 */
+.pm-item__meta { flex: 1 1 auto; min-width: 0; }
 .pm-item__row1 {
   display: flex;
   align-items: center;
@@ -435,12 +440,22 @@ async function confirmRemove() {
   text-align: left;
 }
 
-/* ── 工具快捷条（宽屏才出） ────────────────────────────────────────── */
+/* ── 卡片第二行：工具快捷条（左） + 操作按钮（右） ───────────────────── */
+.pm-item__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 3px;
+  padding-left: 41px;   /* 与项目名左边缘对齐（图标槽 32 + gap 9） */
+}
+
+/* ── 工具快捷条 ────────────────────────────────────────────────────── */
 .pm-item__tools {
-  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   gap: 1px;
+  min-width: 0;
 }
 .pm-tool {
   display: inline-flex;
@@ -501,9 +516,10 @@ async function confirmRemove() {
 }
 .pm-item__action:disabled { cursor: default; opacity: 0.55; }
 
+/* 时间：卡片右上角（与项目名同一行），不占第二行 */
 .pm-item__time {
   flex-shrink: 0;
-  min-width: 62px;
+  margin-left: 4px;
   text-align: right;
   font-size: var(--font-size-xs);
   color: var(--text-meta);
@@ -511,22 +527,14 @@ async function confirmRemove() {
 }
 
 /* 启动方式：复用 ProjectStartupAiPanel，但它是"面板"形态（自带外边距/阴影）——
-   嵌在行里时去掉外边距与阴影，让它看起来是这一行的下半段，不套第二层卡片。 */
+   嵌在卡片里时去掉外边距与阴影，与上面的内容左对齐（41px = 图标槽 32 + gap 9）。 */
 .pm-item__startup {
-  padding: 0 12px 10px 14px;
+  padding: 2px 0 6px 41px;
 }
 .pm-item__startup :deep(.startup-ai-panel) {
   margin-top: 0;
   box-shadow: none;
   background: var(--bg-container);
-}
-
-/* 窄屏：工具快捷条收起来（功能仍在「…」菜单里，20 项一个不少）。
-   1180px 是实测阈值：再窄下去，"路径上限 620 + 快捷条 ~220 + 操作 72 + 时间 62 +
-   四道 16px 间隙"就会开始挤掉项目名。 */
-@media (max-width: 1180px) {
-  .pm-item__tools { display: none; }
-  .pm-item__meta { max-width: none; }
 }
 
 @keyframes pm-pulse {
