@@ -138,6 +138,10 @@ vi.mock('@/utils/scheduleApi', async (importOriginal) => {
 const configState = vi.hoisted(() => ({
   theme: 'light' as const,
   currentDirectory: '/tmp/proj',
+  // AgentView 的 inputModelName（输入框工具条「默认模型」）读 configStore.models；
+  // 桩里缺这个字段时挂载即炸（TypeError: reading 'find'），整文件 20 例全红。
+  // 真实 store 初始值就是空数组（ref<ModelInfo[]>([])），形状保持一致。
+  models: [] as { name?: string; model?: string; isDefault?: boolean }[],
   agentPresetPrompts: [] as { id: string; label: string; prompt: string }[],
 }))
 
