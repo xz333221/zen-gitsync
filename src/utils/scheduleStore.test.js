@@ -177,3 +177,72 @@ test('坏文件:读取时按空任务库处理,不抛给调用方', async () => 
   const restored = await loadTasks({ fresh: true });
   assert.equal(restored.length, before.length);
 });
+
+// ── 原子写纪律(2026-10-16)：Windows 占用要重试穿透；写失败不得留缓存幻影 ──
+// 背景：调度器测试随机红，根因是 rename 撞 Windows 临时占用(EPERM)被上层
+// `.catch(() => {})` 静默吞掉，而内存缓存还指着"改过但没落盘"的数组 →
+// 轮询型的读者读到幻影状态。修法=走 fsAtomic 的重试 + 改动前先失效缓存。
+
+const fspDefault = (await import('node:fs/promises')).default;
+const originalRename = fspDefault.rename;
+const originalWriteFile = fspDefault.writeFile;
+
+test('setTaskRun:rename 撞 EPERM(Windows 占用几毫秒)会重试穿透,不丢写', async () => {
+  const task = await createTask(base({ name: 'retry 用例' }));
+  let failsLeft = 2; // 前两次 EPERM，第三次成功 —— 裸 rename 会当场抛
+  fspDefault.rename = async (a, b) => {
+    if (failsLeft-- > 0) {
+      const err = new Error('simulated rename busy');
+      err.code = 'EPERM';
+      throw err;
+    }
+    return originalRename(a, b);
+  };
+  try {
+    await setTaskRun(task.id, { at: '2026-01-15T09:00:12.000Z', status: 'ok', trigger: 'schedule' });
+  } finally {
+    fspDefault.rename = originalRename;
+  }
+  // 磁盘上真的落下了（重试穿透成功，既没被吞也不靠降级覆盖）
+  const raw = JSON.parse((await import('node:fs')).readFileSync(SCHEDULES_FILE, 'utf-8'));
+  const onDisk = raw.tasks.find(t => t.id === task.id);
+  assert.equal(onDisk.lastRun.status, 'ok', 'rename 重试后 lastRun 必须已在磁盘上');
+});
+
+test('setTaskRun:写盘彻底失败时不落幻影(缓存失效),且不留孤儿 tmp', async () => {
+  const task = await createTask(base({ name: '失败不留幻影' }));
+  assert.equal((await getTask(task.id)).lastRun, null);
+
+  // rename 恒 EPERM；降级覆盖写(直写目标文件)也恒 EPERM —— tmp 的写放行。
+  // fsAtomic 会按 6 次×退避重试两轮，约 1 秒后抛。
+  fspDefault.rename = async () => {
+    const err = new Error('simulated rename busy');
+    err.code = 'EPERM';
+    throw err;
+  };
+  fspDefault.writeFile = async (p, ...rest) => {
+    if (String(p) === SCHEDULES_FILE) {
+      const err = new Error('simulated target busy');
+      err.code = 'EPERM';
+      throw err;
+    }
+    return originalWriteFile(p, ...rest);
+  };
+  try {
+    await assert.rejects(
+      setTaskRun(task.id, { at: '2026-01-15T09:10:00.000Z', status: 'ok', trigger: 'schedule' }),
+      /simulated (rename|target) busy|EPERM/,
+    );
+  } finally {
+    fspDefault.rename = originalRename;
+    fspDefault.writeFile = originalWriteFile;
+  }
+
+  // 关键断言：读到的是**磁盘真相**（lastRun 仍为 null），而不是只存在于内存的新状态
+  const t = await getTask(task.id);
+  assert.equal(t.lastRun, null, '写盘失败后不得读到未落盘的幻影状态');
+  // 孤儿 tmp 已被清理
+  const { readdirSync } = await import('node:fs');
+  const leftovers = readdirSync(path.dirname(SCHEDULES_FILE)).filter(f => f.includes('.tmp'));
+  assert.deepEqual(leftovers, [], '失败路径不应留下孤儿 tmp 文件');
+});

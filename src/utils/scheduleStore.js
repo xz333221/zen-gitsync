@@ -36,6 +36,7 @@
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { SCHEDULES_FILE, SCHEDULE_CLAIMS_DIR } from '../paths.js';
+import { atomicWriteText } from '../fsAtomic.js';
 import { validateCron } from './scheduleCron.js';
 
 export { SCHEDULES_FILE, SCHEDULE_CLAIMS_DIR };
@@ -177,12 +178,21 @@ export async function getTask(id) {
 
 // ── 写 ────────────────────────────────────────────────────────
 
+/**
+ * 原子写盘走 fsAtomic（tmp + rename，带 Windows "目标被占用"重试 + 降级覆盖）。
+ *
+ * ⚠️ 不能用裸 `fsp.rename`：Windows 上杀毒实时扫描 / 索引器 / 并发读者会把目标
+ * 文件占用几毫秒，rename 报 EPERM/EACCES/EBUSY —— 裸 rename 直接抛，而本模块的
+ * 所有调用方都是 `.catch(() => {})` 风格（调度器不能因为一次落盘失败就中断），
+ * 结果就是**一次静默丢写**。2026-10-16 实测：调度器测试里 rename EPERM 被吞 →
+ * 内存缓存留下"从未落盘的 lastRun" → 后续读者读到幻影状态，表现为随机失败。
+ * fsAtomic 的文件头早就写着"若各写一份重试逻辑，迟早有一边漏掉 EPERM/EACCES/EBUSY
+ * 重试"—— 这份就是漏掉的那个，回归到统一实现。
+ */
 async function writeToDisk(tasks) {
   await fsp.mkdir(path.dirname(SCHEDULES_FILE), { recursive: true });
   const payload = { version: 1, tasks };
-  const tmp = `${SCHEDULES_FILE}.tmp.${process.pid}.${Date.now()}`;
-  await fsp.writeFile(tmp, JSON.stringify(payload, null, 2), 'utf-8');
-  await fsp.rename(tmp, SCHEDULES_FILE);
+  await atomicWriteText(SCHEDULES_FILE, JSON.stringify(payload, null, 2));
   cache = null; // 下次读重新 stat + load
 }
 
@@ -193,6 +203,10 @@ async function writeToDisk(tasks) {
  */
 async function mutateTasks(mutator) {
   const tasks = await loadTasks({ fresh: true });
+  // ⚠️ 在 mutator 原地改之前**先把缓存失效**：写盘可能失败（见 writeToDisk 的注释），
+  //    失败后缓存若还指着这份只存在于内存的新数组，读者拿到的是"从未落盘的幻影"——
+  //    比读到旧值危险得多（waitRun 类的轮询会据此提前返回，断言随之与真实时序脱节）。
+  cache = null;
   const result = mutator(tasks);
   await writeToDisk(tasks);
   return result;
