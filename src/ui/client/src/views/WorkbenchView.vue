@@ -25,6 +25,7 @@ import {
   Document,
   Delete,
   CopyDocument,
+  VideoPlay,
   Warning
 } from '@element-plus/icons-vue'
 import AttachmentZone from '@components/AttachmentZone.vue'
@@ -1303,11 +1304,18 @@ const selectedTaskQueue = computed(() =>
             @click="runTask(selectedTask)"
             @command="pickExecutor"
           >
-            {{ selectedTaskHasRun ? $t('@WORKBENCH:重新执行任务') : $t('@WORKBENCH:执行任务') }}
+            <!-- 2026-10-17 紧凑化：主按钮只留「▶ + 执行器图标」。
+                 原来这一排（徽标 193 + 主按钮 272 + 复制 150 + 清空 97 + 日志 97）
+                 占掉 809px，把左侧标题输入框挤到 0 宽（用户截图里标题整条消失）。
+                 文案退成 sr-only：读屏和 verify-wb-rerun-label 读到的仍是
+                 「执行任务 / 重新执行任务」；执行器名同样退进 hint 的 sr-only，
+                 视觉上由 ▶ 旁的品牌图标承担，悬停 hint 仍能看全名/模型。 -->
+            <el-icon class="wb-executor-split__play" aria-hidden="true"><VideoPlay /></el-icon>
             <span class="wb-executor-split__hint" :title="executorModelTitle(selectedTaskExecutor)">
               <TaskExecutorIcon :executor="selectedTaskExecutor" class="wb-executor-split__hint-icon" />
-              {{ executorLabel(selectedTaskExecutor) }}
+              <span class="sr-only">{{ executorLabel(selectedTaskExecutor) }}</span>
             </span>
+            <span class="sr-only">{{ selectedTaskHasRun ? $t('@WORKBENCH:重新执行任务') : $t('@WORKBENCH:执行任务') }}</span>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item
@@ -1354,7 +1362,7 @@ const selectedTaskQueue = computed(() =>
             >
               <el-icon class="wb-logs-inline-btn__icon" v-if="copyExecFlashId !== selectedTask.id"><CopyDocument /></el-icon>
               <el-icon class="wb-logs-inline-btn__icon" v-else>✓</el-icon>
-              <span>{{ $t('@WORKBENCH:复制执行内容') }}</span>
+              <span class="sr-only">{{ $t('@WORKBENCH:复制执行内容') }}</span>
             </button>
             <el-dropdown trigger="click" placement="bottom-end" @command="onCopyExecCommand">
               <button
@@ -1381,7 +1389,7 @@ const selectedTaskQueue = computed(() =>
             @click="clearExecutionForSelectedTask"
           >
             <el-icon class="wb-logs-inline-btn__icon"><Delete /></el-icon>
-            <span>{{ $t('@WORKBENCH:清空执行') }}</span>
+            <span class="sr-only">{{ $t('@WORKBENCH:清空执行') }}</span>
           </button>
           <button
             type="button"
@@ -1391,7 +1399,7 @@ const selectedTaskQueue = computed(() =>
             @click="logsDialogVisible = true"
           >
             <el-icon class="wb-logs-inline-btn__icon"><Document /></el-icon>
-            <span>{{ $t('@WORKBENCH:执行日志') }}</span>
+            <span class="sr-only">{{ $t('@WORKBENCH:执行日志') }}</span>
           </button>
         </div>
         <!-- 任务描述区域：默认折叠，节省首屏空间；展开后可编辑/上传附件 -->
@@ -2416,7 +2424,11 @@ const selectedTaskQueue = computed(() =>
 /* ── 任务头操作区：标题 + 提示词下拉 + 按钮组 ────────────────── */
 .wb-split__header {
   display: flex;
-  gap: 10px;
+  /* 右侧动作全收成图标后一行放得下；只有窄到标题连 200px 都给不出时才换行，
+     换行比"把标题压成 0 宽"强（用户截图里标题整条消失就是后者）。 */
+  flex-wrap: wrap;
+  gap: 8px;
+  row-gap: 6px;
   align-items: center;
   flex-shrink: 0;
   padding-bottom: 4px;
@@ -2432,7 +2444,9 @@ const selectedTaskQueue = computed(() =>
   align-items: center;
   gap: 6px;
   flex: 1;
-  min-width: 0;
+  /* 100 → 200（2026-10-17）：标题是这条任务最主要的信息，宁可整行换行，
+     也不允许被右侧图标压成一条看不见的输入框。 */
+  min-width: 200px;
 }
 .wb-split__title-wrap .wb-input--title { flex: 1; min-width: 0; }
 
@@ -2505,6 +2519,16 @@ const selectedTaskQueue = computed(() =>
 /* 执行器 split button：主体「执行」+ 下拉切执行器 */
 .wb-executor-split {
   flex-shrink: 0;
+}
+/* 2026-10-17：主按钮文案退成 sr-only 后，内容只剩 ▶ + 执行器图标，
+   EP 默认的左右 15px 内边距会白白把它撑宽一个量级（那一排原来就是靠这些
+   内边距 + 文字把标题输入框挤没的）。 */
+.wb-executor-split :deep(.el-button:first-child) {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+.wb-executor-split__play {
+  font-size: var(--font-size-base);
 }
 .wb-executor-split__hint {
   margin-left: 6px;
@@ -2596,9 +2620,11 @@ const selectedTaskQueue = computed(() =>
   appearance: none;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  gap: 0;
   height: 32px;
-  padding: 0 12px;
+  /* 2026-10-17：文案改成 sr-only 后这排只剩图标，内边距收成 8px（32×32 方块） */
+  padding: 0 8px;
   border: 1px solid var(--border-color);
   background: var(--bg-container);
   color: var(--text-secondary);
@@ -2627,8 +2653,8 @@ const selectedTaskQueue = computed(() =>
   background: var(--tint-danger-06);
 }
 /* 「复制执行内容」成功后闪一下成功色 —— 与标题/描述旁的 .wb-copy-btn.is-flash 同一套色。
-   文案**刻意不换**（只换图标为 ✓）：这一排按钮宽度会跟着文字变，换文案会让
-   「清空执行」「执行日志」跟着左右跳一下，banner 级别的抖动不值得。 */
+   文案**刻意不换**（只换图标为 ✓）：2026-10-17 起文案退成 sr-only、按钮只有图标，
+   换文案在视觉上没意义，还会让读屏在点击瞬间念出一段新句子。 */
 .wb-logs-inline-btn--copy.is-flash {
   color: var(--color-success-dark, var(--color-success));
   border-color: var(--tint-success-35, color-mix(in srgb, var(--color-success) 35%, transparent));
