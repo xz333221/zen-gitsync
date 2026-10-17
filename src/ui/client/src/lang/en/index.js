@@ -2838,6 +2838,9 @@ export default {
   '@AGENT:立即发送': 'Send now',
   '@AGENT:移出队列': 'Remove from queue',
   '@AGENT:生成中，发送后会排队，等本轮跑完自动接上…': 'Generating — messages you send will be queued and sent after this turn…',
+  // Turns with no SSE event for a while (ChatSilenceBadge)
+  '@AGENT:静默 {elapsed}': 'Silent for {elapsed}',
+  '@AGENT:已经有一段时间没有收到模型的输出与工具调用了': 'No output or tool call from the model for a while',
   '@AGENT:回答提交失败': 'Failed to submit answer',
   '@AGENT:请先停止当前生成': 'Please stop the current generation first',
   '@AGENT:确认删除该会话': 'Delete this session?',

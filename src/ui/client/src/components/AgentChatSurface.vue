@@ -66,6 +66,7 @@ import {
 import AgentEngineSelector from '@/components/AgentEngineSelector.vue'
 import TaskExecutorPicker from '@/components/TaskExecutorPicker.vue'
 import CopySessionButton from '@/components/CopySessionButton.vue'
+import ChatSilenceBadge from '@/components/ChatSilenceBadge.vue'
 
 const props = defineProps<{
   /** 头部标题（各入口自己决定叫"主 Agent 对话"还是别的） */
@@ -127,6 +128,8 @@ const {
   queuePaused,
   removeQueuedMessage,
   flushQueued,
+  // 本轮静默时长（毫秒）；头部那枚「静默 x 秒」读它，口径见 ChatSilenceBadge
+  silentMs,
 } = useAgentChat()
 
 const displayEngine = computed(() => (isEngineLocked.value ? currentEngine.value : pendingEngine.value))
@@ -257,6 +260,12 @@ onMounted(() => {
       </button>
       <span class="acs__title">{{ title || $t('@WORKBENCH:g ai 对话') }}</span>
       <span class="acs__spacer" />
+      <!-- 本轮静默：与「智能体」页头部同一枚（等回答时不算静默，见组件文件头） -->
+      <ChatSilenceBadge
+        class="acs__silence"
+        :silent-ms="silentMs"
+        :streaming="isStreaming && !questionPanel"
+      />
       <!-- 引擎切换：与「智能体」视图 / 编辑器面板同一个选择器（唯一那份实现）。
            宽屏对话区一直在，所以常驻；窄屏只在对话页出现 —— 列表页摆它只会挤占标题。 -->
       <AgentEngineSelector
@@ -413,6 +422,8 @@ onMounted(() => {
 .acs__spacer { flex: 1; }
 /* 引擎选择器不参与压缩（引擎名是身份标识，挤扁了没法认） */
 .acs__engine { flex: none; }
+/* 静默提示同理：数字串被压缩会折行，反而占了头部的宽 */
+.acs__silence { flex: none; }
 .acs__icon-btn {
   width: 22px;
   height: 22px;

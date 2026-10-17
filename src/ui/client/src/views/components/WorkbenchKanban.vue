@@ -1167,51 +1167,45 @@ function coverTitle(img: BoardImage): string {
   --kb-mask-outside-band: linear-gradient(to bottom, #000 calc(100% - 19px), transparent calc(100% - 14px));
   padding: 12px;
   margin-bottom: 8px;
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-lg);
+  /* 2026-10-17 用户："我不喜欢圆角加单 border 的样式"（圈的就是这张进行中的卡）。
+     卡面改成**平铺**：不画 1px 描边、不给常驻圆角、不挂静息阴影，hover 也不抬升 ——
+     边界交给列身的角色淡底（.kb-col 的 --col-surface），和项目列表 .proj-item 同一套语言。
+     描边/圆角/阴影留任何一项，它还是"一张浮在白底上的卡片"，改不干净。 */
+  border: 0;
+  border-radius: 0;
   background: var(--surface-elevated);
-  box-shadow: var(--shadow-card-rest);
   cursor: pointer;
-  transition: border-color var(--transition-fast) var(--ease-custom),
-              background var(--transition-fast) var(--ease-custom),
-              box-shadow var(--transition-fast) var(--ease-custom),
-              transform var(--transition-fast) var(--ease-custom);
+  transition: background var(--transition-fast) var(--ease-custom);
 }
 .kb-card:hover {
-  border-color: var(--border-card-hover);
-  background: var(--surface-elevated);
-  box-shadow: var(--shadow-card-lift);
-  transform: translateY(-1px);
+  background: var(--bg-subtle-hover);
 }
 /* 卡片状态与列状态是同一套角色 —— "进行中"的卡和"进行中"的列必然同色，
    而不是靠两处各写一遍数值凑巧一致。
 
-   ⚠️ 2026-10-05 第五轮：**进行中的卡不再换底色，只留一圈描边**。
+   ⚠️ 2026-10-05 第五轮：**进行中的卡不再换底色**。
    用户反馈「我非进行中的正常任务都是白色，进行中的是橙色有点奇怪」。
    上一版（第三轮）的判断是"卡片是信号、列身是氛围，所以卡片浓度要比列身高"，
    但漏了一层：**卡片落在哪一列是它自己的状态推出来的**（`is-running` ⇔ 进 进行中 列），
    于是卡面再染一遍色是**纯冗余**，代价却是同屏别的卡都白、唯独它一块暖色 ——
    读起来像"另一种卡"而不是"同一个卡在跑"。
-   现在状态由三处表达：列（色带 + 列身氛围）、这圈 role 描边、
-   卡片自己的活动行（「已运行 x 秒 · 工具 n 次 · PID …」）。
-   这也顺带修掉了"卡片比列身更抢眼"的老问题：同列所有卡同底，扫视时不再有块状跳变。
+   ⚠️ 2026-10-17：卡片自己已经没有描边了（见 .kb-card），状态改挂在**左侧 3px 竖条**上
+   （inset 阴影而不是 border-left：不占布局，hover / 悬停遮罩都不用重算几何）。
+   状态仍由三处表达：列（色带 + 列身氛围）、这条竖条、卡片自己的活动行。
    ⚠️ 错误卡（.has-error）反过来**保留**淡红底，别顺手统一：
    出错是**跨列**的（待处理 / 已完成 列里会混着白卡），不染就扫不出哪条失败了。 */
 .kb-card.is-running {
-  border-color: var(--role-active-edge);
+  box-shadow: inset 3px 0 0 var(--role-active-edge);
 }
 .kb-card.has-error {
-  border-color: var(--role-error-edge);
   background: var(--role-error-wash);
+  box-shadow: inset 3px 0 0 var(--role-error-edge);
 }
-/* 点开过的那张（.is-opened）：常驻一圈主色描边 + aria-current，就是一枚"你最后点开的是这条"的标记。
-   描边色与上面两个状态色同用 color-mix 那一套写法。
-   ⚠️ 2026-10-05：这枚标记原先还负责解释"这张卡为什么没有 hover 操作"（那时 hover 被撤掉了）。
-   现在 hover 照常（见 .kb-card__actions 那段），标记就只剩"刚才在这条上"这一个含义，
-   所以 hover 时它跟别的卡片一样抬升 —— 卡片照样可点（点开就是回到编辑器），
-   之前那条 `:is-opened:hover { transform: none }` 是跟着"不再暗示可点"写的，一并去掉。 */
+/* 点开过的那张（.is-opened）：常驻一条主色竖条 + aria-current，就是一枚"你最后点开的是这条"的标记。
+   与上面两个状态同用 inset 阴影，优先级写在最后 —— 同时点开又出错时，以"你刚看过它"为准；
+   出错仍然能从淡红底认出来。 */
 .kb-card.is-opened {
-  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--border-color));
+  box-shadow: inset 3px 0 0 var(--color-primary);
 }
 
 /* ── 封面：附件里第一张图（模板那段讲了为什么在最顶、为什么只画一张） ──────
@@ -1229,7 +1223,9 @@ function coverTitle(img: BoardImage): string {
   margin: -12px -12px 10px;
   padding: 0;
   border: none;
-  border-radius: calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px) 0 0;
+  /* 2026-10-17：卡片改成平铺（无圆角），封面跟着归零 —— 留着上圆角会在卡片顶上
+     切掉一块白角，比不裁还难看。 */
+  border-radius: 0;
   overflow: hidden;
   /* 2026-10-05：底色原来也是 --bg-subtle（白底上叠 2% 黑）。封面是**出血**到卡片
      边缘的 —— 上面那条负外边距抵消了 .kb-card 的 12px 内边距 —— 而卡片底是

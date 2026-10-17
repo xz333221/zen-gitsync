@@ -8,7 +8,7 @@
 //   5. 生成中排队：发送先入队，本轮正常跑完自动接下一条；被停止 / 报错则暂停等人续
 //      （队列按会话各持一份，UI 在库的输入框条带里，见 queuedMessages / flushQueued）
 
-import { computed, reactive, ref } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, reactive, ref, watch } from 'vue'
 import type { ChatMessage, ToolCall, ChatAttachment, SelectedFile, QueuedMessage } from 'zen-ai-chat-ui'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { uid } from 'zen-ai-chat-ui'
@@ -428,6 +428,15 @@ interface SessionRun {
    */
   queuePaused: boolean
   /**
+   * 本轮流里**最后一次收到任何 SSE 事件**的时刻（ms）。
+   *
+   * 静默计时唯一的数据源（阈值与显示样式见 ChatSilenceBadge）。不能用 startedAt：
+   * 那一轮可能已经跑了 8 分钟、每秒都在吐字，不能因此被当成"静默 8 分钟"。
+   * `null` = 还没开跑（或老一轮留下的空值）→ 界面不显示静默。
+   * 服务端的 `: keep-alive` 注释行不算：它只证明连接活着，不证明模型还在产出。
+   */
+  lastEventAt: number | null
+  /**
    * 本会话最近一次发送的请求级参数（引擎 / 打开的文档 / 派发开关…）。
    * 重试上一轮时原样复用 —— 用户在报错到点重试之间可能改过界面上的选择，
    * 重算一遍等于把那一轮发出去时的东西换掉（与队列存快照同理）。
@@ -495,7 +504,8 @@ export function useAgentChat() {
       answeringQuestion: false,
       contextUsage: null,
       queue: [],
-      queuePaused: false
+      queuePaused: false,
+      lastEventAt: null
     }
   }
 
@@ -546,6 +556,46 @@ export function useAgentChat() {
     return changed ? out : list
   })
   const isStreaming = computed(() => activeRun.value?.isStreaming ?? false)
+
+  /**
+   * 当前会话这一轮已经静默多久（毫秒）；不在跑 / 还没收到过事件 → null。
+   *
+   * 为什么单独养一个每秒跳的 `silenceNow`，而不是直接在模板里 Date.now()：
+   * computed 只认响应式依赖，没有一个会变的数它就不重算，"静默 12 秒"会一直停在
+   * 首帧那个值上。定时器只在有流的时候跑（流结束立刻清掉），不会常驻空转。
+   *
+   * 口径与看板「静默 x 分」一致：都是"距最后一次产出多久"，**不含**连接心跳
+   * （服务端的 keep-alive 是注释行，解析循环只认 `data:` 事件）。
+   * 该不该显示、什么颜色由 ChatSilenceBadge 决定（阈值是展示策略，不放在这里）。
+   */
+  const silenceNow = ref(Date.now())
+  let silenceTimer: ReturnType<typeof setInterval> | null = null
+  const silentMs = computed<number | null>(() => {
+    const run = activeRun.value
+    if (!run || !run.isStreaming || !run.lastEventAt) return null
+    return Math.max(0, silenceNow.value - run.lastEventAt)
+  })
+  watch(isStreaming, (streaming) => {
+    if (streaming) {
+      silenceNow.value = Date.now()
+      if (!silenceTimer) {
+        silenceTimer = setInterval(() => { silenceNow.value = Date.now() }, 1000)
+      }
+    } else if (silenceTimer) {
+      clearInterval(silenceTimer)
+      silenceTimer = null
+    }
+  }, { immediate: true })
+  // 组件卸载时要收掉：composable 在 setup 里调用，作用域销毁后这个 interval 没人管
+  if (getCurrentScope()) {
+    onScopeDispose(() => {
+      if (silenceTimer) {
+        clearInterval(silenceTimer)
+        silenceTimer = null
+      }
+    })
+  }
+
   // 上下文占用：随会话走（切换会话时进度条跟着切，不留在上一个会话的数字上）
   const contextUsage = computed<AgentContextUsage | null>(() => activeRun.value?.contextUsage ?? null)
 
@@ -1023,6 +1073,9 @@ export function useAgentChat() {
     run.messages.push(assistantMsg)
 
     run.isStreaming = true
+    // 静默计时从"请求发出去"这一下起算：服务端准备上下文 / 首包到达之前也算静默，
+    // 否则用户会看到一段既没有"生成中"计时又没有静默提示的空白。
+    run.lastEventAt = Date.now()
     // 记住这一轮的请求参数：重试时要原样再来一遍（引擎 / 打开的文档 / 派发开关…），
     // 见 retryTurn。存快照而不是重算 —— 用户在这中间可能改了界面上的选择。
     run.lastSendOptions = options
@@ -1126,6 +1179,10 @@ export function useAgentChat() {
           if (!payload) continue
           let evt: any
           try { evt = JSON.parse(payload) } catch { continue }
+
+          // 收到**任何一条** data 事件都算"它还在动"：静默计时归零（见 silentMs）。
+          // 放在 switch 之前，新加事件类型不用记得补这一行。
+          run.lastEventAt = Date.now()
 
           switch (evt.type) {
             // 上下文占用：每次请求发出前服务端都会发一条（工具循环里每轮都发，
@@ -1498,6 +1555,8 @@ export function useAgentChat() {
     run.pendingQuestion = null
     run.answeringQuestion = false
     run.isStreaming = true
+    // 续跑同样从请求发出时起算静默（与 sendMessage 同一条口径）
+    run.lastEventAt = Date.now()
 
     const turnToken = `${instanceId}:${run.key}:${myNonce}`
     agentActivity.begin(turnToken)
@@ -1571,6 +1630,9 @@ export function useAgentChat() {
     // 展示用（正文本机图片路径已改写成会话图片端点）；「复制会话」导出请用上面的 messages
     displayMessages,
     isStreaming,
+    // 本轮已经多久没有收到任何 SSE 事件（毫秒）；不在跑 → null。
+    // 界面自己决定阈值 / 颜色（见 ChatSilenceBadge）—— 这里只给原始数字。
+    silentMs,
     sessionLoading,
     pendingQuestion,
     // 面板展示用：只有正在等回答时非空
