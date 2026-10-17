@@ -43,6 +43,7 @@ import SchedulePanel from '@/components/SchedulePanel.vue'
 import AgentPromptSettings from '@/components/AgentPromptSettings.vue'
 import AgentEngineSelector from '@/components/AgentEngineSelector.vue'
 import CopySessionButton from '@/components/CopySessionButton.vue'
+import ChatSilenceBadge from '@/components/ChatSilenceBadge.vue'
 
 const configStore = useConfigStore()
 const gitStore = useGitStore()
@@ -50,7 +51,15 @@ const gitStore = useGitStore()
 // ── 面板宽度：够窄就把「会话列表」和「对话」折成两个页面 ──────────
 // 量的是这个视图容器自己的宽度（窄屏下拖动侧栏 / 分屏都会变；视口宽度反映不了）。
 const rootRef = ref<HTMLElement | null>(null)
-const { narrow } = useNarrowPane(rootRef)
+const { width, narrow } = useNarrowPane(rootRef)
+/**
+ * 头部至少这么宽才摆「静默 x 秒」。
+ *
+ * 这一行已经站着五个 Tab + 引擎选择器 + 复制按钮；再加一枚 ~90px 的徽标，
+ * 900px 以下 Tab 文字就会被压得折行（导航条突然长高一倍，比少一条提示更糟）。
+ * 扣掉左侧会话列（240px）之后 ≈ 860px，够放下整行。
+ */
+const TABS_SILENCE_MIN_WIDTH = 1100
 /** 窄屏下的当前页。宽屏两栏并排时用不到它 */
 const chatPage = ref<'list' | 'chat'>('chat')
 
@@ -128,7 +137,9 @@ const {
   queuedMessages,
   queuePaused,
   removeQueuedMessage,
-  flushQueued
+  flushQueued,
+  // 本轮静默时长（毫秒）；头部那枚「静默 x 秒」读它，口径见 ChatSilenceBadge
+  silentMs
 } = useAgentChat()
 
 // ── 引擎选择 ──────────────────────────────────────────────
@@ -394,6 +405,15 @@ onBeforeUnmount(() => {
           :title="currentSessionTitle"
           :engine="agentEngineName(displayEngine)"
         />
+
+        <!-- 本轮静默：挂在 Tab 行最右端（与引擎 / 复制同一条右对齐线）。
+             等回答时不算静默 —— 那一轮挂着是在等用户点选项（见 ChatSilenceBadge 文件头）。 -->
+        <ChatSilenceBadge
+          v-if="activeTab === 'chat' && width >= TABS_SILENCE_MIN_WIDTH"
+          class="agent-silence"
+          :silent-ms="silentMs"
+          :streaming="isStreaming && !questionPanel"
+        />
       </nav>
 
       <div class="agent-tab-body">
@@ -575,6 +595,11 @@ onBeforeUnmount(() => {
    7px 是让它与 Tab 的文字中线平齐 —— Tab 自己有 9px 下内边距。 */
 .agent-copy {
   margin-left: 2px;
+  margin-bottom: 7px;
+}
+/* 静默提示：复制按钮右边。同样吃 7px 的下外边距，与引擎 / 复制站在同一条中线上 */
+.agent-silence {
+  margin-left: 10px;
   margin-bottom: 7px;
 }
 

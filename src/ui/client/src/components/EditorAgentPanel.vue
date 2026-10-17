@@ -32,6 +32,13 @@
       </template>
 
       <div class="agent-panel-spacer" />
+      <!-- 本轮静默：与「智能体」页、主 Agent 控制台同一枚（等回答时不算静默） -->
+      <ChatSilenceBadge
+        v-if="!narrow || page === 'chat'"
+        class="agent-panel-silence"
+        :silent-ms="silentMs"
+        :streaming="isStreaming && !questionPanel"
+      />
       <!-- 引擎切换：与「智能体」视图同一套（同一个 AgentEngineSelector）。
            宽屏左边摆着历史，对话区一直在，所以常驻；窄屏只在对话页出现 ——
            列表页没有正在跑的对话，摆这儿只会挤占标题。 -->
@@ -205,6 +212,7 @@ import {
 } from '@/utils/agentConversations'
 import AgentEngineSelector from '@/components/AgentEngineSelector.vue'
 import CopySessionButton from '@/components/CopySessionButton.vue'
+import ChatSilenceBadge from '@/components/ChatSilenceBadge.vue'
 
 const props = defineProps<{
   /** 当前打开的文档路径（绝对或相对都行，服务端会归一化到项目根目录） */
@@ -251,6 +259,8 @@ const {
   queuePaused,
   removeQueuedMessage,
   flushQueued,
+  // 本轮静默时长（毫秒）；头部那枚「静默 x 秒」读它，口径见 ChatSilenceBadge
+  silentMs,
 } = useAgentChat()
 
 // ── 引擎：与「智能体」视图同一口径 ────────────────────────────
@@ -487,6 +497,11 @@ onBeforeUnmount(() => {
 /* 引擎切换：不参与压缩（引擎名是身份标识，挤扁了没法认），狭面板优先压标题 */
 .agent-panel-engine {
   flex: none;
+}
+/* 静默提示：数字串不参与压缩（压窄会折行），与引擎选择器同一条右侧对齐线 */
+.agent-panel-silence {
+  flex: none;
+  margin-right: 4px;
 }
 
 .agent-panel-icon-btn {

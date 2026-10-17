@@ -19,10 +19,12 @@ const screenshotDir = path.join(repoRoot, 'workbench-images', '_task-mqekkeib-3e
 fs.mkdirSync(screenshotDir, { recursive: true })
 
 const port = fs.readFileSync(path.join(repoRoot, '.port'), 'utf8').trim()
-const URL = `http://localhost:${port}/`
+// 默认打后端（内置静态产物）；迭代时可以用 ZEN_BASE 指向 5544 的 vite（省一次 build）
+const URL = process.env.ZEN_BASE || `http://localhost:${port}/`
 
 const log = (...args) => console.log('[verify]', ...args)
 const shot = (page, name) => page.screenshot({ path: path.join(screenshotDir, name), fullPage: false })
+const REVERSE = process.argv.includes('--reverse')
 
 async function clickByText(page, selector, text) {
   // 在 selector 内查找包含指定文字的元素并点击
@@ -50,30 +52,38 @@ async function run() {
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`))
   page.on('console', (msg) => { if (msg.type() === 'error') errors.push(`console: ${msg.text()}`) })
 
+  // 反向验证：把内容搜索接口打桩成"永远 0 命中"，A 组断言必须翻红。
+  // 用来证明"命中"不是别的区块（名称匹配 / 上一轮残留）冒充出来的。
+  if (REVERSE) {
+    log('⚠ REVERSE 模式：/api/search_content 固定返回空结果，内容搜索断言应翻红')
+    await page.route('**/api/search_content', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, files: [], totalFiles: 0, totalMatches: 0, scannedFiles: 0, truncated: false }),
+    }))
+  }
+
   log(`导航 ${URL}`)
   await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 60_000 })
-  // 等应用挂载
-  await page.waitForSelector('.sidebar-title', { timeout: 30_000, state: 'attached' })
+  // 首屏落点取决于用户上次停在哪个视图（工作台 / 编辑器），所以只等外壳出现，
+  // 再显式点「编辑器」进文件空间 —— 直接等 .sidebar-title 在别的视图下会等成超时。
+  await page.waitForSelector('.activity-bar', { timeout: 30_000 })
   await page.waitForTimeout(800)
   await shot(page, '01-initial.png')
 
   // ── 切换到编辑器视图（ActivityBar 的"编辑器"按钮） ────
   log('[0] 切换到编辑器视图')
-  const editorBtn = await page.$('button[aria-label="编辑器"], .activity-btn[aria-label="编辑器"]')
-  if (editorBtn) {
-    const visible = await editorBtn.isVisible().catch(() => false)
-    if (visible) {
-      await editorBtn.click({ force: true })
-      log('  - 已点击"编辑器"按钮')
-      await page.waitForTimeout(800)
-    }
+  const editorBtn = page.locator('.activity-btn[aria-label^="编辑器"], .activity-btn[aria-label^="文件空间"]').first()
+  if (await editorBtn.count()) {
+    await editorBtn.click({ force: true })
+    log('  - 已点击"编辑器"按钮')
+    await page.waitForTimeout(800)
   } else {
     log('  ⚠ 未找到编辑器切换按钮,尝试通过 aria-pressed 定位')
     const altBtn = await page.$('button[aria-pressed="false"]')
     if (altBtn) await altBtn.click({ force: true })
     await page.waitForTimeout(500)
   }
-
   // ── 处理项目选择对话框 ──────────────────────────────────
   const dialogVisible = await page.locator('.el-dialog, .el-drawer, .el-message-box').first().isVisible().catch(() => false)
   if (dialogVisible) {
@@ -88,25 +98,19 @@ async function run() {
     await page.waitForTimeout(800)
   }
 
-  // ── 处理侧边栏折叠 ─────────────────────────────────────
-  const sidebarVisible = await page.evaluate(() => {
-    const el = document.querySelector('.sidebar, .file-sidebar, .editor-sidebar')
-    return el && el.offsetWidth > 50
-  })
-  log(`[0] 侧边栏可见: ${sidebarVisible}`)
-  if (!sidebarVisible) {
-    const toggleBtns = await page.$$('button')
-    for (const b of toggleBtns) {
-      const text = (await b.textContent() || '').trim()
-      const aria = await b.getAttribute('aria-label') || ''
-      if (aria.includes('侧边栏') || aria.includes('sidebar') || aria.includes('资源') || text.includes('资源')) {
-        await b.click({ force: true })
-        log(`  - 点击 toggle 按钮: aria="${aria}"`)
-        break
-      }
-    }
-    await page.waitForTimeout(500)
+  // ── 等待编辑器视图真正挂载 ───────────────────────────────
+  // EditorView 是异步组件，dev 下点完按钮还要拉 chunk + 编译，800ms 不够。
+  // 冷启动第一跑偶尔会点空（活动栏刚渲染、事件还没绑上）—— 8 秒没挂上就重点一次。
+  try {
+    await page.waitForSelector('.editor-sidebar', { timeout: 8000 })
+  } catch {
+    log('  ⚠ 编辑器视图 8s 未挂载，重点一次')
+    if (await editorBtn.count()) await editorBtn.click({ force: true })
+    await page.waitForSelector('.editor-sidebar', { timeout: 30_000 })
   }
+  const sidebarWidth = await page.$eval('.editor-sidebar', (el) => el.offsetWidth)
+  log(`[0] 侧边栏宽度: ${sidebarWidth}`)
+  if (sidebarWidth <= 50) throw new Error('编辑器侧边栏宽度异常，可能处于折叠态')
 
   // 等文件树节点加载
   await page.waitForFunction(() => {
@@ -193,12 +197,71 @@ async function run() {
   }
   await shot(page, '07-search-dirs.png')
 
+  // ── 2.5 内容搜索：关键词只出现在文件内容里，任何文件名都不含它 ────────
+  // 用 fs.js 里那句中文报错当关键词：只可能命中内容，不会命中文件名。
+  // 拆成两段拼接，避免完整关键词出现在本文件里、被探针自己搜到
+  const contentKeyword = '禁止搜索' + '工作目录以外的路径'
+  await input.fill(contentKeyword)
+  // 等这一轮内容搜索落定：data-query 认领到本次关键词 + loading 行消失。
+  // 只等 loading 消失会假绿 —— 填词瞬间防抖还没发请求，上一轮的结果还挂在 DOM 上。
+  await page.waitForFunction((kw) => {
+    const el = document.querySelector('.content-results')
+    return !!el
+      && el.getAttribute('data-query') === kw
+      && !document.querySelector('.content-results-status')
+  }, contentKeyword, { timeout: 30_000 })
+  const contentHitFiles = await page.$$eval('.content-hit-file', (els) =>
+    els.map((el) => el.textContent.trim())
+  )
+  const contentHitLines = await page.$$eval('.content-hit-line', (els) => els.length)
+  const contentMarks = await page.$$eval('.content-hit-mark', (els) => els.length)
+  log(`[2.5] 内容搜索 ${contentKeyword} → 文件 ${contentHitFiles.length} / 行 ${contentHitLines} / 高亮 ${contentMarks}`)
+  log('  - 命中文件:', contentHitFiles.slice(0, 4))
+  await shot(page, '07b-search-content.png')
+  if (contentHitFiles.length === 0) throw new Error('内容搜索未返回任何文件命中')
+  if (contentHitLines === 0) throw new Error('内容命中没有渲染行片段')
+  if (contentMarks === 0) throw new Error('内容片段里的关键词没有高亮')
+  // 名称这一侧应当 0 命中（没有任何文件名包含该标识符）—— 证明结果不是名称匹配冒充的
+  const nameNodesForContentQuery = await page.$$eval('.sidebar-tree .tree-node', (els) => els.length)
+  if (nameNodesForContentQuery !== 0) {
+    throw new Error(`内容搜索关键词不应命中文件名，实际有 ${nameNodesForContentQuery} 个名称节点`)
+  }
+
+  // 点一条命中行 → 应该打开对应文件标签
+  await page.locator('.content-hit-line').first().click()
+  await page.waitForTimeout(800)
+  const openedTabName = await page.$eval('.editor-tab.active .tab-name', (el) => el.textContent.trim()).catch(() => '')
+  log(`[2.5] 点击命中行后打开的标签: "${openedTabName}"`)
+  if (!openedTabName) throw new Error('点击内容命中后没有打开文件标签')
+  await shot(page, '07c-content-hit-opened.png')
+
+  // 反向对照：不存在的关键词 → 内容区不应有命中
+  // 带时间戳构造，避免这个字符串被写进仓库文件后自己命中自己
+  const reverseKeyword = `zzzz_no_content_hit_${Date.now()}`
+  await input.fill(reverseKeyword)
+  await page.waitForFunction((kw) => {
+    const el = document.querySelector('.content-results')
+    return !!el
+      && el.getAttribute('data-query') === kw
+      && !document.querySelector('.content-results-status')
+  }, reverseKeyword, { timeout: 30_000 })
+  const reverseHits = await page.$$eval('.content-hit-file', (els) => els.length)
+  log(`[2.5] 反向关键词 → 内容命中文件数 ${reverseHits}`)
+  if (reverseHits !== 0) throw new Error(`不存在的关键词应 0 命中，实际 ${reverseHits}`)
+
   // ── 3. 不存在的关键字 → 空态 ─────────────────────────────
-  await input.fill('xxxxnomatch12345')
-  await page.waitForTimeout(400)
+  const noMatchKeyword = `xxxxnomatch_${Date.now()}`
+  await input.fill(noMatchKeyword)
+  // 内容搜索是异步的：要等它落定，"未找到匹配文件" 才会渲染（搜索期间先不摆空态）
+  await page.waitForFunction((kw) => {
+    const el = document.querySelector('.content-results')
+    return !!el
+      && el.getAttribute('data-query') === kw
+      && !document.querySelector('.content-results-status')
+  }, noMatchKeyword, { timeout: 30_000 })
   nodes = await page.$$eval('.sidebar-tree .tree-node', (els) => els.length)
   const emptyText = await page.$eval('.tree-empty', (el) => el.textContent.trim()).catch(() => '')
-  log(`[3] search=xxxxnomatch12345 → 节点数 ${nodes}, 空态文案: "${emptyText}"`)
+  log(`[3] search=${noMatchKeyword} → 节点数 ${nodes}, 空态文案: "${emptyText}"`)
   await shot(page, '08-no-match.png')
   if (nodes !== 0) throw new Error(`不匹配关键字应显示 0 节点, 实际 ${nodes}`)
   if (!emptyText.includes('未找到匹配文件')) throw new Error('空态文案缺失')
