@@ -102,8 +102,99 @@ watch(searchQuery, (val) => {
   }, 180)
 })
 
+// ── 文件内容搜索 ─────────────────────────────────────────
+// 名称过滤走本地整棵树；内容匹配必须问后端（要读盘）。两条链路共用同一个
+// 防抖关键词：输入时先出名称结果，内容结果稍后补进来。
+// 单独一个 AbortController：连着改关键词时把上一轮请求掐掉，
+// 否则慢的那次（大仓库遍历）回来晚一步就会把新结果覆盖成旧词的结果。
+interface ContentMatchLine {
+  line: number
+  text: string
+}
+
+interface ContentFileHit {
+  path: string
+  relPath: string
+  name: string
+  dir: string
+  total: number
+  matches: ContentMatchLine[]
+}
+
+// 单个字符的内容搜索在大仓库里几乎必然扫满时间预算，收益却很低
+const CONTENT_SEARCH_MIN_LEN = 2
+const contentHits = ref<ContentFileHit[]>([])
+const contentTotalMatches = ref(0)
+const contentQuery = ref('')
+const contentSearching = ref(false)
+const contentTruncated = ref(false)
+let contentAbort: AbortController | null = null
+let contentSeq = 0
+
+function resetContentSearch() {
+  contentAbort?.abort()
+  contentAbort = null
+  // 递增序号让还在飞的请求回来时认领不到结果（finally 也不会把 loading 翻回来）
+  contentSeq += 1
+  contentHits.value = []
+  contentTotalMatches.value = 0
+  contentQuery.value = ''
+  contentSearching.value = false
+  contentTruncated.value = false
+}
+
+async function runContentSearch(rawKeyword: string) {
+  const keyword = rawKeyword.trim()
+  const root = configStore.currentDirectory
+  if (!root || keyword.length < CONTENT_SEARCH_MIN_LEN) {
+    resetContentSearch()
+    return
+  }
+  // 同一关键词且正在搜（防抖重入），不重复发
+  if (keyword === contentQuery.value && contentSearching.value) return
+
+  contentAbort?.abort()
+  const seq = ++contentSeq
+  const ctrl = new AbortController()
+  contentAbort = ctrl
+  contentSearching.value = true
+  contentQuery.value = keyword
+  try {
+    const resp = await fetch('/api/search_content', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: root, query: keyword }),
+      signal: ctrl.signal,
+    })
+    const data = await resp.json().catch(() => null)
+    if (seq !== contentSeq) return
+    if (!data?.success) {
+      contentHits.value = []
+      contentTotalMatches.value = 0
+      contentTruncated.value = false
+      return
+    }
+    contentHits.value = Array.isArray(data.files) ? (data.files as ContentFileHit[]) : []
+    contentTotalMatches.value = typeof data.totalMatches === 'number' ? data.totalMatches : 0
+    contentTruncated.value = !!data.truncated
+  } catch (e: any) {
+    // abort 是正常路径（用户还在打字），不提示、也不清空已有结果
+    if (e?.name === 'AbortError' || seq !== contentSeq) return
+    contentHits.value = []
+    contentTotalMatches.value = 0
+    contentTruncated.value = false
+  } finally {
+    if (seq === contentSeq) contentSearching.value = false
+  }
+}
+
+watch(debouncedSearchQuery, (val) => {
+  void runContentSearch(val)
+})
+
 onBeforeUnmount(() => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  contentAbort?.abort()
   stopTreePolling()
   stopDiskSyncPolling()
 })
@@ -150,6 +241,8 @@ function stopTreePolling() {
 watch(() => configStore.currentDirectory, async () => {
   // 先关写入（同上：切换期间树/标签都会短暂变空，写回去就是把新项目的快照冲成空表）
   workspaceHydrated = false
+  // 上一个项目的内容命中不能带到新项目里
+  resetContentSearch()
   startTreePolling()
   await initTree()
   if (tabs.value.some(t => t.isDirty)) {
@@ -334,33 +427,44 @@ function flattenTree(nodes: TreeNode[]): TreeNode[] {
 // 搜索关键词(小写),用于过滤树
 const searchQueryLower = computed(() => debouncedSearchQuery.value.trim().toLowerCase())
 
-// 递归过滤:不区分大小写匹配 name,命中节点保留所有祖先目录并强制 expanded=true。
+// 递归过滤:不区分大小写匹配 name,命中节点保留所有祖先目录并强制展开。
 // 输入为空 → 返回原树(保持用户已展开/折叠状态)。
-// 直接修改原始 reactive 节点的属性,以保留 Vue 响应式链路(toggleDir / openFile 才能触发 UI 更新)。
-// 仅在节点本身边界才覆盖 children:未加载的目录(原 children 为 undefined)保持 undefined,
-// 这样 toggleDir 仍能通过 `!node.children` 判断触发懒加载。
+// 搜索态返回的是**浅拷贝**:在 computed 里直接改原节点的 expanded 会让
+// 渲染 effect 递归触发自己(Vue 报 "Maximum recursive updates exceeded")。
+// 未加载的目录(原 children 为 undefined)保持 undefined,点击时由 openFile
+// 回到原节点上懒加载。
 function filterTree(nodes: TreeNode[], keyword: string): TreeNode[] {
   if (!keyword) return nodes
   const result: TreeNode[] = []
   for (const n of nodes) {
-    const children = n.children ? filterTree(n.children, keyword) : []
     const nameMatch = n.name.toLowerCase().includes(keyword)
     if (n.type === 'directory') {
       // 目录:自己命中 或 子树有命中 → 保留并强制展开
-      if (nameMatch || children.length > 0) {
-        n.expanded = true
-        // 已加载的目录才覆盖 children;未加载时保留 undefined,以便后续 toggleDir 懒加载
-        if (n.children !== undefined) {
-          n.children = children
-        }
-        result.push(n)
-      }
+      const children = n.children ? filterTree(n.children, keyword) : []
+      if (!nameMatch && children.length === 0) continue
+      result.push({
+        ...n,
+        expanded: true,
+        children: n.children !== undefined ? children : undefined,
+      })
     } else {
       // 文件:仅自身命中
       if (nameMatch) result.push(n)
     }
   }
   return result
+}
+
+// 按路径回原树里找节点（搜索结果的目录是拷贝，懒加载/重命名要落到原节点上）
+function findNodeByPath(nodes: TreeNode[], targetPath: string): TreeNode | null {
+  for (const n of nodes) {
+    if (n.path === targetPath) return n
+    if (n.children) {
+      const hit = findNodeByPath(n.children, targetPath)
+      if (hit) return hit
+    }
+  }
+  return null
 }
 
 // 当前用于渲染的树(搜索时为过滤后,否则为原树)
@@ -371,24 +475,46 @@ const noSearchResults = computed(() =>
   searchQueryLower.value.length > 0 && visibleTree.value.length === 0
 )
 
-// 将节点名按当前防抖关键词拆成段,用于在渲染时高亮命中部分。
+// 名称、内容都没有命中才算"未找到匹配文件"。
+// 内容搜索还在跑时先不摆空态 —— 否则会先闪一行"未找到"，再冒出结果。
+const noAnySearchResults = computed(() =>
+  noSearchResults.value && contentHits.value.length === 0 && !contentSearching.value
+)
+
+// 将文本按当前防抖关键词拆成段,用于在渲染时高亮命中部分(节点名 / 内容片段共用)。
 // 空关键词 → 单段无高亮;大小写不敏感匹配。
-function highlightName(name: string): Array<{ text: string; hit: boolean }> {
+function highlightText(text: string): Array<{ text: string; hit: boolean }> {
   const kw = debouncedSearchQuery.value.trim()
-  if (!kw) return [{ text: name, hit: false }]
-  const lowerName = name.toLowerCase()
+  if (!kw) return [{ text, hit: false }]
+  const lowerText = text.toLowerCase()
   const lowerKw = kw.toLowerCase()
   const parts: Array<{ text: string; hit: boolean }> = []
   let cursor = 0
-  let idx = lowerName.indexOf(lowerKw, cursor)
+  let idx = lowerText.indexOf(lowerKw, cursor)
   while (idx !== -1) {
-    if (idx > cursor) parts.push({ text: name.slice(cursor, idx), hit: false })
-    parts.push({ text: name.slice(idx, idx + lowerKw.length), hit: true })
+    if (idx > cursor) parts.push({ text: text.slice(cursor, idx), hit: false })
+    parts.push({ text: text.slice(idx, idx + lowerKw.length), hit: true })
     cursor = idx + lowerKw.length
-    idx = lowerName.indexOf(lowerKw, cursor)
+    idx = lowerText.indexOf(lowerKw, cursor)
   }
-  if (cursor < name.length) parts.push({ text: name.slice(cursor), hit: false })
+  if (cursor < text.length) parts.push({ text: text.slice(cursor), hit: false })
   return parts
+}
+
+// 点内容命中：打开文件并把光标落到命中的那一行。
+// 打开是异步的(要读盘)，model 在 activeTabPath 的 watcher 里才挂上去，
+// 所以必须等一帧再 reveal，否则拿到的是上一个文件的 model。
+async function openContentHit(hit: ContentFileHit, line?: number) {
+  const node: TreeNode = { name: hit.name, path: hit.path, type: 'file', depth: 0 }
+  await openFile(node)
+  if (!line || line < 1) return
+  await nextTick()
+  const editor = editorInstance.value
+  // 图片 / Office 标签没有 Monaco model，别去动 editor 的当前位置
+  if (!editor || !editor.getModel() || activeTab()?.path !== hit.path) return
+  editor.revealLineInCenter(line, monaco.editor.ScrollType.Smooth)
+  editor.setPosition({ lineNumber: line, column: 1 })
+  editor.focus()
 }
 
 // 搜索输入框 ref + 快捷键聚焦 / Esc 清空
@@ -434,7 +560,8 @@ const selectedNode = ref<TreeNode | null>(null)
 async function openFile(node: TreeNode) {
   selectedNode.value = node
   if (node.type !== 'file') {
-    toggleDir(node)
+    // 搜索态下树里是拷贝节点，展开/懒加载必须落到原节点上
+    toggleDir(findNodeByPath(treeNodes.value, node.path) ?? node)
     return
   }
   // 已打开则激活
@@ -1686,8 +1813,8 @@ function stopPreviewResize() {
           v-model="searchQuery"
           type="text"
           class="sidebar-search-input"
-          :placeholder="$t('@EDITOR:搜索文件...')"
-          :title="$t('@EDITOR:搜索文件...')"
+          :placeholder="$t('@EDITOR:搜索文件名或内容...')"
+          :title="$t('@EDITOR:搜索文件名或内容...')"
           spellcheck="false"
           autocomplete="off"
           @keydown.escape="onSearchEscape"
@@ -1707,6 +1834,10 @@ function stopPreviewResize() {
       </div>
 
       <div class="sidebar-tree" v-if="!treeLoading">
+        <!-- 搜索态下给上方森林一个分组标题：下面还有「内容匹配」，不标一下分不清两块 -->
+        <div v-if="searchQueryLower && visibleTree.length > 0" class="search-section-head">
+          {{ $t('@EDITOR:名称匹配') }}
+        </div>
         <template v-for="node in flattenTree(visibleTree)" :key="node.path">
           <!-- 重命名时用输入框替换节点 -->
           <div
@@ -1765,7 +1896,7 @@ function stopPreviewResize() {
             </svg>
             <!-- 名称(命中关键字高亮) -->
             <span class="tree-name" :title="node.path">
-              <template v-for="(part, i) in highlightName(node.name)" :key="i">
+              <template v-for="(part, i) in highlightText(node.name)" :key="i">
                 <span v-if="part.hit" class="tree-name-hit">{{ part.text }}</span>
                 <template v-else>{{ part.text }}</template>
               </template>
@@ -1822,8 +1953,52 @@ function stopPreviewResize() {
           />
         </div>
 
-        <div v-if="!inlineInput && (noSearchResults || treeNodes.length === 0)" class="tree-empty">
-          {{ noSearchResults ? $t('@EDITOR:未找到匹配文件') : $t('@EDITOR:暂无文件') }}
+        <!-- 内容匹配：搜索框的第二块结果。名称在树里已经能懒加载，内容命中只能平铺 -->
+        <div v-if="searchQueryLower" class="content-results" :data-query="contentQuery">
+          <div v-if="contentSearching" class="content-results-status">
+            <span class="content-search-spin" />
+            <span>{{ $t('@EDITOR:正在搜索文件内容...') }}</span>
+          </div>
+          <template v-else-if="contentHits.length > 0">
+            <div class="search-section-head">
+              <span>{{ $t('@EDITOR:内容匹配') }}</span>
+              <span class="search-section-count">{{ contentTotalMatches }}</span>
+              <span v-if="contentTruncated" class="search-section-note">{{ $t('@EDITOR:结果过多，已截断') }}</span>
+            </div>
+            <div v-for="hit in contentHits" :key="hit.path" class="content-hit">
+              <div
+                class="content-hit-file"
+                :title="hit.relPath"
+                @click="openContentHit(hit, hit.matches[0]?.line)"
+              >
+                <svg class="tree-icon mit-icon" aria-hidden="true">
+                  <use :xlink:href="`#${getFileIconClass(hit.name)}`" />
+                </svg>
+                <span class="content-hit-name">{{ hit.name }}</span>
+                <span class="content-hit-dir">{{ hit.dir }}</span>
+                <span class="content-hit-total">{{ hit.total }}</span>
+              </div>
+              <div
+                v-for="m in hit.matches"
+                :key="`${hit.path}:${m.line}`"
+                class="content-hit-line"
+                :title="$t('@EDITOR:点击跳到该行')"
+                @click="openContentHit(hit, m.line)"
+              >
+                <span class="content-hit-ln">{{ m.line }}</span>
+                <span class="content-hit-text">
+                  <template v-for="(part, i) in highlightText(m.text)" :key="i">
+                    <span v-if="part.hit" class="content-hit-mark">{{ part.text }}</span>
+                    <template v-else>{{ part.text }}</template>
+                  </template>
+                </span>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <div v-if="!inlineInput && (noAnySearchResults || treeNodes.length === 0)" class="tree-empty">
+          {{ noAnySearchResults ? $t('@EDITOR:未找到匹配文件') : $t('@EDITOR:暂无文件') }}
         </div>
       </div>
       <div v-else class="sidebar-loading">
@@ -2282,6 +2457,145 @@ function stopPreviewResize() {
 
 /* 节点名搜索命中高亮(沿用主题色 + 柔和背景) */
 .tree-name-hit {
+  color: var(--color-warning-light);
+  background: rgba(245, 158, 11, 0.15);
+  border-radius: var(--radius-xs);
+  padding: 0 1px;
+}
+
+/* ── 内容匹配结果 ───────────────────────────────
+   平铺行 + hover 底色（不套卡片边框）；分区标题用一条头发丝线跟上方树隔开，
+   且只有内容块真的渲染时才画线 —— 空 div 不留痕迹。 */
+.search-section-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px 3px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-meta);
+  user-select: none;
+}
+
+.search-section-count {
+  min-width: 14px;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  color: var(--text-meta);
+  background: var(--bg-hover);
+  border-radius: var(--radius-xs);
+}
+
+.search-section-note {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-meta);
+}
+
+.content-results {
+  margin-top: 6px;
+  padding-bottom: 6px;
+}
+
+.content-results > .search-section-head,
+.content-results-status {
+  border-top: 1px solid var(--border-color);
+}
+
+.content-results-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-meta);
+}
+
+.content-search-spin {
+  flex-shrink: 0;
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid var(--color-primary);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.content-hit-file {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px 0 12px;
+  cursor: pointer;
+  color: var(--text-primary);
+  transition: background var(--transition-fast);
+}
+
+.content-hit-file:hover,
+.content-hit-line:hover {
+  background: var(--bg-hover);
+}
+
+.content-hit-name {
+  font-size: var(--font-size-mid);
+  white-space: nowrap;
+}
+
+.content-hit-dir {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.content-hit-total {
+  flex-shrink: 0;
+  min-width: 16px;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  color: var(--text-meta);
+  background: var(--bg-hover);
+  border-radius: var(--radius-xs);
+}
+
+.content-hit-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 1px 10px 1px 24px;
+  cursor: pointer;
+}
+
+.content-hit-ln {
+  flex-shrink: 0;
+  width: 30px;
+  text-align: right;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 10.5px;
+  color: var(--text-meta);
+}
+
+.content-hit-text {
+  flex: 1;
+  min-width: 0;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.content-hit-mark {
   color: var(--color-warning-light);
   background: rgba(245, 158, 11, 0.15);
   border-radius: var(--radius-xs);

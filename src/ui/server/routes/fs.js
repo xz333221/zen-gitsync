@@ -477,6 +477,203 @@ export function registerFsRoutes({
     }
     }));
 
+  // ── 文件内容搜索（资源管理器搜索框的「内容匹配」）────────────────────────
+  //
+  // 不依赖 ripgrep / git grep：
+  //   - 本应用会在 30+ 个项目之间切换，其中不少目录不是 git 仓库，`git grep` 直接不可用；
+  //   - rg 不是 Node 自带能力，多一个外部依赖就多一类"换台机器就不工作"。
+  // 纯 fs 遍历的代价靠边界控制：跳过重目录、跳过 >2MB 与含 NUL 的二进制文件，
+  // 最多扫 2 万个文件 / 命中 100 个文件 / 10 秒。前端输入停顿后才发请求，并用
+  // AbortController 取消上一轮 —— 快速连打不会在服务端堆一串遍历。
+  const CONTENT_SEARCH_IGNORED_DIRS = new Set([
+    '.git', '.hg', '.svn', 'node_modules', 'bower_components',
+    'dist', 'build', 'out', 'target', 'vendor', 'coverage',
+    '.next', '.nuxt', '.svelte-kit', '.turbo', '.parcel-cache', '.cache',
+    '__pycache__', '.venv', 'venv', '.pytest_cache', '.mypy_cache',
+  ]);
+  const CONTENT_SEARCH_MAX_FILE_BYTES = 2 * 1024 * 1024;
+  const CONTENT_SEARCH_MAX_HIT_FILES = 100;
+  const CONTENT_SEARCH_MAX_LINES_PER_FILE = 3;
+  const CONTENT_SEARCH_MAX_SCAN_FILES = 20000;
+  const CONTENT_SEARCH_TIME_BUDGET_MS = 10000;
+  const CONTENT_SEARCH_CONCURRENCY = 8;
+
+  // 二进制判定：前 8KB 出现 NUL 就当二进制。UTF-16 文本也会命中，但那类文件
+  // 逐行匹配本来就会输出一堆乱码，跳过比"搜出垃圾"更符合预期。
+  const looksBinary = (buf) => {
+    const limit = Math.min(buf.length, 8000);
+    for (let i = 0; i < limit; i += 1) {
+      if (buf[i] === 0) return true;
+    }
+    return false;
+  };
+
+  // 预览片段：以命中词为中心截一段（行首缩进对扫读没帮助，顺手去掉）。
+  const buildSnippet = (line, queryLower) => {
+    const MAX_LEN = 200;
+    const idx = line.toLowerCase().indexOf(queryLower);
+    if (line.length <= MAX_LEN) return line.trim();
+    const start = Math.max(0, idx - Math.floor((MAX_LEN - queryLower.length) / 2));
+    const end = Math.min(line.length, start + MAX_LEN);
+    return `${start > 0 ? '…' : ''}${line.slice(start, end).trim()}${end < line.length ? '…' : ''}`;
+  };
+
+  app.post('/api/search_content', express.json(), asyncRoute(async (req, res) => {
+    const rawRoot = req.body?.path;
+    const rawQuery = req.body?.query;
+    if (typeof rawRoot !== 'string' || !rawRoot.trim()) {
+      res.status(400).json({ success: false, error: '缺少 path 参数' });
+      return;
+    }
+    if (typeof rawQuery !== 'string' || !rawQuery.trim()) {
+      res.status(400).json({ success: false, error: '缺少 query 参数' });
+      return;
+    }
+    // 关键词会被逐行 toLowerCase 比较，长度上限是必须的（防止一个 1MB 的串拖垮整轮）
+    const query = rawQuery.trim().slice(0, 120);
+    const queryLower = query.toLowerCase();
+
+    const guard = await safePathInProject(rawRoot);
+    if (!guard) {
+      res.status(403).json({ success: false, error: '禁止搜索工作目录以外的路径' });
+      return;
+    }
+    const rootPath = guard.safePath;
+
+    const startedAt = Date.now();
+    const deadline = startedAt + CONTENT_SEARCH_TIME_BUDGET_MS;
+    let scannedFiles = 0;
+    let stopped = false;
+    let truncated = false;
+    let totalMatches = 0;
+    const files = [];
+
+    // 用户还在打字 → 前端 AbortController 会掐掉上一轮请求。
+    // 连接一断就把遍历停掉，否则快速改关键词会在服务端叠好几轮全量扫描。
+    // 用 res 的 close（req 的 close 在请求体读完时就会触发，等于一开始就停）。
+    res.on('close', () => {
+      stopped = true;
+    });
+
+    const searchOneFile = async (absPath) => {
+      if (stopped) return;
+      if (scannedFiles >= CONTENT_SEARCH_MAX_SCAN_FILES || Date.now() > deadline) {
+        truncated = true;
+        stopped = true;
+        return;
+      }
+      scannedFiles += 1;
+      let stat;
+      try {
+        stat = await fs.stat(absPath);
+      } catch {
+        return;
+      }
+      if (!stat.isFile() || stat.size === 0 || stat.size > CONTENT_SEARCH_MAX_FILE_BYTES) return;
+
+      let buf;
+      try {
+        buf = await fs.readFile(absPath);
+      } catch {
+        return;
+      }
+      if (looksBinary(buf)) return;
+
+      const text = buf.toString('utf8');
+      // 先整篇粗筛，命中再逐行拆 —— 大仓库里绝大多数文件都停在这一次 indexOf
+      if (!text.toLowerCase().includes(queryLower)) return;
+
+      const matchedLines = [];
+      let matchCount = 0;
+      const lines = text.split(/\r?\n/);
+      for (let i = 0; i < lines.length; i += 1) {
+        const lower = lines[i].toLowerCase();
+        let from = lower.indexOf(queryLower);
+        if (from === -1) continue;
+        while (from !== -1) {
+          matchCount += 1;
+          from = lower.indexOf(queryLower, from + queryLower.length);
+        }
+        if (matchedLines.length < CONTENT_SEARCH_MAX_LINES_PER_FILE) {
+          matchedLines.push({ line: i + 1, text: buildSnippet(lines[i], queryLower) });
+        }
+      }
+      if (matchCount === 0) return;
+
+      const relPath = path.relative(rootPath, absPath).split(path.sep).join('/');
+      const dir = path.posix.dirname(relPath);
+      totalMatches += matchCount;
+      files.push({
+        path: absPath,
+        relPath,
+        name: path.basename(absPath),
+        dir: dir === '.' ? '' : dir,
+        total: matchCount,
+        matches: matchedLines,
+      });
+      if (files.length >= CONTENT_SEARCH_MAX_HIT_FILES) {
+        truncated = true;
+        stopped = true;
+      }
+    };
+
+    // 有界并发池：一次读 8 个文件，stopped 之后其余 worker 立刻空转退出
+    const runFilePool = async (fileList) => {
+      let cursor = 0;
+      const workers = Array.from(
+        { length: Math.min(CONTENT_SEARCH_CONCURRENCY, fileList.length) },
+        async () => {
+          while (!stopped && cursor < fileList.length) {
+            const file = fileList[cursor];
+            cursor += 1;
+            await searchOneFile(file);
+          }
+        }
+      );
+      await Promise.all(workers);
+    };
+
+    // BFS：按目录层级推进，浅层文件先有结果；每层读完就把这层的文件丢进并发池。
+    try {
+      const dirQueue = [rootPath];
+      while (dirQueue.length > 0 && !stopped) {
+        const batch = dirQueue.splice(0, CONTENT_SEARCH_CONCURRENCY);
+        const listings = await Promise.all(
+          batch.map((dir) => fs.readdir(dir, { withFileTypes: true }).catch(() => []))
+        );
+        const fileList = [];
+        for (let i = 0; i < listings.length; i += 1) {
+          for (const entry of listings[i]) {
+            // 符号链接不跟：可能指回祖先目录，直接把遍历变成死循环
+            if (entry.isSymbolicLink()) continue;
+            const fullPath = path.join(batch[i], entry.name);
+            if (entry.isDirectory()) {
+              if (CONTENT_SEARCH_IGNORED_DIRS.has(entry.name)) continue;
+              dirQueue.push(fullPath);
+            } else if (entry.isFile()) {
+              fileList.push(fullPath);
+            }
+          }
+        }
+        await runFilePool(fileList);
+      }
+    } catch (error) {
+      res.status(500).json({ success: false, error: `搜索失败: ${error.message}` });
+      return;
+    }
+
+    res.json({
+      success: true,
+      query,
+      files,
+      totalFiles: files.length,
+      totalMatches,
+      scannedFiles,
+      truncated,
+      elapsedMs: Date.now() - startedAt,
+    });
+  }));
+
   // 获取最近访问的目录列表
   //
   // 每条带一个 `iconUrl`（项目自己的 favicon，见 workbench/projectIcon.js）——
