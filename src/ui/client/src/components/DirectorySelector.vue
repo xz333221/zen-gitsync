@@ -1459,6 +1459,19 @@ function onBrowserSelect(path: string) {
   padding-left: 8px;
 }
 
+/* 小屏（≤1300px）：header 里的工具行整排收起。
+   这排图标固定宽 ~628px（flex-shrink:0），是 .header-center 最小内容宽度的全部来源 ——
+   窗口一窄它就把中列顶出网格轨道、盖住右侧的 CPU/MEM 与用户区。
+   1300 而不是 1200：1280 的笔记本屏上中列（748）+ 右区（330）刚刚差 3px，
+   留一档余量比按理论值卡边界稳。
+   工具没有消失：点目录胶囊打开「切换工作目录」弹窗，里面同一排工具照旧在。
+   （与 App.vue「小屏适配」一节配套：1360 先收品牌文字，1300 再收这排。） */
+@media (max-width: 1300px) {
+  .directory-selector--header .directory-actions {
+    display: none;
+  }
+}
+
 /* 暗色不再单写一套：底色走 --surface-elevated、阴影走 --shadow-sm/md，
    两者都在 dark-theme.scss 里有覆盖（旧写法是两段硬编码 rgba，跟着主题走不了）。 */
 

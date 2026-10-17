@@ -840,6 +840,44 @@ defineExpose({
   /* 间距交给 grid gap,清掉元素自带的 margin,否则行距会叠成两倍 */
   margin-bottom: 0;
 }
+
+/* 小屏（≤1120px）：最近项目面板从「卡片 | AI 栏」并排改成上下堆叠。
+   面板宽度是主网格右列（0.75fr）：视口 1100 时只剩 ~760px，扣掉 AI 栏 360 + 列间距,
+   卡片列只有 ~370；再窄就出现 178px 宽的卡片（项目名只剩 "obsid…"、路径全截断）。
+   堆叠后两栏各自拿满整个面板宽度。
+   高度策略：面板改成「按内容长、至少占满」，卡片区封顶 42vh 自己滚，AI 栏按内容铺开
+   （追问区在 split 下是 fill/flex:1，放进 auto 高度会塌成 0，所以换回组件自带的固定高度），
+   整块由外层 .commit-form-panel--empty 滚动 —— 挤在一屏里只会把卡片区压成一行高。 */
+@media (max-width: 1120px) {
+  .dir-list--panel.dir-list--split {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto;
+    grid-template-areas:
+      "head"
+      "search"
+      "items"
+      "summary";
+    height: auto;
+    min-height: 100%;
+  }
+
+  .dir-list--panel.dir-list--split > .dir-list__items {
+    max-height: 36vh;
+  }
+
+  /* 解读文字在 split 下是 max-height:45%（相对右栏整列高度算的）。堆叠后父级高度
+     变成"由内容决定"，这个百分比会退化成循环依赖 —— 实测被压到 ~38px，
+     整段话只剩两行还被裁掉。堆叠态里取消封顶，让行高回到 auto。 */
+  .dir-list--panel.dir-list--split > .dir-list__summary :deep(.dir-summary__text) {
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  .dir-list--panel.dir-list--split > .dir-list__summary :deep(.dir-chat) {
+    flex: 0 0 auto;
+    height: min(320px, 36vh);
+  }
+}
 .dir-list__head {
   display: flex;
   /* 右侧多了一个按钮:窄容器下整组换到下一行,而不是把按钮挤扁或让标题折行 */

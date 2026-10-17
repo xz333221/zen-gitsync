@@ -666,7 +666,7 @@ function stopVResize() {
   <ServerClosedOverlay :visible="serverGone" :name="serverGoneName" />
   <header class="main-header app-header">
     <div class="header-left">
-      <a href="https://github.com/xz333221/zen-gitsync" target="_blank" class="header-brand-link">
+      <a href="https://github.com/xz333221/zen-gitsync" target="_blank" class="header-brand-link" aria-label="Zen GitSync">
         <img :src="logo" alt="Zen GitSync Logo" class="logo" width="32" height="32" />
         <h1>Zen GitSync</h1>
       </a>
@@ -2135,6 +2135,37 @@ h1 {
 .projects-pane {
   display: flex;
   overflow: hidden;
+}
+
+/* ── 小屏适配：顶栏先减信息密度（2026-10-17）───────────────────────────
+   顶栏是三段 grid（品牌 | 目录胶囊 + 打开方式工具行 | 实例/命令历史/Git 操作/
+   CPU·MEM/用户）。中列的最小内容宽度被那排工具图标钉死在 ~748px（按钮 flex-shrink:0），
+   窗口一窄它就把自己的网格轨道顶破、盖到右侧读数上：
+   实测 1280 起中列右缘压到用户区，1024 时图标直接盖住 CPU/MEM 数字。
+   这里按「丢失代价从低到高」分两档收，别把 CPU/MEM 也收掉 ——
+   它们有 verify-header-monitor 的常驻契约（用户明确要求过"任何时候都在"）。
+     1. ≤1360：品牌文字收掉，只留 logo（无障碍名字挂在链接的 aria-label 上）
+     2. ≤1300：目录胶囊里的工具图标收掉（点胶囊仍能打开「切换工作目录」弹窗，
+        弹窗里同一排工具照旧在，不是功能消失）
+   收掉后这一列的最小内容宽度 ≈ 180px，768 宽仍能一行放下三个区块。 */
+@media (max-width: 1360px) {
+  .header-brand-link h1 {
+    display: none;
+  }
+}
+
+@media (max-width: 1300px) {
+  .main-header {
+    gap: var(--spacing-sm);
+  }
+}
+
+/* 小屏堆叠态（≤1120px）：最近项目面板不再压在一屏里，改成按内容长、由这一层滚动
+   （卡片区 36vh 自己滚 + 下面整块 AI 解读/追问区，见 RecentDirectoriesList 的媒体查询）。 */
+@media (max-width: 1120px) {
+  .commit-form-panel--empty {
+    overflow-y: auto;
+  }
 }
 
 </style>

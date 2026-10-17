@@ -1153,12 +1153,12 @@ select option {
   }
 }
 
-/* 中等宽度（≤1024px）：网格列比例强制下限，左列折叠成图标条 */
+/* 中等宽度（≤1024px）：只收 footer，不再动主网格。
+   （这里原来有一条 `grid-template-columns: 1fr 4px 2fr 4px 1.5fr !important`，
+   是五列时代的遗留：现在的 .grid-layout 只有「左 | 分隔条 | 右」三列，
+   多出来的两条空轨道会把右侧面板压到一半宽、右边留一大块空白，
+   还把竖分隔条的拖拽（inline style）用 !important 顶掉。2026-10-17 小屏适配时删除。） */
 @media (max-width: 1024px) {
-  .grid-layout {
-    grid-template-columns: 1fr 4px 2fr 4px 1.5fr !important;
-  }
-
   .main-footer {
     font-size: var(--font-size-xs);
   }
@@ -1168,38 +1168,43 @@ select option {
   }
 }
 
-/* 窄屏（≤768px）：网格降级为单列堆叠，header 改两行 */
+/* 窄屏（≤768px）：主网格降级为单列堆叠。
+   header 不跟着换两行 —— 它是 grid（1fr minmax(0,auto) 1fr），旧的 flex-wrap / order
+   两条在这里根本不生效；真按两行排还得同步改 .main-container 的 top，得不偿失。
+   工具行 / 品牌文字在 App.vue、DirectorySelector.vue 的更早一档（1360 / 1300）已经收掉，
+   这个宽度下「品牌 | 目录胶囊 | 用户区」本来就放得下，保持一行 56px 即可。 */
 @media (max-width: 768px) {
   .main-header {
-    height: auto;
-    flex-wrap: wrap;
-    padding: var(--spacing-base);
-    gap: var(--spacing-base);
-  }
-
-  .header-center {
-    position: static;
-    transform: none;
-    width: 100%;
-    max-width: 100%;
-    order: 3;
+    height: 56px;
+    padding: 0 var(--spacing-base);
+    gap: var(--spacing-sm);
   }
 
   .main-container {
-    top: 120px;
+    top: 56px;
   }
 
+  /* 三列 → 一列：左 GitStatus 占上 36%，右侧提交区按内容，提交历史吃剩下的。
+     （旧规则里还有 "h-resizer" / "cmd-console" 这些早已删掉的区域名，
+     多出来的空行会把整块顶出视口。） */
   .grid-layout {
-    grid-template-columns: 1fr !important;
-    grid-template-rows: auto 4px auto 4px auto 4px auto !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 36%) auto minmax(0, 1fr) !important;
     grid-template-areas:
       "git-status"
-      "v-resizer"
       "commit-form"
-      "h-resizer"
-      "cmd-console"
-      "v-resizer-2"
       "log-list";
+  }
+
+  /* 非 Git 仓库只有 RecentDirectoriesList 一块，上下两段：GitStatus → 面板。
+     （必须带 .grid-layout--no-bottom 才盖得住它自己那条 3 列 !important 规则，
+     否则单列只作用在第一列、右侧留两条空轨道，面板会被压到几十像素宽。） */
+  .grid-layout.grid-layout--no-bottom {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 36%) minmax(0, 1fr) !important;
+    grid-template-areas:
+      "git-status"
+      "commit-form";
   }
 
   .vertical-resizer,
