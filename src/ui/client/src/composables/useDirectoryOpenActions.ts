@@ -54,9 +54,9 @@ const TOOL_ENDPOINTS: Record<ToolId, string> = {
  * 有官方桌面端的工具 id —— 与服务端 TOOL_DESKTOP_APPS 的键一一对应。
  * 运行时以 `toolsStore.desktopAppOf(id)` 有返回值为准（服务端才是真相），
  * 这份清单只是"要考虑哪些工具"：vscode 的主按钮本身就是打开桌面应用、
- * zcode 整个就是桌面应用、pi / dsh 没有官方桌面版，都不进来。
+ * zcode 整个就是桌面应用、pi 没有官方桌面版，都不进来。
  */
-export const DESKTOP_APP_TOOL_IDS: ToolId[] = ['claude', 'codex', 'opencode', 'codebuddy', 'kimi']
+export const DESKTOP_APP_TOOL_IDS: ToolId[] = ['claude', 'codex', 'opencode', 'codebuddy', 'kimi', 'dsh']
 
 /** 工具展示名：菜单、tooltip、安装引导都用它，保证同一个工具在三处叫法一致 */
 export const TOOL_DISPLAY_NAMES: Record<ToolId, string> = {

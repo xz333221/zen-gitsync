@@ -74,8 +74,9 @@ const installTool = ref<ToolId | null>(null)
 
 /**
  * 有官方桌面端、且本机桌面应用状态已知的工具（claude / codex / opencode /
- * codebuddy / kimi 里 desktopAppOf 有返回值的）。图标沿用该工具在 OPEN_WITH_TOOLS
- * 里那颗；claude 不在那张表里（它有权限档、单独排布），模板里用 img 特例。
+ * codebuddy / kimi / dsh 里 desktopAppOf 有返回值的）。图标沿用该工具在
+ * OPEN_WITH_TOOLS 里那颗；claude 不在那张表里（它有权限档、单独排布），
+ * 模板里用 img 特例。
  */
 const desktopTools = computed(() =>
   DESKTOP_APP_TOOL_IDS.filter((id) => toolsStore.desktopAppOf(id)).map((id) => ({
@@ -371,7 +372,7 @@ async function openWithTool(tool: ToolId, permissionMode?: string) {
 
     <!-- 桌面端分组：官方有桌面应用的工具各一项（装了点它启动桌面应用，没装跳
          官网下载页）。vscode / zcode 不进这组 —— 它们的主操作本身就是桌面应用；
-         pi / dsh 没有官方桌面版。 -->
+         pi 没有官方桌面版。 -->
     <template v-if="desktopTools.length">
       <li class="proj-menu__sep" role="separator" />
       <li class="proj-menu__title" role="presentation">{{ $t('@WORKBENCH:桌面端') }}</li>

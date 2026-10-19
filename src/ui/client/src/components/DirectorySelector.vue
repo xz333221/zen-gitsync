@@ -681,8 +681,8 @@ async function onUpdateTool(tool: ToolId) {
 }
 
 // ── 桌面端：「打开 / 下载 X 桌面端」────────────────────────────────────
-// 顶栏这排工具大多只有 CLI；官方有桌面版的五个（claude / codex / opencode /
-// codebuddy / kimi，见服务端 TOOL_DESKTOP_APPS）在各工具右键菜单尾部挂这一项：
+// 顶栏这排工具大多只有 CLI；官方有桌面版的六个（claude / codex / opencode /
+// codebuddy / kimi / dsh，见服务端 TOOL_DESKTOP_APPS）在各工具右键菜单尾部挂这一项：
 // 桌面应用装了 → 一键启动；没装 → 直接跳官网下载页（不经服务端，少一次往返）。
 // 「没装 CLI」时右键走的是安装引导，那时的桌面端入口在 ToolInstallDialog 里。
 async function onOpenOrDownloadDesktop(tool: ToolId) {

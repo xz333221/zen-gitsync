@@ -40,7 +40,7 @@ const toolNames: Record<ToolId, string> = {
 
 const toolName = computed(() => props.tool ? toolNames[props.tool] : '')
 const installer = computed(() => props.tool ? toolsStore.installers[props.tool] : undefined)
-// 该工具有官方桌面端时的信息（claude / codex / opencode / codebuddy / kimi）。
+// 该工具有官方桌面端时的信息（claude / codex / opencode / codebuddy / kimi / dsh）。
 // 这个弹窗是"CLI 没装"时才出现的，桌面端按钮给的是另一条路：不装 CLI，
 // 直接去官网拿桌面应用。装了桌面端也显示（下载页顺带能升级）。
 const desktopInfo = computed(() => props.tool ? toolsStore.desktopAppOf(props.tool) : undefined)

@@ -38,11 +38,12 @@
  *      白名单外工具（kimi）**没有**这一项（反向锚）。POST 全被拦截，绝不写真实配置文件。
  *   R  反向锚：没有档位的工具（vscode）菜单里**没有档位项**、且 = MCP 项 + 更新项——
  *      这是最容易写错的地方（一个 v-if 写错就让所有工具都长出档位项）
- *   D  「打开 / 下载 X 桌面端」入口（2026-10-19 加）：有官方桌面版的五个工具
- *      （claude / codex / opencode / codebuddy / kimi）右键菜单尾部有这一项 ——
+ *   D  「打开 / 下载 X 桌面端」入口（2026-10-19 加）：有官方桌面版的六个工具
+ *      （claude / codex / opencode / codebuddy / kimi / dsh）右键菜单尾部有这一项 ——
  *      本机装了桌面应用 → 点它 POST /api/open-desktop-app（body.tool 对上）；
- *      没装 → window.open 官网下载页（地址对上）。两条分支按菜单项实际文案走。
- *      vscode / pi **没有**桌面端项（反向锚）；项目菜单里桌面端分组五项齐全。
+ *      没装 → window.open 官网下载页（地址对上；dsh 是官方固定安装包 URL，
+ *      按平台/架构分）。两条分支按菜单项实际文案走。
+ *      vscode / pi **没有**桌面端项（反向锚）；项目菜单里桌面端分组六项齐全。
  *
  * 请求体怎么断言：`page.route` 直接拦掉这些 POST 并 fulfill 一个假成功 ——
  * 既拿到 body，又避免真去 spawn 一个终端 / TUI 窗口（那种副作用不该出现在验证里）。
@@ -152,16 +153,31 @@ const MCP_NEGATIVE_CASE = { aria: 'Kimi Code', buttonPrefix: '用 Kimi Code 打�
  * 桌面端入口要验的工具（2026-10-19 加）。app = 服务端 TOOL_DESKTOP_APPS 里的展示名，
  * url = 对应的官网下载地址（没装桌面端时前端 window.open 它）。claude 的菜单是独立
  * popper，不在这张表里，下面单独走一遍。
+ *
+ * dsh 的下载地址是**官方固定安装包 URL**（download.deepseek.com/desktop/dsh-latest-*，
+ * 没有落地页），按平台/架构分 —— 期望值跟服务端口径一致地按 process.platform/arch 算，
+ * 否则换台机器跑探针就会假红。
  */
 const DESKTOP_CASES = [
   { aria: 'OpenCode', buttonPrefix: '用 OpenCode 打开', tool: 'opencode', app: 'OpenCode 桌面版', url: 'https://opencode.ai/download' },
   { aria: 'Codex', buttonPrefix: '用 Codex 打开', tool: 'codex', app: 'Codex 桌面版', url: 'https://developers.openai.com/codex/app/' },
   { aria: 'CodeBuddy Code', buttonPrefix: '用 CodeBuddy Code 打开', tool: 'codebuddy', app: 'CodeBuddy IDE', url: 'https://www.codebuddy.cn/ide/' },
   { aria: 'Kimi Code', buttonPrefix: '用 Kimi Code 打开', tool: 'kimi', app: 'Kimi 桌面端', url: 'https://www.kimi.com/products/kimi-work' },
+  {
+    aria: 'DeepSeek Harness',
+    buttonPrefix: '用 DeepSeek Harness 打开',
+    tool: 'dsh',
+    app: 'DeepSeek Harness 桌面版',
+    url: process.platform === 'win32'
+      ? 'https://download.deepseek.com/desktop/dsh-latest-windows-x64.exe'
+      : process.platform === 'darwin'
+        ? `https://download.deepseek.com/desktop/dsh-latest-macos-${process.arch === 'arm64' ? 'arm64' : 'x64'}.dmg`
+        : 'https://github.com/deepseek-ai/deepseek-harness/tree/master/apps/desktop',
+  },
 ]
 
-/** 项目菜单桌面端分组必须出现的五项（与服务端 TOOL_DESKTOP_APPS 一一对应） */
-const DESKTOP_APP_NAMES = ['Claude 桌面端', 'Codex 桌面版', 'OpenCode 桌面版', 'CodeBuddy IDE', 'Kimi 桌面端']
+/** 项目菜单桌面端分组必须出现的六项（与服务端 TOOL_DESKTOP_APPS 一一对应） */
+const DESKTOP_APP_NAMES = ['Claude 桌面端', 'Codex 桌面版', 'OpenCode 桌面版', 'CodeBuddy IDE', 'Kimi 桌面端', 'DeepSeek Harness 桌面版']
 
 /** 没有官方桌面版的工具 —— 菜单里不许长出桌面端项（一个 v-if 写错就会全长出来） */
 const DESKTOP_NEGATIVE_CASES = [
@@ -212,7 +228,7 @@ async function main() {
   // 因此写入侧（save-ui-settings）也要吞掉：store 加载完会把 ui 整体替换一次，
   // headerToolsHidden 的 watch 可能跟着回写一份，那份是被我们改过的可见名单，
   // 真写下去就把用户的偏好改了。
-  const needPinned = [...TOPBAR_CASES.map(c => c.id), 'vscode', 'claude', 'pi'] // vscode 是 R 的对照组；claude / pi 给 M 段用
+  const needPinned = [...TOPBAR_CASES.map(c => c.id), 'vscode', 'claude', 'pi', 'dsh'] // vscode 是 R 的对照组；claude / pi / dsh 给 M、D 段用
   await context.route('**/api/config/getConfig', async (route) => {
     const resp = await route.fetch()
     let data = null
@@ -346,7 +362,15 @@ async function main() {
     }
   })
 
+  // 顶部居中的 toast（实测启动时的「Git 状态已刷新」、A6 之后的打开成功提示）
+  // 正好压住这排工具按钮 —— 右键 / 点击都会被它吃掉，Playwright 报的是 30s
+  // "element intercepts pointer events" 超时，整轮跑挂。每次开菜单前清场：
+  // 直接摘掉残留节点（toast 是纯反馈，摘掉不影响应用状态；另一条探针同款做法）。
+  const clearToasts = () => page.evaluate(() =>
+    document.querySelectorAll('.el-message').forEach(n => n.remove()))
+
   const openTopbarMenu = async (c) => {
+    await clearToasts()
     await triggerOf(c.buttonPrefix).click({ button: 'right' })
     return waitUntil(async () => (await menuItems(c.aria)) !== null, 8000)
   }
@@ -458,6 +482,7 @@ async function main() {
     // ── R 反向锚：没有档位的工具菜单 = MCP 项 + 更新项 ─────────────
     const vscodeBtn = page.locator('.simple-tool-trigger button[aria-label^="用 VSCode 打开"]')
     if ((await vscodeBtn.count()) === 1) {
+      await clearToasts()
       await triggerOf('用 VSCode 打开').click({ button: 'right' })
       await waitUntil(async () => (await menuItems('VSCode')) !== null, 8000)
       const vscodeMenu = await menuItems('VSCode')
@@ -533,6 +558,7 @@ async function main() {
     {
       const claudeTrigger = page.locator('.claude-code-trigger')
       if ((await claudeTrigger.count()) === 1) {
+        await clearToasts()
         await claudeTrigger.click({ button: 'right' })
         const opened = await waitUntil(async () => (await claudeMenuItems()) !== null, 8000)
         check('M7[Claude Code] 右键弹出菜单', opened)
@@ -667,6 +693,7 @@ async function main() {
     {
       const claudeTrigger = page.locator('.claude-code-trigger')
       if ((await claudeTrigger.count()) === 1) {
+        await clearToasts()
         await claudeTrigger.click({ button: 'right' })
         const opened = await waitUntil(async () => (await claudeMenuItems()) !== null, 8000)
         check('D1[Claude Code] 右键弹出菜单', opened)

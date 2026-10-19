@@ -53,16 +53,20 @@ const TOOL_DOCS_URLS = Object.freeze({
 });
 
 // ── 官方桌面应用（顶栏「打开桌面端 / 下载桌面端」用）────────────────────
-// 顶栏这排工具大多只有 CLI；这里只收**官方有桌面版**的五个：
+// 顶栏这排工具大多只有 CLI；这里只收**官方有桌面版**的六个：
 //   claude → Claude 桌面端（Code 标签页就是桌面版 Claude Code）
 //   codex  → Codex 桌面版（2026-07 起并入 ChatGPT 桌面应用，是其中一个模式）
 //   opencode → OpenCode 桌面版
 //   codebuddy → CodeBuddy IDE
 //   kimi   → Kimi 桌面端
+//   dsh    → DeepSeek Harness 桌面版（官方仓库 apps/desktop，Electron 壳）
 // 不收的：vscode（主按钮本身就是打开桌面应用，`code <目录>` 拉起的正是 GUI）、
-// zcode（整个就是桌面应用，主按钮直接启动）、pi / dsh（没有官方桌面版，
+// zcode（整个就是桌面应用，主按钮直接启动）、pi（没有官方桌面版，
 // 社区壳不代表官方立场，不代收）。
 // downloadUrl 给没装桌面端的用户点（前端直接 window.open，不经服务端）；
+// 可以是字符串，也可以是 (platform, arch) => string —— dsh 的官方固定下载
+// 地址按平台/架构分（win-x64 exe、mac arm64/x64 dmg，没有落地页），由服务端
+// 判（UI 与后端同机，process.platform/arch 就是用户机器的）。
 // name 是菜单展示名，刻意和 CLI 版的名字区分（"Claude 桌面端" vs "Claude Code"），
 // 否则用户分不清点下去开的是哪个。
 const TOOL_DESKTOP_APPS = Object.freeze({
@@ -115,6 +119,29 @@ const TOOL_DESKTOP_APPS = Object.freeze({
     winLnkRe: /^Kimi\.lnk$/i,
     macApp: 'Kimi.app',
     linuxPaths: [], // Kimi 桌面端只有 Windows / macOS(Apple 芯片)
+  },
+  dsh: {
+    name: 'DeepSeek Harness 桌面版',
+    // 官方固定下载地址（apps/desktop/publishing/README：upload:latest:* 传到
+    // download.deepseek.com/desktop/dsh-latest-*，就是安装包本身、没有落地页）。
+    // 官方 targets 只有 win-x64 / mac-arm64 / mac-x64 —— Linux 没有官方桌面版，
+    // 回落仓库里的 Desktop 文档。安装器是 per-user NSIS，卸载项在 HKCU 根
+    // （scanWindowsUninstallPaths 本来就查 HKCU）。
+    downloadUrl: (platform, arch) => {
+      if (platform === 'win32') return 'https://download.deepseek.com/desktop/dsh-latest-windows-x64.exe';
+      if (platform === 'darwin') {
+        return `https://download.deepseek.com/desktop/dsh-latest-macos-${arch === 'arm64' ? 'arm64' : 'x64'}.dmg`;
+      }
+      return 'https://github.com/deepseek-ai/deepseek-harness/tree/master/apps/desktop';
+    },
+    // electron-builder productName 是 'DeepSeek Harness' → 装出来的 exe / .app /
+    // 开始菜单快捷方式都叫这个名字（artifactName 的 deepseek-harness-* 只是安装包文件名）
+    winExeName: 'DeepSeek Harness.exe',
+    winExeRe: /DeepSeek Harness\.exe$/i,
+    winPaths: ['Programs/DeepSeek Harness/DeepSeek Harness.exe'],
+    winLnkRe: /^DeepSeek Harness\.lnk$/i,
+    macApp: 'DeepSeek Harness.app',
+    linuxPaths: [], // 官方没有 Linux 桌面版
   },
 });
 
@@ -1665,10 +1692,18 @@ export function registerFileOpenRoutes({
       const installers = getToolInstallers();
       // 官方桌面应用探测：与 CLI 检测并行跑（各自只做 fs / 注册表查询，不起进程）。
       // 前端据此把菜单项翻成「打开 X 桌面端」（装了）/「下载 X 桌面端」（没装）。
+      // downloadUrl 可能是函数（dsh 按平台/架构给固定下载地址），在这里统一解析成
+      // 字符串再下发 —— 前端只认一个地址，平台判断留在服务端（与 UI 同机）。
       const desktopEntries = await Promise.all(
         Object.entries(TOOL_DESKTOP_APPS).map(async ([tool, app]) => {
           const found = await findDesktopApp(tool);
-          return [tool, { installed: found.installed, name: app.name, downloadUrl: app.downloadUrl }];
+          return [tool, {
+            installed: found.installed,
+            name: app.name,
+            downloadUrl: typeof app.downloadUrl === 'function'
+              ? app.downloadUrl(process.platform, process.arch)
+              : app.downloadUrl,
+          }];
         }),
       );
       res.json({
