@@ -77,6 +77,13 @@ export const DOCS = [
     id: 'repos',
     title: '仓库浏览器',
     lede: 'GitHub / Gitee 两个 tab,列出 CLI 账号下能看到的全部仓库(含私有)。全程不碰你的令牌——调用的是官方 gh / gitee CLI,凭据由 CLI 自己保管。',
+    shots: [
+      {
+        src: asset('shots/repo-browser-dark.png'),
+        alt: 'GitHub 仓库页:账号下的仓库卡片网格',
+        caption: 'GitHub 仓库:已登录账号下的全部仓库,可搜索、分组、排序'
+      }
+    ],
     blocks: [
       {
         type: 'list',
@@ -94,6 +101,18 @@ export const DOCS = [
     id: 'branches',
     title: '分支 / 远端 / Stash / Tag',
     lede: '四类日常 Git 管理,都在同一个界面里,不用回终端。',
+    shots: [
+      {
+        src: asset('shots/branch-selector-dark.png'),
+        alt: '顶栏分支下拉:本地与远程分支列表',
+        caption: '分支下拉:本地 / 远程分支一览,可直接切换'
+      },
+      {
+        src: asset('shots/remote-manage-dark.png'),
+        alt: '远程管理弹窗:多个远程与推送地址',
+        caption: '远程管理:多远程、多推送地址,一个弹窗管完'
+      }
+    ],
     blocks: [
       {
         type: 'list',
@@ -236,6 +255,13 @@ export const DOCS = [
     id: 'projects',
     title: '项目管理',
     lede: '把项目清单当资产来管的独立视图,与工作台读同一份清单(常用目录 ∪ 任务记得的目录)。',
+    shots: [
+      {
+        src: asset('shots/projects-view-dark.png'),
+        alt: '项目管理视图:推荐添加与 18 个项目列表',
+        caption: '项目管理:推荐添加 + 逐项目的分支、任务数与路径'
+      }
+    ],
     blocks: [
       {
         type: 'list',
@@ -247,30 +273,6 @@ export const DOCS = [
           { term: '静默刷新', desc: '挂载拉一次,之后每 10 秒静默轮询,别的实例增删项目这里同步可见' }
         ]
       }
-    ]
-  },
-  {
-    id: 'sourcemap',
-    title: '源码地图',
-    lede: '用 AI 画当前项目的架构图:入口文件、模块依赖、技术栈,Vue Flow + dagre 自动布局。',
-    shots: [
-      {
-        src: asset('shots/sourcemap-view-dark.png'),
-        alt: '源码地图视图:输入项目路径后开始分析',
-        caption: '源码地图:输入项目路径,分析结果画成依赖图'
-      }
-    ],
-    blocks: [
-      {
-        type: 'list',
-        items: [
-          { term: '入口优先', desc: '图以识别出的入口文件 / 函数为根,模块作节点、import 关系作边' },
-          { term: '子系统着色', desc: '节点按子系统分组配色,monorepo 的边界一眼可辨' },
-          { term: '点节点读源码', desc: '点击节点即在图旁加载该文件源码,节点自身带文件与行号' },
-          { term: '重新分析', desc: '代码挪了地方再跑一遍;分析过程 SSE 回传进度,结果切视图保留(KeepAlive),刷新页面才重来' }
-        ]
-      },
-      { type: 'note', text: '需要先在 设置 → AI 模型配置 里配一个模型;没配时视图会直说,而不是报错。' }
     ]
   },
   {

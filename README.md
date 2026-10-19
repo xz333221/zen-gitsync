@@ -24,7 +24,6 @@ A Git automation platform with interactive commits, scheduled sync, custom comma
   - [Console Panel](#console-panel)
   - [Project Startup](#project-startup)
   - [Project Manager](#project-manager)
-  - [Source Map (AI Architecture Graph)](#source-map-ai-architecture-graph)
   - [Views at a glance](#views-at-a-glance)
   - [Built-in Code Editor](#built-in-code-editor)
   - [Workbench](#workbench-task-driven-agent-execution)
@@ -76,7 +75,6 @@ npm install -g zen-gitsync
 - **Accessibility (WCAG 2.1 AA)** — Dialog focus trap & restore, role-based separators, keyboard-only panel resize (`← →`), screen-reader friendly commit context menu, ARIA-pressed toggle buttons, commit button `aria-busy` during in-flight commits, Git SHA hashes meet ≥ 4.5:1 contrast in both light and dark themes
 - **Faster cold start** — `monaco-editor` / `@vue-flow` / `flow-mindmap` / `dagre` are split into independent chunks and lazy-loaded so the Git panel boots without waiting on the code editor or visual workflow designer
 - **Project manager view** — manage the project list as an asset: add / remove without switching the current project, see each project's open-with actions, with recommended additions
-- **Source map view** — an AI-drawn architecture graph of the current project: entry file, module dependencies and tech stack, laid out automatically and clickable down to the source
 - **Content-aware file search** — the editor's search box now also matches file contents: name hits filter the tree as before, content hits arrive as a flat list with line numbers and jump-to-line
 
 > Detailed per-release changes can be found via `git log` or the [GitHub Releases](https://github.com/xz333221/zen-gitsync/releases) page.
@@ -90,7 +88,7 @@ npm install -g zen-gitsync
 $ g ui
 ```
 
-The GUI runs as a local web server and opens in your default browser on the first free port it finds in `4000–6000` (set `PORT` to pin a fixed one). It attaches to the current Git repository automatically. The activity bar on the left switches between **Git**, **Console**, **Agent**, **Editor**, **Source Map**, **Workbench**, **Projects**, **System Monitor** and **Mindmap**, top to bottom. See the [Core Git Panel](#core-git-panel) screenshot below for what the main view looks like.
+The GUI runs as a local web server and opens in your default browser on the first free port it finds in `4000–6000` (set `PORT` to pin a fixed one). It attaches to the current Git repository automatically. The activity bar on the left switches between **Git**, **Console**, **Agent**, **Editor**, **Workbench**, **Projects**, **System Monitor** and **Mindmap**, top to bottom. See the [Core Git Panel](#core-git-panel) screenshot below for what the main view looks like.
 
 ### Architecture at a glance
 
@@ -110,9 +108,6 @@ The GUI runs as a local web server and opens in your default browser on the firs
                   │  └──────┘                                   │
                   │  ┌──────┐                                   │
                   │  │Edit  │─► Monaco editor + file tree       │
-                  │  └──────┘                                   │
-                  │  ┌──────┐                                   │
-                  │  │Source│─► AI architecture graph           │
                   │  └──────┘                                   │
                   │  ┌──────┐                                   │
                   │  │Bench │─► Board: projects·kanban·agent│
@@ -371,25 +366,12 @@ Configure commands or workflows to run automatically when a project is opened:
 
 ---
 
-### Source Map (AI Architecture Graph)
-
-> A dedicated view (graph icon in the activity bar) that draws the current project's architecture with AI. Enter a project path, hit **Start analysis**, and the server reads the codebase and asks your configured model for the entry file, the module dependencies and the tech stack — rendered as a graph on Vue Flow with an automatic dagre layout.
-
-- **Entry point first** — the graph is rooted at the detected entry file / function, with modules hanging off it as nodes and their imports as edges
-- **Subsystem coloring** — nodes are grouped by subsystem and color-coded, so a monorepo's boundaries read at a glance
-- **Click a node, read the code** — clicking a node loads that file's source beside the graph (file + line included on the node itself)
-- **Re-analyzable** — **Re-analyze** runs the whole pass again after the code has moved; the analysis streams progress over SSE and the result stays while you switch views (KeepAlive), only a page reload starts over
-- **No model configured** — the view says so instead of failing; configure one in Settings → AI models first
-
----
-
 ### Views at a glance
 
 | View | Purpose | Persistent state | Highlights |
 |---|---|---|---|
 | **Git** | Day-to-day staging, committing, pushing, history review | Per-project UI prefs (view mode, layout ratios) | Structured commit form, AI commit message, selection-scoped quick push |
 | **Editor** | Browse & edit project files without leaving the GUI | Open tabs, unsaved markers, recent files | Monaco editor with syntax highlighting, Markdown preview, file search (file names and contents) |
-| **Source Map** | Draw the project's architecture with AI | Analysis result for the session | Entry file, module dependencies, tech stack, subsystem coloring, click-to-read source |
 | **Workbench** | Multi-project board for dispatching and running agent tasks | Tasks, prompts, board layout, log retention | Kanban board, master-agent console, executor choice, live chat-style logs |
 | **Projects** | Manage the project list as an asset | The same list the Workbench reads | Add / remove without touching the current project, recommended additions, 10 s silent refresh |
 | **Agent** | Chat with the built-in AI agent (web + CLI sessions) | Sessions, pending questions | Streaming answers, tool-call cards, Skill / MCP plaza, rail badge counting the conversations still generating |
@@ -767,7 +749,6 @@ $ g --check-lock=config.json
   - [控制台面板](#控制台面板)
   - [项目启动](#项目启动)
   - [项目管理](#项目管理)
-  - [源码地图（AI 架构图）](#源码地图ai-架构图)
   - [视图一览](#视图一览)
   - [内置代码编辑器](#内置代码编辑器)
   - [工作台](#工作台任务驱动的智能体执行)
@@ -819,7 +800,6 @@ npm install -g zen-gitsync
 - **可访问性(WCAG 2.1 AA)** — 弹窗焦点陷阱与归还、`role="separator"` 键盘可达的分隔条、纯键盘(`← →`)调整面板宽度、屏幕阅读器友好的提交右键菜单、ARIA-pressed 切换按钮、提交按钮在提交过程中挂 `aria-busy`、Git 提交哈希在明/暗主题下对比度均 ≥ 4.5:1
 - **更快的冷启动** — `monaco-editor` / `@vue-flow` / `flow-mindmap` / `dagre` 拆分为独立 chunk 并按需懒加载,Git 面板首屏不再等待代码编辑器或可视化流程编排模块
 - **项目管理视图** — 把项目清单当资产来管：添加 / 删除不切换当前项目，逐行看打开方式，带推荐添加
-- **源码地图视图** — 用 AI 画当前项目的架构图：入口文件、模块依赖与技术栈，自动布局，点节点读源码
 - **文件内容搜索** — 编辑器搜索框现在也匹配文件内容：名称命中仍走本地树过滤，内容命中按文件平铺、带行号，点击跳转对应行
 
 > 每个版本的详细变更可通过 `git log` 或 [GitHub Releases](https://github.com/xz333221/zen-gitsync/releases) 页面查看。
@@ -833,7 +813,7 @@ npm install -g zen-gitsync
 $ g ui
 ```
 
-GUI 以本地 Web 服务器形式运行，自动在浏览器中打开，并附加到当前 Git 仓库。端口默认在 `4000–6000` 里挑第一个可用的（可用 `PORT` 固定）。左侧 Activity Bar 自上而下为 **Git** / **控制台** / **智能体** / **编辑器** / **源码地图** / **工作台** / **项目管理** / **系统监控** / **思维导图**。主界面长什么样可参考下方[核心 Git 面板](#核心-git-面板)的截图。
+GUI 以本地 Web 服务器形式运行，自动在浏览器中打开，并附加到当前 Git 仓库。端口默认在 `4000–6000` 里挑第一个可用的（可用 `PORT` 固定）。左侧 Activity Bar 自上而下为 **Git** / **控制台** / **智能体** / **编辑器** / **工作台** / **项目管理** / **系统监控** / **思维导图**。主界面长什么样可参考下方[核心 Git 面板](#核心-git-面板)的截图。
 
 ### 监听地址
 
@@ -884,9 +864,6 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
                   │  └──────┘                                   │
                   │  ┌──────┐                                   │
                   │  │编辑 │──► Monaco 编辑器 + 文件树           │
-                  │  └──────┘                                   │
-                  │  ┌──────┐                                   │
-                  │  │源码 │──► AI 架构图                       │
                   │  └──────┘                                   │
                   │  ┌──────┐                                   │
                   │  │工作 │──► 看板: 项目 · 看板 · 主 Agent     │
@@ -1145,25 +1122,12 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 
 ---
 
-### 源码地图（AI 架构图）
-
-> Activity Bar 里的图图标视图，用 AI 画当前项目的架构图。输入项目路径、点「开始分析」，服务端读一遍代码库后让默认模型给出入口文件、模块依赖与技术栈，由 Vue Flow + dagre 自动布局渲染成图。
-
-- **入口优先** — 图以识别出的入口文件 / 函数为根，模块作为节点、import 关系作为边挂上去
-- **子系统着色** — 节点按子系统分组配色，monorepo 的边界一眼可辨
-- **点节点读源码** — 点击节点即在图旁加载该文件的源码（节点自身带文件与行号）
-- **可重新分析** — 代码挪了地方就点「重新分析」再跑一遍；分析过程通过 SSE 回传进度，结果在切换视图期间保留（KeepAlive），只有刷新页面才重来
-- **没配模型** — 视图会直说，而不是报错；先在 设置 → AI 模型配置 里配一个
-
----
-
 ### 视图一览
 
 | 视图 | 用途 | 持久化状态 | 高亮特性 |
 |---|---|---|---|
 | **Git** | 日常暂存、提交、推送、历史回看 | 每个项目的 UI 偏好（视图模式、布局比例） | 结构化提交表单、AI 生成提交信息、选择范围一键推送 |
 | **编辑器** | 不离开 GUI 浏览并编辑项目文件 | 打开的 tab、未保存标记、最近访问 | Monaco 编辑器带语法高亮、Markdown 预览、文件搜索（文件名 + 文件内容） |
-| **源码地图** | 用 AI 画项目架构图 | 本次会话的分析结果 | 入口文件、模块依赖、技术栈、子系统着色、点节点读源码 |
 | **工作台** | 多项目看板：派发并执行智能体任务 | 任务、提示词、看板布局、日志保留策略 | 看板视图、主 Agent 控制台、执行器选择、对话式实时日志 |
 | **项目管理** | 把项目清单当资产管理 | 与工作台同一份清单 | 添加 / 删除不切换当前项目、推荐添加、10 秒静默刷新 |
 | **智能体** | 与内置 AI 智能体对话（Web + CLI 会话） | 会话、待回答问题 | 流式回答、工具调用卡片、Skill / MCP 广场、导航栏徽标显示仍在生成的对话数 |

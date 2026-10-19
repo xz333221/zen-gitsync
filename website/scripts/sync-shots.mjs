@@ -21,11 +21,14 @@ const shots = {
 // 文档页用图:来源不止「手写版介绍文章图片」一个目录,按 (目标, 源目录, 源文件) 写全
 // 浅色画布的截图(console / monitor / flow)在页面上走 ShotFrame 的 paper 属性
 const docShots = [
-  ['sourcemap-view-dark.png', 'screenshots', '10-sourcemap-view-dark.png'],
   ['settings-dialog-dark.png', 'screenshots', '12-user-settings-dialog-dark.png'],
   ['console.png', 'screenshots/article', '07-console.png'],
   ['monitor.png', 'screenshots/article', '11-monitor.png'],
-  ['flow.png', 'screenshots/article', '08-flow.png']
+  ['flow.png', 'screenshots/article', '08-flow.png'],
+  ['repo-browser-dark.png', 'screenshots', '16-repo-browser-dark.png'],
+  ['remote-manage-dark.png', 'screenshots', '17-remote-manager-dark.png'],
+  ['branch-selector-dark.png', 'screenshots', '18-branch-selector-dark.png'],
+  ['projects-view-dark.png', 'screenshots', '15-projects-view-dark.png']
 ]
 
 // 首屏主视觉的产品演示录屏(与 cli-quick-commit.png 同画面)
