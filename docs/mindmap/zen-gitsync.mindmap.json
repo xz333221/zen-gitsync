@@ -1,0 +1,373 @@
+{
+  "id": "root",
+  "text": "zen-gitsync",
+  "children": [
+    {
+      "id": "n1",
+      "text": "安装与入口",
+      "children": [
+        {
+          "id": "n2",
+          "text": "npm i -g zen-gitsync",
+          "children": []
+        },
+        {
+          "id": "n3",
+          "text": "g · 一键提交推送",
+          "children": []
+        },
+        {
+          "id": "n4",
+          "text": "g ui · 图形界面",
+          "children": []
+        },
+        {
+          "id": "n5",
+          "text": "g ai · 终端智能体",
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "n6",
+      "text": "Git 面板",
+      "children": [
+        {
+          "id": "n7",
+          "text": "文件改动列表",
+          "children": [
+            {
+              "id": "n8",
+              "text": "已暂存 / 未暂存 / 未追踪 / 冲突分组",
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "n9",
+          "text": "结构化提交表单",
+          "children": [
+            {
+              "id": "n10",
+              "text": "Conventional Commits",
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "n11",
+          "text": "AI 生成提交信息",
+          "children": []
+        },
+        {
+          "id": "n12",
+          "text": "AI 提交并推送",
+          "children": []
+        },
+        {
+          "id": "n13",
+          "text": "分支管理",
+          "children": [
+            {
+              "id": "n14",
+              "text": "创建 / 切换 / 追踪上下游",
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "n15",
+          "text": "远程管理",
+          "children": [
+            {
+              "id": "n16",
+              "text": "多远程 + 多推送地址",
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "n17",
+          "text": "Stash 管理",
+          "children": []
+        },
+        {
+          "id": "n18",
+          "text": "Tag 管理",
+          "children": []
+        },
+        {
+          "id": "n19",
+          "text": "Monaco 差异视图",
+          "children": []
+        },
+        {
+          "id": "n20",
+          "text": "提交历史",
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "n21",
+      "text": "仓库浏览器",
+      "children": [
+        {
+          "id": "n22",
+          "text": "GitHub / Gitee 双 Tab",
+          "children": []
+        },
+        {
+          "id": "n23",
+          "text": "搜索 / 排序 / 工作空间分组",
+          "children": []
+        },
+        {
+          "id": "n24",
+          "text": "克隆到文件夹",
+          "children": [
+            {
+              "id": "n25",
+              "text": "SSH 优先,不卡凭据",
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "n26",
+          "text": "已克隆徽标",
+          "children": [
+            {
+              "id": "n27",
+              "text": "全盘本地仓库索引",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "n28",
+      "text": "控制台",
+      "children": [
+        {
+          "id": "n29",
+          "text": "自定义命令",
+          "children": [
+            {
+              "id": "n30",
+              "text": "参数化 + 启用开关",
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "n31",
+          "text": "定时提交",
+          "children": [
+            {
+              "id": "n32",
+              "text": "等效 g 命令一键复制",
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "n33",
+          "text": "可视化流程编排",
+          "children": [
+            {
+              "id": "n34",
+              "text": "命令 / 等待 / 条件 / 用户确认",
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "n35",
+          "text": "终端会话",
+          "children": [
+            {
+              "id": "n36",
+              "text": "SSE 实时流式输出",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "n37",
+      "text": "文件空间",
+      "children": [
+        {
+          "id": "n38",
+          "text": "文件树 + 搜索",
+          "children": [
+            {
+              "id": "n39",
+              "text": "文件名 + 文件内容",
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "n40",
+          "text": "Monaco 编辑器",
+          "children": []
+        },
+        {
+          "id": "n41",
+          "text": "Markdown 预览",
+          "children": []
+        },
+        {
+          "id": "n42",
+          "text": "复制富文本",
+          "children": []
+        },
+        {
+          "id": "n43",
+          "text": "g ai 对话面板",
+          "children": [
+            {
+              "id": "n44",
+              "text": "当前文件即上下文",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "n45",
+      "text": "工作台",
+      "children": [
+        {
+          "id": "n46",
+          "text": "多项目看板",
+          "children": [
+            {
+              "id": "n47",
+              "text": "待处理 / 进行中 / 已完成",
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "n48",
+          "text": "主 Agent 控制台",
+          "children": [
+            {
+              "id": "n49",
+              "text": "对话 / 指令双模式",
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "n50",
+          "text": "任务执行",
+          "children": [
+            {
+              "id": "n51",
+              "text": "Claude Code / OpenCode / Codex",
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "n52",
+          "text": "进度报告",
+          "children": [
+            {
+              "id": "n53",
+              "text": "AI 估计 + 静默收尾",
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "n54",
+          "text": "跨轮记忆库",
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "n55",
+      "text": "智能体 g ai",
+      "children": [
+        {
+          "id": "n56",
+          "text": "Web + CLI 会话统一",
+          "children": []
+        },
+        {
+          "id": "n57",
+          "text": "流式对话",
+          "children": [
+            {
+              "id": "n58",
+              "text": "思考 / 工具调用内联",
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "n59",
+          "text": "任务计划与提问",
+          "children": []
+        },
+        {
+          "id": "n60",
+          "text": "Skill / MCP 广场",
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "n61",
+      "text": "项目管理",
+      "children": [
+        {
+          "id": "n62",
+          "text": "添加 / 删除不切换",
+          "children": []
+        },
+        {
+          "id": "n63",
+          "text": "推荐添加",
+          "children": []
+        },
+        {
+          "id": "n64",
+          "text": "逐行打开方式",
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "n65",
+      "text": "辅助视图",
+      "children": [
+        {
+          "id": "n66",
+          "text": "系统监控",
+          "children": [
+            {
+              "id": "n67",
+              "text": "CPU / 内存 / 磁盘 / 端口",
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "n68",
+          "text": "思维导图",
+          "children": []
+        }
+      ]
+    }
+  ]
+}

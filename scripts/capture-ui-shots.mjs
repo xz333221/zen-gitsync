@@ -14,6 +14,7 @@
  * 调试:加 --debug 参数,每个视图会把可见按钮的 aria-label / 文本打出来。
  */
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -347,20 +348,34 @@ if (await captureView(page, '系统监控', path.join(A, '11-monitor.png'), '系
   } catch { /* 刷新失败就用首帧 */ }
 }
 
-// ── 15. 思维导图(点开第一个文件,画布上有真图)───────────────────────────────
+// ── 15. 思维导图(打开产品自己的功能总览图)─────────────────────────────────
 if (await captureView(page, '思维导图', path.join(L, '07-mindmap.png'), '思维导图(官网)')) {
   try {
-    // 文件列表(.mm-file-item)里点一个真实的 md,画布渲染出导图再拍
-    const firstFile = page.locator('.mm-file-item').first()
-    if (await firstFile.count()) {
-      await firstFile.click()
-      await page.waitForTimeout(4500)
-      await shot(page, path.join(L, '07-mindmap.png'), '思维导图-打开文件后(官网)')
+    // 官网用的思维导图是「zen-gitsync 功能总览」,源文件在仓库 docs/mindmap/,
+    // 这里同步进思维导图工作目录(config.json 的 ui.mindmapDirs[0])再打开,
+    // 保证截图可复现:工作目录里的文件被删了也能重新生成
+    const src = path.join(root, 'docs', 'mindmap', 'zen-gitsync.mindmap.json')
+    const cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.zen-gitsync', 'config.json'), 'utf8'))
+    const mmDir = (cfg.ui && cfg.ui.mindmapDirs && cfg.ui.mindmapDirs[0]) || ''
+    if (mmDir && fs.existsSync(src)) {
+      fs.copyFileSync(src, path.join(mmDir, 'zen-gitsync.mindmap.json'))
+      // 刷新文件列表,让新文件出现(el-button 自身就是 button,是标题的兄弟节点)
+      const refresh = page.locator('.mm-sidebar-title ~ button').first()
+      if (await refresh.count()) await refresh.click().catch(() => {})
+      await page.waitForTimeout(1500)
+      const target = page.locator('.mm-file-item', { hasText: 'zen-gitsync' }).first()
+      if (await target.count()) {
+        await target.click()
+        await page.waitForTimeout(4500)
+        await shot(page, path.join(L, '07-mindmap.png'), '思维导图-功能总览(官网)')
+      } else {
+        results.push('  skip 思维导图功能总览: 列表里没找到 zen-gitsync 导图')
+      }
     } else {
-      results.push('  skip 思维导图打开文件: 列表里没有 .mm-file-item')
+      results.push('  skip 思维导图功能总览: 找不到工作目录或源文件')
     }
   } catch (e) {
-    results.push(`  skip 思维导图打开文件: ${e.message}`)
+    results.push(`  skip 思维导图功能总览: ${e.message}`)
   }
 }
 
