@@ -1113,15 +1113,15 @@ const selectedTaskQueue = computed(() =>
       @locate-task="locateTaskFromBoard"
     />
 
-    <!-- L2：单任务编辑器 —— 大弹窗浮在看板之上，关掉即回到原位，全程无跳转 -->
+    <!-- L2：单任务编辑器 —— 默认整屏铺开（原来是 1520px 居中浮层），关掉即回到看板，全程无跳转。
+         custom-class 是给文件末尾那段非 scoped 样式用的：全屏下要抹掉圆角 / 单线边框，
+         并把 el-dialog__body 变成撑满剩余高度的 flex 容器。 -->
     <CommonDialog
       v-model="editorOpen"
       :title="$t('@WORKBENCH:任务执行')"
+      size="fullscreen"
       type="flex"
-      height-mode="fixed"
-      height-offset="88px"
-      top="2vh"
-      width="min(1520px, 96vw)"
+      custom-class="wb-task-dialog"
     >
     <div class="wb-editor">
     <!-- 顶部细栏：关闭入口做成独立一条，而不是塞进任务头 ——
@@ -3396,5 +3396,27 @@ const selectedTaskQueue = computed(() =>
   max-height: calc(88vh - 60px);
   overflow: auto;
   padding: 12px 20px 16px;
+}
+
+/* 「任务执行」弹窗（2026-10-19 起默认全屏）。同样只能写在非 scoped 块里 ——
+   el-dialog teleport 到 body，scoped 选择器（含 :deep）都拿不到它。
+
+   全屏下不留「圆角 + 1px 单线边框」：那是居中浮层的语言，铺满屏幕后只剩一圈多余的缝。
+   内边距也归零，让侧栏 / 编辑器直接贴到视口边缘；body 变成撑满剩余高度的 flex 容器，
+   高度链才能一路传到 .wb-editor 里（对话框头部高度由 header 自己撑开，不用算 offset）。 */
+.el-dialog.wb-task-dialog {
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.el-dialog.wb-task-dialog .el-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
 }
 </style>
