@@ -40,8 +40,11 @@ import { useMcpInstallStore } from "@/stores/mcpInstallStore";
 import {
   OPEN_WITH_TOOLS,
   TOOL_DISPLAY_NAMES,
+  desktopAppHint,
+  desktopAppLabel,
   ensureToolsChecked,
   launchGuiInNewTab,
+  openDesktopApp,
   openPathInFileManager,
   openPathInTerminal,
   openPathInAi,
@@ -172,10 +175,16 @@ function openToolInstall(tool: ToolId) {
  * 成功文案优先用服务端返回的（可能附 permission-mode 之类的细节），没有才用调用方给的兜底；
  * 失败一律「<动作>失败: 原因」—— 原因可能来自服务端，也可能是网络层异常（此时是 fetch 的
  * 报错信息），对用户来说是同一件事：没打开成。
+ * params 给兜底文案里的 {app} 之类的占位符用（桌面端启动的提示要带应用名）。
  */
-function toastOpenResult(result: OpenDirectoryResult, successFallbackKey: string, failPrefixKey: string) {
+function toastOpenResult(
+  result: OpenDirectoryResult,
+  successFallbackKey: string,
+  failPrefixKey: string,
+  params?: Record<string, string>,
+) {
   if (result.success) {
-    ElMessage.success(result.message || $t(successFallbackKey))
+    ElMessage.success(result.message || $t(successFallbackKey, params))
   } else {
     ElMessage.error(`${$t(failPrefixKey)}${result.error ?? ''}`)
   }
@@ -671,6 +680,28 @@ async function onUpdateTool(tool: ToolId) {
   }
 }
 
+// ── 桌面端：「打开 / 下载 X 桌面端」────────────────────────────────────
+// 顶栏这排工具大多只有 CLI；官方有桌面版的五个（claude / codex / opencode /
+// codebuddy / kimi，见服务端 TOOL_DESKTOP_APPS）在各工具右键菜单尾部挂这一项：
+// 桌面应用装了 → 一键启动；没装 → 直接跳官网下载页（不经服务端，少一次往返）。
+// 「没装 CLI」时右键走的是安装引导，那时的桌面端入口在 ToolInstallDialog 里。
+async function onOpenOrDownloadDesktop(tool: ToolId) {
+  closeSimpleMenu()
+  closeClaudeMenu()
+  const info = toolsStore.desktopAppOf(tool)
+  if (!info) return
+  if (!info.installed) {
+    window.open(info.downloadUrl, '_blank', 'noopener,noreferrer')
+    return
+  }
+  toastOpenResult(
+    await openDesktopApp(tool),
+    '@67CE7:已打开 {app}',
+    '@67CE7:打开失败: ',
+    { app: info.name },
+  )
+}
+
 // ── simpleTools 的右键菜单 ───────────────────────────────────────
 // 目前只含"更新"一项。与 claude 菜单同款 manual 模式(el-dropdown 在 el-tooltip
 // 嵌套下 contextmenu 失效,见 claude 菜单处的注释)。已安装才有更新可言,
@@ -1052,6 +1083,22 @@ function onBrowserSelect(path: string) {
               <span class="claude-menu__label">{{ $t('@67CE7:更新 {tool}', { tool: tool.name }) }}</span>
               <span class="claude-menu__hint">{{ updateHint(tool.id) || $t('@67CE7:升级到最新版本') }}</span>
             </li>
+            <!-- 桌面端：只对官方有桌面版的工具显示（desktopAppOf 非空）。
+                 装了启动桌面应用，没装跳官网下载页。收在「更新」之后 ——
+                 它既不改变"用什么权限打开"、也不是"往工具里加东西"，
+                 别打乱上面权限档 / MCP / 更新的分组节奏。 -->
+            <li
+              v-if="toolsStore.desktopAppOf(tool.id)"
+              class="claude-menu__item"
+              role="menuitem"
+              tabindex="-1"
+              @click="onOpenOrDownloadDesktop(tool.id)"
+              @keydown.enter.prevent="onOpenOrDownloadDesktop(tool.id)"
+              @keydown.space.prevent="onOpenOrDownloadDesktop(tool.id)"
+            >
+              <span class="claude-menu__label">{{ desktopAppLabel(toolsStore.desktopAppOf(tool.id)) }}</span>
+              <span class="claude-menu__hint">{{ desktopAppHint(toolsStore.desktopAppOf(tool.id)) }}</span>
+            </li>
           </ul>
         </el-popover>
       </template>
@@ -1151,6 +1198,20 @@ function onBrowserSelect(path: string) {
           >
             <span class="claude-menu__label">{{ $t('@67CE7:更新 {tool}', { tool: TOOL_DISPLAY_NAMES.claude }) }}</span>
             <span class="claude-menu__hint">{{ updateHint('claude') || $t('@67CE7:升级到最新版本') }}</span>
+          </li>
+          <!-- 桌面端：Claude 桌面端（Code 标签页即桌面版 Claude Code）。装了启动，
+               没装跳官网下载页。与 simple 工具菜单那项同款位置（更新之后）。 -->
+          <li
+            v-if="toolsStore.desktopAppOf('claude')"
+            class="claude-menu__item"
+            role="menuitem"
+            tabindex="-1"
+            @click="onOpenOrDownloadDesktop('claude')"
+            @keydown.enter.prevent="onOpenOrDownloadDesktop('claude')"
+            @keydown.space.prevent="onOpenOrDownloadDesktop('claude')"
+          >
+            <span class="claude-menu__label">{{ desktopAppLabel(toolsStore.desktopAppOf('claude')) }}</span>
+            <span class="claude-menu__hint">{{ desktopAppHint(toolsStore.desktopAppOf('claude')) }}</span>
           </li>
         </ul>
       </el-popover>

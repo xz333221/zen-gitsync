@@ -722,6 +722,7 @@ export default {
   '@TINST:查看官方文档': 'Official documentation',
   '@TINST:重新检测': 'Check again',
   '@TINST:一键安装': 'Install now',
+  '@TINST:下载 {app}': 'Download {app}',
   '@TINST:完成': 'Done',
   '@67CE7:默认权限': 'Default permissions',
   '@67CE7:已用 Claude Code 打开目录': 'Opened directory in Claude Code',
@@ -739,6 +740,10 @@ export default {
   '@67CE7:展开更多工具': 'Show more tools',
   '@67CE7:收起更多工具': 'Hide more tools',
   '@67CE7:未安装': 'Not installed',
+  '@67CE7:已安装': 'Installed',
+  '@67CE7:打开 {app}': 'Open {app}',
+  '@67CE7:下载 {app}': 'Download {app}',
+  '@67CE7:已打开 {app}': 'Opened {app}',
   // @67CE7: file end
   // @NPM01: file path: components\NpmScriptsPanel.vue
   '@NPM01:NPM 脚本': 'NPM Scripts',
@@ -2614,6 +2619,8 @@ export default {
   '@WORKBENCH:已在新标签页启动 g ui': 'Launched g ui in a new tab',
   '@WORKBENCH:启动 g ui 失败': 'Failed to launch g ui',
   '@WORKBENCH:用工具打开': 'Open with a tool',
+  '@WORKBENCH:打开桌面端失败': 'Failed to open desktop app',
+  '@WORKBENCH:桌面端': 'Desktop apps',
   // @WORKBENCH: file end
 
   // @WORKBENCH: file path: composables/useTaskNotifier.ts (append: task finished notice)

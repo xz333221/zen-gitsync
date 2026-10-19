@@ -29,6 +29,17 @@ export interface ToolInstallerInfo {
   note: string
 }
 
+/**
+ * 某个工具的官方桌面应用（随 /api/check-tools 一起返回，真相在服务端
+ * TOOL_DESKTOP_APPS）。装没装决定菜单项是「打开 X 桌面端」还是「下载 X 桌面端」；
+ * name / downloadUrl 也来自服务端，前端不另存一份 URL。
+ */
+export interface DesktopAppInfo {
+  installed: boolean
+  name: string
+  downloadUrl: string
+}
+
 type ToolInstallers = Partial<Record<ToolId, ToolInstallerInfo>>
 // 检测完成前默认 false，按钮仍显示，但会走安装引导而不是直接启动工具
 
@@ -66,6 +77,9 @@ export const useToolsStore = defineStore('tools', () => {
   const installers = ref<ToolInstallers>({})
   // 各工具本地版本号(--version 采集,tooltip 显示用);zcode 为 null(桌面应用无 CLI 通道)
   const versions = ref<Partial<Record<ToolId, string | null>>>({})
+  // 官方桌面应用(claude / codex / opencode / codebuddy / kimi 五个有桌面版的工具)。
+  // 检测完成前是空对象 —— 桌面端菜单项要等检测跑完才出现,与工具按钮的 checking 态同节奏。
+  const desktopApps = ref<Partial<Record<ToolId, DesktopAppInfo>>>({})
   // npm registry 上的最新版本(更新菜单「当前 → 最新」提示用);null = 未知/查询失败
   const latestVersions = ref<Partial<Record<ToolId, string | null>>>({})
   const isFetchingLatest = ref(false)
@@ -121,6 +135,9 @@ export const useToolsStore = defineStore('tools', () => {
           installers.value = data.installers && typeof data.installers === 'object'
             ? data.installers as ToolInstallers
             : {}
+          desktopApps.value = data.desktopApps && typeof data.desktopApps === 'object'
+            ? data.desktopApps as Partial<Record<ToolId, DesktopAppInfo>>
+            : {}
           versions.value = data.versions && typeof data.versions === 'object'
             ? data.versions as Partial<Record<ToolId, string | null>>
             : {}
@@ -148,6 +165,11 @@ export const useToolsStore = defineStore('tools', () => {
       case 'zcode': return zcodeAvailable.value
       case 'dsh': return dshAvailable.value
     }
+  }
+
+  /** 该工具的官方桌面应用信息；没有桌面版的工具返回 undefined（菜单项据此整条不渲染） */
+  function desktopAppOf(tool: ToolId): DesktopAppInfo | undefined {
+    return desktopApps.value[tool]
   }
 
   // ── 执行器当前配置的模型 ────────────────────────────────────────────────
@@ -277,6 +299,8 @@ export const useToolsStore = defineStore('tools', () => {
     latestVersions,
     isFetchingLatest,
     isToolAvailable,
+    desktopApps,
+    desktopAppOf,
     executorModels,
     executorModelsReady,
     executorModelState,

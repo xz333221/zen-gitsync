@@ -52,6 +52,72 @@ const TOOL_DOCS_URLS = Object.freeze({
   gitee: 'https://gitee.com/oschina/gitee-cli',
 });
 
+// ── 官方桌面应用（顶栏「打开桌面端 / 下载桌面端」用）────────────────────
+// 顶栏这排工具大多只有 CLI；这里只收**官方有桌面版**的五个：
+//   claude → Claude 桌面端（Code 标签页就是桌面版 Claude Code）
+//   codex  → Codex 桌面版（2026-07 起并入 ChatGPT 桌面应用，是其中一个模式）
+//   opencode → OpenCode 桌面版
+//   codebuddy → CodeBuddy IDE
+//   kimi   → Kimi 桌面端
+// 不收的：vscode（主按钮本身就是打开桌面应用，`code <目录>` 拉起的正是 GUI）、
+// zcode（整个就是桌面应用，主按钮直接启动）、pi / dsh（没有官方桌面版，
+// 社区壳不代表官方立场，不代收）。
+// downloadUrl 给没装桌面端的用户点（前端直接 window.open，不经服务端）；
+// name 是菜单展示名，刻意和 CLI 版的名字区分（"Claude 桌面端" vs "Claude Code"），
+// 否则用户分不清点下去开的是哪个。
+const TOOL_DESKTOP_APPS = Object.freeze({
+  claude: {
+    name: 'Claude 桌面端',
+    downloadUrl: 'https://claude.com/download',
+    winExeName: 'Claude.exe',
+    winExeRe: /Claude\.exe$/i,
+    winPaths: ['AnthropicClaude/Claude.exe', 'Programs/Claude/Claude.exe', 'Claude/Claude.exe'],
+    winLnkRe: /^Claude\.lnk$/i,
+    macApp: 'Claude.app',
+    linuxPaths: ['/opt/Claude/claude', '/usr/bin/claude-desktop'],
+  },
+  codex: {
+    name: 'Codex 桌面版',
+    downloadUrl: 'https://developers.openai.com/codex/app/',
+    winExeName: 'ChatGPT.exe',
+    winExeRe: /ChatGPT\.exe$/i,
+    winPaths: ['Microsoft/WindowsApps/ChatGPT.exe', 'Programs/ChatGPT/ChatGPT.exe', 'OpenAI/ChatGPT/ChatGPT.exe'],
+    winLnkRe: /^(ChatGPT|Codex)\.lnk$/i,
+    macApp: 'ChatGPT.app',
+    linuxPaths: [], // Codex 桌面版只有 macOS / Windows
+  },
+  opencode: {
+    name: 'OpenCode 桌面版',
+    downloadUrl: 'https://opencode.ai/download',
+    winExeName: 'opencode.exe',
+    winExeRe: /opencode.*\.exe$/i,
+    winPaths: ['Programs/opencode/opencode.exe', 'Programs/OpenCode/OpenCode.exe', 'Programs/opencode-desktop/opencode-desktop.exe'],
+    winLnkRe: /^OpenCode\.lnk$/i,
+    macApp: 'OpenCode.app',
+    linuxPaths: ['/usr/bin/opencode-desktop', '/usr/local/bin/opencode-desktop', '/opt/opencode-desktop/opencode-desktop'],
+  },
+  codebuddy: {
+    name: 'CodeBuddy IDE',
+    downloadUrl: 'https://www.codebuddy.cn/ide/',
+    winExeName: 'CodeBuddy.exe',
+    winExeRe: /CodeBuddy\.exe$/i,
+    winPaths: ['Programs/CodeBuddy/CodeBuddy.exe', 'CodeBuddy/CodeBuddy.exe'],
+    winLnkRe: /^CodeBuddy( IDE)?\.lnk$/i,
+    macApp: 'CodeBuddy.app',
+    linuxPaths: ['/usr/bin/codebuddy', '/usr/local/bin/codebuddy', '/opt/codebuddy/codebuddy'],
+  },
+  kimi: {
+    name: 'Kimi 桌面端',
+    downloadUrl: 'https://www.kimi.com/products/kimi-work',
+    winExeName: 'Kimi.exe',
+    winExeRe: /Kimi\.exe$/i,
+    winPaths: ['Programs/Kimi/Kimi.exe', 'Kimi/Kimi.exe'],
+    winLnkRe: /^Kimi\.lnk$/i,
+    macApp: 'Kimi.app',
+    linuxPaths: [], // Kimi 桌面端只有 Windows / macOS(Apple 芯片)
+  },
+});
+
 function commandExists(command, platform = process.platform) {
   const checker = platform === 'win32' ? 'where.exe' : 'which';
   const result = spawnSync(checker, [command], {
@@ -804,6 +870,152 @@ async function findZCodeExecutable() {
   return null;
 }
 
+// ── 官方桌面应用探测 / 启动 ────────────────────────────────────────────
+
+async function isFileAt(p) {
+  try { return (await fs.stat(p)).isFile(); } catch { return false; }
+}
+
+async function isDirAt(p) {
+  try { return (await fs.stat(p)).isDirectory(); } catch { return false; }
+}
+
+/**
+ * Windows 卸载注册表里所有 DisplayIcon / InstallLocation 的值（三个根各查一次，
+ * 五个桌面应用共用这一遍 —— check-tools 每 10 分钟跑一轮，不能每个应用各查三遍）。
+ * 为什么查注册表：NSIS / Inno 安装的桌面应用（Claude、CodeBuddy IDE、Kimi）
+ * 安装路径随用户选择变，固定路径猜不中，注册表是唯一权威登记处。
+ */
+function scanWindowsUninstallPaths() {
+  const roots = [
+    'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+    'HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+    'HKLM\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+  ];
+  const values = [];
+  for (const root of roots) {
+    const output = spawnSync('reg.exe', ['query', root, '/s'], {
+      encoding: 'utf8',
+      windowsHide: true,
+    }).stdout || '';
+    for (const line of output.split(/\r?\n/)) {
+      if (!/DisplayIcon|InstallLocation/i.test(line)) continue;
+      const value = line.replace(/^.*?REG_(?:EXPAND_)?SZ\s+/i, '').trim().replace(/^"|"$/g, '').replace(/,\d+$/, '');
+      if (value) values.push(value);
+    }
+  }
+  return values;
+}
+
+/** 递归找一个名字匹配的项（开始菜单目录都很浅，递归开销可忽略） */
+async function walkFindFile(dir, nameRe) {
+  let entries;
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const hit = await walkFindFile(full, nameRe);
+      if (hit) return hit;
+    } else if (nameRe.test(entry.name)) {
+      return full;
+    }
+  }
+  return null;
+}
+
+/**
+ * 开始菜单两个 Programs 根里按文件名找快捷方式。
+ * 为什么需要它：微软商店分发的桌面应用（Codex 桌面版所在的 ChatGPT 桌面）
+ * 不进经典 Uninstall 注册表、安装路径也猜不中，但开始菜单一定有 .lnk；
+ * 且 .lnk 本身就是可启动目标（ShellExecute 认快捷方式，见 launchDesktopAppTarget）。
+ */
+async function findStartMenuShortcut(nameRe) {
+  const roots = [
+    path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
+    path.join(process.env.PROGRAMDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
+  ].filter(Boolean);
+  for (const root of roots) {
+    const hit = await walkFindFile(root, nameRe);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/**
+ * 探测某个工具的官方桌面应用：装没装、启动目标是什么。
+ * target 是**可直接启动的东西**（exe / .app / .lnk / Linux 可执行文件）；
+ * 没装上 target 为 null —— 前端据此把菜单项翻成「下载 X」并打开官网地址。
+ *
+ * 三平台口径：
+ *   Windows  固定安装路径 → 卸载注册表（DisplayIcon 指向 exe / InstallLocation
+ *            是目录时拼期望 exe 名）→ 开始菜单 .lnk（商店版应用走这条）
+ *   macOS    /Applications/<App>.app
+ *   Linux    固定候选路径（桌面版分发最不稳的平台，猜不中就降级成"去官网下载"）
+ */
+async function findDesktopApp(tool) {
+  const app = TOOL_DESKTOP_APPS[tool];
+  if (!app) return { installed: false, target: null };
+
+  if (process.platform === 'win32') {
+    const roots = [process.env.LOCALAPPDATA, process.env.PROGRAMFILES].filter(Boolean);
+    for (const rel of app.winPaths || []) {
+      for (const root of roots) {
+        const candidate = path.join(root, rel);
+        if (await isFileAt(candidate)) return { installed: true, target: candidate };
+      }
+    }
+    // 注册表值两种形态：DisplayIcon 多直接指向 exe；InstallLocation 是目录，
+    // 在目录下拼期望的 exe 名。值与 exe 名对不上的一律不算（防误报）。
+    for (const value of scanWindowsUninstallPaths()) {
+      if (/\.(ico|png|jpg|jpeg|svg)$/i.test(value)) continue;
+      if (app.winExeRe.test(value) && (await isFileAt(value))) {
+        return { installed: true, target: value };
+      }
+      if (await isDirAt(value)) {
+        const exe = path.join(value, app.winExeName);
+        if (await isFileAt(exe)) return { installed: true, target: exe };
+      }
+    }
+    const lnk = await findStartMenuShortcut(app.winLnkRe);
+    if (lnk) return { installed: true, target: lnk };
+    return { installed: false, target: null };
+  }
+
+  if (process.platform === 'darwin') {
+    const appDir = `/Applications/${app.macApp}`;
+    return (await isDirAt(appDir)) ? { installed: true, target: appDir } : { installed: false, target: null };
+  }
+
+  for (const candidate of app.linuxPaths || []) {
+    if (await isFileAt(candidate)) return { installed: true, target: candidate };
+  }
+  return { installed: false, target: null };
+}
+
+/**
+ * 启动桌面应用。target 的三种形态分开处理：
+ *   .lnk（开始菜单快捷方式）不能直接 spawn（CreateProcess 不认快捷方式），
+ *     走 cmd /c start 让 ShellExecute 去解析；
+ *   .app（macOS）是目录，交给 open 命令；
+ *   其余（Windows exe / Linux 可执行文件）直接 detached spawn，与 zcode 一致。
+ */
+async function launchDesktopAppTarget(target) {
+  if (process.platform === 'win32') {
+    if (/\.lnk$/i.test(target)) {
+      return spawnDetached('cmd.exe', ['/c', 'start', '""', target]);
+    }
+    return spawnDetached(target, []);
+  }
+  if (/\.app$/i.test(target)) {
+    return spawnDetached('open', [target]);
+  }
+  return spawnDetached(target, []);
+}
+
 async function launchToolInstaller(installer, dirPath = process.cwd(), { update = false } = {}) {
   // update=true 时改用 updateXxx 字段(升级命令与安装命令动词不同:
   // npm @latest / winget upgrade / brew upgrade / snap refresh / kimi 脚本幂等重跑)
@@ -1357,6 +1569,27 @@ export function registerFileOpenRoutes({
       });
     }));
 
+  // 打开某个工具的官方桌面应用（顶栏 / 项目菜单里的「打开 X 桌面端」走这里）。
+  // 没装桌面端时返回 400 并带上官网地址 —— 前端在检测阶段就分叉了（没装直接
+  // window.open 官网），会走到这里说明是检测之后才卸载的边角情况。
+  app.post('/api/open-desktop-app', asyncRoute(async (req, res) => {
+      const { tool } = req.body || {};
+      const app = TOOL_DESKTOP_APPS[tool];
+      if (!app) {
+        throw new HttpError(400, '该工具没有桌面端');
+      }
+      const found = await findDesktopApp(tool);
+      if (!found.installed || !found.target) {
+        throw new HttpError(400, `未检测到 ${app.name}，请先到官网下载安装：${app.downloadUrl}`);
+      }
+      try {
+        await launchDesktopAppTarget(found.target);
+        res.json({ success: true, message: `已打开 ${app.name}` });
+      } catch (error) {
+        res.status(500).json({ success: false, error: error.message || `无法启动 ${app.name}` });
+      }
+    }));
+
   // 检测本地工具是否已安装 + 采集版本号(供前端决定按钮行为、tooltip 显示版本)
   // 检测方式: spawn 'tool --version',exit 0 即视为已安装;stdout/stderr 里提取 semver。
   // 超时 15s:Claude CLI / opencode 等 Node 包装的工具首次冷启动
@@ -1430,10 +1663,19 @@ export function registerFileOpenRoutes({
       ]);
 
       const installers = getToolInstallers();
+      // 官方桌面应用探测：与 CLI 检测并行跑（各自只做 fs / 注册表查询，不起进程）。
+      // 前端据此把菜单项翻成「打开 X 桌面端」（装了）/「下载 X 桌面端」（没装）。
+      const desktopEntries = await Promise.all(
+        Object.entries(TOOL_DESKTOP_APPS).map(async ([tool, app]) => {
+          const found = await findDesktopApp(tool);
+          return [tool, { installed: found.installed, name: app.name, downloadUrl: app.downloadUrl }];
+        }),
+      );
       res.json({
         success: true,
         platform: process.platform,
         installers: publicInstallerInfo(installers),
+        desktopApps: Object.fromEntries(desktopEntries),
         vscode: vscodeRes.installed,
         claude: claudeRes.installed,
         codex: codexRes.installed,

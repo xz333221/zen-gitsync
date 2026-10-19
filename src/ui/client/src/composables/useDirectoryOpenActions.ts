@@ -25,7 +25,8 @@
 // 要么每个调用点抄一遍 catch。返回值让"失败"成为一种必须显式处理的状态。
 // toast 与安装引导仍归调用方 —— 两处的措辞和交互本来就不一样。
 
-import { useToolsStore, type ToolId } from '@/stores/toolsStore'
+import { $t } from '@/lang/static'
+import { useToolsStore, type DesktopAppInfo, type ToolId } from '@/stores/toolsStore'
 
 /** 一次「打开」的结果：success=false 时 error 一定有值 */
 export interface OpenDirectoryResult {
@@ -48,6 +49,14 @@ const TOOL_ENDPOINTS: Record<ToolId, string> = {
   zcode: '/api/open-directory-with-zcode',
   dsh: '/api/open-directory-with-dsh',
 }
+
+/**
+ * 有官方桌面端的工具 id —— 与服务端 TOOL_DESKTOP_APPS 的键一一对应。
+ * 运行时以 `toolsStore.desktopAppOf(id)` 有返回值为准（服务端才是真相），
+ * 这份清单只是"要考虑哪些工具"：vscode 的主按钮本身就是打开桌面应用、
+ * zcode 整个就是桌面应用、pi / dsh 没有官方桌面版，都不进来。
+ */
+export const DESKTOP_APP_TOOL_IDS: ToolId[] = ['claude', 'codex', 'opencode', 'codebuddy', 'kimi']
 
 /** 工具展示名：菜单、tooltip、安装引导都用它，保证同一个工具在三处叫法一致 */
 export const TOOL_DISPLAY_NAMES: Record<ToolId, string> = {
@@ -158,4 +167,31 @@ export async function ensureToolsChecked(): Promise<boolean> {
   const toolsStore = useToolsStore()
   if (toolsStore.lastCheckedAt === null) await toolsStore.checkTools()
   return toolsStore.lastCheckedAt !== null
+}
+
+/**
+ * 打开某个工具的官方桌面应用（「打开 X 桌面端」走这里；装了才点得动）。
+ * 没装时前端走官网下载页，这个端点只在"检测之后又被卸载"的边角情况才会撞上 400。
+ */
+export function openDesktopApp(tool: ToolId): Promise<OpenDirectoryResult> {
+  return post('/api/open-desktop-app', { tool })
+}
+
+/**
+ * 桌面端菜单项的两行文案。顶栏右键菜单（DirectorySelector）与编排台项目
+ * 「打开方式」菜单（ProjectOpenMenuList）共用一份，各写一遍必然出现
+ * "一处说打开一处说启动"的漂移。存函数不存常量：$t 要按当前语言实时求值
+ * （用户在设置里切语言后菜单要跟着变，理由同 OpenWithTool.labelKey）。
+ * 传 undefined 返回空串 —— 调用方都有 v-if 把着，这是兜底不是正常路径。
+ */
+export function desktopAppLabel(info: DesktopAppInfo | undefined): string {
+  if (!info) return ''
+  return info.installed
+    ? $t('@67CE7:打开 {app}', { app: info.name })
+    : $t('@67CE7:下载 {app}', { app: info.name })
+}
+
+export function desktopAppHint(info: DesktopAppInfo | undefined): string {
+  if (!info) return ''
+  return info.installed ? $t('@67CE7:已安装') : $t('@67CE7:未安装')
 }

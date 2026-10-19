@@ -35,18 +35,23 @@
   改造时不要改名。
 -->
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { CopyDocument, FolderOpened, Monitor, Promotion } from '@element-plus/icons-vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
 import ToolInstallDialog from '@components/ToolInstallDialog.vue'
 import claudeCodeIcon from '@/assets/icons/svg/claudecode-color.svg'
 import { $t } from '@/lang/static'
-import type { ToolId } from '@/stores/toolsStore'
+import { useToolsStore, type ToolId } from '@/stores/toolsStore'
 import { useOpenWithTool } from '@/composables/useOpenWithTool'
 import {
+  DESKTOP_APP_TOOL_IDS,
   OPEN_WITH_TOOLS,
+  TOOL_DISPLAY_NAMES,
+  desktopAppHint,
+  desktopAppLabel,
   launchGuiInNewTab,
+  openDesktopApp,
   openPathInFileManager,
   openPathInTerminal,
 } from '@/composables/useDirectoryOpenActions'
@@ -63,8 +68,39 @@ const emit = defineEmits<{ done: [] }>()
 
 // 「打开方式」的判定与请求走公共 composable（工具快捷条也用同一份）
 const { toolMissing, tryOpenWithTool } = useOpenWithTool()
+const toolsStore = useToolsStore()
 const installVisible = ref(false)
 const installTool = ref<ToolId | null>(null)
+
+/**
+ * 有官方桌面端、且本机桌面应用状态已知的工具（claude / codex / opencode /
+ * codebuddy / kimi 里 desktopAppOf 有返回值的）。图标沿用该工具在 OPEN_WITH_TOOLS
+ * 里那颗；claude 不在那张表里（它有权限档、单独排布），模板里用 img 特例。
+ */
+const desktopTools = computed(() =>
+  DESKTOP_APP_TOOL_IDS.filter((id) => toolsStore.desktopAppOf(id)).map((id) => ({
+    id,
+    name: TOOL_DISPLAY_NAMES[id],
+    icon: OPEN_WITH_TOOLS.find((t) => t.id === id)?.icon ?? '',
+  })),
+)
+
+/**
+ * 「打开 / 下载 X 桌面端」：桌面应用装了 → 一键启动；没装 → 跳官网下载页。
+ * 与顶栏右键菜单那项同一份判定（desktopAppOf）与同一个启动端点，别在这里另写。
+ */
+async function openOrDownloadDesktop(tool: ToolId) {
+  const info = toolsStore.desktopAppOf(tool)
+  if (!info) return
+  emit('done')
+  if (!info.installed) {
+    window.open(info.downloadUrl, '_blank', 'noopener,noreferrer')
+    return
+  }
+  const r = await openDesktopApp(tool)
+  if (r.success) ElMessage.success(r.message || $t('@67CE7:已打开 {app}', { app: info.name }))
+  else ElMessage.error(r.error || $t('@WORKBENCH:打开桌面端失败'))
+}
 
 /** 在系统文件管理器里打开项目目录 */
 async function openInFileManager() {
@@ -332,6 +368,31 @@ async function openWithTool(tool: ToolId, permissionMode?: string) {
       <span class="proj-menu__icon"><svg-icon icon-class="kimi" /></span>
       <span class="proj-menu__label">{{ $t('@67CE7:用 Kimi Code 打开（完全批准）') }}</span>
     </li>
+
+    <!-- 桌面端分组：官方有桌面应用的工具各一项（装了点它启动桌面应用，没装跳
+         官网下载页）。vscode / zcode 不进这组 —— 它们的主操作本身就是桌面应用；
+         pi / dsh 没有官方桌面版。 -->
+    <template v-if="desktopTools.length">
+      <li class="proj-menu__sep" role="separator" />
+      <li class="proj-menu__title" role="presentation">{{ $t('@WORKBENCH:桌面端') }}</li>
+      <li
+        v-for="tool in desktopTools"
+        :key="`desktop-${tool.id}`"
+        class="proj-menu__item"
+        role="menuitem"
+        tabindex="-1"
+        @click="openOrDownloadDesktop(tool.id)"
+        @keydown.enter.prevent="openOrDownloadDesktop(tool.id)"
+        @keydown.space.prevent="openOrDownloadDesktop(tool.id)"
+      >
+        <span class="proj-menu__icon">
+          <img v-if="tool.id === 'claude'" :src="claudeCodeIcon" alt="" class="proj-menu__img" />
+          <svg-icon v-else :icon-class="tool.icon" :class="{ 'icon-invert-dark': tool.id === 'codex' }" />
+        </span>
+        <span class="proj-menu__label">{{ desktopAppLabel(toolsStore.desktopAppOf(tool.id)) }}</span>
+        <span class="proj-menu__hint">{{ desktopAppHint(toolsStore.desktopAppOf(tool.id)) }}</span>
+      </li>
+    </template>
   </ul>
 
   <!-- 未安装的工具：复用顶栏那套安装引导（同一个组件），不在这里另写一份说明。

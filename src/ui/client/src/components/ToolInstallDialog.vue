@@ -40,6 +40,10 @@ const toolNames: Record<ToolId, string> = {
 
 const toolName = computed(() => props.tool ? toolNames[props.tool] : '')
 const installer = computed(() => props.tool ? toolsStore.installers[props.tool] : undefined)
+// 该工具有官方桌面端时的信息（claude / codex / opencode / codebuddy / kimi）。
+// 这个弹窗是"CLI 没装"时才出现的，桌面端按钮给的是另一条路：不装 CLI，
+// 直接去官网拿桌面应用。装了桌面端也显示（下载页顺带能升级）。
+const desktopInfo = computed(() => props.tool ? toolsStore.desktopAppOf(props.tool) : undefined)
 const platformName = computed(() => {
   if (toolsStore.platform === 'win32') return 'Windows'
   if (toolsStore.platform === 'darwin') return 'macOS'
@@ -111,6 +115,12 @@ async function copyCommand() {
 function openDocs() {
   if (!installer.value?.docsUrl) return
   window.open(installer.value.docsUrl, '_blank', 'noopener,noreferrer')
+}
+
+/** 「下载桌面端」：跳官网下载页（桌面版是独立安装包，与这里的 CLI 安装命令二选一） */
+function downloadDesktop() {
+  if (!desktopInfo.value) return
+  window.open(desktopInfo.value.downloadUrl, '_blank', 'noopener,noreferrer')
 }
 
 function closeDialog() {
@@ -188,6 +198,10 @@ onBeforeUnmount(stopPolling)
     <template #footer>
       <div class="tool-install__footer">
         <el-button @click="openDocs">{{ $t('@TINST:查看官方文档') }}</el-button>
+        <!-- 桌面端下载：只对有官方桌面版的工具显示（desktopInfo 非空） -->
+        <el-button v-if="desktopInfo" @click="downloadDesktop">
+          {{ $t('@TINST:下载 {app}', { app: desktopInfo.name }) }}
+        </el-button>
         <el-button v-if="status === 'waiting'" :loading="toolsStore.isChecking" @click="recheck">
           {{ $t('@TINST:重新检测') }}
         </el-button>

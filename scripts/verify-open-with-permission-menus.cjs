@@ -38,10 +38,16 @@
  *      白名单外工具（kimi）**没有**这一项（反向锚）。POST 全被拦截，绝不写真实配置文件。
  *   R  反向锚：没有档位的工具（vscode）菜单里**没有档位项**、且 = MCP 项 + 更新项——
  *      这是最容易写错的地方（一个 v-if 写错就让所有工具都长出档位项）
+ *   D  「打开 / 下载 X 桌面端」入口（2026-10-19 加）：有官方桌面版的五个工具
+ *      （claude / codex / opencode / codebuddy / kimi）右键菜单尾部有这一项 ——
+ *      本机装了桌面应用 → 点它 POST /api/open-desktop-app（body.tool 对上）；
+ *      没装 → window.open 官网下载页（地址对上）。两条分支按菜单项实际文案走。
+ *      vscode / pi **没有**桌面端项（反向锚）；项目菜单里桌面端分组五项齐全。
  *
  * 请求体怎么断言：`page.route` 直接拦掉这些 POST 并 fulfill 一个假成功 ——
  * 既拿到 body，又避免真去 spawn 一个终端 / TUI 窗口（那种副作用不该出现在验证里）。
  * MCP 安装端点同样拦截（探针**绝不**真写用户的 mcp 配置）。
+ * 桌面端启动端点同样拦截、window.open 换成记录器（绝不真启动应用 / 弹标签页）。
  *
  * 反向验证（把改动撤掉后哪几条会红）：
  *   · 删掉模板里那段 `v-for="tier in permissionTiersOf(tool.id)"` → A2/A3/A4 红
@@ -52,6 +58,8 @@
  *   · 把 TOOL_PRIMARY_MODE 里的 codex / opencode 删掉（回到默认档直点）→ A6 红
  *   · 删掉菜单里的 MCP 项 → M1 红；把 TOOL_MCP_TARGETS 里某项删掉 → 对应 M1/M6 红
  *   · 把 MCP 项挪到「更新」之后 → M3 红；点击发的 target 写错 → M4 红
+ *   · 删掉菜单里的桌面端项（或 desktopAppOf 判空写成恒真）→ D2/D6 红
+ *   · 把桌面端启动端点写错 / 下载地址写错 → D4 红
  *
  * 用法：先 `npm run dev`（后端 5545 + vite 5544），再
  *   node scripts/verify-open-with-permission-menus.cjs
@@ -139,6 +147,27 @@ const MCP_CASES = [
 
 /** 白名单外的工具（没核实 MCP 支持）—— 菜单里不许出现 MCP 项 */
 const MCP_NEGATIVE_CASE = { aria: 'Kimi Code', buttonPrefix: '用 Kimi Code 打开' }
+
+/**
+ * 桌面端入口要验的工具（2026-10-19 加）。app = 服务端 TOOL_DESKTOP_APPS 里的展示名，
+ * url = 对应的官网下载地址（没装桌面端时前端 window.open 它）。claude 的菜单是独立
+ * popper，不在这张表里，下面单独走一遍。
+ */
+const DESKTOP_CASES = [
+  { aria: 'OpenCode', buttonPrefix: '用 OpenCode 打开', tool: 'opencode', app: 'OpenCode 桌面版', url: 'https://opencode.ai/download' },
+  { aria: 'Codex', buttonPrefix: '用 Codex 打开', tool: 'codex', app: 'Codex 桌面版', url: 'https://developers.openai.com/codex/app/' },
+  { aria: 'CodeBuddy Code', buttonPrefix: '用 CodeBuddy Code 打开', tool: 'codebuddy', app: 'CodeBuddy IDE', url: 'https://www.codebuddy.cn/ide/' },
+  { aria: 'Kimi Code', buttonPrefix: '用 Kimi Code 打开', tool: 'kimi', app: 'Kimi 桌面端', url: 'https://www.kimi.com/products/kimi-work' },
+]
+
+/** 项目菜单桌面端分组必须出现的五项（与服务端 TOOL_DESKTOP_APPS 一一对应） */
+const DESKTOP_APP_NAMES = ['Claude 桌面端', 'Codex 桌面版', 'OpenCode 桌面版', 'CodeBuddy IDE', 'Kimi 桌面端']
+
+/** 没有官方桌面版的工具 —— 菜单里不许长出桌面端项（一个 v-if 写错就会全长出来） */
+const DESKTOP_NEGATIVE_CASES = [
+  { aria: 'VSCode', buttonPrefix: '用 VSCode 打开' },
+  { aria: 'Pi Agent', buttonPrefix: '用 Pi Agent 打开' },
+]
 
 const results = []
 const consoleErrors = []
@@ -248,11 +277,33 @@ async function main() {
     })
   })
 
+  // 「打开 / 下载 X 桌面端」（2026-10-19 加）：
+  //   · POST /api/open-desktop-app 拦下来记 body —— 绝不真的去启动桌面应用；
+  //   · window.open 换成记录器 —— 下载分支走的是前端直接开官网，不拦的话
+  //     headless 里会真弹一个标签页。
+  const desktopBodies = []
+  await context.route('**/api/open-desktop-app', async (route) => {
+    let body = null
+    try { body = route.request().postDataJSON() } catch { /* 非法 JSON 就当没有 */ }
+    desktopBodies.push(body)
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, message: '已打开 X 桌面端（探针拦截，未启动）' }),
+    })
+  })
+  await context.addInitScript(() => {
+    window.__opened = []
+    window.open = (url) => { window.__opened.push(String(url)); return null }
+  })
+
   const page = await context.newPage()
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()) })
   page.on('pageerror', (e) => pageErrors.push(String(e)))
 
   const lastBody = () => openBodies[openBodies.length - 1]
+  /** window.open 被 addInitScript 换成记录器，下载分支断言"开了哪个网址" */
+  const openedUrls = () => page.evaluate(() => window.__opened || [])
 
   // contextmenu 挂在按钮外面那层 span 上（IconButton 根是 el-tooltip，事件挂不住），
   // 所以右键要打在**那层 span** 上：`xpath=..` 从按钮回到父节点。⚠️ 不能写
@@ -549,6 +600,11 @@ async function main() {
         check('B2 反向锚：默认档「用 X 打开」都还在（含本轮新加档位的 codebuddy / kimi）',
           ['用 Codex 打开', '用 OpenCode 打开', '用 CodeBuddy Code 打开', '用 Kimi Code 打开'].every(l => labels.includes(l)),
           JSON.stringify(labels))
+        // B1b 桌面端分组（2026-10-19 加）：五个有官方桌面版的工具各一项，标签在
+        //   「打开 / 下载」之间随本机桌面应用装没装翻 —— 五项名字必须都在。
+        check('B1b 项目菜单桌面端分组五项齐全',
+          DESKTOP_APP_NAMES.every(n => labels.some(l => /^(打开|下载) /.test(l) && l.includes(n))),
+          JSON.stringify(labels.filter(l => /^(打开|下载) /.test(l))))
         await closeMenus()
       }
 
@@ -565,6 +621,97 @@ async function main() {
           body.permissionMode === c.mode && typeof body.path === 'string' && body.path.length > 0,
           JSON.stringify(body))
         await closeMenus()
+      }
+    }
+
+    // ── D 桌面端入口（2026-10-19 加）──────────────────────────────────
+    // 有官方桌面版的五个工具（claude / codex / opencode / codebuddy / kimi）右键菜单
+    // 尾部有「打开 / 下载 X 桌面端」：本机装了桌面应用 → 一键启动（POST
+    // /api/open-desktop-app）；没装 → window.open 官网下载页。两条分支都验 ——
+    // 标签随本机安装状态翻，断言按菜单项实际文案分支走，不写死某一分支
+    // （本机 opencode 桌面版装着，其余没装）。
+    // vscode / pi 没有桌面端入口（D6 反向锚）—— 前者的主按钮本身就是桌面应用。
+    for (const c of DESKTOP_CASES) {
+      const tag = `[${c.aria}]`
+      const opened = await openTopbarMenu(c)
+      check(`D1${tag} 右键弹出工具菜单`, opened)
+      if (!opened) continue
+      const menu = await menuItems(c.aria)
+      const item = menu?.items.find(it => /^(打开|下载) /.test(it.label) && it.label.includes(c.app))
+      check(`D2${tag} 菜单里有「${c.app}」项`, !!item,
+        `items=${JSON.stringify(menu?.items.map(i => i.label))}`)
+      if (!item) { await closeMenus(); continue }
+      const expectOpen = item.label.startsWith('打开')
+      check(`D3${tag} 状态提示 = ${expectOpen ? '已安装' : '未安装'}`,
+        item.hint === (expectOpen ? '已安装' : '未安装'), `hint=${item.hint}`)
+      if (expectOpen) {
+        desktopBodies.length = 0
+        await clickMenuItem(c.aria, item.label)
+        const got = await waitUntil(async () => desktopBodies.length > 0, 8000)
+        check(`D4${tag} 点「打开」→ POST /api/open-desktop-app tool=${c.tool}`,
+          got && desktopBodies[0]?.tool === c.tool, JSON.stringify(desktopBodies[0] || null))
+      } else {
+        await page.evaluate(() => { window.__opened.length = 0 })
+        await clickMenuItem(c.aria, item.label)
+        const got = await waitUntil(async () => (await openedUrls()).length > 0, 8000)
+        const urls = await openedUrls()
+        check(`D4${tag} 点「下载」→ window.open ${c.url}`,
+          got && urls[0] === c.url, JSON.stringify(urls))
+      }
+      check(`D5${tag} 点完菜单关闭`, await waitUntil(async () => (await menuItems(c.aria)) === null, 5000))
+      await dismissToasts()
+      await closeMenus()
+    }
+
+    // claude 的菜单是独立 popper（.claude-menu-popover），单独走一遍
+    {
+      const claudeTrigger = page.locator('.claude-code-trigger')
+      if ((await claudeTrigger.count()) === 1) {
+        await claudeTrigger.click({ button: 'right' })
+        const opened = await waitUntil(async () => (await claudeMenuItems()) !== null, 8000)
+        check('D1[Claude Code] 右键弹出菜单', opened)
+        if (opened) {
+          const menu = await claudeMenuItems()
+          const item = menu?.items.find(it => /^(打开|下载) /.test(it.label) && it.label.includes('Claude 桌面端'))
+          check('D2[Claude Code] 菜单里有「Claude 桌面端」项', !!item,
+            `items=${JSON.stringify(menu?.items.map(i => i.label))}`)
+          if (item) {
+            const expectOpen = item.label.startsWith('打开')
+            check(`D3[Claude Code] 状态提示 = ${expectOpen ? '已安装' : '未安装'}`,
+              item.hint === (expectOpen ? '已安装' : '未安装'), `hint=${item.hint}`)
+            await page.evaluate(() => { window.__opened.length = 0 })
+            desktopBodies.length = 0
+            await page.locator('.claude-menu-popover .claude-menu__item', { hasText: 'Claude 桌面端' })
+              .first().click({ timeout: 4000 }).catch(() => {})
+            if (expectOpen) {
+              const got = await waitUntil(async () => desktopBodies.length > 0, 8000)
+              check('D4[Claude Code] 点「打开」→ POST /api/open-desktop-app tool=claude',
+                got && desktopBodies[0]?.tool === 'claude', JSON.stringify(desktopBodies[0] || null))
+            } else {
+              const got = await waitUntil(async () => (await openedUrls()).length > 0, 8000)
+              const urls = await openedUrls()
+              check('D4[Claude Code] 点「下载」→ window.open https://claude.com/download',
+                got && urls[0] === 'https://claude.com/download', JSON.stringify(urls))
+            }
+          }
+        }
+        await dismissToasts()
+        await closeMenus()
+      } else {
+        check('D1[Claude Code] 右键弹出菜单', false, 'claude 按钮不在顶栏')
+      }
+    }
+
+    // D6 反向锚：没有官方桌面版的工具（vscode / pi）菜单里不许长出桌面端项
+    for (const neg of DESKTOP_NEGATIVE_CASES) {
+      if (await openTopbarMenu(neg)) {
+        const menu = await menuItems(neg.aria)
+        const has = !!menu?.items.some(it => /^(打开|下载) /.test(it.label))
+        check(`D6 反向锚：${neg.aria} 菜单没有桌面端项`, !has,
+          `items=${JSON.stringify(menu?.items.map(i => i.label))}`)
+        await closeMenus()
+      } else {
+        check(`D6 反向锚：${neg.aria} 菜单没有桌面端项`, false, '菜单没弹出来')
       }
     }
 

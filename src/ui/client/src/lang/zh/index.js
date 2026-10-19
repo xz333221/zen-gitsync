@@ -727,6 +727,7 @@ export default {
   '@TINST:查看官方文档': '查看官方文档',
   '@TINST:重新检测': '重新检测',
   '@TINST:一键安装': '一键安装',
+  '@TINST:下载 {app}': '下载 {app}',
   '@TINST:完成': '完成',
   '@67CE7:默认权限': '默认权限',
   '@67CE7:打开失败: ': '打开失败: ',
@@ -745,6 +746,10 @@ export default {
   '@67CE7:展开更多工具': '展开更多工具',
   '@67CE7:收起更多工具': '收起更多工具',
   '@67CE7:未安装': '未安装',
+  '@67CE7:已安装': '已安装',
+  '@67CE7:打开 {app}': '打开 {app}',
+  '@67CE7:下载 {app}': '下载 {app}',
+  '@67CE7:已打开 {app}': '已打开 {app}',
   // @67CE7: file end
   // @NPM01: file path: components\NpmScriptsPanel.vue
   '@NPM01:NPM 脚本': 'NPM 脚本',
@@ -2620,6 +2625,8 @@ export default {
   '@WORKBENCH:已在新标签页启动 g ui': '已在新标签页启动 g ui',
   '@WORKBENCH:启动 g ui 失败': '启动 g ui 失败',
   '@WORKBENCH:用工具打开': '用工具打开',
+  '@WORKBENCH:打开桌面端失败': '打开桌面端失败',
+  '@WORKBENCH:桌面端': '桌面端',
   // @WORKBENCH: file end
 
   // @WORKBENCH: file path: composables/useTaskNotifier.ts (追加: 任务执行结束提示)
