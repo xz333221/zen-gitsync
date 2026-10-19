@@ -18,6 +18,16 @@ const shots = {
   'mindmap.png': '07-mindmap.png',
 }
 
+// 文档页用图:来源不止「手写版介绍文章图片」一个目录,按 (目标, 源目录, 源文件) 写全
+// 浅色画布的截图(console / monitor / flow)在页面上走 ShotFrame 的 paper 属性
+const docShots = [
+  ['sourcemap-view-dark.png', 'screenshots', '10-sourcemap-view-dark.png'],
+  ['settings-dialog-dark.png', 'screenshots', '12-user-settings-dialog-dark.png'],
+  ['console.png', 'screenshots/article', '07-console.png'],
+  ['monitor.png', 'screenshots/article', '11-monitor.png'],
+  ['flow.png', 'screenshots/article', '08-flow.png']
+]
+
 // 首屏主视觉的产品演示录屏(与 cli-quick-commit.png 同画面)
 const videos = {
   'cli-quick-commit.mp4': '01-cli-quick-commit.mp4',
@@ -44,6 +54,13 @@ for (const [dest, src] of Object.entries(videos)) {
   fs.copyFileSync(from, to)
   total += fs.statSync(to).size
   console.log('video ', dest, (fs.statSync(to).size / 1024).toFixed(0) + 'KB')
+}
+for (const [dest, dir, src] of docShots) {
+  const from = path.join(root, 'docs', dir, src)
+  const to = path.join(pub, 'shots', dest)
+  fs.copyFileSync(from, to)
+  total += fs.statSync(to).size
+  console.log('docshot', dest, (fs.statSync(to).size / 1024).toFixed(0) + 'KB')
 }
 for (const f of fonts) {
   const from = path.join(root, 'src', 'ui', 'client', 'public', 'fonts', f)

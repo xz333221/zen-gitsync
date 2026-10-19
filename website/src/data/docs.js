@@ -5,13 +5,24 @@
  *  - cmds   命令行 [{ cmd, note }](走 CopyChip)
  *  - table  表格 { head: [], rows: [[]] }
  *  - note   补充说明
+ *  每个板块可带 shots:[{ src, alt, caption, paper }] —— paper 用于浅色画布截图
+ *  (贴在暗色页面上像"一张纸",与官网思维导图截图同一处理)。
  */
+
+import { asset } from './site.js'
 
 export const DOCS = [
   {
     id: 'start',
     title: '快速开始',
     lede: '一条安装命令,四个入口。Node.js 20.19 及以上,Windows / macOS / Linux 一致。',
+    shots: [
+      {
+        src: asset('shots/cli-quick-commit.png'),
+        alt: '终端里敲一个 g,完成暂存、提交、推送',
+        caption: '终端:一个 g 走完暂存 → 提交 → 推送'
+      }
+    ],
     blocks: [
       {
         type: 'cmds',
@@ -36,6 +47,13 @@ export const DOCS = [
     id: 'git',
     title: 'Git 面板',
     lede: '打开就是总览:改了什么 → 要提交什么 → 已经提交了什么,同一屏,不切 tab。',
+    shots: [
+      {
+        src: asset('shots/git-commit-view.png'),
+        alt: 'Git 面板:左侧文件改动列表,右侧 diff 与提交区',
+        caption: 'Git 总览页:改动、diff、提交区在同一屏'
+      }
+    ],
     blocks: [
       {
         type: 'list',
@@ -93,6 +111,20 @@ export const DOCS = [
     id: 'console',
     title: '控制台',
     lede: '保存的命令 + 实时终端,左侧点一条命令就在右侧新会话里跑起来。',
+    shots: [
+      {
+        src: asset('shots/console.png'),
+        alt: '控制台:左侧自定义命令与定时提交,右侧终端会话',
+        caption: '控制台:自定义命令、定时提交与终端会话',
+        paper: true
+      },
+      {
+        src: asset('shots/flow.png'),
+        alt: '可视化编排工作台:画布与节点工具箱',
+        caption: '可视化流程编排:拖拽画布,节点工具箱随手可取',
+        paper: true
+      }
+    ],
     blocks: [
       {
         type: 'list',
@@ -101,6 +133,7 @@ export const DOCS = [
           { term: '定时提交', desc: '按间隔自动 git add -A + git commit:间隔可选分钟 / 小时 / 天,可启动即提交一次;提交信息支持默认 / 自定义 / AI 生成;每次提交后可自动推送' },
           { term: '等效命令行', desc: '定时提交面板同步显示等效的 g 命令(如 g -y --interval=1800 --path="<目录>"),一键复制,终端里可复现同一套任务' },
           { term: '终端会话', desc: 'SSE 实时流式输出,多会话并行,运行中进程可逐个停止;Windows 用 cmd.exe,Unix 用 sh' },
+          { term: '可视化流程编排', desc: '拖拽画布编排自动化流水线:命令 / 等待 / 版本管理 / 条件 / 用户确认 / 用户输入 / 代码节点,拓扑序执行,节点可逐个启停,流程可保存复用' },
           { term: '项目启动', desc: '配置打开项目时自动运行的命令或可视化流程,可拖拽排序、混合编排' }
         ]
       }
@@ -110,6 +143,13 @@ export const DOCS = [
     id: 'editor',
     title: '编辑器(文件空间)',
     lede: 'Monaco 编辑器 + 文件树,不离开 GUI 就能浏览、编辑、预览项目文件。',
+    shots: [
+      {
+        src: asset('shots/file-space.png'),
+        alt: '文件空间:左侧文件树,右侧 Markdown 预览',
+        caption: '文件空间:Markdown 预览与复制富文本'
+      }
+    ],
     blocks: [
       {
         type: 'list',
@@ -130,6 +170,13 @@ export const DOCS = [
     id: 'workbench',
     title: '工作台',
     lede: '多项目编排台:一块看板三栏——项目列表(含执行监控)、看板、主 Agent 控制台。每个任务独立进程、独立上下文。',
+    shots: [
+      {
+        src: asset('shots/workbench-board.png'),
+        alt: '工作台看板:项目列表、看板三列与主 Agent 控制台',
+        caption: '工作台:项目列表、看板与主 Agent 控制台同屏'
+      }
+    ],
     blocks: [
       {
         type: 'list',
@@ -156,6 +203,13 @@ export const DOCS = [
     id: 'agent',
     title: '智能体 g ai',
     lede: 'Web 端与 CLI 端同一份会话目录。流式输出、思考过程、工具调用全部内联渲染。',
+    shots: [
+      {
+        src: asset('shots/agent-gui.png'),
+        alt: 'Web 端智能体对话:流式回答、思考与工具调用卡片',
+        caption: 'Web 端 g ai:流式回答与工具调用内联渲染'
+      }
+    ],
     blocks: [
       {
         type: 'list',
@@ -199,6 +253,13 @@ export const DOCS = [
     id: 'sourcemap',
     title: '源码地图',
     lede: '用 AI 画当前项目的架构图:入口文件、模块依赖、技术栈,Vue Flow + dagre 自动布局。',
+    shots: [
+      {
+        src: asset('shots/sourcemap-view-dark.png'),
+        alt: '源码地图视图:输入项目路径后开始分析',
+        caption: '源码地图:输入项目路径,分析结果画成依赖图'
+      }
+    ],
     blocks: [
       {
         type: 'list',
@@ -216,6 +277,14 @@ export const DOCS = [
     id: 'monitor',
     title: '系统监控与思维导图',
     lede: '同一根导航栏上的两个辅助视图。',
+    shots: [
+      {
+        src: asset('shots/monitor.png'),
+        alt: '系统监控:CPU、内存、磁盘占用与监听端口列表',
+        caption: '系统监控:资源占用一眼扫,端口列表可搜索可排序',
+        paper: true
+      }
+    ],
     blocks: [
       {
         type: 'list',
@@ -230,6 +299,13 @@ export const DOCS = [
     id: 'settings',
     title: '设置与自升级',
     lede: '右上角齿轮进设置;底栏版本号每个会话查一次 npm。',
+    shots: [
+      {
+        src: asset('shots/settings-dialog-dark.png'),
+        alt: '设置弹窗:六个设置 tab',
+        caption: '设置弹窗:六个 tab,大部分开关即时生效'
+      }
+    ],
     blocks: [
       {
         type: 'list',

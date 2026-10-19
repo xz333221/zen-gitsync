@@ -85,7 +85,8 @@ node scripts/sync-shots.mjs      # 或 npm run sync:assets
 ```
 
 它会把 `docs/screenshots/手写版介绍文章图片/` 下的 7 张图改名同步到 `public/shots/`,
-并同步字体与品牌图形。换图后重新构建即可。
+并同步文档页用到的 5 张图(源码地图 / 设置弹窗 / 控制台 / 监控 / 流程,来源含
+`docs/screenshots/` 与 `docs/screenshots/article/`),以及字体与品牌图形。换图后重新构建即可。
 
 ### 视觉自检
 

@@ -2,6 +2,7 @@
 import SiteHeader from '../components/SiteHeader.vue'
 import SiteFooter from '../components/SiteFooter.vue'
 import CopyChip from '../components/CopyChip.vue'
+import ShotFrame from '../components/ShotFrame.vue'
 import InlineCode from './InlineCode.vue'
 import { DOCS } from '../data/docs.js'
 import { useScrollSpy } from '../composables/useScrollSpy.js'
@@ -48,6 +49,17 @@ const activeId = useScrollSpy(DOCS.map((m) => m.id))
           <p v-if="m.lede" class="doc__lede">
             <InlineCode :text="m.lede" />
           </p>
+
+          <div v-if="m.shots && m.shots.length" class="doc__shots">
+            <ShotFrame
+              v-for="s in m.shots"
+              :key="s.src"
+              :src="s.src"
+              :alt="s.alt"
+              :caption="s.caption"
+              :paper="s.paper"
+            />
+          </div>
 
           <template v-for="(b, i) in m.blocks" :key="i">
             <p v-if="b.type === 'text'" class="doc__text">
@@ -211,6 +223,12 @@ const activeId = useScrollSpy(DOCS.map((m) => m.id))
   line-height: 1.75;
   max-width: var(--measure);
   margin-bottom: 22px;
+}
+
+.doc__shots {
+  display: grid;
+  gap: 18px;
+  margin-bottom: 24px;
 }
 
 .doc__text {
