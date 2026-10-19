@@ -5,16 +5,21 @@
  *   P1 面板出现在 NPM 脚本面板**上方**(DOM 顺序 + 几何都对)
  *   P2 默认**展开**:一进来就能看到内容;同一屏里 NPM 脚本面板仍是收起的
  *      —— 这条是"默认展开只改了新面板"的反证:两个面板都展开就没证明任何东西
- *   P3 列表按接口给的 order 渲染,每条带序号与「启动」按钮
- *   P4 npm 类建议点「启动」→ 打 /api/run-npm-script,body 里 packagePath/scriptName 精确对应
+ *   P3 列表按接口给的 order 渲染,每条带序号与「启动」按钮;npm 类不再挂「npm 脚本」pill
+ *      (命令自带 npm run,标签只是同义重复),shell 类仍标「命令行」
+ *   P4 npm 类建议点「启动」→ 打 /api/run-npm-script,body 里 packagePath/scriptName 精确对应;
+ *      启动后序号变 ✓、头部进度 +1
  *   P5 shell 类建议点「启动」→ **先弹确认框**(框里必须出现完整命令),取消则一个请求都不发;
  *      确认后才打 /api/exec-in-terminal(command + workingDirectory)
  *   P6 反向护栏:两个接口都给得出内容时,两个面板**都在**(E1/E2 的阳性对照)
  *   P7 左栏拖到最窄(212px)时**标题仍看得全、没被横向裁掉** —— 「启动」按钮上移到标题
  *      行(为的是省掉一条底栏),这条量的是"扣掉按钮之后标题还剩多少宽度"
- *   P8 布局口径:卡片只有**两块** —— ①「标题 + 启动按钮」②「命令 + 类型 pill + 目录 + 说明」。
+ *   P8 布局口径:每行只有**两块** —— ①「标题 + 启动按钮」②「命令 + 类型 pill + 目录 + 说明」。
  *      按钮与标题同一行、pill 与命令同一行、说明也长在命令行行尾(放不下按行尾宽度截断),
  *      且不存在任何独立底栏 —— 这些都曾经各占一行,用户先后圈着说"空太多"「2 行就够了」
+ *   P9 主次/步骤态:六条并排六个实心蓝按钮没有主次,现在只有「下一步」是实心 primary;
+ *      序号兼作步骤状态(未开始灰描边 / 下一步实心 / 已启动绿 ✓),头部显示已启动进度 0/3;
+ *      行式列表的行高收到 ≤60px(旧卡片 64px,300px 高会截掉第 5 条)
  *
  * 空态(--empty):NO_FACTS 时 AI 面板**仍在**,显示的是一句明确的空态提示;
  *   NPM 脚本面板维持"没内容就不渲染"的老口径。
@@ -335,9 +340,38 @@ async function main() {
     check('P3 每条都有命令行与「启动」按钮',
       rendered.every((r) => r.cmd && r.hasButton),
       JSON.stringify(rendered.map((r) => r.cmd)))
-    check('P3 npm 与 shell 两类标签都在',
-      rendered[0].tag === 'npm 脚本' && rendered[2].tag === '命令行',
-      rendered.map((r) => r.tag).join(' | '))
+    check('P3 npm 与 shell 两类标签都在(npm 类不再重复挂 pill)',
+      !rendered[0].tag && !rendered[1].tag && rendered[2].tag === '命令行',
+      rendered.map((r) => r.tag || '(无)').join(' | '))
+
+    // ── P9 主次与步骤态:只有"下一步"是实心按钮,序号 = 步骤状态 ──────────
+    //   旧版六条并排六个实心蓝按钮,主次被抹平;序号也只是静态编号。
+    const primaryCount = await page.locator('.startup-ai-panel .suggestion-actions .el-button--primary').count()
+    check('P9 只有「下一步」是实心 primary 按钮', primaryCount === 1, `count=${primaryCount}`)
+
+    const stepState = await page.locator('.startup-ai-panel .suggestion-item').evaluateAll((els) => els.map((el) => {
+      const order = el.querySelector('.suggestion-order')
+      return {
+        next: el.classList.contains('is-next'),
+        orderText: order?.textContent?.trim() || '',
+        orderBg: order ? getComputedStyle(order).backgroundColor : '',
+      }
+    }))
+    check('P9 第一步被标成 is-next,其余不标',
+      stepState.map((s) => s.next).join(',') === 'true,false,false',
+      JSON.stringify(stepState.map((s) => s.next)))
+    const nextBg = stepState[0]?.orderBg || ''
+    const futureBg = stepState[1]?.orderBg || ''
+    check('P9 "下一步"的序号是实心底,其余不是',
+      !!nextBg && nextBg !== 'rgba(0, 0, 0, 0)' && nextBg !== futureBg,
+      JSON.stringify(stepState.map((s) => s.orderBg)))
+    const progressBefore = (await page.locator('.startup-ai-panel .panel-count').innerText()).trim()
+    check('P9 头部显示 0/3 进度', progressBefore === '0/3', progressBefore)
+
+    // 行高棘轮:卡片改成行式列表后单条约 53px;回到 64px 说明卡片外壳/间距又长回去了
+    const rowHeights = await page.locator('.startup-ai-panel .suggestion-item').evaluateAll((els) =>
+      els.map((el) => Math.round(el.getBoundingClientRect().height)))
+    check('P9 行高收到 ≤60px(旧卡片是 64px)', rowHeights.every((h) => h <= 60), JSON.stringify(rowHeights))
 
     // ── P8 紧凑布局:整张卡片只有两块(标题+按钮 / 命令+类型+目录+说明) ────────
     //    第三块曾经是"说明"自己一行,而命令行行尾通常空着一半 —— 并进去之后按剩余宽度截断。
@@ -356,7 +390,8 @@ async function main() {
       const reason = box('.suggestion-reason')
       return {
         btnWithTitle: !!(name && btn && Math.abs(name.top - btn.top) <= btn.height + 1),
-        tagWithCmd: !!(cmd && tag && Math.abs(cmd.top - tag.top) <= Math.max(cmd.height, tag.height) + 1),
+        // npm 类现在不挂 pill（命令自带 npm run），有 pill 的条目才量这一条
+        tagWithCmd: !tag || !!(cmd && Math.abs(cmd.top - tag.top) <= Math.max(cmd.height, tag.height) + 1),
         hasFoot: !!el.querySelector('.suggestion-foot'),
         // 卡片堆了几块:直接子块各占一行,块数 = 行数
         blocks: main ? main.children.length : 0,
@@ -370,7 +405,7 @@ async function main() {
     }))
     check('P8「启动」按钮与标题同一行',
       layout.every((r) => r.btnWithTitle), JSON.stringify(layout))
-    check('P8 类型 pill 与命令行同一行',
+    check('P8 有类型 pill 的条目里,pill 与命令行同一行',
       layout.every((r) => r.tagWithCmd), JSON.stringify(layout))
     check('P8 每张卡片只剩两块(标题+按钮 / 命令+类型+说明),没有独立底栏',
       layout.every((r) => r.blocks === 2 && new Set(r.blockTops).size === 2 && !r.hasFoot),
@@ -392,6 +427,16 @@ async function main() {
       JSON.stringify(runCalls))
     const launched = await page.locator('.startup-ai-panel .suggestion-item').nth(1).getAttribute('class')
     check('P4 启动过的条目有已启动标记', String(launched).includes('is-launched'))
+
+    const launchedOrder = await page.locator('.startup-ai-panel .suggestion-item').nth(1)
+      .locator('.suggestion-order').evaluate((el) => ({
+        hasCheck: !!el.querySelector('.suggestion-check'),
+        text: el.textContent.trim(),
+      }))
+    check('P4 启动过的条目序号变成 ✓(不再显示数字)',
+      launchedOrder.hasCheck && launchedOrder.text === '', JSON.stringify(launchedOrder))
+    const progressAfter = (await page.locator('.startup-ai-panel .panel-count').innerText()).trim()
+    check('P4 启动后头部进度 1/3', progressAfter === '1/3', progressAfter)
 
     // ── P5 shell 建议:先确认,取消不发请求 ────────────────────────────
     const shellBtn = page.locator('.startup-ai-panel .suggestion-item').nth(2).locator('button', { hasText: '启动' })

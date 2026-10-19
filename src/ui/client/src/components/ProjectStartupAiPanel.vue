@@ -33,13 +33,14 @@
   · 真报错(网关挂了之类)照旧显示错误态,不藏。
 -->
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import IconButton from '@components/IconButton.vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
 import { $t } from '@/lang/static'
 import { useConfigStore } from '@stores/configStore'
 import { useProjectStartupSuggestions } from '@/composables/useProjectStartupSuggestions'
+import type { StartupSuggestion } from '@/utils/projectStartupCache'
 
 const configStore = useConfigStore()
 
@@ -63,6 +64,22 @@ const { status, suggestions, errorText, runningId, launchedIds, hasModel, sync, 
 
 // 手风琴折叠状态 —— 与 NPM 脚本面板相反:**默认展开**(这个面板空着就没有存在意义)
 const collapsed = ref(false)
+
+/**
+ * 「下一步」= 第一条还没启动的建议。只有它用实心 primary 按钮:
+ * 六条建议并排六个实心蓝按钮,等于没有主次,也压过了左栏别的动作;
+ * 把"下一步"挑出来,面板"按顺序启动"的语义才落到视觉上。
+ */
+const nextId = computed(() => suggestions.value.find((item) => !launchedIds.value.has(item.id))?.id || '')
+
+/**
+ * 「在哪个目录/子包」的标签。根目录的 label 就是一个 "." —— 跟在命令后面像标点,
+ * 又不提供任何"在哪个子包"的信息(根目录本来就是默认值),直接不显示。
+ */
+function whereLabel(item: StartupSuggestion): string {
+  const label = item.packageLabel || item.cwdLabel || ''
+  return label === '.' || label === './' ? '' : label
+}
 
 function toggleCollapsed() {
   collapsed.value = !collapsed.value
@@ -98,7 +115,7 @@ onMounted(() => {
         </el-icon>
         <svg-icon icon-class="g-ai" class-name="ai-icon" />
         <span class="panel-title">{{ $t('@NPM02:AI 启动建议') }}</span>
-        <span v-if="status === 'done'" class="panel-count">{{ suggestions.length }}</span>
+        <span v-if="status === 'done'" class="panel-count">{{ launchedIds.size }}/{{ suggestions.length }}</span>
       </div>
       <div class="header-right" @click.stop>
         <IconButton
@@ -146,21 +163,44 @@ onMounted(() => {
           v-for="item in suggestions"
           :key="item.id"
           class="suggestion-item"
-          :class="{ 'is-launched': launchedIds.has(item.id) }"
+          :class="{
+            'is-launched': launchedIds.has(item.id),
+            'is-next': item.id === nextId,
+          }"
+          :aria-current="item.id === nextId ? 'step' : undefined"
         >
-          <div class="suggestion-order">{{ item.order }}</div>
+          <!-- 序号即步骤状态:未开始=灰描边数字,下一步=实心蓝,已启动=绿色 ✓。
+               三步状态共用同一个 18px 圆,纵向连成一条时间线(见 .suggestion-item::before),
+               一眼能看出"走到第几步、还剩几步" -->
+          <div class="suggestion-order">
+            <svg
+              v-if="launchedIds.has(item.id)"
+              class="suggestion-check"
+              viewBox="0 0 16 16"
+              aria-hidden="true"
+            >
+              <path
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M3.2 8.4 6.4 11.6 12.8 4.6"
+              />
+            </svg>
+            <template v-else>{{ item.order }}</template>
+          </div>
 
           <div class="suggestion-main">
-            <!-- 标题独占剩下的宽度(窄栏时最多折成两行),「启动」按钮贴着右上角。
-                 按钮能上移是因为它只占 ~52px,不像「类型 pill + 目录」会把标题挤成两三个字
-                 (见 lessons/left-column-card-footer.md) —— 那两个元素仍旧待在命令行那一行。
-                 "已启动"直接长在按钮上,不再另起一个文字标签:标签会把窄栏标题再砍掉 33px,
-                 而卡片绿边框 + 禁用按钮本来就在说同一件事。 -->
+            <!-- 标题独占剩下的宽度(窄栏时最多折成两行),「启动」按钮贴右。
+                 按钮之间只有"下一步"是实心 --primary,其余是白底描边:
+                 六条并排六个实心蓝按钮会抹平主次,也压过左栏别的动作。
+                 "已启动"直接长在按钮上,不再另起文字标签。 -->
             <div class="suggestion-head">
               <span class="suggestion-name" :title="item.title">{{ item.title }}</span>
               <div class="suggestion-actions">
                 <el-button
-                  :type="launchedIds.has(item.id) ? 'default' : 'primary'"
+                  :type="item.id === nextId && !launchedIds.has(item.id) ? 'primary' : 'default'"
                   size="small"
                   :disabled="launchedIds.has(item.id)"
                   :loading="runningId === item.id"
@@ -171,23 +211,20 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- 命令行右侧放类型/目录/说明:命令普遍很短(``npm run dev``),右侧本来就有空;
-                 单独占一行的底栏只为了摆这几个元素,现在这一行省掉了。
-                 说明(模型给的理由)也并进这一行 —— 它原本自己占第三行,而这条行尾通常还空着
-                 一半宽度;放不下就省略号截断(全文在 title 里),不留换行把卡片撑回三行 -->
+            <!-- 命令行右侧放类型/目录/说明:命令普遍很短(``npm run dev``),右侧本来就有空。
+                 npm 类的命令已经自报家门(npm run ...),不再挂「npm 脚本」pill ——
+                 同义重复,还占掉窄栏里很贵的行宽;只有 shell 类需要额外标出来(它点之前要二次确认) -->
             <div class="suggestion-cmdline">
               <span class="suggestion-cmd" :title="item.command">{{ item.command }}</span>
-              <span class="suggestion-meta">
-                <span class="suggestion-tag" :class="item.kind === 'npm' ? 'is-npm' : 'is-shell'">
-                  {{ item.kind === 'npm' ? $t('@NPM02:npm 脚本') : $t('@NPM02:命令行') }}
-                </span>
-                <span
-                  v-if="item.packageLabel || item.cwdLabel"
-                  class="suggestion-where"
-                  :title="item.packagePath || item.cwd"
-                >
-                  {{ item.packageLabel || item.cwdLabel }}
-                </span>
+              <span v-if="item.kind !== 'npm'" class="suggestion-tag is-shell">
+                {{ $t('@NPM02:命令行') }}
+              </span>
+              <span
+                v-if="whereLabel(item)"
+                class="suggestion-where"
+                :title="item.packagePath || item.cwd"
+              >
+                {{ whereLabel(item) }}
               </span>
               <span v-if="item.reason" class="suggestion-reason" :title="item.reason">{{ item.reason }}</span>
             </div>
@@ -256,13 +293,15 @@ onMounted(() => {
   color: var(--color-text);
 }
 
+/* 进度:0/6 → 6/6。不再用描边徽标(那看起来像个小按钮),只留一枚淡底数字 */
 .panel-count {
   font-size: var(--font-size-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
-  padding: var(--spacing-xs) 6px;
-  background: var(--bg-container);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-card);
+  padding: 1px 6px;
+  background: var(--bg-input-hover);
+  border-radius: 999px;
 }
 
 .header-right {
@@ -280,8 +319,10 @@ onMounted(() => {
   to { transform: rotate(360deg); }
 }
 
+/* 列表是"行"不是"卡片":行要通到面板两边,悬停底色才像一条列表项,
+   所以 body 左右不留白,状态盒自己补回 6px */
 .panel-body {
-  padding: 6px;
+  padding: 6px 0;
 }
 
 .state-box {
@@ -290,6 +331,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  margin: 0 6px;
   padding: 18px 12px;
   border: 1px dashed var(--border-card);
   border-radius: var(--radius-md);
@@ -322,32 +364,67 @@ onMounted(() => {
 .suggestion-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  /* 面板在左栏底部,不给自己加拖拽调高 —— 列表内部滚动,免得把文件列表挤没 */
-  max-height: 300px;
+  /* 面板在左栏底部,不给自己加拖拽调高 —— 列表内部滚动,免得把文件列表挤没。
+     330px 按"六条两行行高"实测调:旧的 300px 会把第 5 条拦腰截断 */
+  max-height: 330px;
   overflow-y: auto;
+  padding-bottom: 2px;
+  /* 左栏可拖拽,窄到 212px 时说明只剩个位数宽度(半截省略号);按"列表自身的宽度"
+     而不是视口宽度做判断 —— 容器查询正好是这个语义 */
+  container-type: inline-size;
 }
 
+@container (max-width: 260px) {
+  /* 窄栏里说明只剩个位数宽度,留着就是半截省略号;类型 pill 会被挤到下一行单独站着 */
+  .suggestion-reason,
+  .suggestion-tag {
+    display: none;
+  }
+}
+
+/* 行式列表:分隔线代替卡片四边框,悬停整行 --bg-input-hover。
+   与下方 NpmScriptsPanel 的 .script-item 同一族语法,两块相邻面板不再各说各话 */
 .suggestion-item {
+  position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 8px;
-  border: 1px solid var(--border-card);
-  border-radius: var(--radius-md);
-  background: var(--bg-input);
-  transition: var(--transition-ui-base);
+  gap: 10px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border-card);
+  transition: background var(--transition-base) ease;
+}
+
+.suggestion-item:last-child {
+  border-bottom: 0;
 }
 
 .suggestion-item:hover {
-  border-color: var(--tint-primary-30);
+  background: var(--bg-input-hover);
 }
 
-.suggestion-item.is-launched {
-  border-color: var(--color-success);
+/* 步骤之间的连接线:贯穿整行、从序号圆底下穿过(圆有不透明底,线自然断开) */
+.suggestion-item::before {
+  content: '';
+  position: absolute;
+  left: 18.5px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border-card);
 }
 
+.suggestion-item:first-child::before {
+  top: 15px;
+}
+
+.suggestion-item:last-child::before {
+  bottom: calc(100% - 15px);
+}
+
+/* 序号 = 步骤状态:未开始灰描边 / 下一步实心蓝 / 已启动绿底 ✓ */
 .suggestion-order {
+  position: relative;
+  z-index: 1;
   flex-shrink: 0;
   width: 18px;
   height: 18px;
@@ -356,11 +433,30 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  font-size: var(--font-size-xs);
+  font-size: 11px;
   font-weight: 700;
-  color: var(--color-primary);
-  background: var(--tint-primary-12);
-  border: 1px solid var(--tint-primary-22);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-meta);
+  background: var(--bg-container);
+  border: 1px solid var(--border-card);
+}
+
+.suggestion-item.is-next .suggestion-order {
+  color: #fff;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.suggestion-item.is-launched .suggestion-order {
+  color: #fff;
+  background: var(--color-success);
+  border-color: var(--color-success);
+}
+
+.suggestion-check {
+  display: block;
+  width: 10px;
+  height: 10px;
 }
 
 .suggestion-main {
@@ -378,7 +474,7 @@ onMounted(() => {
   font-weight: 600;
   line-height: 1.35;
   color: var(--color-text);
-  /* 最长两行后省略 —— 标题是这张卡片的主语,宁可换行也不缩成一个词 */
+  /* 最长两行后省略 —— 标题是这一行的主语,宁可换行也不缩成一个词 */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -390,7 +486,7 @@ onMounted(() => {
    (窄栏时折两行,见 .suggestion-name 的 line-clamp) */
 .suggestion-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   min-width: 0;
 }
@@ -402,19 +498,18 @@ onMounted(() => {
   gap: 6px;
 }
 
+/* 紧凑一档:22px 高让整行从 64px 收到 ~53px,六条才可能一个屏幕放完 */
+.suggestion-actions :deep(.el-button) {
+  height: 22px;
+  padding: 0 10px;
+}
+
 /* 命令 + 类型 pill + 目录:同一行。命令换行时整块自然下移,不会把 pill 挤没 */
 .suggestion-cmdline {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 4px 6px;
-  min-width: 0;
-}
-
-.suggestion-meta {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  gap: 3px 6px;
   min-width: 0;
 }
 
@@ -425,12 +520,6 @@ onMounted(() => {
   font-size: var(--font-size-xs);
   font-weight: 600;
   border: 1px solid transparent;
-
-  &.is-npm {
-    color: var(--color-primary);
-    background: var(--tint-primary-12);
-    border-color: var(--tint-primary-22);
-  }
 
   &.is-shell {
     color: #9c27b0;
@@ -459,15 +548,23 @@ onMounted(() => {
   padding: 1px 5px;
   border-radius: var(--radius-xs);
   font-size: var(--font-size-xs);
+  line-height: 1.4;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   color: var(--color-text);
-  background: var(--bg-container);
+  /* 卡片底也是白的，命令再用 --bg-container 等于没有底色；--bg-subtle 才看得出是"代码块" */
+  background: var(--bg-subtle);
   /* 命令是要照着看的那一行,长命令换行显示,不截断 */
   white-space: normal;
   overflow-wrap: anywhere;
 }
 
-/* 说明跟在「类型 pill + 目录」后面,吃掉行尾剩下的宽度 —— 这就是卡片第三行消失的原因。
+/* 已启动：序号变绿 ✓ 之后，标题和命令一起降级，别再用绿边框另说一遍 */
+.suggestion-item.is-launched .suggestion-name,
+.suggestion-item.is-launched .suggestion-cmd {
+  color: var(--text-secondary);
+}
+
+/* 说明跟在「类型 pill + 目录」后面,吃掉行尾剩下的宽度 —— 这就是第三行消失的原因。
    flex-basis 必须是 0 而不是 auto:这一行是 flex-wrap 的(长命令要能换行),
    而换行判据看的是各个元素的**假定宽度**(basis),写 auto 的话说明一长(普遍都长)
    整块会被挤到第二行,卡片又变回三行。basis=0 让它永远留在本行、再按剩余宽度截断。
@@ -476,7 +573,7 @@ onMounted(() => {
   flex: 1 1 0;
   min-width: 0;
   font-size: var(--font-size-xs);
-  line-height: 1.5;
+  line-height: 1.4;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;

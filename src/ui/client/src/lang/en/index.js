@@ -813,7 +813,6 @@ export default {
   '@NPM02:正在分析这个项目的启动方式…': 'Analyzing how this project can be started…',
   '@NPM02:分析失败，请稍后重试': 'Analysis failed, please try again later',
   '@NPM02:未配置 AI 模型，请先在通用设置里添加模型': 'No AI model configured — add one in General Settings first',
-  '@NPM02:npm 脚本': 'npm script',
   '@NPM02:命令行': 'command',
   '@NPM02:已启动': 'Started',
   '@NPM02:启动': 'Start',
