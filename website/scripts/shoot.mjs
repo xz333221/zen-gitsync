@@ -58,38 +58,47 @@ const viewports = [
   { name: 'mobile', width: 390, height: 844 }
 ]
 
+// 落地页 + 文档页各跑一遍(产物名带 -docs 后缀)
+const pages = [
+  { url: '/', tag: '' },
+  { url: '/docs.html', tag: 'docs' }
+]
+
 for (const vp of viewports) {
-  const page = await browser.newPage({
-    viewport: { width: vp.width, height: vp.height },
-    deviceScaleFactor: 1
-  })
-  const problems = []
-  page.on('console', (m) => {
-    if (m.type() === 'error') problems.push(`console: ${m.text()}`)
-  })
-  page.on('pageerror', (e) => problems.push(`pageerror: ${String(e)}`))
-  page.on('requestfailed', (r) => problems.push(`requestfailed: ${r.url()}`))
+  for (const pg of pages) {
+    const page = await browser.newPage({
+      viewport: { width: vp.width, height: vp.height },
+      deviceScaleFactor: 1
+    })
+    const problems = []
+    page.on('console', (m) => {
+      if (m.type() === 'error') problems.push(`console: ${m.text()}`)
+    })
+    page.on('pageerror', (e) => problems.push(`pageerror: ${String(e)}`))
+    page.on('requestfailed', (r) => problems.push(`requestfailed: ${r.url()}`))
 
-  await page.goto(url, { waitUntil: 'load' })
-  // 先滚一遍整页触发 scroll-reveal,再回到顶部等动效收尾
-  await page.evaluate(async () => {
-    const step = Math.round(window.innerHeight * 0.8)
-    for (let y = 0; y < document.body.scrollHeight; y += step) {
-      window.scrollTo(0, y)
-      await new Promise((r) => setTimeout(r, 180))
-    }
-    window.scrollTo(0, document.body.scrollHeight)
-    await new Promise((r) => setTimeout(r, 400))
-    window.scrollTo(0, 0)
-  })
-  await page.waitForTimeout(1600)
-  await page.screenshot({ path: path.join(outDir, `${vp.name}-fold.png`) })
-  await page.screenshot({ path: path.join(outDir, `${vp.name}-full.png`), fullPage: true })
+    await page.goto(new URL(pg.url, url).href, { waitUntil: 'load' })
+    // 先滚一遍整页触发 scroll-reveal,再回到顶部等动效收尾
+    await page.evaluate(async () => {
+      const step = Math.round(window.innerHeight * 0.8)
+      for (let y = 0; y < document.body.scrollHeight; y += step) {
+        window.scrollTo(0, y)
+        await new Promise((r) => setTimeout(r, 180))
+      }
+      window.scrollTo(0, document.body.scrollHeight)
+      await new Promise((r) => setTimeout(r, 400))
+      window.scrollTo(0, 0)
+    })
+    await page.waitForTimeout(1600)
+    const suffix = pg.tag ? `-${pg.tag}` : ''
+    await page.screenshot({ path: path.join(outDir, `${vp.name}${suffix}-fold.png`) })
+    await page.screenshot({ path: path.join(outDir, `${vp.name}${suffix}-full.png`), fullPage: true })
 
-  const title = await page.title()
-  console.log(`[${vp.name}] ${vp.width}x${vp.height} title="${title}"`)
-  console.log(problems.length ? problems.map((p) => '  ! ' + p).join('\n') : '  ok,无控制台报错')
-  await page.close()
+    const title = await page.title()
+    console.log(`[${vp.name}${suffix}] ${vp.width}x${vp.height} title="${title}"`)
+    console.log(problems.length ? problems.map((p) => '  ! ' + p).join('\n') : '  ok,无控制台报错')
+    await page.close()
+  }
 }
 
 await browser.close()

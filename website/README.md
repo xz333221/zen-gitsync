@@ -30,20 +30,26 @@ zen-gitsync 的官方网站首页,单页,Vue 3 + Vite,纯手写 CSS(design token
 ```
 website/
   index.html                 入口(标题 / description / OG)
-  vite.config.js             注入版本号、base 用相对路径
+  docs.html                  文档页入口(与 index.html 同为多页输入,见 vite.config.js)
+  vite.config.js             注入版本号、base 用相对路径、双页面 input
   public/
     fonts/                   自托管字体(与产品同源)
     logo.svg favicon.svg     品牌图形(取自 src/ui/client/public)
     shots/                   产品截图(由 docs/ 同步,见下)
   scripts/
     sync-shots.mjs           从仓库 docs/ 同步截图与字体到 public/
-    shoot.mjs                构建产物起静态服务 + Playwright 三端截图自检
+    shoot.mjs                构建产物起静态服务 + Playwright 三端截图自检(落地页 + 文档页)
   src/
-    main.js App.vue
+    main.js App.vue          落地页
+    docs/
+      main.js                文档页入口
+      DocsApp.vue            文档页布局(侧栏目录 + 正文)
+      InlineCode.vue         文本里 `代码` 片段的渲染(反引号切分,不走 v-html)
     styles/tokens.css        设计令牌(色 / 形 / 字 / 动效节奏)
     styles/base.css          字体、重置、版式、按钮、进场动效
     data/site.js             链接、命令、截图路径(全站唯一事实来源)
-    composables/             v-reveal 指令、GitHub star 读取
+    data/docs.js             文档页内容(按板块分篇,文案与主 README 一致)
+    composables/             v-reveal 指令、GitHub star 读取、scrollspy(文档侧栏高亮)
     components/              各区块组件
 ```
 
@@ -58,6 +64,17 @@ npm run preview      # 本地预览构建产物
 ```
 
 `base` 是相对的,同一份 `dist/` 放域名根目录或 `/zen-gitsync/` 这类子路径都能跑。
+
+### 文档页
+
+`docs.html` 是第二个页面(与 `index.html` 一起作为多页输入构建),按界面板块逐篇介绍功能,
+内容全在 `src/data/docs.js`(改文案只动这一个文件)。两处入口:
+
+- 落地页顶栏「文档」→ `./docs.html`
+- 文档页顶栏「返回首页」→ `index.html`
+
+页面间用相对路径互链,子路径部署同样成立。文档页侧栏高亮走
+`src/composables/useScrollSpy.js`(IntersectionObserver),窄屏时侧栏收成横向 chips。
 
 ### 更新产品截图
 

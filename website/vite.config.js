@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import fs from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 // 站点页脚展示的版本号直接读主包 package.json,不手写、不会过期
 const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
@@ -14,6 +15,13 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
+    // 两个页面:落地页 index.html + 文档页 docs.html(多页应用,互相用相对路径链接)
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        docs: fileURLToPath(new URL('./docs.html', import.meta.url))
+      }
+    },
     // 截图是产品资产,原样拷贝,不做 base64 内联
     assetsInlineLimit: 0,
     chunkSizeWarningLimit: 900

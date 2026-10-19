@@ -23,6 +23,8 @@ A Git automation platform with interactive commits, scheduled sync, custom comma
   - [AI Startup Suggestions](#ai-startup-suggestions)
   - [Console Panel](#console-panel)
   - [Project Startup](#project-startup)
+  - [Project Manager](#project-manager)
+  - [Source Map (AI Architecture Graph)](#source-map-ai-architecture-graph)
   - [Views at a glance](#views-at-a-glance)
   - [Built-in Code Editor](#built-in-code-editor)
   - [Workbench](#workbench-task-driven-agent-execution)
@@ -73,6 +75,9 @@ npm install -g zen-gitsync
 - **Network error banner** — Global banner appears when the backend is unreachable, with one-click retry and relative-time status
 - **Accessibility (WCAG 2.1 AA)** — Dialog focus trap & restore, role-based separators, keyboard-only panel resize (`← →`), screen-reader friendly commit context menu, ARIA-pressed toggle buttons, commit button `aria-busy` during in-flight commits, Git SHA hashes meet ≥ 4.5:1 contrast in both light and dark themes
 - **Faster cold start** — `monaco-editor` / `@vue-flow` / `flow-mindmap` / `dagre` are split into independent chunks and lazy-loaded so the Git panel boots without waiting on the code editor or visual workflow designer
+- **Project manager view** — manage the project list as an asset: add / remove without switching the current project, see each project's open-with actions, with recommended additions
+- **Source map view** — an AI-drawn architecture graph of the current project: entry file, module dependencies and tech stack, laid out automatically and clickable down to the source
+- **Content-aware file search** — the editor's search box now also matches file contents: name hits filter the tree as before, content hits arrive as a flat list with line numbers and jump-to-line
 
 > Detailed per-release changes can be found via `git log` or the [GitHub Releases](https://github.com/xz333221/zen-gitsync/releases) page.
 
@@ -85,7 +90,7 @@ npm install -g zen-gitsync
 $ g ui
 ```
 
-The GUI runs as a local web server and opens in your default browser on the first free port it finds in `4000–6000` (set `PORT` to pin a fixed one). It attaches to the current Git repository automatically. The activity bar on the left switches between **Git**, **Console**, **Agent**, **Editor**, **Workbench**, **System Monitor** and **Mindmap**, top to bottom. See the [Core Git Panel](#core-git-panel) screenshot below for what the main view looks like.
+The GUI runs as a local web server and opens in your default browser on the first free port it finds in `4000–6000` (set `PORT` to pin a fixed one). It attaches to the current Git repository automatically. The activity bar on the left switches between **Git**, **Console**, **Agent**, **Editor**, **Source Map**, **Workbench**, **Projects**, **System Monitor** and **Mindmap**, top to bottom. See the [Core Git Panel](#core-git-panel) screenshot below for what the main view looks like.
 
 ### Architecture at a glance
 
@@ -107,7 +112,13 @@ The GUI runs as a local web server and opens in your default browser on the firs
                   │  │Edit  │─► Monaco editor + file tree       │
                   │  └──────┘                                   │
                   │  ┌──────┐                                   │
+                  │  │Source│─► AI architecture graph           │
+                  │  └──────┘                                   │
+                  │  ┌──────┐                                   │
                   │  │Bench │─► Board: projects·kanban·agent│
+                  │  └──────┘                                   │
+                  │  ┌──────┐                                   │
+                  │  │Proj  │─► Project list management         │
                   │  └──────┘                                   │
                   │  ┌──────┐                                   │
                   │  │Monit │─► System monitor                  │
@@ -348,13 +359,39 @@ Configure commands or workflows to run automatically when a project is opened:
 
 ---
 
+### Project Manager
+
+> A dedicated view (folders icon in the activity bar) that manages the project list as an asset. It reads the same list the Workbench does (`GET /api/workbench/projects`), so anything you add or remove here shows up there too — the list is the union of recent directories and the paths your tasks remember.
+
+- **Add without switching** — add any directory to the list; adding never changes the current project (switching directories is a global state change that reaches every `g ui` instance)
+- **Remove a dead project** — a row whose folder no longer exists gets a single red **Remove from list** action; the confirm dialog spells out that no tasks are deleted, and the entry comes back on its own if you ever clone the folder again
+- **Startup & open-with at a glance** — each row leads with the project's own favicon (32 px tile, the same lookup the Workbench and the directory switcher use) beside its name and branch, with open-with actions for the file manager, a terminal, a new `g ui` tab, and every detected editor / AI tool
+- **Recommended additions** — directories that look like projects but are not on the list yet are suggested for one-click adding
+- **Quiet refresh** — the list reloads on mount, then silently polls every 10 s, so projects added or removed in another `g ui` instance show up here too
+
+---
+
+### Source Map (AI Architecture Graph)
+
+> A dedicated view (graph icon in the activity bar) that draws the current project's architecture with AI. Enter a project path, hit **Start analysis**, and the server reads the codebase and asks your configured model for the entry file, the module dependencies and the tech stack — rendered as a graph on Vue Flow with an automatic dagre layout.
+
+- **Entry point first** — the graph is rooted at the detected entry file / function, with modules hanging off it as nodes and their imports as edges
+- **Subsystem coloring** — nodes are grouped by subsystem and color-coded, so a monorepo's boundaries read at a glance
+- **Click a node, read the code** — clicking a node loads that file's source beside the graph (file + line included on the node itself)
+- **Re-analyzable** — **Re-analyze** runs the whole pass again after the code has moved; the analysis streams progress over SSE and the result stays while you switch views (KeepAlive), only a page reload starts over
+- **No model configured** — the view says so instead of failing; configure one in Settings → AI models first
+
+---
+
 ### Views at a glance
 
 | View | Purpose | Persistent state | Highlights |
 |---|---|---|---|
 | **Git** | Day-to-day staging, committing, pushing, history review | Per-project UI prefs (view mode, layout ratios) | Structured commit form, AI commit message, selection-scoped quick push |
-| **Editor** | Browse & edit project files without leaving the GUI | Open tabs, unsaved markers, recent files | Monaco editor with syntax highlighting, Markdown preview, file search |
+| **Editor** | Browse & edit project files without leaving the GUI | Open tabs, unsaved markers, recent files | Monaco editor with syntax highlighting, Markdown preview, file search (file names and contents) |
+| **Source Map** | Draw the project's architecture with AI | Analysis result for the session | Entry file, module dependencies, tech stack, subsystem coloring, click-to-read source |
 | **Workbench** | Multi-project board for dispatching and running agent tasks | Tasks, prompts, board layout, log retention | Kanban board, master-agent console, executor choice, live chat-style logs |
+| **Projects** | Manage the project list as an asset | The same list the Workbench reads | Add / remove without touching the current project, recommended additions, 10 s silent refresh |
 | **Agent** | Chat with the built-in AI agent (web + CLI sessions) | Sessions, pending questions | Streaming answers, tool-call cards, Skill / MCP plaza, rail badge counting the conversations still generating |
 
 **Console**, **System Monitor** and **Mindmap** are utility views on the same rail.
@@ -368,7 +405,7 @@ A full IDE-like editor (fourth icon in the activity bar) for browsing and editin
 | Feature | Description |
 |---|---|
 | File tree | Collapsible directory tree with file-type icons; **auto-refreshes every 60s** to pick up changes made outside the GUI (skipped when the tab is hidden or the search box is non-empty) |
-| File search | Type in the sidebar search box to filter the tree (180 ms debounce); matched substrings are highlighted in node names; `Ctrl+F` / `Cmd+F` focuses the box; `Esc` clears the query or blurs the input |
+| File search | Type in the sidebar search box to filter the tree (180 ms debounce); matched substrings are highlighted in node names; `Ctrl+F` / `Cmd+F` focuses the box; `Esc` clears the query or blurs the input. When the name filter has no hit, the query also goes to the server (`POST /api/search_content`) for a **file-content** scan: hits arrive as a flat list with line numbers, highlighted snippets and per-file match counts, and clicking one jumps straight to that line. The scan is a plain filesystem walk (no `rg` / `git grep` dependency) that skips `node_modules` / `dist` / `.git` plus files over 2 MB or binary, capped at 20 000 files / 100 hit files / 10 s, and aborted as soon as you keep typing; single-character queries skip the content pass |
 | Multi-tab editing | Open multiple files simultaneously; tabs show unsaved (●) indicator |
 | Sync with disk | The current tab re-checks the file on disk when the window regains focus, when you switch to that tab, or when you come back to the Editor view; a 30s fallback poll covers the case where something in the same window (the `g ai` panel) rewrote the file with no focus change. If it changed and you have no unsaved edits, it reloads silently (cursor position and undo history preserved); if you do have unsaved edits it asks first and never overwrites on its own |
 | Workspace restore | The tree's expanded folders and the open tabs (their order plus which one is active) are remembered **per project** and put back on reload, and when you switch back to that project. The snapshot lives in `~/.zen-gitsync/config.json` under `ui.editorWorkspaceByProject`; only paths are stored — files are re-read from disk, so unsaved edits do not survive a reload, and files that no longer exist are skipped silently |
@@ -729,6 +766,8 @@ $ g --check-lock=config.json
   - [AI 启动建议](#ai-启动建议)
   - [控制台面板](#控制台面板)
   - [项目启动](#项目启动)
+  - [项目管理](#项目管理)
+  - [源码地图（AI 架构图）](#源码地图ai-架构图)
   - [视图一览](#视图一览)
   - [内置代码编辑器](#内置代码编辑器)
   - [工作台](#工作台任务驱动的智能体执行)
@@ -779,6 +818,9 @@ npm install -g zen-gitsync
 - **网络错误横幅** — 后端不可达时全局弹出横幅,支持一键重试与相对时间状态
 - **可访问性(WCAG 2.1 AA)** — 弹窗焦点陷阱与归还、`role="separator"` 键盘可达的分隔条、纯键盘(`← →`)调整面板宽度、屏幕阅读器友好的提交右键菜单、ARIA-pressed 切换按钮、提交按钮在提交过程中挂 `aria-busy`、Git 提交哈希在明/暗主题下对比度均 ≥ 4.5:1
 - **更快的冷启动** — `monaco-editor` / `@vue-flow` / `flow-mindmap` / `dagre` 拆分为独立 chunk 并按需懒加载,Git 面板首屏不再等待代码编辑器或可视化流程编排模块
+- **项目管理视图** — 把项目清单当资产来管：添加 / 删除不切换当前项目，逐行看打开方式，带推荐添加
+- **源码地图视图** — 用 AI 画当前项目的架构图：入口文件、模块依赖与技术栈，自动布局，点节点读源码
+- **文件内容搜索** — 编辑器搜索框现在也匹配文件内容：名称命中仍走本地树过滤，内容命中按文件平铺、带行号，点击跳转对应行
 
 > 每个版本的详细变更可通过 `git log` 或 [GitHub Releases](https://github.com/xz333221/zen-gitsync/releases) 页面查看。
 
@@ -791,7 +833,7 @@ npm install -g zen-gitsync
 $ g ui
 ```
 
-GUI 以本地 Web 服务器形式运行，自动在浏览器中打开，并附加到当前 Git 仓库。端口默认在 `4000–6000` 里挑第一个可用的（可用 `PORT` 固定）。左侧 Activity Bar 自上而下为 **Git** / **控制台** / **智能体** / **编辑器** / **工作台** / **系统监控** / **思维导图**。主界面长什么样可参考下方[核心 Git 面板](#核心-git-面板)的截图。
+GUI 以本地 Web 服务器形式运行，自动在浏览器中打开，并附加到当前 Git 仓库。端口默认在 `4000–6000` 里挑第一个可用的（可用 `PORT` 固定）。左侧 Activity Bar 自上而下为 **Git** / **控制台** / **智能体** / **编辑器** / **源码地图** / **工作台** / **项目管理** / **系统监控** / **思维导图**。主界面长什么样可参考下方[核心 Git 面板](#核心-git-面板)的截图。
 
 ### 监听地址
 
@@ -844,7 +886,13 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
                   │  │编辑 │──► Monaco 编辑器 + 文件树           │
                   │  └──────┘                                   │
                   │  ┌──────┐                                   │
+                  │  │源码 │──► AI 架构图                       │
+                  │  └──────┘                                   │
+                  │  ┌──────┐                                   │
                   │  │工作 │──► 看板: 项目 · 看板 · 主 Agent     │
+                  │  └──────┘                                   │
+                  │  ┌──────┐                                   │
+                  │  │项管 │──► 项目管理清单                     │
                   │  └──────┘                                   │
                   │  ┌──────┐                                   │
                   │  │监控 │──► 系统监控                         │
@@ -1085,13 +1133,39 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 
 ---
 
+### 项目管理
+
+> Activity Bar 里的文件夹图标视图，把项目清单当资产来管。它读的是工作台那份同一接口的清单（`GET /api/workbench/projects`）—— 清单本身是常用目录与任务记得的目录两份来源的并集，在这里增删，工作台左栏同步可见。
+
+- **添加不切换** — 把任意目录加进清单即可；添加≠切过去看（切目录是全局状态，会波及每个 `g ui` 实例）
+- **移除死项目** — 目录已经不存在的行只留一颗红色「从清单移除」；确认框写明任务不会被删除，目录哪天被克隆回来，这一行会自己现身
+- **启动方式与打开方式一目了然** — 每行以项目自己的 favicon 开头（32px 方块，与工作台、切换目录弹窗同一套探测），旁边是名字与分支，打开方式覆盖资源管理器、终端、新标签页 `g ui` 以及各编辑器 / AI 工具
+- **推荐添加** — 看着像项目但还不在清单里的目录，会作为推荐项出现，一键加入
+- **静默刷新** — 挂载拉一次，之后每 10 秒静默轮询 —— 别的 `g ui` 实例增删项目、任务路径带来的新项目，这里都能看到
+
+---
+
+### 源码地图（AI 架构图）
+
+> Activity Bar 里的图图标视图，用 AI 画当前项目的架构图。输入项目路径、点「开始分析」，服务端读一遍代码库后让默认模型给出入口文件、模块依赖与技术栈，由 Vue Flow + dagre 自动布局渲染成图。
+
+- **入口优先** — 图以识别出的入口文件 / 函数为根，模块作为节点、import 关系作为边挂上去
+- **子系统着色** — 节点按子系统分组配色，monorepo 的边界一眼可辨
+- **点节点读源码** — 点击节点即在图旁加载该文件的源码（节点自身带文件与行号）
+- **可重新分析** — 代码挪了地方就点「重新分析」再跑一遍；分析过程通过 SSE 回传进度，结果在切换视图期间保留（KeepAlive），只有刷新页面才重来
+- **没配模型** — 视图会直说，而不是报错；先在 设置 → AI 模型配置 里配一个
+
+---
+
 ### 视图一览
 
 | 视图 | 用途 | 持久化状态 | 高亮特性 |
 |---|---|---|---|
 | **Git** | 日常暂存、提交、推送、历史回看 | 每个项目的 UI 偏好（视图模式、布局比例） | 结构化提交表单、AI 生成提交信息、选择范围一键推送 |
-| **编辑器** | 不离开 GUI 浏览并编辑项目文件 | 打开的 tab、未保存标记、最近访问 | Monaco 编辑器带语法高亮、Markdown 预览、文件搜索 |
+| **编辑器** | 不离开 GUI 浏览并编辑项目文件 | 打开的 tab、未保存标记、最近访问 | Monaco 编辑器带语法高亮、Markdown 预览、文件搜索（文件名 + 文件内容） |
+| **源码地图** | 用 AI 画项目架构图 | 本次会话的分析结果 | 入口文件、模块依赖、技术栈、子系统着色、点节点读源码 |
 | **工作台** | 多项目看板：派发并执行智能体任务 | 任务、提示词、看板布局、日志保留策略 | 看板视图、主 Agent 控制台、执行器选择、对话式实时日志 |
+| **项目管理** | 把项目清单当资产管理 | 与工作台同一份清单 | 添加 / 删除不切换当前项目、推荐添加、10 秒静默刷新 |
 | **智能体** | 与内置 AI 智能体对话（Web + CLI 会话） | 会话、待回答问题 | 流式回答、工具调用卡片、Skill / MCP 广场、导航栏徽标显示仍在生成的对话数 |
 
 **控制台**、**系统监控**、**思维导图** 是同一导航栏上的辅助视图。
@@ -1105,7 +1179,7 @@ Activity Bar 第四个视图，在 GUI 内直接浏览并编辑项目文件：
 | 功能 | 说明 |
 |---|---|
 | 文件树 | 可折叠的目录树，附带文件类型图标；**每 60 秒自动刷新一次**，捕获 GUI 外部对文件的改动（标签页隐藏或搜索框非空时跳过） |
-| 文件搜索 | 在侧边栏搜索框中输入关键字过滤文件树（180ms 防抖），命中片段会在节点名中高亮；`Ctrl+F` / `Cmd+F` 聚焦搜索框，`Esc` 清空内容或失焦 |
+| 文件搜索 | 在侧边栏搜索框中输入关键字过滤文件树（180ms 防抖），命中片段会在节点名中高亮；`Ctrl+F` / `Cmd+F` 聚焦搜索框，`Esc` 清空内容或失焦。名称没有命中时，关键词还会送到服务端（`POST /api/search_content`）做一次**文件内容**扫描：结果按文件平铺，带行号、片段高亮与每个文件的命中数，点一条直接跳到对应行。扫描是纯文件系统遍历（不依赖 `rg` / `git grep`），跳过 `node_modules` / `dist` / `.git` 以及超过 2 MB 或二进制的文件，上限 2 万个文件 / 100 个命中文件 / 10 秒，继续输入会立即中止上一次；单字符关键词不触发内容扫描 |
 | 多标签页 | 同时打开多个文件，未保存文件显示 ● 标记 |
 | 跟盘同步 | 窗口重新聚焦、切到某个标签、或切回文件空间时，当前标签会跟盘上对一次账；另有 30 秒兜底轮询，盖住"同窗口里 AI 面板写了文件、用户全程没切焦点"的情况。变了且没有未保存改动就静默换成最新正文（光标位置与撤销栈都保留）；有未保存改动则先问一次，绝不自动覆盖 |
 | 工作区恢复 | **按项目**记住文件树展开了哪些目录、开了哪些标签（顺序 + 当前激活的那个），刷新页面或切回该项目时自动恢复；快照存在 `~/.zen-gitsync/config.json` 的 `ui.editorWorkspaceByProject`。只记路径 —— 文件按盘上最新内容重开，未保存的改动不跨会话保留，已被删除的文件静默跳过 |
