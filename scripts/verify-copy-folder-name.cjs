@@ -6,11 +6,13 @@
  *   B 编排台项目列表「打开方式」菜单里的一项（WorkbenchProjectPanel.vue）
  *
  * 守的契约：
- *   A1 顶栏渲染出「复制文件夹名称」按钮（正向锚：新入口真的在）
- *   A2 点它写入剪贴板的是文件夹名（= 当前目录的 basename），**不是**完整路径
- *   A3 成功提示是「已复制文件夹名称」
- *   A4 反向锚：右键目录名仍然是「已复制目录路径」且写完整路径 ——
- *      两个功能不能被合并成一个（路径粘进终端、名称拿去做文件名，场景不同）
+ *   A1 顶栏渲染出「复制目录路径」按钮（正向锚：复制入口真的在）
+ *   A2 点它写入剪贴板的是完整路径（粘进终端就能 cd）
+ *   A3 成功提示是「已复制目录路径」
+ *   A4 反向锚：右键目录名复制的是**文件夹名**（= 当前目录 basename）并提示
+ *      「已复制文件夹名称」—— 两个功能不能被合并成一个（路径粘进终端、
+ *      名称拿去做文件名，场景不同；2026-09-26 起按钮与右键的口径对调过，
+ *      见 a1982bb4，两边都要钉住，谁再被合并/调错都会红）
  *   B1 「打开方式」菜单里出现「复制文件夹名称」
  *   B2 点它写入的是**该项目名**（= 该行 title 里完整路径的 basename，不是路径），且菜单随即关闭
  *   B3 反向锚：原有三项（文件管理器 / 终端 / 新标签页 g ui）与「用工具打开」标题都还在
@@ -38,7 +40,8 @@
  *
  * 反向验证（把改动撤掉后哪几条会红）：
  *   · 删掉顶栏那个 IconButton → A1/A2/A3 红（找不到按钮）
- *   · 把 onCopyFolderName 改成写 currentDirectory → A2 红、A4 仍绿
+ *   · 把 onCopyDirectory 改成写 currentFolderName → A2 红、A4 仍绿
+ *   · 把右键目录名改成写 currentDirectory → A4a/A4b 红（两个入口被合并成一个）
  *   · 把菜单项换成 p.path → B2 红
  *   · 把新项挪到 `.proj-menu__sep` 之后 → B4 红（B1/B2 仍绿 —— 位置锚单独有效）
  *
@@ -113,9 +116,11 @@ async function main() {
     await page.waitForSelector('.activity-bar', { timeout: 25000 })
 
     // ── A 顶栏 ─────────────────────────────────────────────────────
-    const copyBtn = page.locator('.directory-actions button[aria-label="复制文件夹名称"]')
+    // 2026-09-26（a1982bb4）起顶栏这颗按钮复制的是**完整路径**，右键目录名复制
+    // 的是文件夹名 —— 与更早那版正好对调，探针跟着对调，别改回旧口径。
+    const copyBtn = page.locator('.directory-actions button[aria-label="复制目录路径"]')
     const hasBtn = await waitUntil(async () => (await copyBtn.count()) === 1, 15000)
-    check('A1 顶栏渲染出「复制文件夹名称」按钮', hasBtn, `count=${await copyBtn.count()}`)
+    check('A1 顶栏渲染出「复制目录路径」按钮', hasBtn, `count=${await copyBtn.count()}`)
     // 顶栏显示的目录名应与我们算出来的一致（否则后面的断言就是自说自话）
     const shownName = (await page.locator('.directory-display').first().textContent() || '').trim()
     check('A0 页面上的目录名与接口给的一致（夹具自检）', shownName === expectedName, `页面="${shownName}" 期望="${expectedName}"`)
@@ -124,20 +129,20 @@ async function main() {
     if (hasBtn) {
       await clearToasts() // 先清干净别条提示，让下面看到的就是新弹出的这条
       await copyBtn.first().click()
-      await waitUntil(async () => await hasToast('已复制文件夹名称'))
-      check('A3 提示「已复制文件夹名称」', await hasToast('已复制文件夹名称'), `toasts=${JSON.stringify(await toasts())}`)
+      await waitUntil(async () => await hasToast('已复制目录路径'))
+      check('A3 提示「已复制目录路径」', await hasToast('已复制目录路径'), `toasts=${JSON.stringify(await toasts())}`)
       const got = await lastCopied()
-      check('A2a 复制内容是文件夹名', got === expectedName, `copied="${got}"`)
-      check('A2b 复制内容不是完整路径', got !== currentDir, `copied="${got}"`)
+      check('A2a 复制内容是完整路径', got === currentDir, `copied="${got}"`)
+      check('A2b 复制内容不是文件夹名', got !== expectedName, `copied="${got}"`)
       await clearToasts()
     }
 
-    // A4 反向锚：右键目录名 → 复制完整路径（老行为不能被新功能吃掉）
+    // A4 反向锚：右键目录名 → 复制文件夹名（与按钮的口径互补，不能被合并/调错）
     await page.locator('.directory-display').first().click({ button: 'right' })
-    await waitUntil(async () => await hasToast('已复制目录路径'))
+    await waitUntil(async () => await hasToast('已复制文件夹名称'))
     const gotPath = await lastCopied()
-    check('A4a 右键目录名仍是「已复制目录路径」', await hasToast('已复制目录路径'), `toasts=${JSON.stringify(await toasts())}`)
-    check('A4b 右键复制的是完整路径', gotPath === currentDir, `copied="${gotPath}"`)
+    check('A4a 右键目录名是「已复制文件夹名称」', await hasToast('已复制文件夹名称'), `toasts=${JSON.stringify(await toasts())}`)
+    check('A4b 右键复制的是文件夹名', gotPath === expectedName, `copied="${gotPath}"`)
     await clearToasts()
 
     // ── B 编排台项目列表 ────────────────────────────────────────────
