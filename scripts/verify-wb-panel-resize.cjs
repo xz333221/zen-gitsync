@@ -21,9 +21,10 @@
  *   P13 竖排 780：右分隔条不渲染、右栏铺满、折叠按钮隐藏（没有"收边"这个方向）
  *   P14 反向验证：没拖过时媒体查询仍然生效（1300 → 左 224 / 右 320），
  *       证明内联变量只在用户拖过之后才接管
- *   ── 以下守右栏派发输入框（需求："输入框也调大一些"）──
- *   P26 默认：rows=4、高度 ≥ 76（旧的 min-height 52）、上限从写死的 160 放到 min(380px, 45vh)
- *   P27 拖右下角 grip：高度真的变大，并落进 localStorage（wb.ocInputHeight.v1）
+ *   ── 以下守右栏派发输入框（需求："输入框也调大一些"；2026-10-20 用户反馈
+ *      "没有附件的情况下显得有点大、有没有附件保持大小一致"又调小，见 P26）──
+ *   P26 默认：rows=3、高度 ≥ 76（旧的 min-height 52）、上限从写死的 160 放到 min(380px, 45vh)
+ *   P27 拖右下角 grip：高度真的变大，并落进 localStorage（wb.ocInputHeight.v2）
  *   P28 持久化：reload 后高度还在（不用每次开局重拖一遍）
  *   P29 拖到超限：夹在 max-height，但**仍然写盘** —— 拖到顶也是用户的选择
  *   P30 窗口变矮：高度被 max-height 压低，此时**不许覆盖**已存的高度（P29 的值要还在）
@@ -138,7 +139,7 @@ function MEASURE() {
         inline: n.style.height || '',
         resize: cs.resize,
         /** 组件为"记住手拖高度"落的那把 key */
-        storedH: (() => { try { return localStorage.getItem('wb.ocInputHeight.v1') } catch { return null } })(),
+        storedH: (() => { try { return localStorage.getItem('wb.ocInputHeight.v2') } catch { return null } })(),
       }
     })(),
     stored: (() => { try { return localStorage.getItem('wb.boardLayout.v1') } catch { return null } })(),
@@ -426,25 +427,26 @@ async function main() {
        那一下布局重排就会把高度写盘，等多久都抢不赢它（2026-10-16 实测）。
        所以把 reports 接口**挂住**（既不 fulfill 也不 abort）：首屏永远 empty、
        没有任何布局变化，RO 首次回调又被跳过 → inline 与 localStorage 都空着。 */
-    await page.evaluate(() => { try { localStorage.removeItem('wb.ocInputHeight.v1') } catch {} })
+    await page.evaluate(() => { try { localStorage.removeItem('wb.ocInputHeight.v2') } catch {} })
     await page.route('**/api/workbench/orchestrator/reports', () => { /* 挂住，见上 */ })
     await page.reload({ waitUntil: 'domcontentloaded' })
     await openBoard(page)
     const firstFrame = await page.evaluate(() => {
       const n = document.querySelector('.oc__input')
-      return { inline: n?.style.height || '', storedH: (() => { try { return localStorage.getItem('wb.ocInputHeight.v1') } catch { return null } })() }
+      return { inline: n?.style.height || '', storedH: (() => { try { return localStorage.getItem('wb.ocInputHeight.v2') } catch { return null } })() }
     })
     check('P26d 没拖过时首屏不写内联高度、localStorage 里也没有那把 key（默认完全交给 CSS）',
       firstFrame.inline === '' && firstFrame.storedH === null,
       `inline="${firstFrame.inline}" storedH=${firstFrame.storedH}`)
-    /* P26a/b/c 量**非 empty 态**的默认高度（empty 态那条 CSS 把输入框
-       min-height 顶到 168）：放行 reports，等面板脱离 empty。
+    /* P26a/b/c 量默认高度：放行 reports，等面板脱离 empty。
+       （2026-10-20 前 empty 态有一条 min-height:168 会把输入框顶高，必须先等它
+        退去；那条规则已随"输入框调小"删除，这里保留等待只当同步点，时序不变。）
        reports 轮询 30s 一次（WorkbenchBoard 的 REPORT_POLL_MS），等待放到 40s。 */
     await page.unroute('**/api/workbench/orchestrator/reports')
     await page.waitForFunction(() => !document.querySelector('.oc.is-report-empty'), null, { timeout: 40000 }).catch(() => {})
     m = await M()
-    check('P26a 输入框默认 4 行（旧的是 3 行）', m.input?.rows === '4', `rows=${m.input?.rows}`)
-    check('P26b 默认高度 ≥ 76（旧的 min-height 是 52，量出来约 88；is-report-empty 态会到 168，已先等它退去）',
+    check('P26a 输入框默认 3 行（2026-10-20 从 4 行调小：用户"没有附件的情况下显得有点大，有没有附件保持大小一致"）', m.input?.rows === '3', `rows=${m.input?.rows}`)
+    check('P26b 默认高度 ≥ 76 且 ≤ 120（3 行量出来约 78；2026-10-20 前是 4 行约 98、is-report-empty 态 168）',
       !!m.input && m.input.h >= 76 && m.input.h <= 120, `h=${m.input?.h}`)
     check('P26c 上限从写死的 160 放开到 min(380px, 45vh) —— 900 高视口下 = 380',
       m.input?.maxHpx === 380 && m.input?.resize === 'vertical',
@@ -459,7 +461,7 @@ async function main() {
     m = await M()
     check('P27a 拖右下角真的把输入框拖高了（约 +120）',
       m.input.h > inputBefore + 90, `前 ${inputBefore} → 后 ${m.input?.h}`)
-    check('P27b 拖出来的高度落进 localStorage（key = wb.ocInputHeight.v1）',
+    check('P27b 拖出来的高度落进 localStorage（key = wb.ocInputHeight.v2）',
       m.input.storedH !== null && Number(m.input.storedH) === Math.round(m.input.h),
       `storedH=${m.input?.storedH} h=${m.input?.h}`)
     check('P27c 输入框变高时是往上长的（底边不动、上面的活动流让位，没把容器顶穿）',

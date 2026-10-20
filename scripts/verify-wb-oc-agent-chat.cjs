@@ -3,7 +3,7 @@
  *
  * 守的契约（对应 OrchestratorConsole.vue / AgentChatSurface.vue）：
  *   C1  默认进「指令」模式：拨片在、两个 tab、指令那块是激活项；
- *       三块常驻面板可见、对话面让位；输入框几何没破（rows=4 且高度 ≥ 76，P26）
+ *       三块常驻面板可见、对话面让位；输入框几何没破（rows=3 且高度 ≥ 76，P26）
  *   C2  切「对话」：激活项换、偏好落盘 wb.ocMode.v2=chat
  *   C3  对话面真的铺开了（几何量，不是"元素存在"）：标题 / 引擎选择器 / 消息容器都有高度
  *   C4  对话模式底下的派发执行器：TaskExecutorPicker 在，且不是"引擎不会派活"的提示态
@@ -127,7 +127,7 @@ function MEASURE() {
           h: +(inpRect?.height || 0).toFixed(1),
           visible: input.offsetParent !== null,
           rows: input.getAttribute('rows'),
-          storedH: (() => { try { return localStorage.getItem('wb.ocInputHeight.v1') } catch { return null } })(),
+          storedH: (() => { try { return localStorage.getItem('wb.ocInputHeight.v2') } catch { return null } })(),
         }
       : null,
     // ── 持久化 ──
@@ -231,8 +231,8 @@ async function main() {
       `report=${m.report?.visible}(${m.report?.h}) git=${m.git?.visible} compose=${m.compose?.visible} chat=${m.chat?.visible}`)
     check('C1f 指令模式派发栏里的执行器下拉在（第一处 TaskExecutorPicker）',
       m.composeHasTep === true, `composeHasTep=${m.composeHasTep}`)
-    check('C1g 默认态输入框几何没被双模式改坏：rows=4 且高度 ≥ 76（P26 契约）',
-      m.input?.rows === '4' && (m.input?.h || 0) >= 76,
+    check('C1g 默认态输入框几何没被双模式改坏：rows=3 且高度 ≥ 76（P26 契约）',
+      m.input?.rows === '3' && (m.input?.h || 0) >= 76,
       `rows=${m.input?.rows} h=${m.input?.h}`)
     await shot(page, '1600-command-default')
 
@@ -288,8 +288,8 @@ async function main() {
       `report=${m.report?.visible} compose=${m.compose?.visible} chat=${m.chat?.visible}`)
     check('C6d 指令模式的派发栏里也有执行器下拉（第二处 TaskExecutorPicker 没被拆掉）',
       m.composeHasTep === true, `composeHasTep=${m.composeHasTep}`)
-    check('C6e 输入框几何没被双模式改坏：rows=4 且高度 ≥ 76（P26 契约）',
-      m.input?.rows === '4' && (m.input?.h || 0) >= 76,
+    check('C6e 输入框几何没被双模式改坏：rows=3 且高度 ≥ 76（P26 契约）',
+      m.input?.rows === '3' && (m.input?.h || 0) >= 76,
       `rows=${m.input?.rows} h=${m.input?.h}`)
     await shot(page, '1600-command-mode')
 

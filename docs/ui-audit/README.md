@@ -280,6 +280,17 @@ tsc 与 build 均通过。`verify:ui-consistency` 3 条红为存量
 （无 currentReport 时输入框 min-height 168）—— 改成先挂住 reports 接口造
 "无异步数据首屏"验 P26d、放行后等面板脱 empty 再量 P26a/b/c。
 
+> **2026-10-20 追记（派发输入框调小 + 换样式）**：用户反馈「没有附件的情况下，
+> 显得有点大，有没有附件，保持大小一致吧」＋「我不喜欢圆角加单 border 的样式」。
+> 三处联动：① 输入框 4 行 → 3 行，并**删掉**上面那条 empty 态 min-height 168
+> （拿输入框填空态，空态过了就是赶不走的巨框；空态居中那招保留）；
+> ② 长相从"白底 + radius-lg + 一道 1px 边"换成控制台输入语言
+> （`--bg-console-input` / `--border-console-input` / 方角，与 CommandConsole
+> 的命令行同一套令牌）；③ localStorage key `wb.ocInputHeight.v1 → v2` ——
+> ResizeObserver 的"没在拖也写盘"兜底会把 168 记进 v1，不换 key 的话旧高度
+> 会以内联样式继续压着新默认（"改了 CSS 却不生效"就是这么来的）。
+> `panel-resize` 的 P26/P27 与 `wb-oc-modes` 的 C1g/C6e 断言已同步。
+
 ![左栏搜索：默认一枚放大镜](./wb-proj-search-idle.png)
 ![左栏搜索：点开展开](./wb-proj-search-open.png)
 ![右栏：无执行数、报告默认展开](./wb-oc-report-open.png)

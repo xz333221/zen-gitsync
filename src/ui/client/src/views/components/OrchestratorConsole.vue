@@ -337,8 +337,14 @@ function onInputKeydown(e: KeyboardEvent) {
 // 记下去就把用户真正想要的高度永久覆盖成小的了（窗口小一次，偏好就没了）。
 // 夹住的判据是 offsetHeight == max-height（全局 `* { box-sizing: border-box }`，
 // 两者同口径，可直接比）。
-const INPUT_H_KEY = 'wb.ocInputHeight.v1'
-/** 与 CSS 里的 min-height 同值：低于它的量值一律当成"没拖过" */
+//
+// ⚠️ key 从 v1 升到 v2（2026-10-20）：上面这条"没在拖也写盘"的兜底，会把
+// **CSS 强加的高度**也记进 v1 —— 2026-10-05 那条"空报告态 min-height 168"
+// 触发过一次 resize，168 就被写进了 v1 并长期以内联高度压着新默认
+// （用户实测：删了 168 规则框还是那么大）。这次把默认从 4 行调回 3 行，
+// 不换 key 的话旧值会继续赢，调小了看不见。v1 的存量一律作废。
+const INPUT_H_KEY = 'wb.ocInputHeight.v2'
+/** 与 CSS 里的 min-height 同值：低于它的量值一律当成"没拖过"（3 行 ≈ 78，留 76 当下限） */
 const OC_INPUT_MIN_H = 76
 
 function readInputH(): number | null {
@@ -1031,7 +1037,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
         :class="{ 'is-over': overLimit }"
         v-model="draft"
         :style="inputStyle"
-        rows="4"
+        rows="3"
         :placeholder="$t('@WORKBENCH:给主 Agent 下一条指令，例如：把登录模块的错误处理重构一遍')"
         @keydown="onInputKeydown"
         @paste="onPaste"
@@ -1295,22 +1301,24 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   padding: 8px 0 0;
 }
 
-/* ── 空闲态：空态居中，输入框适度加高 ──
+/* ── 空闲态：空态居中 ──
    实测（2026-10-05 截图量测 1718×1300）：没有进度报告时这一块是 458×700 的全白，
    占整屏约 14%，而空态那行字**顶对齐贴在列表第一行** —— 读起来像加载失败，
-   不像"现在没有在跑的活"。这一版做两件事：
-     ① 空态在剩下的空间里居中，并换成与看板列同一套的虚线框（见 .oc-empty）；
-     ② 输入框下限抬到 6 行（76 → 168）。
-   ⚠️ 试过更激进的一版：让报告区收缩、把 700px 全给输入框（flex:1 + max-height:none），
-   实测输入框会长到 **798px** —— 一个只有占位符的巨框，比原来那块空白更像"没做完"。
-   所以**高度仍然留在报告区**，只是那里面现在是一块说得清话的空态。
-   真要利用它，正确做法是在空闲时自动展开「历史报告」（那是行为改动，单独一轮做）。 */
+   不像"现在没有在跑的活"。所以空态在剩下的空间里居中，并换成与看板列同一套的
+   虚线框（见 .oc-empty）。
+   （同轮原本还把输入框下限抬到 6 行（76 → 168）去"填"那块白；2026-10-20
+   用户反馈「没有附件的情况下，显得有点大，有没有附件，保持大小一致吧」→ 删除。
+   留证的教训：拿输入框填空态，空态一过就变成一个赶不走的巨框，而且
+   ResizeObserver 会把这一下 resize 写进 localStorage（INPUT_H_KEY 的注释）——
+   只删 CSS 不换 key，用户浏览器里的旧高度照样压着新默认。
+   ⚠️ 另一个极端也别走：试过让报告区收缩、把 700px 全给输入框
+   （flex:1 + max-height:none），实测输入框会长到 **798px** —— 比那块空白
+   更像"没做完"。高度留在报告区，那里面现在是一块说得清话的空态。） */
 .oc__report.is-empty .oc__report-list {
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.oc.is-report-empty .oc__input { min-height: 168px; }
 /* 区块标题：与面板标题同一族的次级档（12px/600）。它下面是整块报告，
    原来跟着注脚一起挤在 11px，报告和它右边的两个控件谁先被读到全靠位置。 */
 .oc__panel-title {
@@ -1759,6 +1767,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
      甚至把输入区自己顶出容器。45vh 保证"上下都能看见"，380px 是宽屏下的实际手拖上限。
      （拖动后的高度由组件记进 localStorage，见 script 里的 INPUT_H_KEY） */
   resize: vertical;
+  /* 3 行起步（2026-10-20 从 4 行调小，理由见下面 background 那条注释）。 */
   min-height: 76px;
   max-height: min(380px, 45vh);
   /* 2026-10-05：内边距 7/8 → 9/10，字号 12 → 13。这是这一栏里用户唯一
@@ -1768,9 +1777,17 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   line-height: 1.5;
   font-family: inherit;
   color: var(--text-primary);
-  background: var(--input-bg);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
+  /* 2026-10-20：用户两条反馈一起办 ——「我不喜欢圆角加单 border 的样式」、
+     「没有附件的情况下显得有点大，有没有附件保持大小一致」：
+     · 长相换成**控制台输入**的语言：淡底（--bg-console-input）+ 同系极淡
+       描边 + 方角，与终端那条命令行（CommandConsole 的 .console-input-row）
+       同一套令牌。不再用"白底 + radius-lg + 一道 1px 边"的通用表单长相；
+       方角 + 轻一档的重量，同一个高度也显小。
+     · 尺寸不再随状态胀大（原 empty 态 min-height 168 已删，见下面
+       .oc.is-report-empty 处的说明）：有没有附件、有没有报告，都是这 3 行。 */
+  background: var(--bg-console-input);
+  border: 1px solid var(--border-console-input);
+  border-radius: 0;
   outline: none;
   transition: border-color var(--transition-fast) var(--ease-custom),
               box-shadow var(--transition-fast) var(--ease-custom);
