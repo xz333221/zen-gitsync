@@ -11,6 +11,7 @@
  *   P4r2 该目录已在清单里（alreadyKnown）→ 提示"已在项目列表中"，不说"添加成功"
  *   P5  推荐列表渲染 + 一键「添加」→ /projects/add 收到那一行的路径
  *   P5r 推荐为空 → 空态文案
+ *   P5s 推荐区搜索：本地过滤（不发新请求）—— 命中/大小写/路径片段/无匹配空态/清空恢复
  *   P6  启动方式**懒加载**：初始 0 次带 projectPath 的请求；展开某一行 → 1 次且
  *       body.projectPath = 那一行的路径；点「启动」→ run-npm-script 收到 packagePath/scriptName
  *   P7  行内「打开方式」菜单能开（复用 ProjectOpenMenuList，与工作台同一份菜单）
@@ -100,22 +101,26 @@ async function main() {
   const startupCalls = []
   const npmLaunchCalls = []
   let addResponse = { success: true, alreadyKnown: false }
+  let recommendedCalls = 0
 
   await page.route('**/api/workbench/projects', (route) => route.fulfill({
     status: 200, contentType: 'application/json',
     body: JSON.stringify({ success: true, projects: projectsFixture, tasks: [], currentProjectPath: P_ALPHA }),
   }))
-  await page.route('**/api/workbench/projects/recommended', (route) => route.fulfill({
-    status: 200, contentType: 'application/json',
-    body: JSON.stringify({
-      success: true,
-      recommendations: [
-        { path: 'Z:\\zen-verify\\rec-one', name: 'rec-one', mtime: Date.now() },
-        { path: 'Z:\\zen-verify\\rec-two', name: 'rec-two', mtime: Date.now() - 1000 },
-      ],
-      roots: ['Z:\\zen-verify'],
-    }),
-  }))
+  await page.route('**/api/workbench/projects/recommended', (route) => {
+    recommendedCalls += 1
+    route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        recommendations: [
+          { path: 'Z:\\zen-verify\\rec-one', name: 'rec-one', mtime: Date.now() },
+          { path: 'Z:\\zen-verify\\rec-two', name: 'rec-two', mtime: Date.now() - 1000 },
+        ],
+        roots: ['Z:\\zen-verify'],
+      }),
+    })
+  })
   await page.route('**/api/workbench/projects/add', (route) => {
     addCalls.push(JSON.parse(route.request().postData() || '{}'))
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(addResponse) })
@@ -416,6 +421,34 @@ async function main() {
       JSON.stringify(addCalls[addCalls.length - 1]))
     check('P5c 该行变成「已添加」', await waitUntil(async () => (await recRows.locator('.pm-rec__added').count()) === 1, 5000))
     clearToasts()
+
+    // ── P5s 推荐区搜索（前端本地过滤：不应发出新的 recommended 请求） ─────
+    const recSearch = page.locator('.pm-rec__search input')
+    const recNames = () => page.locator('.pm-rec__item .pm-rec__name').allTextContents()
+    const waitRecRows = (n) => waitUntil(async () => (await recRows.count()) === n, 5000)
+    const recCallsBefore = recommendedCalls
+    check('P5s1 推荐带头部有搜索框', (await recSearch.count()) === 1, `count=${await recSearch.count()}`)
+    await recSearch.fill('two')
+    await waitRecRows(1)
+    const twoOnly = (await recNames()).map(s => s.trim())
+    check('P5s2 搜 "two" → 只剩 rec-two 一行', twoOnly.length === 1 && twoOnly[0] === 'rec-two', JSON.stringify(twoOnly))
+    await recSearch.fill('REC-ONE')
+    await waitRecRows(1)
+    const oneOnly = (await recNames()).map(s => s.trim())
+    check('P5s3 大小写不敏感：搜 "REC-ONE" → 只剩 rec-one', oneOnly.length === 1 && oneOnly[0] === 'rec-one', JSON.stringify(oneOnly))
+    await recSearch.fill('zen-verify')
+    await waitRecRows(2)
+    check('P5s4 路径片段也参与匹配：搜 "zen-verify" → 两行都在', (await recRows.count()) === 2)
+    await recSearch.fill('zzz-no-such')
+    await waitRecRows(0)
+    const noMatchText = await page.locator('.pm-rec__state-text', { hasText: '没有匹配的仓库' }).count()
+    check('P5s5 搜不到 → 空态文案（与"真的没扫到"分开说）',
+      (await recRows.count()) === 0 && noMatchText === 1, `rows=${await recRows.count()}, state=${noMatchText}`)
+    await recSearch.fill('')
+    await waitRecRows(2)
+    check('P5s6 清空搜索 → 两行恢复', (await recRows.count()) === 2, `rows=${await recRows.count()}`)
+    check('P5s7 整个搜索过程没有发出新的扫描请求（纯本地过滤）',
+      recommendedCalls === recCallsBefore, `recommendedCalls=${recommendedCalls}, before=${recCallsBefore}`)
 
     await page.screenshot({ path: path.join(SHOT_DIR, 'pm-final.png'), fullPage: true })
   } finally {

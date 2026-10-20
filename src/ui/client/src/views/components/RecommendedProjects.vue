@@ -27,10 +27,13 @@
 
   一句话范围说明是刻意加的：用户看到"推荐"两字会以为扫了全盘，
   实际只扫了已有项目的同级目录 —— 不说清楚，扫描不到就变成一个说不清的 bug。
+
+  搜索是**前端本地过滤**（不重新请求）：扫出来的清单已在内存里，按名称/路径
+  大小写不敏感匹配即可，没必要为过滤再打一次有预算上限的扫描。
 -->
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { Refresh } from '@element-plus/icons-vue'
+import { computed, onMounted, ref } from 'vue'
+import { Refresh, Search } from '@element-plus/icons-vue'
 import IconButton from '@components/IconButton.vue'
 import { $t } from '@/lang/static'
 
@@ -53,6 +56,14 @@ const errorText = ref('')
 const addingPath = ref('')
 /** 本次会话里已经加成功的（服务端下次扫描也不会再列出来，这里只是立刻消失） */
 const addedPaths = ref<Set<string>>(new Set())
+/** 搜索词：扫出来的仓库可能几十条，按名称 / 路径过滤（大小写不敏感） */
+const searchInput = ref('')
+const filteredItems = computed(() => {
+  const q = searchInput.value.trim().toLowerCase()
+  if (!q) return items.value
+  return items.value.filter(it =>
+    it.name.toLowerCase().includes(q) || it.path.toLowerCase().includes(q))
+})
 
 async function reload() {
   status.value = 'loading'
@@ -95,7 +106,19 @@ defineExpose({ reload })
   <section class="pm-rec">
     <header class="pm-rec__head">
       <h3 class="pm-rec__title">{{ $t('@PROJM:推荐添加') }}</h3>
-      <span v-if="status === 'done'" class="pm-rec__count">{{ items.length }}</span>
+      <span v-if="status === 'done'" class="pm-rec__count">{{ filteredItems.length }}</span>
+      <el-input
+        v-if="status === 'done'"
+        v-model="searchInput"
+        class="pm-rec__search"
+        size="small"
+        clearable
+        :placeholder="$t('@PROJM:搜索推荐仓库...')"
+      >
+        <template #prefix>
+          <el-icon><Search /></el-icon>
+        </template>
+      </el-input>
       <IconButton
         size="small"
         :disabled="status === 'loading'"
@@ -119,8 +142,8 @@ defineExpose({ reload })
       <p class="pm-rec__state-text">{{ $t('@PROJM:没有发现可以添加的仓库，可以直接用「添加项目」指定路径') }}</p>
     </div>
 
-    <ul v-else-if="items.length" class="pm-rec__items">
-      <li v-for="item in items" :key="item.path" class="pm-rec__item">
+    <ul v-else-if="filteredItems.length" class="pm-rec__items">
+      <li v-for="item in filteredItems" :key="item.path" class="pm-rec__item">
         <div class="pm-rec__info">
           <span class="pm-rec__name">{{ item.name }}</span>
           <span class="pm-rec__path" :title="item.path">{{ item.path }}</span>
@@ -138,6 +161,11 @@ defineExpose({ reload })
         </button>
       </li>
     </ul>
+
+    <!-- 有仓库但都被搜索词挡掉 → 与"真的没有仓库"分开说，否则用户以为扫描坏了 -->
+    <div v-else-if="items.length" class="pm-rec__state">
+      <p class="pm-rec__state-text">{{ $t('@PROJM:没有匹配的仓库，换个关键词试试') }}</p>
+    </div>
   </section>
 </template>
 
@@ -167,6 +195,15 @@ defineExpose({ reload })
   font-size: var(--font-size-xs);
   color: var(--text-meta);
   font-variant-numeric: tabular-nums;
+}
+/* 搜索框与全站其它 el-input 同一套壳（全局统一了圆角 + box-shadow 环），
+   这里只管宽度：这条带子高度有限，输入框不许把列表挤下去。 */
+.pm-rec__search {
+  width: 180px;
+  flex-shrink: 0;
+}
+@media (max-width: 900px) {
+  .pm-rec__search { width: 130px; }
 }
 .pm-rec__hint {
   margin: 2px 0 4px;

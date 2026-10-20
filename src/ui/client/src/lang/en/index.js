@@ -3215,6 +3215,8 @@ export default {
   '@PROJM:展开启动方式': 'Show startup commands',
   '@PROJM:收起启动方式': 'Hide startup commands',
   '@PROJM:推荐添加': 'Suggested',
+  '@PROJM:搜索推荐仓库...': 'Search suggested repositories...',
+  '@PROJM:没有匹配的仓库，换个关键词试试': 'No matching repositories — try another keyword',
   '@PROJM:重新扫描': 'Rescan',
   '@PROJM:扫描已有项目所在的目录，列出还没加进来、且含 .git 的仓库': 'Scans the folders your projects live in and lists repositories (folders with .git) that are not added yet',
   '@PROJM:正在扫描…': 'Scanning…',
