@@ -2155,6 +2155,8 @@ export default {
   '@EDITOR:打开 g ai 对话': 'Open g ai Chat',
   '@EDITOR:关闭 g ai 对话': 'Close g ai Chat',
   '@EDITOR:关闭对话': 'Close Chat',
+  '@EDITOR:全屏对话': 'Fullscreen chat',
+  '@EDITOR:退出全屏对话': 'Exit fullscreen chat',
   '@EDITOR:当前文档': 'Current file',
   '@EDITOR:不引用当前文档': "Don't reference this file",
   '@EDITOR:会话列表': 'Conversations',

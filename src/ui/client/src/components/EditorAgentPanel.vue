@@ -10,7 +10,11 @@
       它修饰的是**这一条消息的上下文**，所以做成附件卡片、搬进输入框内部（见 contextSlot）
     - 自己持有一个 useAgentChat 实例：runs/refs 与「对话」Tab 隔离，互不打断
   -->
-  <div ref="rootRef" class="editor-agent-panel">
+  <!--
+    全屏对话：盖住整个编辑区（左栏文件树不动）。父级负责把分隔条藏掉。
+    absolute 而不是改 flex-basis —— Monaco 留在原地、状态不重建。
+  -->
+  <div ref="rootRef" class="editor-agent-panel" :class="{ 'is-fullscreen': fullscreen }">
     <div class="agent-panel-header">
       <!-- 窄屏的列表页：整条 header 让给「返回对话 + 标题」 -->
       <template v-if="narrow && page === 'list'">
@@ -68,6 +72,22 @@
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
           <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+        </svg>
+      </button>
+      <button
+        class="agent-panel-icon-btn agent-panel-fullscreen-btn"
+        :title="fullscreen ? $t('@EDITOR:退出全屏对话') : $t('@EDITOR:全屏对话')"
+        :aria-label="fullscreen ? $t('@EDITOR:退出全屏对话') : $t('@EDITOR:全屏对话')"
+        @click="emit('toggle-fullscreen')"
+      >
+        <!-- 展开：四角朝外；收起：四角朝内（Tabler maximize / minimize） -->
+        <svg v-if="!fullscreen" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 8V5a1 1 0 0 1 1-1h3"/><path d="M16 4h3a1 1 0 0 1 1 1v3"/>
+          <path d="M20 16v3a1 1 0 0 1-1 1h-3"/><path d="M8 20H5a1 1 0 0 1-1-1v-3"/>
+        </svg>
+        <svg v-else viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 9h3a1 1 0 0 0 1-1V5"/><path d="M15 5v3a1 1 0 0 0 1 1h3"/>
+          <path d="M19 15h-3a1 1 0 0 0-1 1v3"/><path d="M9 19v-3a1 1 0 0 0-1-1H5"/>
         </svg>
       </button>
       <button
@@ -225,9 +245,11 @@ const props = defineProps<{
   activeFileName?: string
   /** 面板是否可见：v-show 隐藏时收不到通知，靠它在重新可见时贴底并刷新会话列表 */
   active?: boolean
+  /** 全屏对话：父级这一档下会把分隔条藏掉，本组件只负责铺满编辑区 */
+  fullscreen?: boolean
 }>()
 
-const emit = defineEmits<{ (e: 'close'): void }>()
+const emit = defineEmits<{ (e: 'close'): void; (e: 'toggle-fullscreen'): void }>()
 
 const { theme } = useThemeObserver()
 const chatTheme = computed<'light' | 'dark'>(() => (theme.value === 'dark' ? 'dark' : 'light'))
@@ -481,6 +503,19 @@ onBeforeUnmount(() => {
   overflow: hidden;
   background: var(--bg-panel);
   border-left: 1px solid var(--border-color);
+}
+
+/* 全屏：父级的 .editor-body 是定位基准，这里直接铺满。
+   内联的 flex-basis（拖拽宽度）在 absolute 下不参与布局，不用特意覆盖。
+   底色必须换成不透明的 --bg-container：常态那份 --bg-panel 在深色下是
+   rgba(255,255,255,0.06)（靠下面的容器底色撑起来的），直接盖在 Monaco 上会透出代码。 */
+.editor-agent-panel.is-fullscreen {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  flex: none;
+  border-left: none;
+  background: var(--bg-container);
 }
 
 .agent-panel-header {

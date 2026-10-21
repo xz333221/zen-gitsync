@@ -1542,8 +1542,19 @@ async function ctxOpenInBrowser() {
 }
 
 // 点击全局关闭右键菜单
-onMounted(() => document.addEventListener('click', closeContextMenu))
-onBeforeUnmount(() => document.removeEventListener('click', closeContextMenu))
+onMounted(() => {
+  document.addEventListener('click', closeContextMenu)
+  document.addEventListener('keydown', onEditorKeydown)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('click', closeContextMenu)
+  document.removeEventListener('keydown', onEditorKeydown)
+})
+
+/** Esc 退出全屏对话（全屏时它盖住了编辑区，得留一条键盘退路） */
+function onEditorKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && agentFullscreen.value) agentFullscreen.value = false
+}
 
 // ── 预览面板 ────────────────────────────────────────────
 const PREVIEW_TEXT_EXTS = new Set(['md', 'html', 'htm', 'svg'])
@@ -1556,7 +1567,10 @@ const showMindmap = ref(false)
 const showAgentChat = ref(false)
 // 面板首次打开后常驻（v-show 保状态）：流式的流与折叠状态不会因为切走一次就丢
 const agentOpened = ref(false)
-// 0 = 默认占满右半边（flex: 1 1 0%），用户拖动 resizer 后会写入实际像素值
+// 全屏对话：面板盖住整个编辑区（左栏文件树仍可见）。Esc 或再点一次退出
+const agentFullscreen = ref(false)
+// 0 = 默认占满右半边（flex-grow 平分）；拖过分隔条后是面板的**实际像素宽**
+// （`flex: 0 0 Npx`，不再参与平分 —— 否则「变宽」和「变窄」会被 grow 重新摊掉一半）
 const previewWidth = ref(0)
 
 const activeTabRef = computed(() => tabs.value.find(t => t.path === activeTabPath.value) ?? null)
@@ -1614,6 +1628,29 @@ function toggleAgentChat() {
   showAgentChat.value = !showAgentChat.value
   agentOpened.value = true
 }
+
+function closeAgentChat() {
+  showAgentChat.value = false
+}
+
+// 面板一关就退出全屏：切去预览 / 思维导图也是走这条（它们直接把 showAgentChat 置 false），
+// 否则下次打开对话会莫名其妙地整屏铺开
+watch(showAgentChat, (open) => {
+  if (!open) agentFullscreen.value = false
+})
+
+function toggleAgentFullscreen() {
+  agentFullscreen.value = !agentFullscreen.value
+}
+
+/** 右侧面板（对话 / 预览）的宽度样式：没拖过就平分，拖过就是钉死的像素宽 */
+const rightPaneStyle = computed(() => {
+  // 没有打开的文件 = 编辑区是空的，面板直接占满（否则还留着上次拖出来的窄条 + 左边一片空）
+  if (previewWidth.value <= 0 || tabs.value.length === 0) return { flexBasis: '0px' }
+  // 全屏时不能再带 max-width：内联的 calc(100% - 320px) 会把 inset:0 的面板砍窄一截
+  if (agentFullscreen.value) return { flex: `0 0 ${previewWidth.value}px` }
+  return { flex: `0 0 ${previewWidth.value}px`, maxWidth: 'calc(100% - 320px)' }
+})
 
 // ── Markdown 预览复制（导出到公众号 / 富文本编辑器）─────────────────────
 const mdPreviewRef = ref<InstanceType<typeof MarkdownPreview> | null>(null)
@@ -1735,31 +1772,49 @@ const previewSrcdoc = computed(() => {
   return ''
 })
 
-// 预览面板拖拽调整宽度
+// 预览 / 对话面板拖拽调整宽度
+// 基准取"面板**当前**宽度"，不取 previewWidth：0 的意思是"平分"，不是 0 像素。
+// 手指向左拖 = 面板变宽（分隔条在面板左边缘），与左栏拖拽的方向相反。
+const PREVIEW_MIN_WIDTH = 300
+const EDITOR_MIN_WIDTH = 320
 let isPreviewResizing = false
 let previewResizeStartX = 0
 let previewResizeStartW = 0
+let previewResizeMaxW = 0
 
 function startPreviewResize(e: MouseEvent) {
+  const handle = e.currentTarget as HTMLElement
+  const body = handle.parentElement
+  if (!body) return
+  const bodyRect = body.getBoundingClientRect()
+  const handleRect = handle.getBoundingClientRect()
   isPreviewResizing = true
   previewResizeStartX = e.clientX
-  previewResizeStartW = previewWidth.value
+  // 面板占的就是分隔条右侧到容器右缘那一段（不用找兄弟节点：隐藏的 v-show 面板宽度是 0）
+  previewResizeStartW = bodyRect.right - handleRect.right
+  previewResizeMaxW = Math.max(PREVIEW_MIN_WIDTH, bodyRect.width - EDITOR_MIN_WIDTH)
   document.addEventListener('mousemove', onPreviewResize)
   document.addEventListener('mouseup', stopPreviewResize)
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
   e.preventDefault()
 }
 
 function onPreviewResize(e: MouseEvent) {
   if (!isPreviewResizing) return
-  // resizer 在面板右侧：向右拖动 → 面板变宽
-  const delta = e.clientX - previewResizeStartX
-  previewWidth.value = Math.max(200, Math.min(900, previewResizeStartW + delta))
+  // 向左拖 → delta 为正 → 面板变宽
+  const delta = previewResizeStartX - e.clientX
+  previewWidth.value = Math.round(
+    Math.max(PREVIEW_MIN_WIDTH, Math.min(previewResizeMaxW, previewResizeStartW + delta))
+  )
 }
 
 function stopPreviewResize() {
   isPreviewResizing = false
   document.removeEventListener('mousemove', onPreviewResize)
   document.removeEventListener('mouseup', stopPreviewResize)
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
 }
 </script>
 
@@ -2011,8 +2066,10 @@ function stopPreviewResize() {
 
     <!-- 右侧编辑区 -->
     <div class="editor-main">
-      <!-- 标签栏 -->
-      <div class="editor-tabs" v-if="tabs.length > 0">
+      <!-- 标签栏：没有打开文件时也留着 —— 右侧 g ai 面板的口子在它右端，
+           藏掉整条就是"不选文件就没法跟 g ai 说话"（用户 2026-10-21 反馈）。
+           此时左半边是空的，只留右端那几个按钮。 -->
+      <div class="editor-tabs">
         <div
           v-for="tab in tabs"
           :key="tab.path"
@@ -2087,9 +2144,10 @@ function stopPreviewResize() {
         </button>
       </div>
 
-      <!-- 无文件打开时的提示 -->
+      <!-- 无文件打开时的提示（g ai 面板开着时让位给它 —— 两个都是 flex:1 的话
+           对话区只剩半截高） -->
       <EmptyState
-        v-if="tabs.length === 0"
+        v-if="tabs.length === 0 && !showAgentChat"
         class="editor-empty"
         :title="$t('@EDITOR:从左侧选择文件打开')"
         :hint="$t('@EDITOR:Ctrl+S 保存')"
@@ -2103,7 +2161,7 @@ function stopPreviewResize() {
       </EmptyState>
 
       <!-- Monaco 容器（始终挂载，tab 为空或 image tab 时隐藏） -->
-      <div class="editor-body">
+      <div class="editor-body" :class="{ 'is-agent-fullscreen': agentFullscreen && showAgentChat }">
         <div
           class="monaco-container"
           :class="{ hidden: tabs.length === 0 || activeTabIsImage || activeTabIsOffice }"
@@ -2122,27 +2180,31 @@ function stopPreviewResize() {
           <p class="image-tab-placeholder-title">{{ activeTabRef?.name }}</p>
           <p class="image-tab-placeholder-hint">{{ $t('@EDITOR:这是图片文件，已在右侧预览面板中打开') }}</p>
         </div>
-        <!-- 预览分隔条（在面板右侧，拉动调整面板宽度） -->
+        <!-- 分隔条：贴在右侧面板的**左边缘**（DOM 顺序在面板之前），向左拖 = 面板变宽。
+             以前靠 order:99 挂在容器最右端，用户根本分不清拖的是哪条边。 -->
         <div
           v-if="(showPreview || showMindmap || showAgentChat) && tabs.length > 0"
           class="preview-resizer"
           @mousedown="startPreviewResize"
         />
-        <!-- g ai 对话面板：v-if 懒挂载 + v-show 保状态（切到预览再切回来，进行中的流还在） -->
+        <!-- g ai 对话面板：v-if 懒挂载 + v-show 保状态（切到预览再切回来，进行中的流还在）。
+             不再要求 tabs.length > 0：不选文件也能聊（当前文档上下文自动为空）。 -->
         <EditorAgentPanel
           v-if="agentOpened"
-          v-show="showAgentChat && tabs.length > 0"
-          :active="showAgentChat && tabs.length > 0"
+          v-show="showAgentChat"
+          :active="showAgentChat"
           :active-file-path="activeTabPath"
           :active-file-name="activeTabRef?.name ?? ''"
-          :style="{ flexBasis: previewWidth + 'px' }"
-          @close="showAgentChat = false"
+          :fullscreen="agentFullscreen && showAgentChat"
+          :style="rightPaneStyle"
+          @close="closeAgentChat"
+          @toggle-fullscreen="toggleAgentFullscreen"
         />
         <!-- 预览面板 -->
         <div
           v-if="(showPreview || showMindmap) && tabs.length > 0"
           class="preview-panel"
-          :style="{ flexBasis: previewWidth + 'px' }"
+          :style="rightPaneStyle"
         >
           <div class="preview-header">
             <span class="preview-title">{{ showMindmap ? $t('@EDITOR:思维导图') : $t('@EDITOR:预览') }}</span>
@@ -2895,43 +2957,47 @@ function stopPreviewResize() {
   display: flex;
   overflow: hidden;
   min-height: 0;
+  /* 全屏对话时面板是 absolute inset:0，基准得在这块上 */
+  position: relative;
 }
 
+/* 全屏对话：面板盖住整个编辑区，分隔条没有意义了（Monaco 只是被盖住，没卸载） */
+.editor-body.is-agent-fullscreen .preview-resizer {
+  display: none;
+}
+
+/*
+  右侧面板的分隔条：贴在面板**左边缘**，向左拖 = 面板变宽。
+  宽 7px 是为了好点中，视觉上只有正中间 1px 那条线（不要圆角胶囊）。
+*/
 .preview-resizer {
-  width: 6px;
+  width: 7px;
   flex-shrink: 0;
   cursor: col-resize;
   position: relative;
   background: transparent;
-  transition: background var(--transition-fast);
   z-index: 2;
-  /* resizer 视觉上位于面板右边缘：让 monaco / 面板保持原 DOM 顺序，
-     借助 flex order 把它推到 flex 容器的最右端 */
-  order: 99;
-  margin-left: auto;
-}
 
-.preview-resizer::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 2px;
-  height: 32px;
-  background: var(--color-gray-300);
-  border-radius: var(--radius-xs);
-  transition: background var(--transition-fast), height var(--transition-fast);
-}
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    transform: translateX(-50%);
+    background: var(--border-color);
+    transition: background var(--transition-fast), width var(--transition-fast);
+  }
 
-.preview-resizer:hover {
-  background: var(--tint-primary-06);
-}
+  &:hover {
+    background: var(--tint-primary-06);
 
-.preview-resizer:hover::after {
-  background: var(--color-primary);
-  height: 48px;
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+    &::after {
+      width: 2px;
+      background: var(--color-primary);
+    }
+  }
 }
 
 .preview-panel {

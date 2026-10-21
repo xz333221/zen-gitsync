@@ -2163,6 +2163,8 @@ export default {
   '@EDITOR:打开 g ai 对话': '打开 g ai 对话',
   '@EDITOR:关闭 g ai 对话': '关闭 g ai 对话',
   '@EDITOR:关闭对话': '关闭对话',
+  '@EDITOR:全屏对话': '全屏对话',
+  '@EDITOR:退出全屏对话': '退出全屏对话',
   '@EDITOR:当前文档': '当前文档',
   '@EDITOR:不引用当前文档': '不引用当前文档',
   '@EDITOR:会话列表': '会话列表',
