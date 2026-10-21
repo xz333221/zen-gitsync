@@ -1,21 +1,26 @@
 /**
- * 智能体视图（AgentView）对话页输入框工具条「当前分支 + 默认模型」展示的验证。
+ * 智能体视图（AgentView）与文件空间 g ai 面板输入框工具条「当前分支 + 默认模型」展示的验证。
  *
  * 为什么要有这个：
  *   工作台 g ai 面板自 66034b76 起，输入框工具条就有分支 + 默认模型两片；
  *   对话页（AgentView）的 ChatContainer 一直没传这两个 prop，用户 2026-10-15
  *   反馈"对话页没显示出分支和模型"。本探针钉住补上之后的契约，防回归。
+ *   文件空间 g ai 面板是同一件事的第三个宿主（自己摆的 ChatInput），2026-10-21
+ *   用户又反馈"文件空间这里没有展示出来模型"—— 同一个契约再抄漏一次，所以两组都钉。
  *   数据口径与 AgentChatSurface / App.vue 底栏一致：分支读 gitStore.currentBranch，
  *   模型读设置里标了「默认」的那一条（name || model），库只排版不猜。
  *
  * 验收契约（改这块时别破坏）：
- *   A1 分支片 `.acu-input-chip.is-git` 可见，文本 == 后端 /api/branch 的 branch
- *   A2 模型片 `.acu-input-chip.is-model` 可见，文本 == 后端默认模型的 name||model
- *      （期望值为空时该片必须不渲染 —— 库的约定是"不传则不渲染"，没有占位）
- *   A3 无 pageerror
+ *   对话页：
+ *     A1 分支片 `.acu-input-chip.is-git` 可见，文本 == 后端 /api/branch 的 branch
+ *     A2 模型片 `.acu-input-chip.is-model` 可见，文本 == 后端默认模型的 name||model
+ *        （期望值为空时该片必须不渲染 —— 库的约定是"不传则不渲染"，没有占位）
+ *     A3 无 pageerror
+ *   文件空间面板（作用域 .editor-agent-panel）：
+ *     A4 / A5 同 A1 / A2（同一份期望值），A6 无 pageerror
  * 反向（--reverse）：注入 `.acu-input-chip{display:none!important}` 后
- *   R1/R2 必须翻红，且芯片仍在 DOM 里（证明是 CSS 藏掉的、不是数据没到）
- *   —— 没有这个反证，"可见"断言可能恒绿。
+ *   R1/R2（对话页）、R3/R4（文件空间）必须翻红，且芯片仍在 DOM 里
+ *   （证明是 CSS 藏掉的、不是数据没到）—— 没有这个反证，"可见"断言可能恒绿。
  *
  * 前置：dev server 已起（后端 5545 / 前端 5544）；当前目录是 git 仓库、
  * 设置里有默认模型（否则正向组退化成"必须不渲染"、反向组无可反证，exit 2）。
@@ -71,16 +76,29 @@ async function openAgentView(page) {
   await page.waitForSelector('.acu-input-textarea', { timeout: 30000 })
 }
 
-/** 读工具条上那两片：返回 { git: {exists, visible, text}, model: {...} } */
-async function readChips(page) {
-  return page.evaluate(() => {
+/**
+ * 进文件空间的 g ai 面板（面板只在"有打开的文件"时挂载：先点左树第一个文件再点 Tab 栏的
+ * agent toggle）。作用域断言都带 `.editor-agent-panel` —— 视图是 keep-alive 的，
+ * 全局 querySelector 可能命中对话页那一份。
+ */
+async function openEditorPanel(page) {
+  await page.click('.activity-bar button[aria-label^="文件空间"]')
+  await page.waitForSelector('.tree-node--file', { timeout: 60000 })
+  await page.locator('.tree-node--file').first().click()
+  await page.click('.agent-toggle-btn')
+  await page.waitForSelector('.editor-agent-panel .acu-input-textarea', { timeout: 30000 })
+}
+
+/** 读工具条上那两片：返回 { git: {exists, visible, text}, model: {...} }。scope 传宿主选择器 */
+async function readChips(page, scope = '') {
+  return page.evaluate((sc) => {
     const read = (sel) => {
-      const el = document.querySelector(sel)
+      const el = document.querySelector((sc ? sc + ' ' : '') + sel)
       if (!el) return { exists: false, visible: false, text: '' }
       return { exists: true, visible: !!el.offsetParent, text: (el.textContent || '').trim() }
     }
     return { git: read('.acu-input-chip.is-git'), model: read('.acu-input-chip.is-model') }
-  })
+  }, scope)
 }
 
 async function browserChecks(facts) {
@@ -103,6 +121,11 @@ async function browserChecks(facts) {
     await sleep(500) // 等工具条渲染稳定（输入框就绪时两片是同步渲染的，这点余量是防慢机器）
     const chips = await readChips(page)
 
+    // 文件空间面板：同一个 ChatInput，宿主自己摆（show-input=false），最容易漏传的就是它
+    await openEditorPanel(page)
+    await sleep(500)
+    const panelChips = await readChips(page, '.editor-agent-panel')
+
     if (REVERSE) {
       // R1/R2：芯片必须还在 DOM 里（数据/ prop 链路没断）但不可见（被 CSS 藏了）
       // —— 只断言"不可见"不够：产品代码真坏了（没传 prop）也会不可见，那是恒绿。
@@ -112,6 +135,12 @@ async function browserChecks(facts) {
       check('R2 模型片被 CSS 藏掉后不可见（且仍在 DOM）',
         chips.model.exists && !chips.model.visible,
         `exists=${chips.model.exists} visible=${chips.model.visible} text=${chips.model.text}`)
+      check('R3 文件空间分支片被 CSS 藏掉后不可见（且仍在 DOM）',
+        panelChips.git.exists && !panelChips.git.visible,
+        `exists=${panelChips.git.exists} visible=${panelChips.git.visible} text=${panelChips.git.text}`)
+      check('R4 文件空间模型片被 CSS 藏掉后不可见（且仍在 DOM）',
+        panelChips.model.exists && !panelChips.model.visible,
+        `exists=${panelChips.model.exists} visible=${panelChips.model.visible} text=${panelChips.model.text}`)
     } else {
       // A1/A2：期望值非空 → 必须可见且文本一致；为空 → 必须不渲染（无占位）
       check(`A1 分支片可见且为「${facts.branch || '（空，应不渲染）'}」`,
@@ -124,7 +153,19 @@ async function browserChecks(facts) {
           ? (chips.model.visible && chips.model.text === facts.model)
           : !chips.model.visible,
         `visible=${chips.model.visible} text=${chips.model.text}`)
-      check('A3 无 pageerror', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '))
+      check('A3 对话页无 pageerror', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '))
+
+      check(`A4 文件空间分支片可见且为「${facts.branch || '（空，应不渲染）'}」`,
+        facts.branch
+          ? (panelChips.git.visible && panelChips.git.text === facts.branch)
+          : !panelChips.git.visible,
+        `visible=${panelChips.git.visible} text=${panelChips.git.text}`)
+      check(`A5 文件空间模型片可见且为「${facts.model || '（空，应不渲染）'}」`,
+        facts.model
+          ? (panelChips.model.visible && panelChips.model.text === facts.model)
+          : !panelChips.model.visible,
+        `visible=${panelChips.model.visible} text=${panelChips.model.text}`)
+      check('A6 文件空间无 pageerror', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '))
     }
   } finally {
     await browser.close().catch(() => {})
@@ -156,7 +197,9 @@ async function browserChecks(facts) {
     for (const f of failed) console.error(`  FAIL  ${f.name}${f.extra ? '  :: ' + f.extra : ''}`)
     process.exit(1)
   }
-  console.log(REVERSE ? '反证通过：两片芯片都如期翻红' : '通过：对话页输入框工具条展示了分支与默认模型')
+  console.log(REVERSE
+    ? '反证通过：对话页与文件空间的两片芯片都如期翻红'
+    : '通过：对话页与文件空间输入框工具条都展示了分支与默认模型')
   process.exit(0)
 })().catch((err) => {
   console.error('[verify] 异常:', err?.stack || err)

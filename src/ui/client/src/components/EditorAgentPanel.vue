@@ -147,6 +147,8 @@
           :placeholder="isStreaming ? $t('@AGENT:生成中，发送后会排队，等本轮跑完自动接上…') : $t('@AGENT:输入消息，Enter 发送')"
           :upload-config="{ accept: AGENT_UPLOAD_ACCEPT }"
           :context-usage="inputContextUsage"
+          :git-branch="gitStore.currentBranch || undefined"
+          :model="inputModelName || undefined"
           @send="onSend"
           @stop="stop"
           @unqueue="removeQueuedMessage"
@@ -196,6 +198,8 @@ import { ChatContainer, ChatInput, ConversationList } from 'zen-ai-chat-ui'
 // 那三个 chunk 一个都没加载过，漏了这行就是整块面板无样式裸奔（2026-09-27 用户实测报过）。
 import 'zen-ai-chat-ui/style.css'
 import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
+import { useConfigStore } from '@/stores/configStore'
+import { useGitStore } from '@/stores/gitStore'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import { useNarrowPane } from '@/composables/useNarrowPane'
 import { useConvListCollapse } from '@/composables/useConvListCollapse'
@@ -262,6 +266,18 @@ const {
   // 本轮静默时长（毫秒）；头部那枚「静默 x 秒」读它，口径见 ChatSilenceBadge
   silentMs,
 } = useAgentChat()
+
+// ── 输入框工具条上的「当前分支 + 默认模型」两片 ────────────────
+// 与「智能体」视图 / 工作台 g ai 面板同一口径（分支读 gitStore.currentBranch，
+// 模型读设置里标了「默认」的那一条，见 App.vue 底栏）。读不到就传 undefined ——
+// 库的约定是"不传则不渲染"，这里不许自己编占位（用户 2026-10-21 反馈文件空间里没有模型）。
+const configStore = useConfigStore()
+const gitStore = useGitStore()
+const inputModelName = computed(() => {
+  const m = configStore.models.find((x: any) => x.isDefault)
+  if (!m) return ''
+  return m.name || m.model || ''
+})
 
 // ── 引擎：与「智能体」视图同一口径 ────────────────────────────
 // 已有会话显示它自己的引擎（且锁定），没有会话显示"下次新建会用哪个"。
