@@ -45,6 +45,7 @@ import { $t } from '@/lang/static'
 import { useToolsStore, type ToolId } from '@/stores/toolsStore'
 import { useOpenWithTool } from '@/composables/useOpenWithTool'
 import {
+  DARK_TILE_ICON_IDS,
   DESKTOP_APP_TOOL_IDS,
   OPEN_WITH_TOOLS,
   TOOL_DISPLAY_NAMES,
@@ -258,7 +259,7 @@ async function openWithTool(tool: ToolId, permissionMode?: string) {
       @keydown.enter.prevent="openWithTool(tool.id)"
       @keydown.space.prevent="openWithTool(tool.id)"
     >
-      <span class="proj-menu__icon"><svg-icon :icon-class="tool.icon" :class="{ 'icon-invert-dark': tool.id === 'codex' }" /></span>
+      <span class="proj-menu__icon"><svg-icon :icon-class="tool.icon" :class="{ 'icon-invert-dark': tool.id === 'codex', 'icon-outline-dark': DARK_TILE_ICON_IDS.has(tool.id) }" /></span>
       <span class="proj-menu__label">{{ $t(tool.labelKey) }}</span>
       <span v-if="toolMissing(tool.id)" class="proj-menu__hint">{{ $t('@67CE7:未安装') }}</span>
     </li>
@@ -388,7 +389,7 @@ async function openWithTool(tool: ToolId, permissionMode?: string) {
       >
         <span class="proj-menu__icon">
           <img v-if="tool.id === 'claude'" :src="claudeCodeIcon" alt="" class="proj-menu__img" />
-          <svg-icon v-else :icon-class="tool.icon" :class="{ 'icon-invert-dark': tool.id === 'codex' }" />
+          <svg-icon v-else :icon-class="tool.icon" :class="{ 'icon-invert-dark': tool.id === 'codex', 'icon-outline-dark': DARK_TILE_ICON_IDS.has(tool.id) }" />
         </span>
         <span class="proj-menu__label">{{ desktopAppLabel(toolsStore.desktopAppOf(tool.id)) }}</span>
         <span class="proj-menu__hint">{{ desktopAppHint(toolsStore.desktopAppOf(tool.id)) }}</span>

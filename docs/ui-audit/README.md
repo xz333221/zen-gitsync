@@ -801,3 +801,58 @@ hint —— 那个是"**下次**用谁"（`selectedTaskExecutor`，用户临时�
 与按钮 hint 相互独立 / 滚动不断链 / 窄视口退场）+ `--reverse`（job 全空 → 徽标
 全不渲染，8 条）。存量红预警：库里 MessageRail 的 `getBoundingClientRect`
 pageerror 三条是改动前就有的（`verify-wb-rerun-label` 同样报），不是本改动引入。
+
+## 补记（2026-10-21）：按 `ui-ux-pro-max` 过一遍全站，清掉最后一层「圆角 + 单边框」
+
+用项目内的 `ui-ux-pro-max`（57 风格 / 99 条 UX 规则）+ 1600×1000 双主题全页截图 + 运行时扫描
+（「圆角 + 四边 1px 边框 + 有底色」的容器、逐字对比度）把 8 个视图审了一遍。结论不是结构问题，
+是**设计语言还差最后一截**：广场已经平铺化，另外几处仍停在老写法。
+
+### 1. 监控页：五张 KPI 卡 → 一条指标带（顺带修对比度）
+
+旧写法每格「白底 + 描边 + 圆角 + hover 阴影」，五张并排就是一排小方框；数值色直接吃
+Element Plus 的 `--color-success` / `--color-warning`，浅色下 **2.24 / 2.19:1**（大字号下限 3:1），
+12px 磁盘百分比同样 2.2:1（下限 4.5:1）—— 全屏最该读的数字反而最淡。
+
+现在容器铺 `--border-color`、格子铺 `--bg-container`、`gap: 1px`，任何断点（5/2/1 列）自带细线，
+不需要按 `nth-child` 补线。文字改用 `--role-*-ink`（为过 AA 压暗/提亮的那档），进度条用
+`--role-*-bar`（实心色块不吃文字预算）。与看板进度条同一套口径。
+
+| 改前（卡片 + 2.2:1） | 改后（指标带 + AA） |
+|---|---|
+| ![改前](./metric-cards-before.png) | ![改后](./metric-cards-after.png) |
+
+### 2. 设置弹窗：七块渐变 info-card → 纯标题 + hairline
+
+`GitGlobalSettingsDialog.vue` 每个 tab 顶上都是「135° 主色渐变 + 1px 描边 + `radius-xl` + 4px
+渐变竖条 + 非交互却有 hover 阴影」。降级成标题（16px/600）+ 说明（`--text-meta`）+ 一条
+`--border-color` 分隔线，七处一次收敛。同时给 footer 补 `border-top`：内容区可滚动，没有这条线时
+滚到中间的行会被 footer 齐刷刷切一半。
+
+![设置弹窗](./settings-header-flat.png)
+
+### 3. 智能体欢迎页：五张预设卡 → 平铺目录
+
+宿主已有 `flex-wrap` 覆盖（3+2 均分、不留洞），但卡片仍是库里的「白底 + 1px 描边 + 圆角 14」。
+在 `AgentView.vue` 的 `:deep()` 覆盖层里去底去描边、hover 铺 `--bg-hover`，序号保留
+（它承担「一页目录」的定位）。库源码不动，避免为一个形态改版就发一次包。
+
+![预设平铺](./welcome-presets-flat.png)
+
+### 4. 其余小项（同一次提交）
+
+| 位置 | 问题 | 改法 |
+|---|---|---|
+| 广场 `.mp-card-foot` | 来源行折行时「安装」掉到下一档，五列不成线 | `margin-top: auto` 按格底对齐 |
+| 工作台 `.proj-item__badge` | 「当前」11px 主色压 12% 底：深 3.66 / 浅 3.43 | `--color-primary-dark`，深色另给 `--color-primary-light` |
+| 推荐添加 `.pm-rec__add` | 11px 主色文字，浅色 3.14:1 | 同上换深档 |
+| 顶栏 opencode / zcode | 整块暗色方砖压在 #1b1f2a 上糊掉 | `DARK_TILE_ICON_IDS` + `.icon-outline-dark`（drop-shadow 描边，不反相） |
+| Git 刷新 toast | 默认 `top:20` 盖住目录胶囊与工具入口 | `offset: 72` |
+| 思维导图「保存」 | 禁用态仍是主色淡底 + 白字，看着能点 | 中性底 + `--text-meta` |
+
+顺手清掉 `RecommendedProjects` / `MarketplacePanel` 里三处存量违规（success 当文字色、字面
+`opacity: 0.6`），`verify:ui-consistency` 的 A1/A8 从 3/2 处降到 1/0 处。
+
+回归网：`verify:ui-consistency`（38 PASS，剩 5 条失败全在 `SchedulePanel` /
+`ProjectManageItem` / `CopySessionButton` 与本轮无关的存量，另有一条运行时图标尺寸棘轮在浮动）、
+`verify:project-manager` 50/50、`verify:marketplace-panel` 15/15、`tsc` + `build` 绿。

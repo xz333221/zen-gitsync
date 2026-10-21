@@ -822,6 +822,18 @@ onBeforeUnmount(() => {
 .agent-chat-host :deep(.acu-welcome-grid > .acu-preset-q) {
   flex: 1 1 260px;
   min-width: 0;
+  /* 库里每张预设是「白底 + 1px 描边 + 圆角」的小卡片，五张并排时边界比内容还抢眼
+     （用户点名不要这种形态）。宿主按广场的写法压成平铺块：去底、去描边，
+     hover 才铺一层淡底。序号保留 —— 它承担「一页目录」的定位，不是重复信息。 */
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-lg);
+  padding: 12px 10px 12px 0;
+}
+.agent-chat-host :deep(.acu-welcome-grid > .acu-preset-q:hover) {
+  background: var(--bg-hover);
+  box-shadow: none;
+  transform: none;
 }
 
 /* ── 暗色主题适配 ───────────────────────────────── */

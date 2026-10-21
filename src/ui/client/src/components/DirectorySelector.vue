@@ -38,6 +38,7 @@ import { useMcpInstallStore } from "@/stores/mcpInstallStore";
 // 编排台的项目列表用的是同一份端点映射和工具展示名，避免同一个工具在顶栏叫一个名、
 // 在项目列表里叫另一个名。这里只负责把结果翻译成 toast，交互(安装引导、版本 tooltip)仍在本组件。
 import {
+  DARK_TILE_ICON_IDS,
   OPEN_WITH_TOOLS,
   TOOL_DISPLAY_NAMES,
   desktopAppHint,
@@ -1031,7 +1032,7 @@ function onBrowserSelect(path: string) {
                 size="large"
                 @click="runOrInstall(tool.id, tool.action)"
               >
-                <svg-icon :icon-class="tool.icon" :class="{ 'icon-invert-dark': tool.id === 'codex' }" />
+                <svg-icon :icon-class="tool.icon" :class="{ 'icon-invert-dark': tool.id === 'codex', 'icon-outline-dark': DARK_TILE_ICON_IDS.has(tool.id) }" />
               </IconButton>
             </span>
           </template>
@@ -1278,7 +1279,7 @@ function onBrowserSelect(path: string) {
                   :alt="tool.name"
                   class="tools-more__claude-icon"
                 />
-                <svg-icon v-else :icon-class="tool.icon ?? ''" :class="{ 'icon-invert-dark': tool.id === 'codex' }" />
+                <svg-icon v-else :icon-class="tool.icon ?? ''" :class="{ 'icon-invert-dark': tool.id === 'codex', 'icon-outline-dark': DARK_TILE_ICON_IDS.has(tool.id) }" />
               </span>
               <span class="tools-more__label">{{ tool.name }}</span>
               <span v-if="tool.missing" class="tools-more__hint">{{ $t('@67CE7:未安装') }}</span>

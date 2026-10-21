@@ -102,6 +102,17 @@ export const OPEN_WITH_TOOLS: OpenWithTool[] = [
   { id: 'dsh', name: 'DeepSeek Harness', icon: 'dsh', labelKey: '@67CE7:用 DeepSeek Harness 打开' },
 ]
 
+/**
+ * 「整块暗色方砖」型的品牌标：opencode（#211E1E 底 + 浅灰字形）、zcode（#2D2D2D 底 +
+ * 白色 Z）。它们本身没有浅色描边，压在深色顶栏（#1b1f2a）上边界会糊掉，整颗图标
+ * 看着像一块黑洞。
+ *
+ * 这类标**不反相** —— 反相会把品牌底色翻成白色（另一套视觉），只在外沿补一圈
+ * 1px 浅色描边即可（CSS 见 dark-theme.scss 的 `.icon-outline-dark`）。
+ * 纯黑线稿的 codex 是另一种情况，走 `.icon-invert-dark`（整体反相成白色）。
+ */
+export const DARK_TILE_ICON_IDS: ReadonlySet<ToolId> = new Set<ToolId>(['opencode', 'zcode'])
+
 /** 统一的 POST 封装：网络异常也转成结果对象，不让调用方被 promise rejection 打穿 */
 async function post(path: string, body: Record<string, unknown>): Promise<OpenDirectoryResult> {
   try {

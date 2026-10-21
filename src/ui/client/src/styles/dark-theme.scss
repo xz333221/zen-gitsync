@@ -1372,3 +1372,10 @@ html[data-theme="dark"] {
 html[data-theme="dark"] .icon-invert-dark {
   filter: invert(1);
 }
+
+/* 整块暗色方砖的品牌标（opencode / zcode，见 DARK_TILE_ICON_IDS）。
+   底色本身就是 #211E1E / #2D2D2D，压在 #1b1f2a 的顶栏上边界整个糊掉 ——
+   不反相（那会把品牌底色翻成白的），只沿 alpha 轮廓补一圈极窄的浅色描边。 */
+html[data-theme="dark"] .icon-outline-dark {
+  filter: drop-shadow(0 0 0.7px rgba(255, 255, 255, 0.65));
+}

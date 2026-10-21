@@ -807,6 +807,14 @@ function formatSize(bytes: number): string {
   flex-shrink: 0;
 }
 
+/* 保存按钮不可用时仍是「主色淡底 + 白字」，看着像一颗能点的主按钮。
+   置灰成和旁边 ghost 按钮同一档（中性底 + meta 字），禁用态才读得出"现在没得存"。 */
+.mm-toolbar-right :deep(.el-button--primary.is-disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-color);
+  color: var(--text-meta);
+}
+
 /* 已添加目录数的标签（hover 通过 tooltip 看完整路径列表） */
 .mm-dir-tag {
   flex-shrink: 0;

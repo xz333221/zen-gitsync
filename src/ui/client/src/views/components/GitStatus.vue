@@ -245,6 +245,9 @@ async function loadStatus() {
     ElMessage({
       message: $t('@13D1C:Git 状态已刷新'),
       type: 'success',
+      // 默认 top:20 正好压在顶栏的目录胶囊和工具入口上；这条提示是高频动作
+      // （每次刷新都来一次），把它挪到顶栏下面，别挡手。
+      offset: 72,
     })
   } catch (error) {
     ElMessage({
@@ -529,7 +532,7 @@ async function refreshStatus() {
     // 工作区状态和刷新前不同时，右侧提交历史会跟着重拉 —— 与聚焦刷新行为一致，
     // 不然"手动刷新了状态、右侧 log 还是旧的"会很误导
     await gitStore.refreshStatusOnFocus(true)
-    ElMessage.success($t('@13D1C:Git 状态已刷新'))
+    ElMessage.success({ message: $t('@13D1C:Git 状态已刷新'), offset: 72 })
   } catch (error) {
     ElMessage.error(`${$t('@13D1C:刷新失败: ')}${(error as Error).message}`)
   }

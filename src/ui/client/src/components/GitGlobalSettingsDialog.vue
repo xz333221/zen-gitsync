@@ -424,7 +424,7 @@
                   :class="{ 'is-off': !isHeaderToolVisible(tool.id) }"
                 >
                   <span class="header-tool__icon">
-                    <svg-icon :icon-class="tool.icon" :class="{ 'icon-invert-dark': tool.id === 'codex' }" />
+                    <svg-icon :icon-class="tool.icon" :class="{ 'icon-invert-dark': tool.id === 'codex', 'icon-outline-dark': DARK_TILE_ICON_IDS.has(tool.id) }" />
                   </span>
                   <span class="header-tool__name">{{ tool.name }}</span>
                   <el-switch
@@ -915,7 +915,7 @@ import { useConfigStore, type ModelInfo } from '@/stores/configStore'
 import { useToolsStore, type ToolId } from '@/stores/toolsStore'
 import { TASK_EXECUTOR_OPTIONS, type TaskExecutorId } from '@/utils/taskExecutor'
 import { builtinAgentPresets, newAgentPresetId, type AgentPresetPrompt } from '@/utils/agentPresets'
-import { TOOL_DISPLAY_NAMES } from '@/composables/useDirectoryOpenActions'
+import { DARK_TILE_ICON_IDS, TOOL_DISPLAY_NAMES } from '@/composables/useDirectoryOpenActions'
 import {
   notificationPermission,
   requestNotificationPermission,
@@ -2276,15 +2276,9 @@ async function openSystemConfigFile() {
   margin: 0;
 }
 
-/* 深色主题适配 */
+/* 深色主题适配（面板头已无卡片底，只剩分隔线，跟随 --border-color 自动翻转） */
 [data-theme="dark"] .info-card {
-  background: linear-gradient(135deg, var(--tint-primary-12) 0%, var(--tint-primary-06) 100%);
-  border-color: var(--tint-primary-22);
-}
-
-[data-theme="dark"] .info-card:hover {
-  border-color: var(--tint-primary-35);
-  box-shadow: var(--shadow-md);
+  border-bottom-color: var(--border-color);
 }
 
 [data-theme="dark"] .basic-info-section {
@@ -2348,32 +2342,17 @@ async function openSystemConfigFile() {
   margin-bottom: var(--spacing-base);
 }
 
+/* 面板头：从「蓝色渐变卡片 + 描边 + 4px 渐变竖条」降级成纯标题 + 一条细线。
+   原来每个 tab 顶上都是一块带边界的色块，七块同构地重复，视觉噪声比标题本身大；
+   而且它不可点却有 hover 阴影。现在只留排版层级：标题大一号、说明走 meta 色，
+   下面用 1px 分隔线接第一个分区 —— 和广场的分组头是同一套写法。 */
 .info-card {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-md);
-  padding: var(--spacing-lg);
-  background: linear-gradient(135deg, var(--tint-primary-08) 0%, var(--tint-primary-04) 100%);
-  border: 1px solid var(--tint-primary-18);
-  border-radius: var(--radius-xl);
-  position: relative;
-  overflow: hidden;
-  transition: var(--transition-ui-slow);
-}
-
-.info-card:hover {
-  border-color: var(--tint-primary-30);
-  box-shadow: var(--shadow-md);
-}
-
-.info-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 4px;
-  height: 100%;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  display: block;
+  padding: 4px 0 14px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 0;
 }
 
 .info-icon {
@@ -2396,25 +2375,28 @@ async function openSystemConfigFile() {
 }
 
 .info-title {
-  margin: 0 0 6px 0;
-  
+  margin: 0 0 4px 0;
+  font-size: var(--font-size-md);
   font-weight: 600;
-  color: var(--color-text-title);
-  letter-spacing: 0.3px;
+  color: var(--text-title);
+  letter-spacing: 0.2px;
 }
 
 .info-desc {
   margin: 0;
   font-size: var(--font-size-sm);
-  color: var(--el-text-color-regular);
-  line-height: 1.6;
+  color: var(--text-meta);
+  line-height: 1.55;
 }
 
 .user-settings-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0;
+  padding: 12px 0 0;
+  /* 内容区是可滚动的：没有这条线时，滚到中间的行会被 footer 齐刷刷切一半，
+     看上去像渲染坏了。一条 hairline 把「滚动区」和「操作区」分开就正常了。 */
+  border-top: 1px solid var(--border-color);
 }
 
 /* 配置编辑面板 */

@@ -861,7 +861,8 @@ async function onRemove(item: InstalledItem) {
 .mp-verified {
   flex-shrink: 0;
   font-size: 12px;
-  color: var(--color-success);
+  /* 状态色当文字色要走压暗档（同 A1 规则） */
+  color: var(--color-success-dark);
 }
 
 .mp-card-head {
@@ -943,7 +944,11 @@ async function onRemove(item: InstalledItem) {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 2px;
+  /* 贴到格子底部：来源/标签那行折行时（如 anthropics/skills · skills/skill-creator），
+     同一排的「安装」会掉到下一档，五列按钮连不成一条水平线。
+     .mp-card-main 是撑满格子的 flex 列，margin-top:auto 把操作行按格底对齐。 */
+  margin-top: auto;
+  padding-top: 2px;
 }
 
 .mp-card-link {
@@ -980,7 +985,7 @@ async function onRemove(item: InstalledItem) {
   align-items: center;
   gap: 3px;
   font-size: var(--font-size-xs);
-  color: var(--color-success, var(--action-emerald));
+  color: var(--color-success-dark);
 }
 
 .mp-not-installable {

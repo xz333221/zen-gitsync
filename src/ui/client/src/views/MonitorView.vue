@@ -102,11 +102,23 @@ function formatUptime(seconds: number): string {
   return parts.join(' ')
 }
 
-// 数值到颜色的映射，给 el-progress 用
-function usageColor(percent: number): string {
-  if (percent >= 90) return 'var(--color-danger)'
-  if (percent >= 70) return 'var(--color-warning)'
-  return 'var(--color-success)'
+/* 数值到颜色的映射。文字和进度条分两档取色：
+   - 文字走 `--role-*-ink`：这是为「小字过 AA」压暗/提亮过的那一档。原来直接吃
+     Element Plus 的 `--color-success` / `--color-warning`，浅色下 24px 大字只有
+     2.2:1（大字号下限 3:1），12px 磁盘百分比 2.2:1（下限 4.5:1）—— 全屏最该读的
+     数字反而是最淡的。
+   - 进度条走 `--role-*-bar`：实心色块不承载文字，不该吃对比度预算，比 ink 亮一档
+     正好（与看板进度条同一套口径）。 */
+function usageInk(percent: number): string {
+  if (percent >= 90) return 'var(--role-error-ink)'
+  if (percent >= 70) return 'var(--role-active-ink)'
+  return 'var(--role-done-ink)'
+}
+
+function usageBar(percent: number): string {
+  if (percent >= 90) return 'var(--role-error-bar)'
+  if (percent >= 70) return 'var(--role-active-bar)'
+  return 'var(--role-done-bar)'
 }
 
 // ── kill 进程 ────────────────────────────────────────────────────────────
@@ -251,7 +263,7 @@ onBeforeUnmount(() => {
           <span>{{ $t('@MONITOR:CPU 占用') }}</span>
         </div>
         <div class="metric-card__body">
-          <div class="metric-value" :style="{ color: usageColor(store.overview.cpu.usage) }">
+          <div class="metric-value" :style="{ color: usageInk(store.overview.cpu.usage) }">
             {{ store.overview.cpu.usage.toFixed(1) }}<span class="metric-unit">%</span>
           </div>
           <div class="metric-sub">{{ store.overview.cpu.cores }} {{ $t('@MONITOR:核心') }}</div>
@@ -260,7 +272,7 @@ onBeforeUnmount(() => {
           :percentage="store.overview.cpu.usage"
           :stroke-width="6"
           :show-text="false"
-          :color="usageColor(store.overview.cpu.usage)"
+          :color="usageBar(store.overview.cpu.usage)"
         />
         <div class="metric-card__footer" :title="store.overview.cpu.model">
           {{ store.overview.cpu.model }}
@@ -285,7 +297,7 @@ onBeforeUnmount(() => {
           <span>{{ $t('@MONITOR:内存占用') }}</span>
         </div>
         <div class="metric-card__body">
-          <div class="metric-value" :style="{ color: usageColor(store.overview.memory.usagePercent) }">
+          <div class="metric-value" :style="{ color: usageInk(store.overview.memory.usagePercent) }">
             {{ store.overview.memory.usagePercent.toFixed(1) }}<span class="metric-unit">%</span>
           </div>
           <div class="metric-sub">
@@ -296,7 +308,7 @@ onBeforeUnmount(() => {
           :percentage="store.overview.memory.usagePercent"
           :stroke-width="6"
           :show-text="false"
-          :color="usageColor(store.overview.memory.usagePercent)"
+          :color="usageBar(store.overview.memory.usagePercent)"
         />
         <div class="metric-card__footer">
           {{ $t('@MONITOR:空闲') }} {{ formatBytes(store.overview.memory.free) }}
@@ -361,9 +373,9 @@ onBeforeUnmount(() => {
                 :percentage="d.usagePercent"
                 :stroke-width="6"
                 :show-text="false"
-                :color="usageColor(d.usagePercent)"
+                :color="usageBar(d.usagePercent)"
               />
-              <span class="disk-percent" :style="{ color: usageColor(d.usagePercent) }">
+              <span class="disk-percent" :style="{ color: usageInk(d.usagePercent) }">
                 {{ d.usagePercent.toFixed(1) }}%
               </span>
             </div>
@@ -542,13 +554,21 @@ onBeforeUnmount(() => {
   margin-right: 4px;
 }
 
-/* ── KPI 卡片 ───────────────────────────────────────────────────────── */
+/* ── KPI 指标带 ─────────────────────────────────────────────────────── */
+/* 五组指标并成一条带，靠 1px 间隙露出容器底色当分隔线：
+   原来每格是「白底 + 1px 描边 + 圆角 + hover 阴影」的卡片，五张排下来
+   屏幕上是五块尺寸相同的小方框，边界噪声比信息本身还抢眼。
+   现在容器铺 `--border-color`、格子铺 `--bg-container`、`gap: 1px` ——
+   任何断点（5 列 / 2 列 / 1 列）都自带细线，不需要按 nth-child 补线。 */
 .monitor-cards {
   display: grid;
-  /* 四张 KPI 卡片 + 右侧磁盘卡片同排；磁盘卡片多占一点宽度放进度条 */
+  /* 四组 KPI + 右侧磁盘组同排；磁盘组多占一点宽度放进度条 */
   grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.35fr);
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 1px;
+  margin: 12px 16px;
+  background: var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
   flex-shrink: 0;
 }
 
@@ -559,18 +579,11 @@ onBeforeUnmount(() => {
 
 .metric-card {
   background: var(--bg-container);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: 12px 14px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow var(--transition-base) ease, transform var(--transition-base) ease;
-}
-
-.metric-card:hover {
-  box-shadow: var(--shadow-md);
+  min-width: 0;
 }
 
 .metric-card__header {

@@ -971,8 +971,16 @@ async function confirmRemove(p: ProjectSummary) {
   line-height: 15px;
   padding: 0 5px;
   border-radius: var(--radius-base);
-  color: var(--color-primary);
+  /* 深一档的主色：11px 小字压 12% 主色底，用 --color-primary 只有 3.4:1
+     （浅色 3.43 / 深色 3.66），低于 AA 的 4.5。深档在浅色下 5.5:1；
+     深色主题另有一套（见下方 [data-theme="dark"]），因为 --color-primary-dark
+     在暗色下没有翻转、仍是给白底用的 #2563eb。 */
+  color: var(--color-primary-dark);
   background: var(--tint-primary-12);
+}
+
+[data-theme="dark"] .proj-item__badge {
+  color: var(--color-primary-light);
 }
 
 /* ── hover 才出现的「打开文件夹」+「打开方式」 ─────────────────────── */

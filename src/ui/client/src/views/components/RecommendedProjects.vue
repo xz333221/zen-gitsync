@@ -278,7 +278,10 @@ defineExpose({ reload })
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--color-primary);
+  /* 11px 小字压 --bg-subtle，用 --color-primary 只有 3.14:1（浅色）/4.25（深色），
+     都低于 AA；深一档在浅色下 5.1:1。深色主题另给 --color-primary-light
+     （--color-primary-dark 在暗色下没翻转，仍是白底用的 #2563eb）。 */
+  color: var(--color-primary-dark);
   font-family: inherit;
   font-size: var(--font-size-xs);
   cursor: pointer;
@@ -286,13 +289,15 @@ defineExpose({ reload })
     background var(--transition-fast) var(--ease-custom),
     color var(--transition-fast) var(--ease-custom);
 }
+[data-theme="dark"] .pm-rec__add { color: var(--color-primary-light); }
 .pm-rec__add:hover:not(:disabled) { background: var(--tint-primary-12); }
 .pm-rec__add:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
-.pm-rec__add:disabled { cursor: default; opacity: 0.6; }
+.pm-rec__add:disabled { cursor: default; opacity: var(--disabled-opacity); }
 .pm-rec__added {
   flex-shrink: 0;
   font-size: var(--font-size-xs);
-  color: var(--color-success);
+  /* 「已添加」是文字：走压暗一档的 success（浅色下 --color-success 只有 2.2:1） */
+  color: var(--color-success-dark);
 }
 .is-rotating { animation: pm-rec-rotating 1s linear infinite; }
 @keyframes pm-rec-rotating {
