@@ -35,6 +35,10 @@
  *   P9 截图存证
  *   P14 报告正文**默认展开**（2026-10-16 用户要求）：is-expanded、按钮是「收起」；
  *       换一份报告也保持展开
+ *   P15 设置弹窗是同一个间隔的另一个入口（2026-10-21 用户要求「默认报告时间也能在
+ *       设置里设」）：通用设置里有「自动报告间隔」、显示的当前档与控制台逐字一致、
+ *       档位就是服务端白名单那 6 档、在设置里改档服务端跟着落盘且控制台下拉跟着变；
+ *       反证：接口返 500 时不当成功（服务端没被改 + 弹错误），重开弹窗显示回到旧档
  *
  * 前置：dev server 已启动（npm run dev，后端 5545 / 前端 5544）。
  * 用法：node scripts/verify-wb-progress-report.cjs
@@ -330,6 +334,151 @@ async function main() {
     m = await readPanel(page)
     check('P3b 刷新后仍显示该档位（记住了，不是每次回默认）',
       Number(m.interval) === target, `select=${m.interval}`)
+
+    /* ══ P15 设置弹窗是同一个间隔的另一个入口（2026-10-21 用户要求） ══ */
+    // 用户原话："我希望我的这个默认报告时间也能在设置中进行设置"。控制台那个下拉
+    // （P2/P3）读写的 orchestrator.json 里就一个值；设置里加的这一个必须是同一份：
+    // 打开时显示当前档、改动能落盘、控制台跟着变。三条各钉一角，少任何一条都会
+    // 出现"设置里改了没用"或"两个入口各存一份"的分叉。
+    {
+      const labelRe = (zh, en) => new RegExp(`${zh}|${en}`, 'i')
+      const SETTINGS_ROW_SRC = labelRe('自动报告间隔', 'auto-report interval').source
+      /** 点顶栏齿轮打开设置弹窗；aria-label 跟随语言，zh/en 都认 */
+      const openSettings = () => page.evaluate((src) => {
+        const re = new RegExp(src, 'i')
+        const btn = [...document.querySelectorAll('button[aria-label]')]
+          .find(b => re.test(b.getAttribute('aria-label') || ''))
+        if (!btn) return false
+        btn.click()
+        return true
+      }, labelRe('用户设置', 'user settings').source)
+      /** 设置弹窗里那一行 select 当前显示的文案（空串 = 行不在 / 值还没读到）。
+       *  读 .el-select__selection 而不是 .el-select__selected-item：element-plus 2.11
+       *  里后者有**两个**节点（隐藏的 filterable input 壳 + 真正显示文案的），
+       *  querySelector 取第一个会拿到空文本（实测踩过） */
+      const settingsIntervalText = () => page.evaluate((src) => {
+        const re = new RegExp(src, 'i')
+        const row = [...document.querySelectorAll('.user-settings-dialog .setting-row')]
+          .find(r => re.test(r.querySelector('.setting-label')?.textContent || ''))
+        return (row?.querySelector('.el-select__selection')?.textContent || '').trim()
+      }, SETTINGS_ROW_SRC)
+      /**
+       * 等那一行渲染出当前值（弹窗打开时才去打 /orchestrator 读间隔）。
+       * 传 want 时等到**指定文案**为止 —— 弹窗挂载时先渲染兜底默认值（10 分钟），
+       * 只等"选中项存在"会读到还没被服务端值纠正的那一帧（两步等，见 lessons）。
+       */
+      const waitSettingsRow = (want = null) => page.waitForFunction(({ src, text }) => {
+        const re = new RegExp(src, 'i')
+        const row = [...document.querySelectorAll('.user-settings-dialog .setting-row')]
+          .find(r => re.test(r.querySelector('.setting-label')?.textContent || ''))
+        const sel = row?.querySelector('.el-select__selection')
+        if (!sel) return false
+        return text === null || (sel.textContent || '').trim() === text
+      }, { src: SETTINGS_ROW_SRC, text: want }, { timeout: 10000 }).then(() => true).catch(() => false)
+      /** 弹窗里那一行的 select（按 label 定位，别按顺序数 —— 将来有人往上插下拉就会错位） */
+      const settingsRow = () => page.locator('.user-settings-dialog .setting-row')
+        .filter({ has: page.locator('.setting-label', { hasText: new RegExp(SETTINGS_ROW_SRC, 'i') }) })
+      /** 在设置里把间隔切成第 idx 档（档位表 = REPORT_INTERVAL_OPTIONS_MS，与控制台同一份） */
+      const pickSettingsInterval = async (idx) => {
+        if (!(await page.locator('.el-select-dropdown:visible').count())) {
+          await settingsRow().locator('.el-select').first().click()
+          await sleep(500)
+        }
+        await page.locator('.el-select-dropdown:visible').last()
+          .locator('.el-select-dropdown__item').nth(idx).click()
+        await sleep(700)
+      }
+      /** 关掉设置弹窗（遮罩会挡住看板那边的点击，后面的组要用） */
+      const closeSettings = async () => {
+        await page.evaluate(() => {
+          document.querySelector('.user-settings-dialog .el-dialog__headerbtn')?.click()
+        })
+        await page.waitForSelector('.user-settings-dialog', { state: 'detached', timeout: 8000 }).catch(() => {})
+        await sleep(300)
+      }
+
+      check('P15a 顶栏「用户设置」能打开设置弹窗', await openSettings() === true)
+      await page.waitForSelector('.user-settings-dialog .settings-tabs', { timeout: 10000 }).catch(() => {})
+      await page.locator('.user-settings-dialog .el-loading-mask').waitFor({ state: 'detached', timeout: 8000 }).catch(() => {})
+      // 控制台在 P3 之后停在 30 分钟那一档；设置里必须显示同一个档的同一句文案
+      // （两个入口共用 reportIntervalLabelKey，逐字一致是结构性成立的）
+      const textOfTarget = m.options.find(o => o.value === String(target))?.text || ''
+      const rowShown = await waitSettingsRow(textOfTarget || null)
+      const settingsText = await settingsIntervalText()
+      check('P15b 通用设置里有「自动报告间隔」，显示的当前档与控制台逐字一致',
+        rowShown && settingsText.length > 0 && settingsText === textOfTarget,
+        `settings="${settingsText}" console="${textOfTarget}"`)
+
+      // 档位数 = 服务端白名单（REPORT_INTERVAL_OPTIONS_MS，与控制台共用）。
+      // 展开后**保持在同一个展开态**里接着点目标档：关掉再开要和收起动画抢时间
+      // （过渡还没完 :visible 仍命中，点 item 时下拉已在消失，实测超时过）
+      if (!(await page.locator('.el-select-dropdown:visible').count())) {
+        await settingsRow().locator('.el-select').first().click()
+        await sleep(500)
+      }
+      const visibleItems = page.locator('.el-select-dropdown:visible').last()
+        .locator('.el-select-dropdown__item')
+      const itemCount = await visibleItems.count()
+      check('P15c 档位就是服务端白名单那 6 档（与控制台同一份表）',
+        itemCount === OPTIONS.length, `items=${itemCount}`)
+
+      // 改到 15 分钟（idx 3）：服务端落盘 + 控制台那个下拉跟着变
+      await visibleItems.nth(3).click()
+      await sleep(700)
+      const afterSettings = await getJson('/api/workbench/orchestrator')
+      check('P15d 在设置里改档位，服务端跟着变（不是只改了弹窗里的显示）',
+        afterSettings?.reportIntervalMs === OPTIONS[3], `server=${afterSettings?.reportIntervalMs}`)
+      const consoleFollowed = await page.waitForFunction((want) => {
+        const sel = document.querySelector('.oc__interval')
+        return !!sel && sel.value === String(want)
+      }, OPTIONS[3], { timeout: 12000, polling: 500 }).then(() => true).catch(() => false)
+      check('P15e 控制台那个下拉跟着变成新档（两个入口是同一份值）',
+        consoleFollowed === true, `want=${OPTIONS[3]}`)
+      await closeSettings()
+
+      /* 反证：接口失败不能假装成功。桩 POST /report-interval 返 500 ——
+         P15d 只证了"改动能落盘"，失败路径没被走过的话，"保存成功"这句提示
+         可能压根不看回执。server 值不变 + 弹错误，两条一起才算数 */
+      const textOf15 = m.options.find(o => o.value === String(OPTIONS[3]))?.text || ''
+      const errMark = consoleErrors.length
+      const respMark = badResponses.length
+      await page.route('**/api/workbench/orchestrator/report-interval', route => route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: false, error: 'probe: 故意存不进去' }),
+      }))
+      await clearToasts(page)
+      check('P15f0 反证准备：能再次打开设置弹窗', await openSettings() === true)
+      await page.waitForSelector('.user-settings-dialog .settings-tabs', { timeout: 10000 }).catch(() => {})
+      await page.locator('.user-settings-dialog .el-loading-mask').waitFor({ state: 'detached', timeout: 8000 }).catch(() => {})
+      // 等到服务端当前档（15 分钟）显示出来再动手，免得跟"刚挂载的兜底值"抢跑
+      await waitSettingsRow(textOf15 || null)
+      await pickSettingsInterval(1) // 5 分钟：与当前档不同，但注定保存失败
+      const afterFail = await getJson('/api/workbench/orchestrator')
+      const errToasts = await page.locator('.el-message--error').count()
+      check('P15f 接口失败时不当成功：服务端没被改、界面弹了错误',
+        afterFail?.reportIntervalMs === OPTIONS[3] && errToasts > 0,
+        `server=${afterFail?.reportIntervalMs} errToasts=${errToasts}`)
+      await page.unroute('**/api/workbench/orchestrator/report-interval')
+      // 反证桩故意返的那个 500 会落进控制台错误 / 5xx 清单 —— 那是探针自己造的，
+      // P8b 不该记它。只挖桩窗口内新增的条目（文案正是"资源 500"、URL 正是本接口），
+      // 真错误哪怕长着一样的文案也生在窗口外，不会被误挖
+      for (let i = consoleErrors.length - 1; i >= errMark; i--) {
+        if (/500 \(Internal Server Error\)/.test(consoleErrors[i])) consoleErrors.splice(i, 1)
+      }
+      for (let i = badResponses.length - 1; i >= respMark; i--) {
+        if (/report-interval/.test(badResponses[i])) badResponses.splice(i, 1)
+      }
+      // 失败不会留下假状态：关掉重开，显示的仍是服务端当前档那句
+      await closeSettings()
+      check('P15g0 反证准备：第三次打开设置弹窗', await openSettings() === true)
+      await page.waitForSelector('.user-settings-dialog .settings-tabs', { timeout: 10000 }).catch(() => {})
+      await page.locator('.user-settings-dialog .el-loading-mask').waitFor({ state: 'detached', timeout: 8000 }).catch(() => {})
+      const textAfterFailOk = await waitSettingsRow(textOf15 || null)
+      check('P15g 失败后重开弹窗，显示回到服务端当前档（没把假的新档留在界面上）',
+        textAfterFailOk === true, `want="${textOf15}"`)
+      await closeSettings()
+    }
 
     /* ══ P4 立即报告 ══ */
     // ⚠️ 这里刻意**不**用「点完等 .rp 出现」判定：上一轮的报告卡片本来就还在 DOM 里，

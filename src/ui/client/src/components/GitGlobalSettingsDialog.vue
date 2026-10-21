@@ -228,6 +228,41 @@
             </div>
           </div>
 
+          <!-- 进度报告：主 Agent 自动汇报的间隔。控制台（右栏「进度报告」面板标题旁）
+               那个下拉是同一个值的另一个入口 —— 值存在服务端 orchestrator.json，
+               两边读写的都是那一份，不存在"设置里改了控制台不变"。
+               即时保存而不是草稿模式：间隔是"现在就开始按它跑"的活设置，
+               攒到「保存设置」再提交，期间用户看到的控制台还是旧间隔在跑。 -->
+          <div class="settings-section">
+            <div class="section-title">
+              <span>{{ $t('@42BB9:进度报告') }}</span>
+            </div>
+            <div class="settings-grid">
+              <div class="setting-row">
+                <label class="setting-label">{{ $t('@42BB9:自动报告间隔') }}</label>
+                <div class="project-toggle">
+                  <el-select
+                    :model-value="tempReportIntervalMs"
+                    class="modern-input"
+                    size="default"
+                    :disabled="savingReportInterval"
+                    @update:model-value="onReportIntervalChange"
+                  >
+                    <el-option
+                      v-for="ms in REPORT_INTERVAL_OPTIONS_MS"
+                      :key="ms"
+                      :label="$t(reportIntervalLabelKey(ms), reportIntervalLabelParams(ms))"
+                      :value="ms"
+                    />
+                  </el-select>
+                  <span class="setting-hint-block report-interval-hint">
+                    {{ $t('@42BB9:主 Agent 按这个间隔自动汇报正在执行的任务进度；关掉后仍可在控制台手动点「立即报告」') }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- 界面（视图模式 / 分割比例 / 控制台 / 布局比例） -->
           <div class="settings-section">
             <div class="section-title">
@@ -896,6 +931,13 @@ import 'ai-model-form/dist/ai-model-form.css'
 import { MARKDOWN_THEME_OPTIONS } from '@/utils/markdownTheme'
 import { providerLogoUrlForBaseURL, type ProviderTheme } from '@/utils/providerLogo'
 import { useThemeObserver } from '@/composables/useThemeObserver'
+import {
+  DEFAULT_REPORT_INTERVAL_MS,
+  REPORT_INTERVAL_OPTIONS_MS,
+  normalizeReportInterval,
+  reportIntervalLabelKey,
+  reportIntervalLabelParams,
+} from '@/utils/progressReport'
 
 const gitStore = useGitStore()
 const localeStore = useLocaleStore()
@@ -999,6 +1041,13 @@ const tempNotifySoundOnTaskDone = ref(true)
 // 权限已拒 / 环境不支持时，光看开关是不知道的，用户会以为开了却没动静。
 const notifyPermissionState = ref<NotifyPermission>('default')
 
+// 进度报告间隔（主 Agent 自动汇报的周期，毫秒；0 = 关闭）。
+// 值**不住 config.json**：服务端 orchestrator.json 是唯一权威（右栏控制台那个下拉
+// 轮询读的、自动定时器用的都是它），设置这里只是同一份值的另一个入口。
+// 打开时读、改动即时 POST 回去 —— 与「AI 智能体运行时」几个输入框同一套交互。
+const tempReportIntervalMs = ref<number>(DEFAULT_REPORT_INTERVAL_MS)
+const savingReportInterval = ref(false)
+
 // 编辑器设置
 const tempEditorAutoSave = ref(false)
 // 文件树自动刷新:文件空间左侧资源管理器是否定时静默刷新(捕获编辑器/外部工具改动)
@@ -1074,6 +1123,57 @@ async function handleAiMaxRequestCharsChange(value: number | undefined) {
     if (ok) ElMessage.success($t('@42BB9:已保存'))
   } finally {
     savingAiSettings.value = false
+  }
+}
+
+/**
+ * 打开设置弹窗时读服务端当前的报告间隔。
+ *
+ * 读整份 orchestrator 状态而不是单开一个 GET：这个接口本来就在被右栏 5s 轮询，
+ * 多一个入口不会多一份口径；读失败不弹错（保持默认值），别为这一个数字
+ * 打断用户改别的设置。
+ */
+async function loadReportInterval() {
+  try {
+    const res = await fetch('/api/workbench/orchestrator', { cache: 'no-store' }).then(r => r.json())
+    if (res?.success) {
+      tempReportIntervalMs.value = normalizeReportInterval(res.reportIntervalMs)
+    }
+  } catch {
+    // 读不到就留着兜底默认值：下一次轮询/手动改都会纠正过来
+  }
+}
+
+/**
+ * 改报告间隔：即时保存到服务端。
+ *
+ * 为什么不是草稿模式：间隔是"服务端定时器下一刻就按它跑"的活设置，也是右栏
+ * 控制台下拉正在显示的值。攒到「保存设置」再提交的话，弹窗开着的那段时间里
+ * 控制台仍按旧间隔跑，用户会以为改了没生效。
+ *
+ * 以回执为准（res.reportIntervalMs 过了服务端白名单归一），不回写请求值 ——
+ * 与 useOrchestrator.setReportInterval 同一套口径。
+ */
+async function onReportIntervalChange(value: number) {
+  const next = normalizeReportInterval(value)
+  if (next === tempReportIntervalMs.value) return
+  savingReportInterval.value = true
+  try {
+    const res = await fetch('/api/workbench/orchestrator/report-interval', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ intervalMs: next }),
+    }).then(r => r.json())
+    if (!res?.success) {
+      ElMessage.error($t('@42BB9:保存失败'))
+      return
+    }
+    tempReportIntervalMs.value = normalizeReportInterval(res.reportIntervalMs)
+    ElMessage.success($t('@42BB9:已保存'))
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  } finally {
+    savingReportInterval.value = false
   }
 }
 
@@ -1293,6 +1393,8 @@ watch(() => props.modelValue, async (val) => {
     notifyPermissionState.value = notificationPermission()
     // 资源管理器右键菜单状态：可能在别的实例里加过/删过，同样每次打开重读
     void loadExplorerMenuStatus()
+    // 报告间隔同理：别的实例/控制台可能刚改过，打开时以服务端当前值为准
+    void loadReportInterval()
     aiModels.value = [...configStore.models]
     aiMaxToolIterationsInput.value = configStore.aiMaxToolIterations
     aiMaxRequestTokensInput.value = configStore.aiMaxRequestTokens
@@ -2100,6 +2202,14 @@ async function openSystemConfigFile() {
 }
 /* 智能体运行时的说明较长，允许换行完整展示（默认 hint 是单行省略号截断） */
 .project-toggle .ai-iterations-hint {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.5;
+}
+/* 报告间隔的说明同样较长（还要交代"关掉后能手动报"），单行省略号会把半句话吞掉 —
+   与上面那条同一处理 */
+.project-toggle .report-interval-hint {
   white-space: normal;
   overflow: visible;
   text-overflow: clip;
