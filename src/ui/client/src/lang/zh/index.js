@@ -3060,6 +3060,13 @@ export default {
   '@MKT:环境变量值': '环境变量值',
   '@MKT:启动参数': '启动参数',
   '@MKT:参数提示': '空格分隔，带引号的参数会被当作一个整体；留空则使用默认参数',
+  '@MKT:MCP 广场': 'MCP 广场',
+  '@MKT:Skill 广场': 'Skill 广场',
+  '@MKT:MCP 广场副标题': '从官方注册表、Smithery、npm 与 GitHub 发现服务器，一键装到当前项目或 g ai 智能体',
+  '@MKT:Skill 广场副标题': '从 Anthropic 官方仓库、社区合集与 GitHub 发现技能，一键装到当前项目或 g ai 智能体',
+  '@MKT:共 {n} 个服务': '共 {n} 个服务',
+  '@MKT:共 {n} 个技能': '共 {n} 个技能',
+  '@MKT:已验证': '已验证',
   // @DIFFAI: file path: components\AiDiffSummary.vue
   '@DIFFAI:AI 文件说明': 'AI 文件说明',
   '@DIFFAI:AI 整体说明': 'AI 整体说明',

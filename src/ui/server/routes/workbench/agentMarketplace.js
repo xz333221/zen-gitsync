@@ -144,6 +144,7 @@ const BUILTIN_MCPS = [
     description: '在显式授权的目录里读写文件。',
     package: '@modelcontextprotocol/server-filesystem',
     args: ['-y', '@modelcontextprotocol/server-filesystem', '${project}'],
+    repository: 'modelcontextprotocol/servers',
     upstream: 'https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem',
     tags: ['official', 'files'],
   },
@@ -152,6 +153,7 @@ const BUILTIN_MCPS = [
     name: 'Memory',
     description: '基于知识图谱的长期记忆,跨会话记住事实与关系。',
     package: '@modelcontextprotocol/server-memory',
+    repository: 'modelcontextprotocol/servers',
     upstream: 'https://github.com/modelcontextprotocol/servers/tree/main/src/memory',
     tags: ['official', 'memory'],
   },
@@ -160,6 +162,7 @@ const BUILTIN_MCPS = [
     name: 'Sequential Thinking',
     description: '把复杂问题拆成可修订的连续思考步骤。',
     package: '@modelcontextprotocol/server-sequential-thinking',
+    repository: 'modelcontextprotocol/servers',
     upstream: 'https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking',
     tags: ['official', 'reasoning'],
   },
@@ -168,6 +171,7 @@ const BUILTIN_MCPS = [
     name: 'Everything (示例服务器)',
     description: '官方参考实现,涵盖 prompts/resources/tools 全套能力,适合验证链路。',
     package: '@modelcontextprotocol/server-everything',
+    repository: 'modelcontextprotocol/servers',
     upstream: 'https://github.com/modelcontextprotocol/servers/tree/main/src/everything',
     tags: ['official', 'reference'],
   },
@@ -176,6 +180,7 @@ const BUILTIN_MCPS = [
     name: 'GitHub',
     description: '操作仓库、Issue、Pull Request 与代码搜索。',
     package: '@modelcontextprotocol/server-github',
+    repository: 'modelcontextprotocol/servers',
     envKeys: ['GITHUB_PERSONAL_ACCESS_TOKEN'],
     upstream: 'https://github.com/modelcontextprotocol/servers/tree/main/src/github',
     tags: ['official', 'github'],
@@ -185,6 +190,7 @@ const BUILTIN_MCPS = [
     name: 'Context7',
     description: '拉取任意库的最新版文档与代码示例,避免模型凭记忆写过期 API。',
     package: '@upstash/context7-mcp',
+    repository: 'upstash/context7',
     upstream: 'https://github.com/upstash/context7',
     tags: ['docs', 'popular'],
   },
@@ -193,6 +199,7 @@ const BUILTIN_MCPS = [
     name: 'Playwright',
     description: '浏览器自动化:打开页面、点击、截图、取 DOM。',
     package: '@playwright/mcp',
+    repository: 'microsoft/playwright-mcp',
     upstream: 'https://github.com/microsoft/playwright-mcp',
     tags: ['browser', 'popular'],
   },
@@ -201,6 +208,7 @@ const BUILTIN_MCPS = [
     name: 'Chrome DevTools',
     description: '直接操作真实 Chrome:性能轨迹、网络、控制台。',
     package: 'chrome-devtools-mcp',
+    repository: 'ChromeDevTools/chrome-devtools-mcp',
     upstream: 'https://github.com/ChromeDevTools/chrome-devtools-mcp',
     tags: ['browser'],
   },
@@ -468,13 +476,21 @@ function normalizeNpmSearch(data, type) {
   return objects.map(entry => {
     const name = String(entry?.package?.name || '').trim();
     if (!name || !SAFE_PACKAGE.test(name)) return null;
+    // npm 的 links.repository 常是完整 URL（git+https://github.com/owner/repo.git），
+    // 归一成 owner/repo：卡片据此取 GitHub 组织头像当图标。
+    // 只给 mcp 用 —— skill 的 installSkill 见 repository 就改走 git clone
+    // （agentMarketplace.js installSkill），给 npm skill 带上它会悄悄改变安装语义。
+    const repo = String(entry.package?.links?.repository || '')
+      .replace(/^git\+/, '')
+      .replace(/^https?:\/\/(www\.)?github\.com\//, '')
+      .replace(/\.git$/, '');
     return {
       id: `npm-${safeId(name.replace(/^@/, '').replace('/', '-'))}`,
       type,
       name: clampText(entry.package.name, 80),
       description: clampText(entry.package.description || 'npm package', 400),
       package: name,
-      repository: '',
+      repository: type === 'mcp' && SAFE_REPOSITORY.test(repo) ? repo : '',
       upstream: entry.package?.links?.npm || `https://www.npmjs.com/package/${encodeURIComponent(name)}`,
       downloads: Number(entry.downloads?.weekly) || 0,
       tags: ['npm'],

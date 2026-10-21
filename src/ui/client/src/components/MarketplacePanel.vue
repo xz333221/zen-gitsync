@@ -6,12 +6,14 @@
   后端见 src/ui/server/routes/workbench/agentMarketplace.js
 -->
 <script setup lang="ts">
-import { ref, computed, watch, reactive } from 'vue'
+import { ref, computed, watch, reactive, onBeforeUnmount } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Refresh, Delete, Link, Check, Star, Download, Warning, FolderOpened } from '@element-plus/icons-vue'
+import { Search, Refresh, Delete, Link, Check, Select, Star, Download, Warning, FolderOpened } from '@element-plus/icons-vue'
 import { useConfigStore } from '@/stores/configStore'
 import CommonDialog from '@/components/CommonDialog.vue'
+import { marketIcon } from '@/utils/marketIcon'
+import { useThemeObserver } from '@/composables/useThemeObserver'
 
 const props = defineProps<{
   type: 'skill' | 'mcp'
@@ -80,6 +82,58 @@ const revealing = ref<Set<string>>(new Set())
 
 const cwd = computed(() => configStore.currentDirectory || '')
 
+// 图标配色跟随当前主题（深色下深色品牌 logo 会糊进面板底色）
+const { theme: currentTheme } = useThemeObserver()
+const isDark = computed(() => currentTheme.value === 'dark')
+
+// GitHub 头像两种坏法都见过：404 / 连接挂住不返回。后者不触发 error 事件，
+// 只靠 @error 会留下一排空白图标位 —— 本机到 avatars.githubusercontent.com
+// 就有这种抖动（一批 24 张里前几张正常、后面的连接 stall）。
+// 对策：每张图挂 4s 定时器，加载成功（@load）或失败（@error）即取消，
+// 超时未加载按失败处理，退首字母砖。
+const ICON_FALLBACK_MS = 4000
+const iconErrors = ref<Set<string>>(new Set())
+const iconTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+function settleIconTimer(key: string) {
+  const timer = iconTimers.get(key)
+  if (timer) clearTimeout(timer)
+  iconTimers.delete(key)
+}
+
+function scheduleIconFallback(item: MarketItem) {
+  const key = cardKey(item)
+  if (!marketIcon(item, isDark.value).url) return
+  settleIconTimer(key)
+  iconTimers.set(key, setTimeout(() => {
+    iconTimers.delete(key)
+    iconErrors.value.add(key)
+  }, ICON_FALLBACK_MS))
+}
+
+onBeforeUnmount(() => {
+  for (const timer of iconTimers.values()) clearTimeout(timer)
+  iconTimers.clear()
+})
+
+function iconOf(item: MarketItem) {
+  const icon = marketIcon(item, isDark.value)
+  return iconErrors.value.has(cardKey(item)) ? { ...icon, url: '' } : icon
+}
+
+function onIconLoad(item: MarketItem) {
+  settleIconTimer(cardKey(item))
+}
+
+function onIconError(item: MarketItem) {
+  settleIconTimer(cardKey(item))
+  iconErrors.value.add(cardKey(item))
+}
+
+const totalCount = computed(() =>
+  groups.value.reduce((sum, group) => sum + (group.status === 'ok' ? group.items.length : 0), 0),
+)
+
 // ── 请求 ──────────────────────────────────────────────────
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -95,6 +149,10 @@ async function loadCatalog() {
     if (data?.success) {
       groups.value = data.groups || []
       installed.value = data.installed || []
+      // 每张图的加载兜底定时器在这里挂（重拉目录会换掉 groups，旧定时器随之作废）
+      for (const group of groups.value) {
+        for (const item of group.items) scheduleIconFallback(item)
+      }
     } else {
       ElMessage.error(data?.error || $t('@MKT:加载失败'))
     }
@@ -288,6 +346,17 @@ async function onRemove(item: InstalledItem) {
 
 <template>
   <div class="marketplace-panel">
+    <!-- ── 页头 ───────────────────────────────── -->
+    <header class="mp-hero">
+      <div class="mp-hero-text">
+        <h2 class="mp-hero-title">{{ type === 'skill' ? $t('@MKT:Skill 广场') : $t('@MKT:MCP 广场') }}</h2>
+        <p class="mp-hero-sub">{{ type === 'skill' ? $t('@MKT:Skill 广场副标题') : $t('@MKT:MCP 广场副标题') }}</p>
+      </div>
+      <span class="mp-hero-count">
+        {{ type === 'skill' ? $t('@MKT:共 {n} 个技能', { n: totalCount }) : $t('@MKT:共 {n} 个服务', { n: totalCount }) }}
+      </span>
+    </header>
+
     <!-- ── 工具栏 ───────────────────────────────── -->
     <div class="mp-toolbar">
       <div class="mp-search">
@@ -356,44 +425,64 @@ async function onRemove(item: InstalledItem) {
 
         <div v-if="group.status === 'ok' && group.items.length" class="mp-grid">
           <article v-for="item in group.items" :key="cardKey(item)" class="mp-card">
-            <div class="mp-card-head">
-              <span class="mp-card-name" :title="item.name">{{ item.name }}</span>
-              <span v-if="metricText(item)" class="mp-card-metric">
-                <el-icon><Star v-if="item.stars" /><Download v-else /></el-icon>
-                {{ metricText(item) }}
-              </span>
+            <!-- 图标：品牌 logo（simple-icons / GitHub 组织头像）→ 首字母砖兜底 -->
+            <div
+              class="mp-card-icon"
+              :class="{ tile: !iconOf(item).url }"
+              :style="{ '--tile-hue': String(iconOf(item).hue) }"
+            >
+              <img
+                v-if="iconOf(item).url"
+                :src="iconOf(item).url"
+                :alt="item.name"
+                draggable="false"
+                @load="onIconLoad(item)"
+                @error="onIconError(item)"
+              />
+              <span v-else>{{ iconOf(item).letter }}</span>
             </div>
 
-            <p class="mp-card-desc" :title="item.description">{{ item.description || $t('@MKT:暂无描述') }}</p>
+            <div class="mp-card-main">
+              <div class="mp-card-head">
+                <span class="mp-card-name" :title="item.name">{{ item.name }}</span>
+                <el-icon v-if="item.verified" class="mp-verified" :title="$t('@MKT:已验证')"><Select /></el-icon>
+                <span v-if="metricText(item)" class="mp-card-metric">
+                  <el-icon><Star v-if="item.stars" /><Download v-else /></el-icon>
+                  {{ metricText(item) }}
+                </span>
+              </div>
 
-            <div class="mp-card-meta">
-              <code v-if="item.package" class="mp-meta-pkg" :title="item.package">{{ item.package }}</code>
-              <span v-else-if="item.repository" class="mp-meta-repo" :title="item.repository + (item.subpath ? ' · ' + item.subpath : '')">
-                {{ item.repository }}<template v-if="item.subpath"> · {{ item.subpath }}</template>
-              </span>
-              <span v-if="item.transport === 'remote'" class="mp-tag remote">{{ $t('@MKT:远程服务') }}</span>
-              <span v-for="tag in (item.tags || []).slice(0, 2)" :key="tag" class="mp-tag">{{ tag }}</span>
-            </div>
+              <p class="mp-card-desc" :title="item.description">{{ item.description || $t('@MKT:暂无描述') }}</p>
 
-            <div class="mp-card-foot">
-              <a
-                v-if="item.upstream"
-                class="mp-card-link"
-                :href="item.upstream"
-                target="_blank"
-                rel="noopener noreferrer"
-              >{{ $t('@MKT:查看来源') }}</a>
-              <span class="mp-foot-spacer" />
-              <span v-if="item.installed" class="mp-installed-chip">
-                <el-icon><Check /></el-icon>{{ $t('@MKT:已安装') }}
-              </span>
-              <button
-                v-else-if="item.installable !== false"
-                class="mp-install-btn"
-                :disabled="isBusy(item)"
-                @click="onInstall(item)"
-              >{{ isBusy(item) ? $t('@MKT:安装中...') : $t('@MKT:安装') }}</button>
-              <span v-else class="mp-not-installable">{{ $t('@MKT:暂不支持一键安装') }}</span>
+              <div class="mp-card-meta">
+                <code v-if="item.package" class="mp-meta-pkg" :title="item.package">{{ item.package }}</code>
+                <span v-else-if="item.repository" class="mp-meta-repo" :title="item.repository + (item.subpath ? ' · ' + item.subpath : '')">
+                  {{ item.repository }}<template v-if="item.subpath"> · {{ item.subpath }}</template>
+                </span>
+                <span v-if="item.transport === 'remote'" class="mp-tag remote">{{ $t('@MKT:远程服务') }}</span>
+                <span v-for="tag in (item.tags || []).slice(0, 2)" :key="tag" class="mp-tag">{{ tag }}</span>
+              </div>
+
+              <div class="mp-card-foot">
+                <a
+                  v-if="item.upstream"
+                  class="mp-card-link"
+                  :href="item.upstream"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >{{ $t('@MKT:查看来源') }}</a>
+                <span class="mp-foot-spacer" />
+                <span v-if="item.installed" class="mp-installed-chip">
+                  <el-icon><Check /></el-icon>{{ $t('@MKT:已安装') }}
+                </span>
+                <button
+                  v-else-if="item.installable !== false"
+                  class="mp-install-btn"
+                  :disabled="isBusy(item)"
+                  @click="onInstall(item)"
+                >{{ isBusy(item) ? $t('@MKT:安装中...') : $t('@MKT:安装') }}</button>
+                <span v-else class="mp-not-installable">{{ $t('@MKT:暂不支持一键安装') }}</span>
+              </div>
             </div>
           </article>
         </div>
@@ -490,6 +579,50 @@ async function onRemove(item: InstalledItem) {
   height: 100%;
   min-height: 0;
   background: var(--bg-container);
+}
+
+/* ── 页头 ─────────────────────────────────── */
+.mp-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px 12px;
+  flex-shrink: 0;
+}
+
+.mp-hero-text {
+  min-width: 0;
+}
+
+.mp-hero-title {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mp-hero-sub {
+  margin: 2px 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mp-hero-count {
+  flex-shrink: 0;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-lg);
+  background: var(--bg-hover);
+  color: var(--text-meta);
 }
 
 /* ── 工具栏 ─────────────────────────────────── */
@@ -670,20 +803,65 @@ async function onRemove(item: InstalledItem) {
   gap: 10px;
 }
 
+/* 平铺卡片：不画边框、不给常驻圆角、无静息阴影，hover 才出底色 ——
+   与项目列表 .proj-item 同一套语言，避免一屏铺开时显得碎 */
 .mp-card {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  transition: background var(--transition-fast) ease;
+
+  &:hover { background: var(--bg-hover); }
+}
+
+/* 图标位：品牌 logo（simple-icons / GitHub 组织头像）或首字母砖。
+   砖的底/字同向翻色相，深色主题不会是"浅底深字"的孤岛 */
+.mp-card-icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+
+  &.tile {
+    background: hsl(var(--tile-hue, 220) 62% 95%);
+
+    span {
+      font-size: var(--font-size-mid);
+      font-weight: 600;
+      color: hsl(var(--tile-hue, 220) 45% 38%);
+    }
+  }
+}
+
+[data-theme="dark"] .mp-card-icon.tile {
+  background: hsl(var(--tile-hue, 220) 35% 22%);
+
+  span { color: hsl(var(--tile-hue, 220) 55% 75%); }
+}
+
+.mp-card-main {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--bg-panel);
-  transition: border-color var(--transition-fast) ease, box-shadow var(--transition-fast) ease;
+}
 
-  &:hover {
-    border-color: color-mix(in srgb, var(--color-primary) 40%, var(--border-color));
-    box-shadow: var(--shadow-sm);
-  }
+.mp-verified {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--color-success);
 }
 
 .mp-card-head {
@@ -841,9 +1019,9 @@ async function onRemove(item: InstalledItem) {
   align-items: center;
   gap: 10px;
   padding: 6px 10px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-base);
-  background: var(--bg-panel);
+  transition: background var(--transition-fast) ease;
+
+  &:hover { background: var(--bg-hover); }
 }
 
 .mp-installed-name {

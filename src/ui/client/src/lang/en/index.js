@@ -3050,6 +3050,13 @@ export default {
   '@MKT:环境变量值': 'Environment variable value',
   '@MKT:启动参数': 'Launch arguments',
   '@MKT:参数提示': 'Space-separated; quoted parts count as one argument. Leave empty to use the defaults.',
+  '@MKT:MCP 广场': 'MCP Plaza',
+  '@MKT:Skill 广场': 'Skill Plaza',
+  '@MKT:MCP 广场副标题': 'Discover servers from the official registry, Smithery, npm and GitHub — install to the current project or g ai in one click.',
+  '@MKT:Skill 广场副标题': 'Discover skills from Anthropic’s official repo, community collections and GitHub — install in one click.',
+  '@MKT:共 {n} 个服务': '{n} servers',
+  '@MKT:共 {n} 个技能': '{n} skills',
+  '@MKT:已验证': 'Verified',
   // @DIFFAI: file path: components\AiDiffSummary.vue
   '@DIFFAI:AI 文件说明': 'AI File Summary',
   '@DIFFAI:AI 整体说明': 'AI Overall Summary',
