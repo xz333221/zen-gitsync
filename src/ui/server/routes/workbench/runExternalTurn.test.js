@@ -293,6 +293,26 @@ test('launcher 抛错（CLI 没装）→ 发 error，不让整轮静默失败', 
   assert.equal(c.of('done').length, 0, '启动失败不该再发 done');
 });
 
+test('协议层报错（codebuddy 找不到会话）→ 发 error，不落空 assistant、不发 done', async () => {
+  // 实测：用子会话 id 去 --resume，CLI 只吐这一条 NDJSON，退出码 0
+  const lines = [
+    JSON.stringify({ type: 'error', error: 'No conversation found with session ID: sub-sess' }),
+  ];
+  const session = baseSession();
+  session.engineSessionId = 'sub-sess';
+  const c = collector();
+  await runExternalTurn({
+    session, engine: 'codebuddy', userMessage: '接着聊', cwd: 'D:/ws',
+    send: c.send,
+    launchers: { codebuddy: async () => ({ pid: 1, child: fakeChild(lines) }) },
+  });
+
+  assert.equal(c.of('error').length, 1);
+  assert.match(c.of('error')[0].error, /No conversation found/);
+  assert.equal(c.of('done').length, 0, '失败轮不该发 done（否则界面显示成"已完成"）');
+  assert.equal(session.messages.filter(m => m.role === 'assistant').length, 0, '不该落一条空的 assistant');
+});
+
 test('未知引擎 → 明确报错（不静默当内置处理）', async () => {
   const c = collector();
   await runExternalTurn({ session: baseSession(), engine: 'gemini', userMessage: 'hi', cwd: 'D:/ws', send: c.send });

@@ -255,6 +255,15 @@ export async function runExternalTurn({
   if (lineBuf.stderr.trim()) for (const l of lineBuf.stderr.split('\n')) handleLine(l, 'stderr');
   tracker.flush?.();
 
+  // 协议层报错（各家方言不同，handler 统一落到 job.agentError）。
+  // 与内置 g ai 同口径：只发 error、不落一条空的 assistant —— 否则前端拿到的是
+  // 一个空气泡（2026-10-21 用户报的"续接时不输出，直接结束"就是这条路径：
+  // codebuddy 用错会话 id 时发 {"type":"error"} 且退出码 0）。
+  if (!aborted && job.agentError) {
+    send({ type: 'error', error: `${label}: ${job.agentError}` });
+    return { aborted };
+  }
+
   // 落盘：assistant（带 tool_calls）+ 逐条 tool 结果，形状与 g ai 那条链路一致，
   // 前端 convertSessionToMessages 的合并逻辑不用改就能渲染历史。
   const calls = Array.isArray(job.toolCalls) ? job.toolCalls : [];

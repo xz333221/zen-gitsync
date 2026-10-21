@@ -273,3 +273,45 @@ test('codebuddy 事件：init 重复推送（实测出现过两条）只认第�
   assert.equal(job.claudeSessionId, 'cbc-sess-x');
   assert.deepEqual(sink.output, []);
 });
+
+// 2026-10-21 实测（CLI 2.168.0，一轮派了 Explore 子智能体）：一轮里出现 4 条 init ——
+// 主会话（78 件工具）→ 子会话（36 件工具）→ 子会话再补一条 → 结尾主会话又补一条。
+// 子会话**不注册进会话库**（CLI 日志 "Child session skipped registration"），
+// 拿它的 id 去 --resume 只会得到 {"type":"error","error":"No conversation found with
+// session ID: …"} 且退出码 0 —— 用户看到的就是"续接不输出、直接结束"。
+test('codebuddy 事件：子智能体的 init 不能顶掉主会话 id（--resume 全靠它）', () => {
+  const job = {};
+  const sink = makeSink();
+  const handle = createCodebuddyEventHandler(job, sink.appendOutput, sink.appendThinking, makeTrackerSpy());
+
+  handle({ type: 'system', subtype: 'init', session_id: 'main-sess', tools: new Array(78).fill('t') });
+  // 子会话 init（工具集更小，且紧跟一条带 parent_tool_use_id 的 assistant）
+  handle({ type: 'system', subtype: 'init', session_id: 'sub-sess', tools: new Array(36).fill('t') });
+  handle({ type: 'assistant', parent_tool_use_id: 'call_1', message: { content: [{ type: 'text', text: '子智能体的汇报' }] } });
+  // 结尾主会话再补一条 init
+  handle({ type: 'system', subtype: 'init', session_id: 'main-sess' });
+
+  assert.equal(job.claudeSessionId, 'main-sess', '续接标识必须留在主会话上');
+});
+
+test('codebuddy 事件：error / result.is_error 落 agentError（退出码 0 也不能当完成）', () => {
+  // 形状取自实测：用错的会话 id 续接时 CLI 只吐这一条，然后 exit 0
+  const job = {};
+  const handle = createCodebuddyEventHandler(job, () => {}, () => {}, makeTrackerSpy());
+  handle({ type: 'error', error: 'No conversation found with session ID: sub-sess' });
+  assert.equal(job.agentError, 'No conversation found with session ID: sub-sess');
+
+  // result 的失败分支：errors 是错误对象/字符串数组，没有 result 字段
+  const job2 = {};
+  const handle2 = createCodebuddyEventHandler(job2, () => {}, () => {}, makeTrackerSpy());
+  handle2({ type: 'result', subtype: 'error_during_execution', is_error: true, errors: ['Authentication required'] });
+  assert.equal(job2.agentError, 'Authentication required');
+
+  // success 的 result 不能误判成失败（它带 result 正文，is_error=false）
+  const job3 = {};
+  const sink3 = makeSink();
+  const handle3 = createCodebuddyEventHandler(job3, sink3.appendOutput, sink3.appendThinking, makeTrackerSpy());
+  handle3({ type: 'result', subtype: 'success', is_error: false, result: 'ok' });
+  assert.equal(job3.agentError, undefined);
+  assert.deepEqual(sink3.output, [], 'result.result 是终态快照，不是新的正文分片');
+});

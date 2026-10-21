@@ -640,19 +640,50 @@ export async function launchCodebuddyPrint(cwd, promptText, resumeSessionId) {
  * 多处实现"的失效方式有惨痛记忆：不报错，只是悄悄少一半数据）。
  *
  * 已知被忽略的事件：system/status、system/task_*（后台任务，已被
- * CODEBUDDY_CODE_DISABLE_BACKGROUND_TASKS 禁用）、ai-title、result。
+ * CODEBUDDY_CODE_DISABLE_BACKGROUND_TASKS 禁用）、ai-title、成功的 result。
+ * `type:'error'` 与 `result.is_error` 例外 —— 它们是"进程退出码 0 但本轮失败"的
+ * 唯一线索（如会话找不到、认证失败），必须落 job.agentError（见 handler 内注释）。
  * （导出仅为回归测试可见：taskRunner.codebuddy.test.js）
  */
 export function createCodebuddyEventHandler(job, appendOutput, appendThinking, toolCalls) {
   const tracker = toolCalls || createToolCallTracker(job);
   return (evt) => {
     if (!evt || typeof evt !== 'object') return;
-    // init：session_id 落 job.claudeSessionId（--resume 续接用）
+    // init：session_id 落 job.claudeSessionId（--resume 续接用）。
+    //
+    // ⚠️ **只认第一条**，后续 init 一律忽略。cbc 会把**子智能体**会话的 init 也写进
+    // 同一条 stdout（2026-10-21 实测：一轮里 4 条 init —— 主会话 78 件工具、中间那条
+    // 36 件工具的子会话、结尾又把主会话补一遍）。子会话**不注册进会话库**
+    // （CLI 日志原话 "Child session skipped registration"），拿它的 id 去 --resume
+    // 只会得到一条 `{"type":"error","error":"No conversation found with session ID: …"}`，
+    // 进程退出码仍是 0 —— 表现就是"续接时不输出、直接结束"。
+    // 主会话的 init 必定最先到（子智能体是主会话跑起来才派出去的），所以首条即真值；
+    // 续接时首条回来的 id 与 --resume 传入的 id 也实测一致（不会丢上下文）。
     if (evt.type === 'system' && evt.subtype === 'init' && typeof evt.session_id === 'string') {
-      if (!job.claudeSessionId || job.claudeSessionId !== evt.session_id) {
+      if (!job.claudeSessionId) {
         job.claudeSessionId = evt.session_id;
         publish('job:update', job);
       }
+      return;
+    }
+    // 协议层报错：实测形状 `{"type":"error","error":"<文案>"}`（如会话找不到、
+    // 认证失败），**退出码照样是 0**。落 job.agentError 让终态判成 error，
+    // 否则一轮空输出会被记成"已完成"（另四家 handler 同一口径）。
+    if (evt.type === 'error') {
+      const msg = typeof evt.error === 'string'
+        ? evt.error
+        : (typeof evt.error?.message === 'string' ? evt.error.message : '');
+      if (msg && !job.agentError) job.agentError = msg;
+      return;
+    }
+    // result 的失败分支同上一类：cbc 发的是
+    // `{type:'result',subtype:'error_during_execution',is_error:true,errors:[…]}`
+    // （拿到的是错误对象数组，没有 result 字符串），success 分支才带 result。
+    if (evt.type === 'result' && evt.is_error) {
+      const detail = Array.isArray(evt.errors) ? evt.errors.filter(Boolean).join('; ') : '';
+      const msg = detail || (typeof evt.result === 'string' ? evt.result : '')
+        || evt.subtype || 'codebuddy 执行出错';
+      if (!job.agentError) job.agentError = msg;
       return;
     }
     // 工具结果：与 claude 完全同构 —— user 事件的 content 是块数组，
