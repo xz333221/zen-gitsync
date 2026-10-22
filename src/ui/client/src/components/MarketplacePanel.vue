@@ -54,6 +54,15 @@ interface SourceGroup {
   count?: number
 }
 
+// 筛选器用的来源清单。**不能**从 catalog 的 groups 推出来：一旦筛选生效,
+// 后端只返回被选中的那几个组,筛选项就跟着一起消失、没法再选第二个来源。
+interface SourceDef {
+  id: string
+  label: string
+  kind: 'builtin' | 'live'
+  homepage?: string
+}
+
 interface InstalledItem {
   id: string
   name: string
@@ -69,6 +78,7 @@ interface InstalledItem {
 }
 
 const groups = ref<SourceGroup[]>([])
+const sources = ref<SourceDef[]>([])
 const installed = ref<InstalledItem[]>([])
 const loading = ref(false)
 const searchInput = ref('')
@@ -137,8 +147,26 @@ const totalCount = computed(() =>
 // ── 请求 ──────────────────────────────────────────────────
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
+// 筛选器另开一个接口:它只依赖来源定义,不依赖抓取结果
+async function loadSources() {
+  try {
+    const res = await fetch(`/api/agent/marketplace/sources?type=${props.type}`)
+    const data = await res.json()
+    if (data?.success) sources.value = data.sources || []
+  } catch {
+    // 拿不到来源清单时筛选器为空,不影响正文目录
+  }
+}
+
+// 连点两个筛选项时,第二次会撞上 loading 直接 return —— 结果是筛选器和列表各说一套。
+// 让它在飞的那次落地后再补跑一次。
+let reloadQueued = false
+
 async function loadCatalog() {
-  if (loading.value) return
+  if (loading.value) {
+    reloadQueued = true
+    return
+  }
   loading.value = true
   try {
     const params = new URLSearchParams({ type: props.type, cwd: cwd.value })
@@ -160,6 +188,10 @@ async function loadCatalog() {
     ElMessage.error($t('@MKT:加载失败'))
   } finally {
     loading.value = false
+    if (reloadQueued) {
+      reloadQueued = false
+      void loadCatalog()
+    }
   }
 }
 
@@ -168,9 +200,18 @@ watch(searchInput, value => {
   searchTimer = setTimeout(() => { query.value = value.trim(); loadCatalog() }, 400)
 })
 
-watch(selectedSources, () => loadCatalog())
-watch(() => props.type, () => { selectedSources.value = []; query.value = ''; searchInput.value = ''; loadCatalog() })
+// deep:筛选是 push/splice 原地改数组,浅监听只在「整个数组被替换」时才触发,
+// 点单个标签等于什么都没发生(只有标签自己亮起来)
+watch(selectedSources, () => loadCatalog(), { deep: true })
+watch(() => props.type, () => {
+  selectedSources.value = []
+  query.value = ''
+  searchInput.value = ''
+  void loadSources()
+  loadCatalog()
+})
 watch(cwd, () => loadCatalog())
+void loadSources()
 loadCatalog()
 
 // ── 展示辅助 ──────────────────────────────────────────────
@@ -385,16 +426,16 @@ async function onRemove(item: InstalledItem) {
       <span class="mp-target-hint">{{ $t('@MKT:安装到') }} <b>{{ targetLabel }}</b></span>
       <div class="mp-source-filter">
         <button
-          v-for="group in groups"
-          :key="group.id"
+          v-for="source in sources"
+          :key="source.id"
           class="mp-chip"
-          :class="{ active: selectedSources.includes(group.id) }"
+          :class="{ active: selectedSources.includes(source.id) }"
           @click="() => {
-            const index = selectedSources.indexOf(group.id)
+            const index = selectedSources.indexOf(source.id)
             if (index >= 0) selectedSources.splice(index, 1)
-            else selectedSources.push(group.id)
+            else selectedSources.push(source.id)
           }"
-        >{{ group.label }}</button>
+        >{{ source.label }}</button>
         <button v-if="selectedSources.length" class="mp-chip clear" @click="selectedSources = []">
           {{ $t('@MKT:全部来源') }}
         </button>
