@@ -693,6 +693,36 @@ async function deleteTask(t: BoardTask) {
   await refresh(true)
 }
 
+/**
+ * 把一条待处理任务移动到其他项目（卡片右键菜单 → POST /tasks/:id/move）。
+ *
+ * 为什么值得一个专门端点、不在编辑器保存里顺带改：projectPath 同时是**执行目录**
+ * （resolveTaskRepoPath），编辑器"整 task 体提交"那条路刻意不动它（否则在 A 项目
+ * 里编辑 B 项目的任务、保存一次就把它挪到 A 了），移动必须是一次显式动作。
+ *
+ * 不弹确认：这个动作可逆（再右键挪回来就行），而扫一遍看板重新归类时会连挪多条，
+ * 每条一个确认框只会让人烦。失败透出服务端原话 —— 最典型的是"该任务正在执行,
+ * 请先停止再移动"（在跑的任务换了项目，这一轮还在旧目录里跑）。
+ *
+ * 成功后 refresh(true)：卡片落到新项目归属；若当前按项目筛选，它从本视图消失
+ * 也正是期望结果（去目标项目的筛选下能看到它）。
+ */
+async function moveTask(t: BoardTask, targetPath: string) {
+  const res = await fetch(`/api/workbench/tasks/${encodeURIComponent(t.id)}/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectPath: targetPath }),
+  }).then(r => r.json()).catch(() => null)
+  if (!res?.success) {
+    ElMessage.error(res?.error || $t('@WORKBENCH:移动失败'))
+    return
+  }
+  const name = projects.value.find(p => canonicalProjectPath(p.path) === canonicalProjectPath(targetPath))?.name
+    || targetPath
+  ElMessage.success($t('@WORKBENCH:已移动到「{name}」', { name }))
+  await refresh(true)
+}
+
 /** 控制台组件实例：派发成功后才由它清掉草稿附件（失败要留着，让用户能重试） */
 const consoleRef = ref<InstanceType<typeof OrchestratorConsole> | null>(null)
 
@@ -993,6 +1023,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
         <WorkbenchKanban
           :tasks="visibleTasks"
           :project-labels="projectLabels"
+          :projects="projects"
           :task-percents="taskPercents"
           :show-project-label="!selectedProject"
           :opened-task-id="props.openedTaskId"
@@ -1004,6 +1035,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
           @complete-task="completeTask"
           @reopen-task="reopenTask"
           @delete-task="deleteTask"
+          @move-task="moveTask"
           @create-task="onCreateClick"
         />
       </main>

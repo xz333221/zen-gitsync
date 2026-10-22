@@ -67,7 +67,8 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import TaskExecutorIcon from '@/components/TaskExecutorIcon.vue'
-import type { BoardImage, BoardTask, TaskColumn } from '@/types/workbench'
+import WorkbenchTaskMoveMenu from './WorkbenchTaskMoveMenu.vue'
+import type { BoardImage, BoardTask, ProjectSummary, TaskColumn } from '@/types/workbench'
 import { taskExecutorName, type TaskExecutorId } from '@/utils/taskExecutor'
 import { projectTagStyle } from '@/utils/projectTag'
 import { formatDurationMs, relativeTimeFromIso } from '@/utils/relativeTime'
@@ -78,6 +79,11 @@ const props = defineProps<{
   tasks: BoardTask[]
   /** 项目列表（左栏）里的项目 key → 显示名，供「全部项目」视图在卡片上标出归属 */
   projectLabels: Record<string, string>
+  /**
+   * 全量项目清单（与左栏同源）：右键「移动到其他项目」的候选。
+   * 看板不自己探测项目，这里给什么就列什么。
+   */
+  projects: ProjectSummary[]
   /**
    * 「这条任务现在几成」：任务 id → 百分比（0–100）。
    *
@@ -119,6 +125,8 @@ const emit = defineEmits<{
   /** 撤销手动标的完成标记，退回待处理 */
   'reopen-task': [task: BoardTask]
   'delete-task': [task: BoardTask]
+  /** 把这条待处理任务移动到另一个项目（卡片右键菜单；上层发 /move 并刷新看板） */
+  'move-task': [task: BoardTask, targetPath: string]
   'create-task': []
   /** 视图切换（v-model:view）：持久化与图标切换钮都在上层 */
   'update:view': [view: 'kanban' | 'list']
@@ -131,6 +139,30 @@ const COLUMNS: { key: TaskColumn; labelKey: string }[] = [
   { key: 'doing', labelKey: '@WORKBENCH:进行中' },
   { key: 'done', labelKey: '@WORKBENCH:已完成' },
 ]
+
+/**
+ * 卡片右键菜单（「移动到其他项目」）的状态。
+ *
+ * 只对**待处理**列开放：那一列是"还没开始、可以重新安排归属"的收件箱；
+ * 进行中的任务可能正跑着（后端 /move 也会拒），已完成的是历史。
+ * DOM 里只有一份菜单（teleport 到 body、fixed 定位），不随卡片数量增长。
+ */
+const moveMenu = ref<{ visible: boolean; x: number; y: number; task: BoardTask | null }>(
+  { visible: false, x: 0, y: 0, task: null }
+)
+
+function onCardContextMenu(t: BoardTask, column: TaskColumn, evt: MouseEvent) {
+  if (column !== 'todo') return
+  // 只拦待处理列的默认菜单；其余列照旧弹浏览器原生的（那里没有可移动的语义）
+  evt.preventDefault()
+  moveMenu.value = { visible: true, x: evt.clientX, y: evt.clientY, task: t }
+}
+
+function onMoveToProject(targetPath: string) {
+  const t = moveMenu.value.task
+  moveMenu.value = { ...moveMenu.value, visible: false }
+  if (t) emit('move-task', t, targetPath)
+}
 
 const filtered = computed(() => {
   const q = props.search.trim().toLowerCase()
@@ -504,6 +536,7 @@ function coverTitle(img: BoardImage): string {
             @click="emit('open-task', t)"
             @keydown.enter.prevent="emit('open-task', t)"
             @keydown.space.prevent="emit('open-task', t)"
+            @contextmenu="onCardContextMenu(t, col.key, $event)"
           >
             <!--
               首行 = 所属项目色标 + 标题 + 时间，三样同一行。
@@ -963,6 +996,17 @@ function coverTitle(img: BoardImage): string {
       :hide-on-click-modal="true"
       :teleported="true"
       @close="closeImages"
+    />
+
+    <!-- 右键「移动到其他项目」：全局一份，teleport 到 body（不被看板滚动容器裁掉） -->
+    <WorkbenchTaskMoveMenu
+      :visible="moveMenu.visible"
+      :x="moveMenu.x"
+      :y="moveMenu.y"
+      :task="moveMenu.task"
+      :projects="projects"
+      @move="onMoveToProject"
+      @close="moveMenu.visible = false"
     />
   </div>
 </template>

@@ -80,6 +80,7 @@
     "verify:wb-auto-done:reverse": "node scripts/verify-wb-auto-done.cjs --reverse",
     "verify:wb-card-cover": "node scripts/verify-wb-card-cover.cjs",
     "verify:wb-card-cover:reverse": "node scripts/verify-wb-card-cover.cjs --reverse",
+    "verify:wb-card-move": "node scripts/verify-wb-card-move.cjs",
     "verify:wb-list-view": "node scripts/verify-wb-list-view.cjs",
     "verify:wb-head-actions": "node scripts/verify-wb-head-actions.cjs",
     "verify:wb-head-actions:reverse": "node scripts/verify-wb-head-actions.cjs --reverse",

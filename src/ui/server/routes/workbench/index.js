@@ -369,8 +369,48 @@ export function registerWorkbenchRoutes({
   }));
 
   // ════════════════════════════════════════════════════════════════════════
-  // §12. 执行任务（每个任务都是一次会话）
+  // §11.5 移动任务到其他项目（看板「待处理」卡片的右键菜单）
+  //
+  //   为什么单独开一个端点，而不是让 POST /api/workbench/tasks 的更新分支
+  //   支持改 projectPath：那条分支是编辑器"整 task 体提交"走的路，它**刻意**
+  //   一律保留任务原有的 projectPath（见上面 296–297 行）—— 否则在 A 项目的
+  //   编辑器里打开 B 项目的任务、保存一次，任务就悄悄挪到 A 去了。
+  //   「移动到其他项目」是一次显式动作，值得一个显式端点。
+  //
+  //   projectPath 同时是任务的**执行目录**（resolveTaskRepoPath），所以：
+  //     · 有活跃 job 的任务拒绝移动 —— 这一轮还在旧目录里跑、下一轮才换地方，
+  //       一张卡会短暂地在两个项目下都看得见，先停再挪（与 DELETE 同口径）；
+  //     · 目标按 canonicalProjectPath 判重（大小写/斜杠不同也是同一个项目），
+  //       落库保留调用方给的原始写法（与 buildProjectEntries "首次出现的写法"一致）。
   // ════════════════════════════════════════════════════════════════════════
+  app.post('/api/workbench/tasks/:id/move', asyncRoute(async (req, res) => {
+    const taskId = req.params.id;
+    const targetPath = typeof req.body?.projectPath === 'string' ? req.body.projectPath.trim() : '';
+    if (!targetPath) throw new HttpError(400, '缺少目标项目路径');
+    const data = await readJson(TASKS_FILE, { tasks: [] });
+    const task = (data.tasks || []).find(t => t && t.id === taskId);
+    if (!task) throw new HttpError(404, '任务不存在');
+
+    // 先刷磁盘再取快照：别的实例刚起的 job 也要看得到（与 /tasks/:id/run 同一口径）
+    await refreshJobsFromDisk();
+    const liveJob = snapshotJobs().find(j => j.taskId === taskId && (j.status === 'running' || j.status === 'pending'));
+    if (liveJob) throw new HttpError(400, '该任务正在执行,请先停止再移动');
+
+    // 幂等：目标就是当前归属时直接回成功（"挪到它已经在的项目"不是错误）
+    if (canonicalProjectPath(task.projectPath) === canonicalProjectPath(targetPath)) {
+      return res.json({ success: true, task });
+    }
+
+    const now = nowIso();
+    task.projectPath = targetPath;
+    task.updatedAt = now;
+    await writeJson(TASKS_FILE, data);
+    publish('task:update', task);
+    res.json({ success: true, task });
+  }));
+
+  // ════════════════════════════════════════════════════════════════════════
+  // §12. 执行任务（每个任务都是一次会话）
   app.post('/api/workbench/tasks/:id/run', asyncRoute(async (req, res) => {
     const data = await readJson(TASKS_FILE, { tasks: [] });
     const task = (data.tasks || []).find(t => t.id === req.params.id);
