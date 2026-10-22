@@ -23,6 +23,7 @@ import { useEditorTabsStore } from '@/stores/editorTabs'
 import { getLanguageByExt } from '@/utils/editorLang'
 import { getFileIconClass, getFolderIconClass } from '@/utils/fileIcon'
 import ImagePreview from '@/components/ImagePreview.vue'
+import MediaPreview from '@/components/MediaPreview.vue'
 import OfficePreview from '@/components/OfficePreview.vue'
 import MarkdownPreview from '@/components/MarkdownPreview.vue'
 import MindmapPreview from '@/components/MindmapPreview.vue'
@@ -32,6 +33,7 @@ import SvgIcon from '@/components/SvgIcon/index.vue'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import { PREVIEW_IFRAME_SANDBOX, injectHtmlPreviewShims } from '@/utils/previewSandbox'
 import { isOfficeFile } from '@/utils/officeFile'
+import { MEDIA_EXTS } from '@/utils/fileKind'
 import { prepareHtml, prepareRichText } from '@/utils/markdownClipboard'
 
 // 配置 Monaco web worker(避免回退到主线程导致 UI 卡顿)
@@ -573,9 +575,24 @@ async function openFile(node: TreeNode) {
     nextTick(() => focusEditor())
     return
   }
+  // 音视频：不读文本（会撞上 2MB 上限），直接建 media tab，播放器在编辑区里铺满
+  const ext = node.name.split('.').pop() || ''
+  if (MEDIA_EXTS.has(ext.toLowerCase())) {
+    const tab: Tab = {
+      path: node.path,
+      name: node.name,
+      content: '',
+      originalContent: '',
+      isDirty: false,
+      language: 'media',
+      diskMtimeMs: null,
+    }
+    tabs.value.push(tab)
+    activeTabPath.value = node.path
+    return
+  }
   // 图片/Office：跳过 Monaco，直接建一个只读 tab，content 留空字符串（不渲染 Monaco）
   // 由 preview 自动打开，ImagePreview 通过 /api/editor/raw 读取二进制
-  const ext = node.name.split('.').pop() || ''
   if (IMAGE_EXTS.has(ext.toLowerCase())) {
     const tab: Tab = {
       path: node.path,
@@ -707,7 +724,11 @@ async function restoreTab(path: string) {
   if (tabs.value.some(t => t.path === path)) return
   const name = path.split(/[\\/]/).pop() || path
   const ext = (name.split('.').pop() || '').toLowerCase()
-  // 图片/Office 与 openFile 口径一致：不读文本内容，建只读 tab，内容交给预览面板
+  // 音视频/图片/Office 与 openFile 口径一致：不读文本内容，建只读 tab
+  if (MEDIA_EXTS.has(ext)) {
+    tabs.value.push({ path, name, content: '', originalContent: '', isDirty: false, language: 'media', diskMtimeMs: null })
+    return
+  }
   if (IMAGE_EXTS.has(ext)) {
     tabs.value.push({ path, name, content: '', originalContent: '', isDirty: false, language: 'plaintext', diskMtimeMs: null })
     return
@@ -1142,6 +1163,9 @@ onBeforeUnmount(() => {
 async function saveCurrentFile(silent = false) {
   const tab = activeTab()
   if (!tab) return
+  // 图片 / Office / 音视频 tab 的 content 恒为空串（正文在预览里），
+  // 放行保存等于把二进制文件写成 0 字节 —— 这里直接拒掉
+  if (activeTabIsImage.value || activeTabIsOffice.value || activeTabIsMedia.value) return
   try {
     const resp = await fetch('/api/editor/file', {
       method: 'PUT',
@@ -1578,6 +1602,8 @@ const activeTabRef = computed(() => tabs.value.find(t => t.path === activeTabPat
 /** 当前 tab 是否为图片（content 为空、language 为 'plaintext'，由 openFile 设置） */
 const activeTabIsImage = computed(() => activeTabRef.value?.language === 'plaintext' && activeTabRef.value?.content === '')
 const activeTabIsOffice = computed(() => activeTabRef.value?.language === 'office')
+/** 音视频 tab：主区域直接放播放器，不占用右侧预览面板 */
+const activeTabIsMedia = computed(() => activeTabRef.value?.language === 'media')
 
 const activeExt = computed(() => {
   const name = activeTabRef.value?.name ?? ''
@@ -2164,8 +2190,15 @@ function stopPreviewResize() {
       <div class="editor-body" :class="{ 'is-agent-fullscreen': agentFullscreen && showAgentChat }">
         <div
           class="monaco-container"
-          :class="{ hidden: tabs.length === 0 || activeTabIsImage || activeTabIsOffice }"
+          :class="{ hidden: tabs.length === 0 || activeTabIsImage || activeTabIsOffice || activeTabIsMedia }"
           ref="editorContainerRef"
+        />
+        <!-- 音视频 tab：播放器直接铺满主区域（不走右侧预览面板 —— 音频没必要和空编辑区平分） -->
+        <MediaPreview
+          v-if="activeTabIsMedia && activeTabRef"
+          :key="activeTabRef.path"
+          :file-path="activeTabRef.path"
+          :file-name="activeTabRef.name"
         />
         <!-- 图片 tab 时的占位提示（主预览区在右侧 preview-panel） -->
         <div

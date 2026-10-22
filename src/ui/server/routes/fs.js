@@ -16,6 +16,7 @@ import express from 'express';
 import logger from '../utils/logger.js'
 import chalk from 'chalk';
 import fs from 'fs/promises';
+import { createReadStream } from 'fs';
 import path from 'path';
 import open from 'open';
 import os from 'os';
@@ -1050,7 +1051,11 @@ export function registerFsRoutes({
     }
     }));
 
-  // ── 编辑器：读取原始文件（用于图片等二进制文件预览）────────────────────
+  // ── 编辑器：读取原始文件（图片预览 / 音视频播放）────────────────────────
+  // 图片走"整份读进内存"（最大 20 MB）；音视频必须走流 + Range：
+  //   - <audio>/<video> 拖进度条时浏览器发 `Range: bytes=N-`，回不了 206 就没法 seek；
+  //   - 一首无损 / 一段视频动辄上百 MB，整份读进内存既慢又容易被 20 MB 上限拒掉
+  //     （以前点 mp3 会掉进"文件过大，暂不支持在线编辑"就是这条上限的连带）。
   app.get('/api/editor/raw', asyncRoute(async (req, res) => {
     try {
       const filePath = req.query.path;
@@ -1060,18 +1065,68 @@ export function registerFsRoutes({
       const resolved = safe.safePath;
       const stat = await fs.stat(resolved);
       if (!stat.isFile()) return res.status(400).end();
-      if (stat.size > 20 * 1024 * 1024) return res.status(413).end();
       const ext = path.extname(resolved).toLowerCase().slice(1);
       const mimeMap = {
         png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
         gif: 'image/gif', webp: 'image/webp', ico: 'image/x-icon',
         svg: 'image/svg+xml', bmp: 'image/bmp', tiff: 'image/tiff',
+        // 音视频：MIME 必须给对，否则浏览器把它当 octet-stream 直接不播
+        mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', oga: 'audio/ogg',
+        m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', opus: 'audio/opus',
+        weba: 'audio/webm',
+        mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg',
+        mov: 'video/quicktime', mkv: 'video/x-matroska', avi: 'video/x-msvideo',
       };
       const mime = mimeMap[ext] || 'application/octet-stream';
-      const content = await fs.readFile(resolved);
+      const isMedia = mime.startsWith('audio/') || mime.startsWith('video/');
+
+      if (!isMedia) {
+        if (stat.size > 20 * 1024 * 1024) return res.status(413).end();
+        const content = await fs.readFile(resolved);
+        res.setHeader('Content-Type', mime);
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(content);
+        return;
+      }
+
+      const size = stat.size;
       res.setHeader('Content-Type', mime);
       res.setHeader('Cache-Control', 'no-store');
-      res.send(content);
+      res.setHeader('Accept-Ranges', 'bytes');
+
+      // 只接受单段 `bytes=a-b` / `bytes=a-` / `bytes=-n`；多段（逗号）按整份返回，
+      // 浏览器对音视频只会发单段，没必要为多段写 multipart。
+      const rangeHeader = String(req.headers.range || '').trim();
+      const m = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
+      let start = 0;
+      let end = size - 1;
+      let partial = false;
+      if (m && (m[1] !== '' || m[2] !== '')) {
+        if (m[1] === '') {
+          // 后缀区间：最后 n 字节
+          const len = Math.min(Number(m[2]) || 0, size);
+          start = size - len;
+        } else {
+          start = Number(m[1]);
+          if (m[2] !== '') end = Math.min(Number(m[2]), size - 1);
+        }
+        if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= size) {
+          res.status(416);
+          res.setHeader('Content-Range', `bytes */${size}`);
+          return res.end();
+        }
+        partial = true;
+      }
+
+      const length = end - start + 1;
+      res.status(partial ? 206 : 200);
+      res.setHeader('Content-Length', String(length));
+      if (partial) res.setHeader('Content-Range', `bytes ${start}-${end}/${size}`);
+      // 空文件：没有可读区间，直接收尾（createReadStream(start>end) 会抛）
+      if (length <= 0) return res.end();
+      const stream = createReadStream(resolved, { start, end });
+      stream.on('error', () => res.destroy());
+      stream.pipe(res);
     } catch (error) {
       res.status(500).end();
     }

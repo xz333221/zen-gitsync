@@ -2206,6 +2206,10 @@ export default {
   '@EDITOR:已复制': '已复制',
   '@EDITOR:复制失败': '复制失败',
   '@EDITOR:{n} 张图片未能转成 Base64，已保留原地址': '{n} 张图片未能转成 Base64，已保留原地址',
+  '@EDITOR:音频': '音频',
+  '@EDITOR:视频': '视频',
+  '@EDITOR:正在载入媒体文件…': '正在载入媒体文件…',
+  '@EDITOR:无法播放该文件，可能是编码或格式不受支持': '无法播放该文件，可能是编码或格式不受支持',
   // @EDITOR: file end
   // @INSSW: file path: components/InstanceSwitcher.vue, components/ServerClosedOverlay.vue
   '@INSSW:个实例': '个实例',
