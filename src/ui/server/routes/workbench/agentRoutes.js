@@ -456,6 +456,12 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
     // 文件空间对话：客户端把"当前打开的文档"带上来，服务端只在请求副本里注入上下文（不落库）
     const openFilePath = String(req.body?.openFilePath || '').trim().slice(0, 512);
 
+    // 宿主补充的当前上下文说明（思维导图页：导图文件位置 + "生成导图"的输出约定）。
+    // 为什么不用 openFilePath：导图落在用户自选目录里，常常在项目根之外，那条注入
+    // 按"项目外忽略"会整段丢掉；而且这里要说的是格式约定，不是"哪个文件开着"。
+    // 与其它请求级上下文同一条路 —— 内置引擎塞请求副本、外部引擎拼 prompt 前缀，都不落会话。
+    const docNote = String(req.body?.docNote || '').trim().slice(0, 4000);
+
     // 切换工作目录弹窗里的 g ai 追问：客户端把"常用目录那批目录的状态"带上来。
     // 与 /api/recent_directories/summary 完全是同一份数据形状，走同一个归一化函数；
     // 真正拼块要等拿到 configManager（需要读最近目录白名单），见下面 cwd 那一段。
@@ -719,6 +725,11 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
         if (dirStatusBlock) {
           promptPrefix = promptPrefix ? `${dirStatusBlock}\n\n${promptPrefix}` : dirStatusBlock;
         }
+        // 宿主的当前上下文说明（思维导图页的导图格式约定）。外部引擎那边 openFilePath
+        // 根本传不进去，所以这类"宿主才知道的约定"只能走前缀。
+        if (docNote) {
+          promptPrefix = promptPrefix ? `${docNote}\n\n${promptPrefix}` : docNote;
+        }
         // 用户固定提示词排在最前：它是每轮都成立的规则，工作区快照是这一刻的现场。
         // 外部引擎那条链路的 system 提示词是 CLI 自己的，进不去 —— 只能靠这个前缀。
         if (promptSection) {
@@ -757,6 +768,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
           cwd,
           locale,
           openFilePath,
+          docNote,
           attachments,
           dirStatusBlock,
           signal: abortController.signal,

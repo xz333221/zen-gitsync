@@ -49,6 +49,28 @@ test('injectRequestContext: 每轮都基于副本重新注入，不会重复累�
   assert.equal((second[0].content.match(/# 当前上下文/g) || []).length, 1)
 })
 
+test('injectRequestContext: docNote 原样进副本（项目外路径照样生效）', () => {
+  const messages = [{ role: 'system', content: 'rules' }]
+  // 思维导图页的用法：文件在项目外，openFilePath 那条会按"项目外忽略"丢掉，
+  // 所以宿主改用 docNote 把格式约定带上来 —— 这条不受项目根限制。
+  injectRequestContext(messages, {
+    cwd: ROOT,
+    openFilePath: 'D:/maps/a.mindmap.json',
+    docNote: '用户此刻在「思维导图」视图里。用 ```mindmap 输出大纲。',
+    locale: 'zh'
+  })
+  assert.match(messages[0].content, /# 当前上下文/)
+  assert.match(messages[0].content, /思维导图/)
+  assert.ok(!messages[0].content.includes('D:/maps/a.mindmap.json'), '项目外的 openFilePath 仍被忽略')
+  assert.ok(!messages[0].content.includes('用户此刻在文件空间打开的文件'), '没有走 openFilePath 那条说明')
+})
+
+test('injectRequestContext: 空 docNote 不产生空段落', () => {
+  const messages = [{ role: 'system', content: 'rules' }]
+  injectRequestContext(messages, { cwd: ROOT, docNote: '   ', locale: 'zh' })
+  assert.equal(messages[0].content, 'rules')
+})
+
 test('injectRequestContext: 附件只注入绝对路径,内容不进消息体', () => {
   const messages = [{ role: 'system', content: 'rules' }, { role: 'user', content: '看下这个日志' }]
   injectRequestContext(messages, {

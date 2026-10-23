@@ -89,6 +89,12 @@ export interface PendingAgentQuestion {
 export interface AgentSendOptions {
   /** 文件空间对话：当前打开的文档路径（请求副本的 system 注入） */
   openFilePath?: string
+  /**
+   * 宿主补充的"当前上下文"说明（请求副本的 system 注入，不落会话历史）。
+   * 给那些 openFilePath 说不清的场景用 —— 思维导图页靠它交代导图文件与生成约定
+   * （导图多落在项目外，openFilePath 那条注入会按"项目外忽略"直接丢掉）。
+   */
+  docNote?: string
   /** 引擎覆盖：只在新建会话时生效（已有会话由服务端按落盘引擎接管） */
   engine?: AgentEngineId
   /** 常用目录对话：那批目录的 Git 状态 */
@@ -1099,6 +1105,8 @@ export function useAgentChat() {
       ...(attachments.length > 0 ? { attachments } : {}),
       // 文件空间对话：把"当前打开的文档"带给服务端（请求级注入上下文，不落会话历史）
       ...(options.openFilePath ? { openFilePath: options.openFilePath } : {}),
+      // 宿主补充的当前上下文说明（思维导图页：导图格式 + 生成约定）
+      ...(options.docNote ? { docNote: options.docNote } : {}),
       // 常用目录对话：把"那批目录的状态 + 界面上那段解读"带给服务端（同样只进请求副本）
       ...(options.dirStatus?.length ? { dirStatus: options.dirStatus } : {}),
       ...(options.dirSummary ? { dirSummary: options.dirSummary } : {}),
@@ -1567,6 +1575,7 @@ export function useAgentChat() {
       cwd: configStore.currentDirectory || '',
       engine,
       ...(run.lastSendOptions?.openFilePath ? { openFilePath: run.lastSendOptions.openFilePath } : {}),
+      ...(run.lastSendOptions?.docNote ? { docNote: run.lastSendOptions.docNote } : {}),
       ...(run.lastSendOptions?.dirStatus?.length ? { dirStatus: run.lastSendOptions.dirStatus } : {}),
       ...(run.lastSendOptions?.dirSummary ? { dirSummary: run.lastSendOptions.dirSummary } : {}),
       ...(run.lastSendOptions?.allowDispatch

@@ -2821,6 +2821,20 @@ export default {
   '@MINDMAP:请选择目标目录': '请在左侧目录分组上右键选择「在此目录新建」',
   '@MINDMAP:目录不存在或已删除': '目录不存在或已被删除',
   '@MINDMAP:该目录暂无思维导图': '该目录暂无思维导图',
+  '@MINDMAP:g ai 对话': 'g ai 对话',
+  '@MINDMAP:打开 g ai 对话': '打开 g ai 对话',
+  '@MINDMAP:关闭 g ai 对话': '关闭 g ai 对话',
+  '@MINDMAP:AI 导图草稿': 'AI 导图草稿',
+  '@MINDMAP:个节点': '{n} 个节点',
+  '@MINDMAP:应用到当前导图': '应用到当前导图',
+  '@MINDMAP:另存为新导图': '另存为新导图',
+  '@MINDMAP:关闭草稿': '关闭草稿',
+  '@MINDMAP:覆盖当前导图确认': '会用这份草稿整份替换当前导图「{title}」,确定继续?',
+  '@MINDMAP:应用导图草稿': '应用导图草稿',
+  '@MINDMAP:覆盖': '覆盖',
+  '@MINDMAP:已应用到当前导图': '已应用到当前导图',
+  '@MINDMAP:已新建导图': '已新建导图',
+  '@MINDMAP:应用草稿失败': '应用导图草稿失败',
   // @MINDMAP: file end
 
   // @ACTBAR: file path: components/ActivityBar.vue (追加: 智能体)

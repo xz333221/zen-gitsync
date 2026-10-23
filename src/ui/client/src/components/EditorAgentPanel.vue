@@ -243,13 +243,28 @@ const props = defineProps<{
   activeFilePath?: string | null
   /** 当前打开的文档名（只用于输入框里那张卡片） */
   activeFileName?: string
+  /**
+   * 宿主补充的"当前上下文"说明（请求级注入，不落会话历史）。
+   * 文件空间用不到（它靠 activeFilePath）；思维导图页用它交代导图格式与生成约定 ——
+   * 导图多半在项目根之外，openFilePath 那条注入会被服务端按"项目外"直接丢掉。
+   */
+  contextNote?: string
   /** 面板是否可见：v-show 隐藏时收不到通知，靠它在重新可见时贴底并刷新会话列表 */
   active?: boolean
   /** 全屏对话：父级这一档下会把分隔条藏掉，本组件只负责铺满编辑区 */
   fullscreen?: boolean
 }>()
 
-const emit = defineEmits<{ (e: 'close'): void; (e: 'toggle-fullscreen'): void }>()
+const emit = defineEmits<{
+  (e: 'close'): void
+  (e: 'toggle-fullscreen'): void
+  /**
+   * 一轮跑完（成功 / 报错 / 停止 / 重试 / 队列接棒都算）时把最后一条助手回答的正文
+   * 交给宿主。宿主自己想认格式（思维导图页从里面抠 ```mindmap 草稿）—— 面板不认识
+   * 任何业务格式，只负责"这一轮说完了"这个信号。
+   */
+  (e: 'assistant-done', payload: { text: string }): void
+}>()
 
 const { theme } = useThemeObserver()
 const chatTheme = computed<'light' | 'dark'>(() => (theme.value === 'dark' ? 'dark' : 'light'))
@@ -413,7 +428,7 @@ async function onSend(payload: { text: string; files: any[] }) {
   // 关键：把"当前打开的文档"一起发给服务端（请求级注入，不落会话历史）。
   // 点过卡片上的 ✕ 就不带 —— 与"移除一个附件"是同一种语义：这一条不要它。
   const openFilePath = contextDismissed.value ? undefined : (props.activeFilePath || undefined)
-  await sendMessage(payload.text, payload.files, { openFilePath })
+  await sendMessage(payload.text, payload.files, { openFilePath, docNote: props.contextNote || undefined })
   await nextTick()
   scrollToBottom()
 }
@@ -432,6 +447,24 @@ function onNewSession() {
 watch(() => messages.value.length, () => {
   nextTick(() => scrollToBottom(false))
 })
+
+/**
+ * 一轮跑完 → 把最后一条助手回答的正文交给宿主（见 emits 里那条注释）。
+ * 挂在 isStreaming 的 true→false 上而不是某个具体事件上：正常结束、报错、点停止、
+ * 重试、队列接棒都会落到"流停了"这一刻，漏一条就等于某种结束方式下草稿不出现。
+ */
+watch(isStreaming, (streaming, wasStreaming) => {
+  if (!streaming && wasStreaming) emit('assistant-done', { text: lastAssistantText() })
+})
+
+/** 最后一条助手消息的正文（流式结束后它已经是完整的） */
+function lastAssistantText(): string {
+  const list = messages.value
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (list[i]?.role === 'assistant') return String(list[i].content || '')
+  }
+  return ''
+}
 
 // 锚点住在那条常驻输入框里，盯着它：库在有/无附件时会动态增删附件行，
 // 锚点得跟着搬进搬出（比在各个 watch 里到处补一遍可靠）。

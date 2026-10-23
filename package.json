@@ -114,6 +114,8 @@
     "verify:file-search:reverse": "node scripts/verify-file-search.mjs --reverse",
     "verify:wb-copy-folder-name": "node scripts/verify-copy-folder-name.cjs",
     "verify:marketplace-panel": "node scripts/verify-marketplace-panel.cjs",
+    "verify:mindmap-ai": "node scripts/verify-mindmap-ai.cjs",
+    "verify:mindmap-ai:reverse": "node scripts/verify-mindmap-ai.cjs --reverse",
     "verify:wb-open-with-permission": "node scripts/verify-open-with-permission-menus.cjs",
     "verify:open-with-permission": "node --test test/open-with-permission.test.mjs",
     "verify:repo-list": "node scripts/verify-repo-list.cjs",

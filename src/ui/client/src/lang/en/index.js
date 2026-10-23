@@ -2814,6 +2814,20 @@ export default {
   '@MINDMAP:请选择目标目录': 'Right-click a folder group on the left, then choose "New file in this folder"',
   '@MINDMAP:目录不存在或已删除': 'Folder is missing or deleted',
   '@MINDMAP:该目录暂无思维导图': 'No mind maps in this folder',
+  '@MINDMAP:g ai 对话': 'g ai chat',
+  '@MINDMAP:打开 g ai 对话': 'Open g ai chat',
+  '@MINDMAP:关闭 g ai 对话': 'Close g ai chat',
+  '@MINDMAP:AI 导图草稿': 'AI draft',
+  '@MINDMAP:个节点': '{n} nodes',
+  '@MINDMAP:应用到当前导图': 'Apply to current map',
+  '@MINDMAP:另存为新导图': 'Save as new map',
+  '@MINDMAP:关闭草稿': 'Dismiss draft',
+  '@MINDMAP:覆盖当前导图确认': 'This draft replaces the whole current map "{title}". Continue?',
+  '@MINDMAP:应用导图草稿': 'Apply mind map draft',
+  '@MINDMAP:覆盖': 'Replace',
+  '@MINDMAP:已应用到当前导图': 'Applied to the current map',
+  '@MINDMAP:已新建导图': 'Mind map created',
+  '@MINDMAP:应用草稿失败': 'Failed to apply the draft',
   // @MINDMAP: file end
 
   // @ACTBAR: file path: components/ActivityBar.vue (追加: 智能体)

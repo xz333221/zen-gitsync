@@ -21,6 +21,9 @@ const agent = vi.hoisted(() => ({
   loadSession: null as any,
   newSession: null as any,
   sendMessage: null as any,
+  // 「一轮跑完」的握手（思维导图页靠它拿最后一条回答去抠 ```mindmap 草稿）
+  isStreaming: null as any,
+  messages: null as any,
   // 排队（2026-10-07）：条带上的移除 / 立即发送要真的转到 composable 上
   removeQueuedMessage: null as any,
   flushQueued: null as any,
@@ -62,6 +65,8 @@ vi.mock('@/composables/useAgentChat', async () => {
   agent.pendingEngine = ref('gai')
   agent.isEngineLocked = ref(false)
   agent.pickEngine = vi.fn()
+  agent.isStreaming = ref(false)
+  agent.messages = ref([])
   return {
     AGENT_UPLOAD_ACCEPT: 'image/*',
     useAgentChat: () => ({
@@ -70,10 +75,10 @@ vi.mock('@/composables/useAgentChat', async () => {
       ]),
       sessionsLoading: ref(false),
       currentSessionId: ref('s1'),
-      messages: ref([]),
+      messages: agent.messages,
       // 展示用（正文本机图片路径改写后的那份）；mock 形状同真实 store
       displayMessages: ref([]),
-      isStreaming: ref(false),
+      isStreaming: agent.isStreaming,
       pendingQuestion: ref(null),
       questionPanel: ref(null),
       answeringQuestion: ref(false),
@@ -151,6 +156,8 @@ beforeEach(() => {
   agent.currentEngine.value = 'gai'
   agent.pendingEngine.value = 'gai'
   agent.isEngineLocked.value = false
+  agent.isStreaming.value = false
+  agent.messages.value = []
 })
 
 describe('EditorAgentPanel 版面：够宽并排，不够宽分页', () => {
@@ -414,7 +421,7 @@ describe('EditorAgentPanel 当前文档卡片', () => {
     await nextTick()
 
     expect(agent.sendMessage).toHaveBeenCalledTimes(1)
-    expect(agent.sendMessage.mock.calls[0][2]).toEqual({ openFilePath: undefined })
+    expect(agent.sendMessage.mock.calls[0][2]).toEqual({ openFilePath: undefined, docNote: undefined })
   })
 
   it('没点 ✕ 时照旧把当前文档带上去', async () => {
@@ -426,7 +433,7 @@ describe('EditorAgentPanel 当前文档卡片', () => {
     await nextTick()
     await nextTick()
 
-    expect(agent.sendMessage.mock.calls[0][2]).toEqual({ openFilePath: 'src/a.md' })
+    expect(agent.sendMessage.mock.calls[0][2]).toEqual({ openFilePath: 'src/a.md', docNote: undefined })
   })
 
   it('换了个打开的文档 → 之前的 ✕ 作废，新文档重新带上', async () => {
@@ -456,6 +463,60 @@ describe('EditorAgentPanel 当前文档卡片', () => {
     expect(w.find('.agent-context-att').exists()).toBe(false)
     expect((w.find('.acu-input-wrap').element as HTMLElement).querySelector('.agent-context-slot'))
       .toBeNull()
+  })
+
+  // 思维导图页没有走 openFilePath（导图多半在项目根之外，那条注入会被丢掉），
+  // 靠 contextNote 把「这是导图 + 生成格式约定」带上去。宿主传了就必须真的进请求。
+  it('contextNote 跟着每条消息一起发给服务端', async () => {
+    const w = mountWithSetup(EditorAgentPanel, {
+      props: {
+        activeFilePath: 'D:/maps/a.mindmap.json',
+        activeFileName: 'a.mindmap.json',
+        contextNote: '这是思维导图视图，用 ```mindmap 输出大纲',
+        active: true,
+      },
+      global: { stubs: EL_ICON_STUB },
+    })
+    await nextTick()
+    await nextTick()
+
+    w.findComponent({ name: 'ChatInput' }).vm.$emit('send', { text: '做个导图', files: [] })
+    await nextTick()
+    await nextTick()
+
+    expect(agent.sendMessage.mock.calls[0][2]).toEqual({
+      openFilePath: 'D:/maps/a.mindmap.json',
+      docNote: '这是思维导图视图，用 ```mindmap 输出大纲',
+    })
+  })
+})
+
+// ── 一轮跑完的握手（思维导图页靠它抠导图草稿）──────────────────
+describe('EditorAgentPanel assistant-done', () => {
+  it('流停下时把最后一条助手回答的正文 emit 出去', async () => {
+    const w = mountPanel(false)
+    await nextTick()
+    await nextTick()
+
+    agent.messages.value = [
+      { id: 'u1', role: 'user', content: '做个 Java 导图' },
+      { id: 'a1', role: 'assistant', content: '```mindmap\n# Java\n## 基础\n```' },
+    ]
+    agent.isStreaming.value = true
+    await nextTick()
+    agent.isStreaming.value = false
+    await nextTick()
+
+    expect(w.emitted('assistant-done')?.[0]).toEqual([
+      { text: '```mindmap\n# Java\n## 基础\n```' },
+    ])
+  })
+
+  it('一直是 false（没跑过）时不 emit —— 别让宿主拿空正文去清草稿', async () => {
+    const w = mountPanel(false)
+    await nextTick()
+    await nextTick()
+    expect(w.emitted('assistant-done')).toBeUndefined()
   })
 })
 

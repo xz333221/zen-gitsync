@@ -374,7 +374,7 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 // 分流、摘要注进请求副本（agentParity.test.js 有守卫）。
 //
 // 返回: { aborted: boolean }
-export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, registerProject, dispatchTask, getContextBlock, requestBudget = null, resume = false, streamFn = streamChatOnce, promptSection }) {
+export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, docNote = '', attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, registerProject, dispatchTask, getContextBlock, requestBudget = null, resume = false, streamFn = streamChatOnce, promptSection }) {
   const ctx = { cwd, locale, onChild, askUser, listProjects, registerProject, dispatchTask };
 
   // 确保 session.messages 存在
@@ -474,7 +474,7 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
     const messages = prepareRequestMessages(session.messages, { locale, ...budget });
     // 请求级上下文：用户固定提示词 + 工作区状态快照 + 常用目录状态 + 当前打开的文档
     // + 本轮附件路径 + 扩展层摘要（只改副本，不落 session.messages，下一轮不重复累积）
-    injectRequestContext(messages, { cwd, openFilePath, attachments, locale, workspaceBlock, dirStatusBlock, promptSection: userPromptSection, extensionSection: extensionPromptSuffix(extensions, locale) });
+    injectRequestContext(messages, { cwd, openFilePath, docNote, attachments, locale, workspaceBlock, dirStatusBlock, promptSection: userPromptSection, extensionSection: extensionPromptSuffix(extensions, locale) });
 
     // 上下文占用：在**请求发出去之前**量一次，发给 UI 画圆环。
     // 为什么必须在发之前：provider 的真实 usage（input_tokens）要等响应回来才有，
@@ -660,7 +660,8 @@ function summarizeArgs(name, args) {
 
 // ── 请求级上下文注入（用户固定提示词 / 工作区状态 / 常用目录状态 / 文件空间对话 / 本轮附件 / 扩展层摘要） ──
 // 把"用户配的两块固定提示词""工作区各板块的状态摘要""常用目录那批目录的 Git 状态"
-// "用户当前打开的文件""本轮附件的落盘路径"与"扩展层摘要（Skill + MCP）"追加到
+// "用户当前打开的文件""宿主补充的当前上下文（docNote）""本轮附件的落盘路径"与
+// "扩展层摘要（Skill + MCP）"追加到
 // **请求副本**的 system 消息末尾：只影响这一次请求，session.messages 与磁盘历史保持
 // 原样，下一轮也不会重复累积。
 //
@@ -677,7 +678,7 @@ function summarizeArgs(name, args) {
 // 附件为什么只给路径、不给内容：见 utils/agentAttachments.js 的头注释 —— 非图片附件
 // 由服务端落盘，模型自己用 read / grep 按需取，比把几百 KB 文本内联进消息省得多。
 // 快照块同理,只给摘要与目录路径,板块正文由模型按需读。
-export function injectRequestContext(messages, { cwd, openFilePath, attachments = [], locale, workspaceBlock = '', dirStatusBlock = '', promptSection = '', extensionSection = '' }) {
+export function injectRequestContext(messages, { cwd, openFilePath, docNote = '', attachments = [], locale, workspaceBlock = '', dirStatusBlock = '', promptSection = '', extensionSection = '' }) {
   if (!Array.isArray(messages)) return;
   const en = String(locale || '').startsWith('en');
 
@@ -710,6 +711,13 @@ export function injectRequestContext(messages, { cwd, openFilePath, attachments 
         ? `The file the user currently has open in the editor is \`${file}\` (relative to the project root). When the user says "this file" / "the current file" / "here", that is what they mean; read it with your tools before assuming its content.`
         : `用户此刻在文件空间打开的文件是 \`${file}\`（相对项目根目录）。用户说"这个文件/当前文件"时默认指它；请先用工具读取内容，不要臆测。`);
     }
+  }
+
+  // ②' 宿主补充的当前上下文（思维导图页：导图文件位置 + "生成导图"的输出约定）。
+  //    原文由前端给（它才知道面板此刻在什么界面），这里只做转发 —— 同样
+  //    只进请求副本，不落 session.messages。
+  if (typeof docNote === 'string' && docNote.trim()) {
+    parts.push(docNote.trim());
   }
 
   // ③ 本轮附件：只给绝对路径，内容让模型自己去读
