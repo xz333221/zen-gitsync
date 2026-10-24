@@ -77,6 +77,13 @@ async function main() {
   page.on('response', (r) => {
     if (r.status() >= 400) badUrls.push(r.url())
   })
+  // 连接被重置（如外网 CDN 的 provider logo 拉不到）**没有 response**，
+  // 只会在 requestfailed 里出现；不归因的话会判成"本轮引入的 console 错误"。
+  // ERR_ABORTED 是页面收尾时的主动取消，不算失败，别混进归因列表。
+  page.on('requestfailed', (r) => {
+    if (r.failure()?.errorText === 'net::ERR_ABORTED') return
+    badUrls.push(r.url())
+  })
 
   // 合成 SSE + 记录 Audio 音源。addInitScript 保证在任何模块执行前就位
   await page.addInitScript(({ toolCallId, question, options }) => {
