@@ -31,9 +31,10 @@
     并把问题发给 AgentView.askQuestion（见 utils/agentDockBus.ts）。
   - 编辑器上下文：App.vue 判定 activeView==='editor' 时传入当前激活文件，
     发送时随消息注入（openFilePath，请求级、不落会话历史）。
-  - 尺寸：默认 560×720；头部「最大化」拉到近满屏（≥680 宽 → AgentView 宽屏两栏，
-    就是旧 tab 的完整体验）。最大化态是 ref，开关面板不重置。
-  - 关闭四条路：Esc / 再点 mascot / 头部 ✕ / 点击面板外部。
+  - 尺寸：默认 560×720；头部「最大化」铺到活动栏右侧的近满屏（≥680 宽 →
+    AgentView 宽屏两栏，就是旧 tab 的完整体验）。最大化态是 ref，开关面板不重置。
+  - 关闭四条路：Esc / 再点 mascot / 头部 ✕ / 点击面板外部（活动栏与 EP 弹层豁免 ——
+    点视图按钮切视图时对话必须还在右下角）。
 -->
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, defineAsyncComponent } from 'vue'
