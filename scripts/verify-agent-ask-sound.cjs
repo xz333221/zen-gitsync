@@ -167,19 +167,9 @@ async function main() {
   await page.goto(BASE, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(2500)
 
-  // 切到智能体视图：ActivityBar 里 aria-label 是"智能体"的那个按钮
-  const buttons = page.locator('.activity-btn')
-  const n = await buttons.count()
-  let clicked = false
-  for (let i = 0; i < n; i++) {
-    const label = (await buttons.nth(i).getAttribute('aria-label')) || ''
-    if (/智能体|Agent/i.test(label)) {
-      await buttons.nth(i).click()
-      clicked = true
-      break
-    }
-  }
-  if (!clicked && n > 0) await buttons.nth(n - 1).click()
+  // 打开右下角 g ai 悬浮 dock（AI 对话入口 2026-10 从活动栏 tab 整合为 dock）
+  await page.click('.agent-dock__mascot')
+  await page.waitForSelector('.agent-view', { timeout: 15000 })
   await page.waitForTimeout(1200)
 
   const input = page.locator('.acu-input-textarea').first()

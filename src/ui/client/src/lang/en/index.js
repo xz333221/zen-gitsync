@@ -1841,6 +1841,7 @@ export default {
   '@13D1C:刷新失败：{error}': 'Fetch failed: {error}',
   '@13D1C:刷新超时（超过 {seconds} 秒）': 'Fetch timed out (over {seconds}s)',
   '@13D1C:AI 项目状态解读': 'AI project status',
+  '@13D1C:问问 g ai 怎么处理': 'Ask g ai how to handle',
   '@13D1C:AI 正在解读各项目状态...': 'Analyzing project status...',
   '@13D1C:重新生成解读': 'Regenerate summary',
   '@13D1C:解读失败': 'Analysis failed',
@@ -1848,13 +1849,6 @@ export default {
   '@13D1C:无法解读项目状态': 'Unable to analyze project status',
   '@13D1C:重试': 'Retry',
   // 解读底下那块 g ai 追问区(components/RecentDirectoriesChat.vue)
-  '@13D1C:追问 g ai：这批项目该怎么处理？': 'Ask g ai: what should I do with these projects?',
-  '@13D1C:g ai 正在回答...': 'g ai is answering...',
-  '@13D1C:g ai 正在回答…发送会先排队，等本轮跑完自动接上': 'g ai is answering — messages you send will be queued and sent after this turn…',
-  '@13D1C:可以接着问 g ai': 'Keep asking g ai',
-  '@13D1C:新建对话': 'New chat',
-  '@13D1C:新建对话，当前会话会保留': 'New chat — this session is kept',
-  '@13D1C:它已经拿到了这批目录的 Git 状态，可以直接问该先处理哪个、某个项目落后了什么。': 'It already has the Git status of these directories — ask which one to handle first, or how far a project is behind.',
   '@13D1C:这些项目该先处理哪个？': 'Which project should I handle first?',
   '@13D1C:这些项目里该先处理哪个？按优先级给我一个处理顺序，并说明每一项该做什么。': 'Which of these projects should I handle first? Give me a priority order and what each step involves.',
   '@13D1C:哪些项目落后远端？': 'Which projects are behind the remote?',
@@ -2152,8 +2146,6 @@ export default {
   '@EDITOR:关闭思维导图': 'Close Mind Map',
   '@EDITOR:需要至少一个 # 标题': 'Needs at least one # heading',
   '@EDITOR:g ai 对话': 'g ai Chat',
-  '@EDITOR:打开 g ai 对话': 'Open g ai Chat',
-  '@EDITOR:关闭 g ai 对话': 'Close g ai Chat',
   '@EDITOR:关闭对话': 'Close Chat',
   '@EDITOR:全屏对话': 'Fullscreen chat',
   '@EDITOR:退出全屏对话': 'Exit fullscreen chat',
@@ -2833,6 +2825,9 @@ export default {
   // @ACTBAR: file path: components/ActivityBar.vue (追加: 智能体)
   '@ACTBAR:智能体': 'Agent',
   '@ACTBAR:个对话正在生成': 'conversations generating',
+  '@ACTBAR:关闭对话': 'Close chat',
+  '@ACTBAR:最大化对话': 'Maximize chat',
+  '@ACTBAR:还原对话': 'Restore chat',
   // 追加5：项目管理入口（与「工作台」分开 —— 那边管任务，这里管项目本身）
   '@ACTBAR:项目管理': 'Projects',
   // @ACTBAR: file end (追加5)

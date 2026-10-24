@@ -51,10 +51,11 @@ describe('refreshAiContextForView', () => {
     expect(calls[2].body).toEqual({ sections: ['mindmap'], force: true })
   })
 
-  it('切到智能体页 = 全刷（空数组语义），因为用户在那儿可能问任何一块', () => {
-    refreshAiContextForView('agent', 'current')
+  it('右下角 g ai dock 打开 = 全刷（空数组语义），因为用户在那儿可能问任何一块', () => {
+    // 智能体 tab 移除后，全刷由 AgentDock.open() 直接调 refreshAiContext 触发
+    refreshAiContext(ALL_AI_CONTEXT_SECTIONS)
     expect(calls).toHaveLength(1)
-    expect(calls[0].body).toEqual({ sections: ALL_AI_CONTEXT_SECTIONS, force: true })
+    expect(calls[0].body).toEqual({ sections: [], force: true })
     expect(ALL_AI_CONTEXT_SECTIONS).toEqual([])
   })
 
@@ -101,9 +102,13 @@ describe('refreshAiContext 自身', () => {
 
 describe('两张映射表的完整性', () => {
   it('每个已知视图都有条目（null 也算条目，"明确不刷"不能靠漏写来表达）', () => {
-    for (const view of ['git', 'console', 'editor', 'source-map', 'workbench', 'monitor', 'mindmap', 'agent']) {
+    for (const view of ['git', 'console', 'editor', 'source-map', 'workbench', 'monitor', 'mindmap']) {
       expect(Object.keys(AI_CONTEXT_SECTIONS_BY_VIEW)).toContain(view)
     }
+  })
+
+  it('已移除的「智能体」视图不该有条目（全刷改由 dock 打开时触发）', () => {
+    expect(Object.keys(AI_CONTEXT_SECTIONS_BY_VIEW)).not.toContain('agent')
   })
 
   it('Git 三个子 Tab 全覆盖', () => {

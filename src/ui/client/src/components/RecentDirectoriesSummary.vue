@@ -21,9 +21,10 @@
 //   配了 AI 模型 → 同一块位置换成模型写的**状态解读**:哪些项目该 pull、哪些有
 //                  未推送的提交、哪些只是工作区脏了(见后端
 //                  routes/recentDirectoriesAiSummary.js 的 prompt 契约)。
-//   左栏右栏分栏时(变体 split,来自列表的 layout='split')→ 解读底下再接一块 g ai
-//                  **追问区**(components/RecentDirectoriesChat.vue):读完那段话想问
-//                  "先处理哪个"就地能问,不用另开智能体视图重述一遍背景。
+//   左栏右栏分栏时(变体 split,来自列表的 layout='split')→ 解读底下再接一排追问
+//                  **chips**:读完那段话想问"先处理哪个"点一下就行 —— 打开右下角
+//                  g ai 悬浮 dock 并把问题带着这批目录状态发进去(AI 对话入口已整合
+//                  为 dock,见 utils/agentDockBus.ts)。
 //                  切换工作目录全屏弹窗与最近项目面板都走这条路(列表 layout='split'
 //                  → 这里 variant='split')。stack 形态不给 —— 那块位置的高度全给了列表。
 // 两处调用方(App 里的最近项目面板 / 切换工作目录弹窗的常用目录)都用这一个组件,
@@ -41,10 +42,11 @@
 // <script setup> 整块都编译进 setup(),那里的 Map 是每个实例一份:
 // 弹窗重开(它有自己的 RecentDirectoriesSummary 实例)就会重新问一次模型。
 // 详见 utils/directorySummaryCache.ts 的文件头。
-import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { Refresh, Warning } from "@element-plus/icons-vue";
 import { $t } from "@/lang/static";
 import { useConfigStore } from "@stores/configStore";
+import { askAgentDock } from "@/utils/agentDockBus";
 import { dropDirectorySummary, pendingDirectorySummary, readDirectorySummary, trackPendingDirectorySummary, writeDirectorySummary } from "@/utils/directorySummaryCache";
 
 /** 后端 /api/recent_directories/summary 需要的单条状态(多一个字段都不传) */
@@ -339,27 +341,53 @@ const bodyText = computed(() => {
   return staticNote.value;
 });
 
-// ── 追问区(把 g ai 引到这块来)───────────────────────────────────────────
-// 只在**分栏**形态下才渲染(bare=原来的底部条,split=全屏/面板右栏):stack 形态
-// 那一块的高度预算全给了目录列表,再塞一块对话区会把列表压到只剩两三行(它本来就够挤了)。
-// 也不在没配模型时渲染 —— 没有模型就没有 g ai 可问,与上面那段"没配模型只显示
-// 静态说明"是同一条口径。
-const showChat = computed(() =>
+// ── 追问 chips：打开右下角 g ai dock 并把问题发进去 ──────────────────────
+// 整合前这里就地嵌一个 g ai 对话（RecentDirectoriesChat）。AI 入口收拢到右下角
+// 悬浮 dock 后改成四个问题 chip：点一下带着这批目录的 Git 状态和解读原文打开
+// dock 并发问 —— engine / dirStatus / dirSummary 与旧追问区完全同口径
+// （见 AgentView 的 defineExpose askQuestion）。
+// 显示条件与旧追问区一致：分栏形态 + 有模型 + 有目录（stack 形态的高度预算
+// 全给目录列表，不塞；没配模型就没有 g ai 可问）。
+const showChips = computed(() =>
   (props.variant === "bare" || props.variant === "split") && hasModel.value && props.items.length > 0
 );
-// 懒加载:最近项目面板挂在 App 首屏上,不能为它把整个 zen-ai-chat-ui 拖进主 chunk。
-// 这块对话只在弹窗打开时真的渲染,异步 chunk 到那时才拉。
-const RecentDirectoriesChat = defineAsyncComponent(
-  () => import("@/components/RecentDirectoriesChat.vue")
-);
-// 带给追问区的目录状态:与发给 /api/recent_directories/summary 的是同一份
-// (requestItems() 已经把它收敛成服务端认识的形状,这里不再抄一遍)
-const chatDirStatus = computed(() => requestItems());
-// 解读原文只在**出完了**才带给追问区:半截的流式正文会让模型对着"还没说完的一句话"
-// 回答用户的"那第二个呢"。没有正文(还没解读出来/解读失败)就只带状态,不带这段。
-const chatSummary = computed(() =>
-  state.value.status === "done" ? toPlainText(state.value.text) : ""
-);
+
+/**
+ * 建议问题（从旧追问区的开场白原样搬来）：前两句问状态，后两句是承接状态的动作。
+ * 点 chip 即发送，不需要用户再敲一遍"落后远端的有哪些"。
+ */
+const chipQuestions = computed(() => [
+  {
+    id: 'priority',
+    label: $t('@13D1C:这些项目该先处理哪个？'),
+    prompt: $t('@13D1C:这些项目里该先处理哪个？按优先级给我一个处理顺序，并说明每一项该做什么。'),
+  },
+  {
+    id: 'behind',
+    label: $t('@13D1C:哪些项目落后远端？'),
+    prompt: $t('@13D1C:哪些项目落后远端？分别落后多少个提交？'),
+  },
+  {
+    id: 'pull-behind',
+    label: $t('@13D1C:落后远端的都帮我 pull 下代码'),
+    prompt: $t('@13D1C:落后远端的项目都帮我 pull 下代码，逐个执行并汇报结果。'),
+  },
+  {
+    id: 'uncommitted',
+    label: $t('@13D1C:看一下各项目未提交的都改了什么'),
+    prompt: $t('@13D1C:看一下各项目未提交的改动都改了什么，按项目列出来。'),
+  },
+])
+
+function askDock(q: { prompt: string }) {
+  askAgentDock({
+    text: q.prompt,
+    // 与发给 /api/recent_directories/summary 的是同一份（requestItems 已收敛成服务端认识的形状）
+    dirStatus: requestItems(),
+    // 解读原文只在出完了才带：半截的流式正文会让模型对着"还没说完的一句话"回答
+    dirSummary: state.value.status === "done" ? toPlainText(state.value.text) : "",
+  })
+}
 </script>
 
 <template>
@@ -401,13 +429,18 @@ const chatSummary = computed(() =>
       >{{ $t('@13D1C:重试') }}</button>
     </div>
 
-    <!-- 追问区:在上面那段解读底下就地接一个 g ai 对话,不用另开智能体视图重述背景 -->
-    <RecentDirectoriesChat
-      v-if="showChat"
-      :dir-status="chatDirStatus"
-      :summary="chatSummary"
-      :fill="variant === 'split'"
-    />
+    <!-- 追问 chips:点一下打开右下角 g ai dock,把问题带着这批目录的状态发进去 -->
+    <div v-if="showChips" class="dir-summary__chips">
+      <span class="dir-summary__chips-label">{{ $t('@13D1C:问问 g ai 怎么处理') }}</span>
+      <button
+        v-for="q in chipQuestions"
+        :key="q.id"
+        type="button"
+        class="dir-summary__chip"
+        :title="q.prompt"
+        @click="askDock(q)"
+      >{{ q.label }}</button>
+    </div>
   </section>
 </template>
 
@@ -436,8 +469,7 @@ const chatSummary = computed(() =>
   padding: var(--spacing-sm) var(--spacing-base);
 }
 /* split:全屏"切换工作目录"弹窗的右栏。整块撑满右栏:标题与解读文字钉在顶部,
-   追问区吃掉剩下的高度(见 RecentDirectoriesChat 的 fill)。min-height:0 是必需的
-   —— 否则内部的对话区会把父级顶穿,滚不到底也收不住。 */
+   追问 chips 跟在解读文字底下。min-height:0 是必需的 —— 否则内部内容会把父级顶穿。 */
 .dir-summary--split {
   margin-top: 0;
   min-height: 0;
@@ -546,5 +578,37 @@ const chatSummary = computed(() =>
 .dir-summary__retry:disabled {
   cursor: default;
   opacity: var(--disabled-opacity);
+}
+
+/* ── 追问 chips ─────────────────────────────────────────
+   AI 对话入口整合为右下角 dock 后，原来的内嵌追问区改成一排问题 chip：
+   平铺 + hover 底色（不用"圆角+单 border"的卡片感），小图标角色色走 --role-ai-hue。 */
+.dir-summary__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+}
+.dir-summary__chips-label {
+  flex-shrink: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-meta);
+}
+.dir-summary__chip {
+  padding: 3px 10px;
+  border: none;
+  border-radius: var(--radius-base);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  cursor: pointer;
+  transition: background var(--transition-fast) var(--ease-enter), color var(--transition-fast) var(--ease-enter);
+}
+.dir-summary__chip:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 </style>

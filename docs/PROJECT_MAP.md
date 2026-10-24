@@ -121,7 +121,7 @@ zen-gitsync/                                    [根: 配置文件 + 顶层脚�
 │       │       ├── main.ts                # Vue 应用入口
 │       │       ├── App.vue                # 根组件 (1874 行, 包含全局 UI shell)
 │       │       ├── views/
-│       │       │   ├── AgentView.vue      # 智能体页(会话 + Skill/MCP 广场入口)
+│       │       │   ├── AgentView.vue      # g ai 对话(由右下角悬浮 dock AgentDock 承载)
 │       │       │   ├── ConsoleView.vue    # 控制台(自定义命令 + 终端)
 │       │       │   ├── EditorView.vue     # Monaco 编辑器视图
 │       │       │   ├── MindmapView.vue / MonitorView.vue
@@ -385,7 +385,7 @@ zen-gitsync/                                    [根: 配置文件 + 顶层脚�
 |------|------|---------|
 | `src/ui/client/src/views/EditorView.vue` | Monaco 编辑视图 | 改编辑器/Monaco 相关 |
 | `src/ui/client/src/views/SourceMapView.vue` | 依赖关系图(**Activity Bar 入口已隐藏**) | 改源码地图 |
-| `src/ui/client/src/views/AgentView.vue` + `components/MarketplacePanel.vue` | 智能体页 + Skill/MCP 广场 | 改智能体 / 广场 |
+| `src/ui/client/src/views/AgentView.vue` + `components/MarketplacePanel.vue` | g ai 对话(右下角 dock)+ Skill/MCP 广场 | 改智能体 / 广场 |
 | `src/ui/client/src/components/flow/` (17 文件) | 工作流节点系统(8 种节点) | 改节点类型/编排 |
 | `src/ui/client/src/components/buttons/` (16 文件) | 原子按钮 | 改单一 git 操作 |
 | `src/ui/client/src/components/JobLogDetails.vue` / `ExecutionLogManager.vue` | 工作台日志 | 改任务日志 |
@@ -475,7 +475,7 @@ zen-gitsync/                                    [根: 配置文件 + 顶层脚�
 3. `components/flow/nodes/` 8 种节点(start / command / wait / version / confirm / code / condition / user_input)
 
 ### 改智能体 (Web + CLI)
-1. `views/AgentView.vue` + `components/MarketplacePanel.vue` (对话 + Skill/MCP 广场)
+1. `components/AgentDock.vue`(右下角悬浮入口) + `views/AgentView.vue` + `components/MarketplacePanel.vue` (对话 + Skill/MCP 广场)
 2. `routes/workbench/agentRoutes.js` / `agentChat.js` / `agentMarketplace.js`
 3. CLI 侧：`src/cli/ai/agent.js` 与同目录 17 个模块(termui / turn / transport / tools / skills / mcp …)
 

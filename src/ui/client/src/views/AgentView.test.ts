@@ -13,11 +13,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { nextTick } from 'vue'
 import { mountWithSetup } from '@/test-utils/mount'
 
-const pane = vi.hoisted(() => ({ refs: [] as { value: boolean }[] }))
+const pane = vi.hoisted(() => ({ refs: [] as { value: boolean }[], width: null as any }))
 const agent = vi.hoisted(() => ({
   loadSession: null as any,
   newSession: null as any,
   loadSessions: null as any,
+  // 发送：onSend 的 openFilePath 注入与 askQuestion 都要断到它身上
+  sendMessage: null as any,
   // 排队：条带上的移除 / 立即发送要真的转到 composable 上
   removeQueuedMessage: null as any,
   flushQueued: null as any,
@@ -36,7 +38,9 @@ vi.mock('@/composables/useNarrowPane', async () => {
     useNarrowPane: () => {
       const narrow = ref(false)
       pane.refs.push(narrow as unknown as { value: boolean })
-      return { width: ref(1000), narrow }
+      // width 是真 ref（紧凑 Tab 用例要能拨它触发重渲染）；工厂只建一次
+      if (!pane.width) pane.width = ref(1000)
+      return { width: pane.width, narrow }
     },
   }
 })
@@ -46,6 +50,7 @@ vi.mock('@/composables/useAgentChat', async () => {
   agent.loadSession = vi.fn().mockResolvedValue(undefined)
   agent.newSession = vi.fn()
   agent.loadSessions = vi.fn().mockResolvedValue(undefined)
+  agent.sendMessage = vi.fn()
   agent.removeQueuedMessage = vi.fn()
   agent.flushQueued = vi.fn()
   agent.currentEngine = ref('gai')
@@ -78,7 +83,7 @@ vi.mock('@/composables/useAgentChat', async () => {
       deleteSession: vi.fn(),
       renameSession: vi.fn(),
       newSession: agent.newSession,
-      sendMessage: vi.fn(),
+      sendMessage: agent.sendMessage,
       answerQuestion: vi.fn(),
       stop: vi.fn(),
       inputContextUsage: ref(null),
@@ -96,7 +101,8 @@ vi.mock('zen-ai-chat-ui', () => ({
   ChatContainer: {
     name: 'ChatContainer',
     props: ['messages', 'generating', 'disabled', 'allowQueue', 'queued', 'queuePaused', 'queueLabels', 'placeholder', 'theme', 'showInput', 'presetQuestions'],
-    template: '<div class="stub-chat" />',
+    // 库里真输入框的根节点类名：上下文卡的锚点要住进它（syncContextSlot 查询它）
+    template: '<div class="stub-chat"><div class="acu-input-wrap" /></div>',
     methods: { scrollToBottom() {} },
   },
   ConversationList: {
@@ -151,9 +157,12 @@ vi.mock('@stores/configStore', () => ({
 
 import AgentView from './AgentView.vue'
 
-function mountView() {
+function mountView(props: Record<string, unknown> = {}) {
   pane.refs.length = 0
+  // width 的 ref 由 useNarrowPane 的 mock 工厂在首次挂载时创建；此前调用只是置位
+  if (pane.width) pane.width.value = 1000
   return mountWithSetup(AgentView, {
+    props,
     global: { stubs: { 'el-icon': { template: '<i><slot /></i>' } } },
   })
 }
@@ -166,10 +175,12 @@ async function setNarrow(value: boolean) {
 
 beforeEach(() => {
   pane.refs.length = 0
+  if (pane.width) pane.width.value = 1000
   agent.currentEngine.value = 'gai'
   agent.pendingEngine.value = 'gai'
   agent.isEngineLocked.value = false
   agent.pickEngine.mockClear()
+  agent.sendMessage.mockClear()
   configState.agentPresetPrompts = []
   sched.handler = null
   sched.disposed = 0
@@ -187,12 +198,14 @@ describe('AgentView 窄屏折行', () => {
     expect(w.find('.agent-list-page').exists()).toBe(false)
   })
 
-  it('窄屏：默认落在对话页 —— 侧栏整块不渲染，只有返回条 + 对话', async () => {
+  it('窄屏：默认落在对话页 —— 侧栏整块让位，只有返回条 + 对话', async () => {
     const w = mountView()
     await setNarrow(true)
-    // 关键：宽屏那套并排骨架必须消失，否则又会挤成一团
-    expect(w.find('.agent-sidebar').exists()).toBe(false)
-    expect(w.find('.sidebar-resizer').exists()).toBe(false)
+    // 关键：宽屏那套并排骨架必须消失，否则又会挤成一团。
+    // 2026-10 起侧栏从 v-if 改成 v-show（切到广场再回来滚动位置不丢）——
+    // 节点还在 DOM 里，但 display:none 不占 flex 空间，布局契约不变。
+    expect((w.find('.agent-sidebar').element as HTMLElement).style.display).toBe('none')
+    expect((w.find('.sidebar-resizer').element as HTMLElement).style.display).toBe('none')
 
     expect(w.find('.agent-page-bar').exists()).toBe(true)
     // 返回条上显示当前会话的标题（取自会话列表那条，兜底规则一致）
@@ -436,5 +449,91 @@ describe('AgentView 预设提示词（可配置）', () => {
       { id: 'u2', label: '第二条', prompt: '做点别的' },
       { id: 'u1', label: '第一条', prompt: '跑测试' },
     ])
+  })
+})
+
+// ── 右下角 dock 集成后新增的三组行为 ───────────────────────────
+// AgentView 从「活动栏 tab 的 pane」搬进悬浮面板，多出三条对接口：
+// defineExpose 的 askQuestion（Git 视图追问 chips 经 bus 发问）、
+// props 传入的编辑器上下文（原 EditorAgentPanel 的 openFilePath 注入）、
+// 以及 560px 窄面板下的紧凑 Tab。
+
+describe('AgentView 外部发问（defineExpose askQuestion）', () => {
+  it('带目录上下文时固定 g ai 引擎，把问题发进对话', async () => {
+    const w = mountView()
+    await w.vm.askQuestion('哪些项目落后远端？', { dirStatus: [{ path: 'x' }], dirSummary: '解读原文' })
+
+    expect(agent.sendMessage).toHaveBeenCalledWith('哪些项目落后远端？', [], {
+      engine: 'gai',
+      dirStatus: [{ path: 'x' }],
+      dirSummary: '解读原文',
+    })
+  })
+
+  it('不带上下文时原样发送，不硬塞引擎覆盖', async () => {
+    const w = mountView()
+    await w.vm.askQuestion('你好')
+
+    expect(agent.sendMessage).toHaveBeenCalledWith('你好', [], undefined)
+  })
+})
+
+describe('AgentView 紧凑 Tab（dock 默认 560px 面板）', () => {
+  it('宽度 <640 时 tab 只留图标，文字进 title；复制按钮隐藏', async () => {
+    const w = mountView()
+    // mountView 会把 width 复位成 1000，紧凑态要在挂载后拨出来
+    pane.width.value = 560
+    await setNarrow(true)
+    await nextTick()
+
+    const chatTab = w.findAll('.agent-tab')[0]
+    expect(chatTab.attributes('title')).toBe('@AGENT:对话')
+    expect(chatTab.text()).toBe('')
+    expect(w.find('.agent-copy').exists()).toBe(false)
+  })
+
+  it('宽度足够（最大化）时恢复完整文字 tab 与复制按钮', async () => {
+    pane.width.value = 1000
+    const w = mountView()
+    await nextTick()
+
+    const chatTab = w.findAll('.agent-tab')[0]
+    expect(chatTab.text()).toContain('@AGENT:对话')
+    expect(w.find('.agent-copy').exists()).toBe(true)
+  })
+})
+
+describe('AgentView 当前文档上下文卡（dock 编辑器上下文）', () => {
+  const fileProps = { contextFilePath: 'd:/repo/a.ts', contextFileName: 'a.ts' }
+
+  it('传入文件名 → 输入框里出现上下文卡，点 ✕ 后消失', async () => {
+    const w = mountView(fileProps)
+    await nextTick()
+    await nextTick()
+
+    const card = w.find('.agent-context-att')
+    expect(card.exists()).toBe(true)
+    expect(card.text()).toContain('a.ts')
+
+    await w.find('.agent-context-att-remove').trigger('click')
+    await nextTick()
+    await nextTick()
+    expect(w.find('.agent-context-att').exists()).toBe(false)
+  })
+
+  it('发送时把当前文件路径带给服务端；点过 ✕ 之后不带', async () => {
+    const w = mountView(fileProps)
+    await nextTick()
+    await nextTick()
+    const chat = w.findComponent({ name: 'ChatContainer' })
+
+    await chat.vm.$emit('send', { text: '看看这个文件', files: [] })
+    expect(agent.sendMessage).toHaveBeenCalledWith('看看这个文件', [], { openFilePath: 'd:/repo/a.ts' })
+
+    agent.sendMessage.mockClear()
+    await w.find('.agent-context-att-remove').trigger('click')
+    await nextTick()
+    await chat.vm.$emit('send', { text: '第二个问题', files: [] })
+    expect(agent.sendMessage).toHaveBeenCalledWith('第二个问题', [], undefined)
   })
 })

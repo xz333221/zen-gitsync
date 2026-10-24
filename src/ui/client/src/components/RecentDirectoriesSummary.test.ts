@@ -38,20 +38,11 @@ vi.mock('@/lang/static', () => ({ $t: $tInterp }))
 const configStore = vi.hoisted(() => ({ models: [] as any[], locale: 'zh-CN' }))
 vi.mock('@stores/configStore', () => ({ useConfigStore: () => configStore }))
 
-// 追问区是 **defineAsyncComponent** 懒加载的(它一进来就把整个 zen-ai-chat-ui 拖进
-// 这个 chunk)。这里只留一个能认出"渲染了没有"的壳 —— 它自己往外发什么由
-// RecentDirectoriesChat.test.ts 守,本文件只管"什么时候该渲染它"。
-vi.mock('@/components/RecentDirectoriesChat.vue', () => ({
-  // __esModule 不能少:它是 defineAsyncComponent 的 dynamic import 取 `.default` 的依据
-  // (缺了它 Vue 会把整个模块命名空间当成组件,渲染时直接炸)。
-  __esModule: true,
-  // props 要显式声明:不声明的话 dir-status / summary 会落到 attrs 上,
-  // 用例里就拿不到它们,等于没守住"父组件到底递了什么下去"。
-  default: {
-    name: 'RecentDirectoriesChat',
-    props: ['dirStatus', 'summary'],
-    template: '<div class="dir-chat-stub" />',
-  },
+// 追问 chips 走 agentDockBus（打开右下角 g ai dock 并把问题发进去）。
+// mock 掉它，把每次调用记下来 —— 本文件守"什么时候出 chips、点了带什么上下文"。
+const dockBus = vi.hoisted(() => ({ calls: [] as any[] }))
+vi.mock('@/utils/agentDockBus', () => ({
+  askAgentDock: (p: any) => { dockBus.calls.push(p) },
 }))
 
 import RecentDirectoriesSummary from './RecentDirectoriesSummary.vue'
@@ -280,24 +271,30 @@ describe('RecentDirectoriesSummary.vue', () => {
     wrapper.unmount()
   })
 
-  test('RDS-07: 只有弹窗(bare)里才接 g ai 追问区;主面板与没配模型都不接', async () => {
+  test('RDS-07: 只有弹窗(bare)里才出追问 chips;主面板与没配模型都不出;点击带着状态+解读发问', async () => {
     configStore.models = [MODEL]
     const items = [item('D:\\chat\\a', gitState({ behind: 1 }))]
 
-    // 主面板:那一列的高度预算全给列表,不摆对话区
+    // 主面板:那一列的高度预算全给列表,不摆 chips
     const panel = mountSummary({ items, ready: true })
     await vi.advanceTimersByTimeAsync(500)
     await flushAll()
-    expect(panel.find('.dir-chat-stub').exists()).toBe(false)
+    expect(panel.find('.dir-summary__chips').exists()).toBe(false)
     panel.unmount()
 
-    // 弹窗:解读底下就地接一块追问区,并把"这份状态 + 解读原文"原样递下去
+    // 弹窗:解读底下出一排 chips(四条建议问题)
     const bare = mountSummary({ items, ready: true, variant: 'bare' })
     await vi.advanceTimersByTimeAsync(500)
     await flushAll()
-    const chat = bare.findComponent({ name: 'RecentDirectoriesChat' })
-    expect(chat.exists()).toBe(true)
-    expect(chat.props('dirStatus')).toEqual([
+    const chips = bare.findAll('.dir-summary__chip')
+    expect(chips).toHaveLength(4)
+
+    // 点第一条:带着这批目录的 Git 状态 + 解读原文发进 dock
+    dockBus.calls.length = 0
+    await chips[0].trigger('click')
+    expect(dockBus.calls).toHaveLength(1)
+    expect(dockBus.calls[0].text).toContain('先处理哪个')
+    expect(dockBus.calls[0].dirStatus).toEqual([
       {
         path: 'D:\\chat\\a',
         exists: true,
@@ -307,7 +304,7 @@ describe('RecentDirectoriesSummary.vue', () => {
         },
       },
     ])
-    expect(chat.props('summary')).toBe('ok')          // 只有解读出完了才带原文
+    expect(dockBus.calls[0].dirSummary).toBe('ok')   // 只有解读出完了才带原文
     bare.unmount()
 
     // 没配模型:没有 g ai 可问,与"只显示静态说明"是同一条口径
@@ -315,7 +312,7 @@ describe('RecentDirectoriesSummary.vue', () => {
     const noModel = mountSummary({ items, ready: true, variant: 'bare' })
     await vi.advanceTimersByTimeAsync(500)
     await flushAll()
-    expect(noModel.find('.dir-chat-stub').exists()).toBe(false)
+    expect(noModel.find('.dir-summary__chips').exists()).toBe(false)
     noModel.unmount()
   })
 })

@@ -47,6 +47,9 @@ export const ALL_AI_CONTEXT_SECTIONS: string[] = []
  * git 视图是 null:它有子 Tab(当前项目 / GitHub / Gitee),对应板块完全不同,
  * 由下面那张表按 gitTab 决定。console / editor / source-map 与快照无关,一律 null ——
  * 切过去什么都不刷,别为了"整齐"给它们硬塞一个板块。
+ *
+ * 原「智能体」视图的条目(全刷)已随入口整合移除:g ai 对话现在住在右下角悬浮 dock,
+ * 任何视图下都能打开,全刷改由 AgentDock 打开面板时触发(见 AgentDock.vue 的 open())。
  */
 export const AI_CONTEXT_SECTIONS_BY_VIEW: Record<string, AiContextSections> = {
   git: null,
@@ -56,9 +59,6 @@ export const AI_CONTEXT_SECTIONS_BY_VIEW: Record<string, AiContextSections> = {
   workbench: ['tasks'],
   monitor: ['system'],
   mindmap: ['mindmap'],
-  // 智能体页:用户可能在这里问任何一块,所以全刷。
-  // 联网板块被服务端的 60s 地板挡着,不会因为反复进出这个页面而疯狂拉列表。
-  agent: ALL_AI_CONTEXT_SECTIONS,
 }
 
 /** Git 视图内三个子 Tab → 该刷的板块 */

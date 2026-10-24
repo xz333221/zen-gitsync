@@ -199,9 +199,18 @@ async function main() {
     check('A5 点收纳条展开回去（列宽与条目都回来）', false, '上一步没收起，跳过')
   }
 
-  // ── A6 智能体视图的侧栏（第二个入口）────────────────────────
-  await page.locator('.activity-btn[aria-label^="智能体"]').first().click()
-  const avReady = await waitFor(async () => (await page.locator('.agent-sidebar').count()) > 0, 15000)
+  // ── A6 右下角 dock 的侧栏（第二个入口；2026-10 智能体 tab 整合为 dock）────
+  await page.click('.agent-dock__mascot')
+  await page.waitForSelector('.agent-view', { timeout: 15000 })
+  // 最大化：dock 默认 560px 是窄面板（宽屏侧栏被 v-show 收起、折成两页），
+  // 本组守的 240→40 宽屏收起契约要宽屏两栏才量得到真几何
+  await page.click('.agent-dock__btn--max')
+  // 必须等「真的可见」：v-show 收起时节点还在 DOM 里，量到的宽是 0，
+  // 「≤44」会假绿（布局断言只认可见几何）
+  const avReady = await waitFor(async () => {
+    const el = page.locator('.agent-sidebar')
+    return (await el.count()) > 0 && (await el.first().isVisible().catch(() => false))
+  }, 15000)
   if (!avReady) {
     skip('A6 智能体视图侧栏', '侧栏没挂上来（可能不是宽屏）')
   } else {
@@ -224,60 +233,9 @@ async function main() {
       await sleep(700)
     }
   }
-
-  // ── A7 文件空间 g ai 面板（第三个入口）──────────────────────
-  // 这个面板要「有打开的文件」才挂，所以先开文件树里一个文件，再点 .agent-toggle-btn。
-  let treeReady = false
-  for (let i = 0; i < 3 && !treeReady; i++) {
-    await page.locator('.activity-btn[aria-label^="文件空间"], .activity-btn[aria-label^="编辑器"]').first().click().catch(() => {})
-    treeReady = await waitFor(async () => (await page.locator('.tree-node').count()) > 3, 12000, 300)
-  }
-  if (!treeReady) {
-    skip('A7 文件空间 g ai 面板', '文件树没加载出来')
-  } else {
-    const opened = await page.evaluate(() => {
-      const el = [...document.querySelectorAll('.tree-name')].find((e) => (e.textContent || '').trim() === 'README.md')
-      const node = el ? el.closest('.tree-node') : null
-      if (!node) return false
-      node.click()
-      return true
-    })
-    if (!opened) {
-      skip('A7 文件空间 g ai 面板', '文件树里没找到 README.md')
-    } else {
-      await waitFor(async () => (await page.locator('.editor-tab.active').count()) > 0, 8000, 200)
-      await page.locator('.agent-toggle-btn').first().click().catch(() => {})
-      await sleep(800)
-      // 面板默认占右半边，往往不到 680px（那就折成两页，本来就没有"旁边那一列"）。
-      // 拖 .preview-resizer 往左把面板拉到宽屏档 —— 用户自己也会这么做。
-      const rz = await page.locator('.preview-resizer').first().boundingBox().catch(() => null)
-      if (rz) {
-        await page.mouse.move(rz.x + rz.width / 2, rz.y + rz.height / 2)
-        await page.mouse.down()
-        await page.mouse.move(rz.x + rz.width / 2 - 320, rz.y + rz.height / 2, { steps: 12 })
-        await page.mouse.up()
-        await sleep(800)
-      }
-      const panelW = await geom(page, '.agent-panel-body')
-      const panelBtn = await waitFor(async () => (await page.locator('.agent-panel-convs .acu-conv-collapse').count()) > 0, 10000)
-      check('A7a 文件空间面板左列出现收起按钮', panelBtn, `面板宽 ${panelW && panelW.w}`)
-      if (panelBtn) {
-        const pBefore = await geom(page, '.agent-panel-convs')
-        await page.locator('.agent-panel-convs .acu-conv-collapse').first().click()
-        await sleep(900)
-        const pAfter = await geom(page, '.agent-panel-convs')
-        const pRail = await geom(page, '.agent-panel-convs .acu-conv-rail')
-        check(
-          'A7b ★ 文件空间面板左列收到 40px 且出现收纳条',
-          !!pAfter && pAfter.w <= 44 && !!pRail,
-          `panel ${pBefore && pBefore.w} → ${pAfter && pAfter.w}`
-        )
-        await page.screenshot({ path: path.join(SHOT_DIR, REVERSE ? 'reverse-editor.png' : 'editor-collapsed.png') }).catch(() => {})
-        await page.locator('.agent-panel-convs .acu-conv-rail').first().click().catch(() => {})
-        await sleep(700)
-      }
-    }
-  }
+  // ── A7（原「文件空间 g ai 面板」入口）随 2026-10 编辑器 AI 面板并入 dock 移除 ──
+  // 同一个 ConversationList 收起控件在 dock 最大化态由 A6 守；宽屏两栏的
+  // 240→40 契约不变，只是入口从编辑器面板变成右下角悬浮面板。
 
   await browser.close().catch(() => {})
 

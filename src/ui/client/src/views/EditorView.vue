@@ -27,7 +27,6 @@ import MediaPreview from '@/components/MediaPreview.vue'
 import OfficePreview from '@/components/OfficePreview.vue'
 import MarkdownPreview from '@/components/MarkdownPreview.vue'
 import MindmapPreview from '@/components/MindmapPreview.vue'
-import EditorAgentPanel from '@/components/EditorAgentPanel.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import SvgIcon from '@/components/SvgIcon/index.vue'
 import { useThemeObserver } from '@/composables/useThemeObserver'
@@ -1067,6 +1066,17 @@ watch(
   (n) => { editorTabsStore.setDirtyCount(n) },
   { immediate: true },
 )
+// 同步"当前激活文件"到 editorTabs store：右下角 g ai dock 在编辑器视图激活时，
+// 靠它给对话附带当前文件上下文（openFilePath 请求级注入，与旧 EditorAgentPanel 同口径）。
+// 关闭全部 tab 时同步清空，避免 dock 还带着上一个文件的上下文。
+watch(
+  activeTabPath,
+  (p) => {
+    const tab = tabs.value.find(t => t.path === p) ?? null
+    editorTabsStore.setActiveFile(tab?.path ?? '', tab?.name ?? '')
+  },
+  { immediate: true },
+)
 // 组件卸载时清零，避免空 tab 列表后徽标仍显示历史数字
 onBeforeUnmount(() => editorTabsStore.setDirtyCount(0))
 
@@ -1568,17 +1578,10 @@ async function ctxOpenInBrowser() {
 // 点击全局关闭右键菜单
 onMounted(() => {
   document.addEventListener('click', closeContextMenu)
-  document.addEventListener('keydown', onEditorKeydown)
 })
 onBeforeUnmount(() => {
   document.removeEventListener('click', closeContextMenu)
-  document.removeEventListener('keydown', onEditorKeydown)
 })
-
-/** Esc 退出全屏对话（全屏时它盖住了编辑区，得留一条键盘退路） */
-function onEditorKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && agentFullscreen.value) agentFullscreen.value = false
-}
 
 // ── 预览面板 ────────────────────────────────────────────
 const PREVIEW_TEXT_EXTS = new Set(['md', 'html', 'htm', 'svg'])
@@ -1587,12 +1590,6 @@ const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'bmp'])
 const showPreview = ref(false)
 // 思维导图模式:整篇 markdown 渲染为一张大导图。与 showPreview 互斥。
 const showMindmap = ref(false)
-// g ai 对话面板。与预览/思维导图三选一（互斥）
-const showAgentChat = ref(false)
-// 面板首次打开后常驻（v-show 保状态）：流式的流与折叠状态不会因为切走一次就丢
-const agentOpened = ref(false)
-// 全屏对话：面板盖住整个编辑区（左栏文件树仍可见）。Esc 或再点一次退出
-const agentFullscreen = ref(false)
 // 0 = 默认占满右半边（flex-grow 平分）；拖过分隔条后是面板的**实际像素宽**
 // （`flex: 0 0 Npx`，不再参与平分 —— 否则「变宽」和「变窄」会被 grow 重新摊掉一半）
 const previewWidth = ref(0)
@@ -1628,10 +1625,9 @@ watch(activeTabPath, () => {
 
 function togglePreview() {
   if (!isPreviewable.value) return
-  // 互斥:打开 HTML 预览时关掉思维导图 / g ai 对话
+  // 互斥:打开 HTML 预览时关掉思维导图
   if (!showPreview.value) {
     showMindmap.value = false
-    showAgentChat.value = false
   }
   showPreview.value = !showPreview.value
 }
@@ -1640,41 +1636,14 @@ function toggleMindmap() {
   if (!isMindmapable.value) return
   if (!showMindmap.value) {
     showPreview.value = false
-    showAgentChat.value = false
   }
   showMindmap.value = !showMindmap.value
 }
 
-/** g ai 对话：与预览 / 思维导图互斥；首次打开后组件常驻 */
-function toggleAgentChat() {
-  if (!showAgentChat.value) {
-    showPreview.value = false
-    showMindmap.value = false
-  }
-  showAgentChat.value = !showAgentChat.value
-  agentOpened.value = true
-}
-
-function closeAgentChat() {
-  showAgentChat.value = false
-}
-
-// 面板一关就退出全屏：切去预览 / 思维导图也是走这条（它们直接把 showAgentChat 置 false），
-// 否则下次打开对话会莫名其妙地整屏铺开
-watch(showAgentChat, (open) => {
-  if (!open) agentFullscreen.value = false
-})
-
-function toggleAgentFullscreen() {
-  agentFullscreen.value = !agentFullscreen.value
-}
-
-/** 右侧面板（对话 / 预览）的宽度样式：没拖过就平分，拖过就是钉死的像素宽 */
+/** 右侧面板（预览 / 思维导图）的宽度样式：没拖过就平分，拖过就是钉死的像素宽 */
 const rightPaneStyle = computed(() => {
   // 没有打开的文件 = 编辑区是空的，面板直接占满（否则还留着上次拖出来的窄条 + 左边一片空）
   if (previewWidth.value <= 0 || tabs.value.length === 0) return { flexBasis: '0px' }
-  // 全屏时不能再带 max-width：内联的 calc(100% - 320px) 会把 inset:0 的面板砍窄一截
-  if (agentFullscreen.value) return { flex: `0 0 ${previewWidth.value}px` }
   return { flex: `0 0 ${previewWidth.value}px`, maxWidth: 'calc(100% - 320px)' }
 })
 
@@ -2151,29 +2120,11 @@ function stopPreviewResize() {
           </svg>
           <span>{{ $t('@EDITOR:思维导图') }}</span>
         </button>
-      <!-- g ai 对话：文件空间右侧的智能体面板（与预览/思维导图互斥） -->
-        <button
-          class="preview-toggle-btn agent-toggle-btn"
-          :class="{ active: showAgentChat }"
-          :title="showAgentChat ? $t('@EDITOR:关闭 g ai 对话') : $t('@EDITOR:打开 g ai 对话')"
-          @click="toggleAgentChat"
-        >
-          <!-- message-chatbot.svg（Tabler icons，MIT）：对话气泡+机器人脸。
-               原来是自绘双星闪光 —— 用户偏好「AI 功能不用星星/闪光贴标签」，顺带换掉 -->
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-            <path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-5l-5 3v-3h-2a3 3 0 0 1-3-3v-8a3 3 0 0 1 3-3h12" />
-            <path d="M9.5 9h.01" />
-            <path d="M14.5 9h.01" />
-            <path d="M9.5 13a3.5 3.5 0 0 0 5 0" />
-          </svg>
-          <span>{{ $t('@EDITOR:g ai 对话') }}</span>
-        </button>
       </div>
 
-      <!-- 无文件打开时的提示（g ai 面板开着时让位给它 —— 两个都是 flex:1 的话
-           对话区只剩半截高） -->
+      <!-- 无文件打开时的提示 -->
       <EmptyState
-        v-if="tabs.length === 0 && !showAgentChat"
+        v-if="tabs.length === 0"
         class="editor-empty"
         :title="$t('@EDITOR:从左侧选择文件打开')"
         :hint="$t('@EDITOR:Ctrl+S 保存')"
@@ -2187,7 +2138,7 @@ function stopPreviewResize() {
       </EmptyState>
 
       <!-- Monaco 容器（始终挂载，tab 为空或 image tab 时隐藏） -->
-      <div class="editor-body" :class="{ 'is-agent-fullscreen': agentFullscreen && showAgentChat }">
+      <div class="editor-body">
         <div
           class="monaco-container"
           :class="{ hidden: tabs.length === 0 || activeTabIsImage || activeTabIsOffice || activeTabIsMedia }"
@@ -2216,22 +2167,9 @@ function stopPreviewResize() {
         <!-- 分隔条：贴在右侧面板的**左边缘**（DOM 顺序在面板之前），向左拖 = 面板变宽。
              以前靠 order:99 挂在容器最右端，用户根本分不清拖的是哪条边。 -->
         <div
-          v-if="(showPreview || showMindmap || showAgentChat) && tabs.length > 0"
+          v-if="(showPreview || showMindmap) && tabs.length > 0"
           class="preview-resizer"
           @mousedown="startPreviewResize"
-        />
-        <!-- g ai 对话面板：v-if 懒挂载 + v-show 保状态（切到预览再切回来，进行中的流还在）。
-             不再要求 tabs.length > 0：不选文件也能聊（当前文档上下文自动为空）。 -->
-        <EditorAgentPanel
-          v-if="agentOpened"
-          v-show="showAgentChat"
-          :active="showAgentChat"
-          :active-file-path="activeTabPath"
-          :active-file-name="activeTabRef?.name ?? ''"
-          :fullscreen="agentFullscreen && showAgentChat"
-          :style="rightPaneStyle"
-          @close="closeAgentChat"
-          @toggle-fullscreen="toggleAgentFullscreen"
         />
         <!-- 预览面板 -->
         <div
@@ -2990,13 +2928,7 @@ function stopPreviewResize() {
   display: flex;
   overflow: hidden;
   min-height: 0;
-  /* 全屏对话时面板是 absolute inset:0，基准得在这块上 */
   position: relative;
-}
-
-/* 全屏对话：面板盖住整个编辑区，分隔条没有意义了（Monaco 只是被盖住，没卸载） */
-.editor-body.is-agent-fullscreen .preview-resizer {
-  display: none;
 }
 
 /*

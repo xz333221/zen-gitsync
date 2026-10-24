@@ -19,8 +19,8 @@
  *   别信「没报错就是过」。
  *
  * 说明：顶栏 CPU/MEM 告警色只在 ≥70% 时上色，默认态量不到（改的是 usageAlert 常量）；
- *   其余同族角标（工作台运行中 / 编辑器未保存 / 控制台会话 / 智能体生成）默认态不渲染，
- *   同口径「兑 55% 黑」，需要时按 A4 的写法补。
+ *   其余同族角标（工作台运行中 / 编辑器未保存 / 控制台会话 / 右下角 dock 的生成中徽标）
+ *   默认态不渲染，同口径「兑 55% 黑」，需要时按 A4 的写法补。
  */
 const path = require('node:path')
 module.paths.unshift(path.resolve(__dirname, '../src/ui/client/node_modules'))

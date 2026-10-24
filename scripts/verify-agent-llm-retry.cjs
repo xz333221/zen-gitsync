@@ -147,8 +147,8 @@ async function main() {
     })
     await page.locator('.loading-container').waitFor({ state: 'detached', timeout: 30000 }).catch(() => {})
 
-    // ── 进智能体页，发一条消息 ────────────────────────────────────────────
-    await page.locator('.activity-btn[aria-label^="智能体"]').first().click()
+    // ── 打开右下角 g ai dock，发一条消息 ────────────────────────────────
+    await page.click('.agent-dock__mascot')
     await page.waitForSelector('.agent-tabs', { timeout: 15000 })
     await sleep(1000)
 

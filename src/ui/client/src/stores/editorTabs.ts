@@ -29,5 +29,15 @@ export const useEditorTabsStore = defineStore('editorTabs', () => {
 
   const hasDirty = computed(() => dirtyCount.value > 0)
 
-  return { dirtyCount, hasDirty, setDirtyCount }
+  // 当前激活文件：右下角 g ai dock 在编辑器视图自动附带文件上下文用
+  // （与 dirtyCount 同一写入范式：EditorView 写、AgentDock 经 App.vue 读）
+  const activeFilePath = ref('')
+  const activeFileName = ref('')
+
+  function setActiveFile(path: string, name: string) {
+    activeFilePath.value = path
+    activeFileName.value = name
+  }
+
+  return { dirtyCount, hasDirty, setDirtyCount, activeFilePath, activeFileName, setActiveFile }
 })

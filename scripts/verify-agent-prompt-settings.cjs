@@ -156,8 +156,10 @@ function reverseChecks() {
         chatSrc.replace(/if \(userPromptSection === undefined\)/, 'if (false)')),
         (src) => /userPromptSection\s*===\s*undefined/.test(src)],
       // R5：injectRequestContext 不再消费
+      // （2026-10 修：服务端那行是 `promptSection: userPromptSection,` 逗号结尾，
+      //   旧正则写死 `}` 让 replace 空转、反向恒真 —— 门得咬在真实代码上）
       ['R5 injectRequestContext 不再消费 promptSection', write('R5.js',
-        chatSrc.replace(/promptSection:\s*userPromptSection\s*\}/, '}')),
+        chatSrc.replace(/promptSection:\s*userPromptSection\s*,/, '')),
         (src) => /promptSection:\s*userPromptSection/.test(src)],
       // R6：全局键没解构（漏进项目配置）
       ['R6 agentDefaultPrompt 不在解构名单里', write('R6.js',
@@ -272,17 +274,20 @@ async function browserChecks() {
     await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' })
     // App.vue 的加载门：initCompleted 之前整段是 .loading-container（v-if），
     // .app-body 是 v-else —— 等它出现即"初始化完成"，没有竞态
-    // （默认视图是 Git Pane，AgentView 根本不挂载，直接等 .agent-tab 会超时）
     await page.waitForSelector('.app-body', { timeout: 60000 })
-    // 智能体视图要经左侧活动栏进（aria-label 可能带「· N 个对话正在生成」后缀，用前缀匹配）
-    await page.click('.activity-bar button[aria-label^="智能体"]')
+    // AI 对话入口 2026-10 整合为右下角悬浮 dock：点 mascot 展开，再最大化
+    //（默认 560px 窄面板下 Tab 是图标紧凑态，本探针要读 Tab 文字）
+    await page.click('.agent-dock__mascot')
+    await page.waitForSelector('.agent-view', { timeout: 30000 })
+    await page.click('.agent-dock__btn--max')
+    await page.waitForSelector('.agent-sidebar', { timeout: 15000 })
     await page.waitForSelector('.agent-tab', { timeout: 30000 })
 
     // ── B 组：Tab + 面板 ──
     const tabLabels = await page.$$eval('.agent-tab', els => els.map(e => e.textContent.trim()))
     check('B1 Tab 栏里有「设置」', tabLabels.some(t => t.includes('设置')), tabLabels.join(' / '))
 
-    await page.click('.agent-tab:has-text("设置")')
+    await page.click('.agent-tab[title="设置"]')
     await page.waitForSelector('.aps', { timeout: 15000 })
     check('B2 切到设置后出现提示词面板', await page.isVisible('.aps'))
 

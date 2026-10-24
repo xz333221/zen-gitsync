@@ -104,59 +104,60 @@ test.describe('App smoke', () => {
     })
   }
 
-  test('9. 文件空间: g ai 对话面板可打开,当前文档卡片落在输入框内部', async ({ page }) => {
+  // ── g ai 悬浮 dock（2026-10 AI 对话入口从活动栏 tab / 编辑器面板整合而来）──
+  // 原「文件空间 g ai 对话面板」的两条用例（当前文档卡 / 附件分流）移植到 dock：
+  // 编辑器视图激活时，App 把当前打开文件经 :context-file 传进 dock 的 AgentView，
+  // 卡片与附件行为与旧面板同一套实现（Teleport 锚点 + sendMessage 的 openFilePath 注入）。
+  test('9. g ai dock: 当前文档卡片落在输入框内部，引擎下拉全量', async ({ page }) => {
     await page.locator('.activity-bar button[aria-label^="文件空间"]').first().click()
     await expect(page.locator('.editor-pane')).toBeVisible()
 
-    // 面板只在"有打开的文件"时可见，先点左树里的第一个文件
+    // dock 的文件上下文来自「编辑器当前激活文件」，先点左树里的第一个文件
     const firstFile = page.locator('.tree-node--file').first()
     await expect(firstFile).toBeVisible({ timeout: 30_000 })
     await firstFile.click()
 
-    // Tab 栏右侧的第三个 toggle：g ai 对话
-    const toggle = page.locator('.agent-toggle-btn')
-    await expect(toggle).toBeVisible()
-    await toggle.click()
-    await expect(toggle).toHaveClass(/active/)
-    await expect(page.locator('.editor-agent-panel')).toBeVisible()
+    // 右下角 mascot 展开 dock
+    await page.locator('.agent-dock__mascot').click()
+    const view = page.locator('.agent-view')
+    await expect(view).toBeVisible({ timeout: 30_000 })
+    await expect(view.locator('.acu-input-textarea').first()).toBeVisible({ timeout: 30_000 })
+
     // 当前文档卡片在输入框**内部**第一行（库的附件行 .acu-input-attachments 待的那一层），
     // 不是浮在输入框外面。这里不只断言"可见"，还量了它确实排在 .acu-input-row 之上 ——
-    // 光 `toBeVisible()` 的话，绝对定位浮在输入框上方也能骗过用例（上一版就是这么错的）。
-    const ctxCard = page.locator('.editor-agent-panel .acu-input-wrap .agent-context-att')
+    // 光 toBeVisible() 的话，绝对定位浮在输入框上方也能骗过用例（上一版就是这么错的）。
+    const ctxCard = view.locator('.agent-chat-host .acu-input-wrap .agent-context-att')
     await expect(ctxCard).toBeVisible()
-    await expect(page.locator('.agent-panel-header .agent-context-att')).toHaveCount(0)
+    await expect(view.locator('.agent-dock__head .agent-context-att')).toHaveCount(0)
     expect(await ctxCard.evaluate(el => {
       const row = el.closest('.acu-input-wrap')?.querySelector('.acu-input-row')
       if (!row) return false
       return el.getBoundingClientRect().bottom <= row.getBoundingClientRect().top + 1
     })).toBe(true)
     // 和附件一样带移除按钮（只是它移除的是"这一条不带当前文档"，不是删文件）
-    await expect(page.locator('.editor-agent-panel .agent-context-att-remove')).toHaveCount(1)
+    await expect(view.locator('.agent-context-att-remove')).toHaveCount(1)
 
-    // 执行器切换：用户反馈过"文件空间里的 g ai 没有执行器的切换"。面板头部要有与
-    // 智能体视图同款的引擎下拉 —— 默认 g ai，点开后有全部四个引擎。
-    const engine = page.locator('.editor-agent-panel .agent-engine')
+    // 执行器切换：与旧文件空间面板同款引擎下拉 —— 默认 g ai，点开后是全部引擎。
+    // 条数 = 内置 g ai + TASK_EXECUTOR_OPTIONS（claude / opencode / codex /
+    // codebuddy / pi，2026-10 已 5 家）。新增执行器时这条要跟着改，是刻意的门。
+    const engine = view.locator('.agent-engine')
     await expect(engine).toBeVisible()
     await expect(engine.locator('.agent-engine__name')).toHaveText('g ai')
     await engine.locator('.agent-engine__btn').click()
-    await expect(page.locator('.el-dropdown-menu .agent-engine__item')).toHaveCount(4)
+    await expect(page.locator('.el-dropdown-menu .agent-engine__item')).toHaveCount(6)
     await page.keyboard.press('Escape')
 
-    // 光"可见"不够：组件库的样式表要真的生效，否则面板是裸的（2026-09-27 用户实测报过）。
-    // 本用例是全新 context、直接进文件空间，从未加载 AgentView / WorkbenchView / JobLogDetails
-    // 那三个引了 zen-ai-chat-ui/style.css 的懒加载 chunk —— 正好是漏引样式时的现场。
+    // 光"可见"不够：组件库的样式表要真的生效，否则对话区是裸的（2026-09-27 用户实测报过）。
     // .acu-chat 的 flex-direction: column 来自库样式表，浏览器默认是 row。
-    const chatDir = await page.locator('.editor-agent-panel .acu-chat')
+    const chatDir = await view.locator('.acu-chat')
       .evaluate(el => getComputedStyle(el).flexDirection)
     expect(chatDir).toBe('column')
-    // 会话列表的渲染与样式由下面第 11 条用例守（它会翻到列表页）。
-    // 这里不再断言 .acu-conv —— 列表默认整块 display:none，写在这里只会永远红。
   })
 
   // 附件：图片走多模态（images[] dataURL），非图片走"服务端落盘 + 只把路径给模型"（attachments[]）。
   // 这条用例同时守两件事：① accept 被放开后非图片真能选进来并变成 chip；
   // ② 请求体里两类附件各归各位（前端只过滤"能不能发"，落盘与注入由服务端负责）。
-  test('10. 文件空间对话: 图片进 images[]、非图片进 attachments[]', async ({ page }) => {
+  test('10. g ai dock 对话: 图片进 images[]、非图片进 attachments[]', async ({ page }) => {
     const bodies: any[] = []
     await page.route('/api/agent/chat', async route => {
       bodies.push(route.request().postDataJSON())
@@ -171,26 +172,28 @@ test.describe('App smoke', () => {
     await page.locator('.activity-bar button[aria-label^="文件空间"]').first().click()
     await expect(page.locator('.tree-node--file').first()).toBeVisible({ timeout: 30_000 })
     await page.locator('.tree-node--file').first().click()
-    await page.locator('.agent-toggle-btn').click()
-    await expect(page.locator('.editor-agent-panel')).toBeVisible()
+    await page.locator('.agent-dock__mascot').click()
+    const view = page.locator('.agent-view')
+    await expect(view).toBeVisible({ timeout: 30_000 })
+    await expect(view.locator('.acu-input-textarea').first()).toBeVisible({ timeout: 30_000 })
 
     // 1x1 透明 PNG
     const png = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
       'base64'
     )
-    await page.locator('.editor-agent-panel input[type=file]').setInputFiles([
+    await view.locator('input[type=file]').setInputFiles([
       { name: 'a.log', mimeType: 'text/plain', buffer: Buffer.from('log line\n') },
       { name: 'shot.png', mimeType: 'image/png', buffer: png }
     ])
-    await expect(page.locator('.editor-agent-panel .acu-input-att')).toHaveCount(2)
+    await expect(view.locator('.acu-input-att')).toHaveCount(2)
 
     // 「当前文档」卡片和这两个附件**并排在同一行**（这就是"跟加附件一样"）：
     // 它住在 .acu-input-attachments 里，是那一行的一个 flex item。
     // 上一版靠"插在输入框最前面"保位置，Vue 更新输入框时会把它挤到下一行 —— 用户截图报过。
     // 判据用"垂直方向有重叠"而不是"top 相等"：附件里的图片缩略图是 56px 固定高，
     // flex 的 align-items 会把同行各 item 拉伸成不同高度，top 本来就不一定相等。
-    expect(await page.locator('.editor-agent-panel .agent-context-att').evaluate(el => {
+    expect(await view.locator('.agent-context-att').evaluate(el => {
       const att = el.closest('.acu-input-attachments')?.querySelector('.acu-input-att')
       if (!att) return false
       const a = el.getBoundingClientRect()
@@ -198,8 +201,8 @@ test.describe('App smoke', () => {
       return a.bottom > b.top && a.top < b.bottom
     })).toBe(true)
 
-    await page.locator('.editor-agent-panel .acu-input-textarea').fill('看下这两个')
-    await page.locator('.editor-agent-panel .acu-input-send').click()
+    await view.locator('.acu-input-textarea').first().fill('看下这两个')
+    await view.locator('.acu-input-send').first().click()
 
     await expect.poll(() => bodies.length, { timeout: 15_000 }).toBe(1)
     expect(bodies[0].attachments.map((a: any) => a.name)).toEqual(['a.log'])
@@ -208,60 +211,22 @@ test.describe('App smoke', () => {
     expect(bodies[0].images[0]).toMatch(/^data:image\/png;base64,/)
   })
 
-  // ── 文件空间 g ai 面板：会话列表 ↔ 对话 **恒为两个整页** ──
-  // 这块面板挂在编辑器里跟 Monaco 分宽度，天生长得窄；原先"列表压在上面 + 对话在下面"，
-  // 列表一开就只剩两三行对话。现在不按宽度分支，任何宽度都是两个整页 ——
-  // 所以这里要**同时**在宽窄两个视口下断言，防止哪天有人把宽度分支加回来。
-  test('11. 文件空间 g ai 面板：会话列表页 ↔ 对话页（恒两页，与宽度无关）', async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 })
-
-    await page.locator('.activity-bar button[aria-label^="文件空间"]').first().click()
-    await expect(page.locator('.tree-node--file').first()).toBeVisible({ timeout: 30_000 })
-    await page.locator('.tree-node--file').first().click()
-    await page.locator('.agent-toggle-btn').click()
-
-    const panel = page.locator('.editor-agent-panel')
-    await expect(panel).toBeVisible()
-    // 恒两页：宽度分支该留下的痕迹一个都不该有
-    await expect(panel).not.toHaveClass(/is-narrow/)
-
-    // 默认在对话页：对话铺满，列表整块让位
-    await expect(panel.locator('.agent-panel-chat')).toBeVisible()
-    await expect(panel.locator('.agent-panel-convs')).toBeHidden()
-
-    // 点头部按钮 → 会话列表页整页铺开（组件库的 ConversationList 真的渲染出来）
-    await panel.locator('.agent-panel-list-btn').click()
-    await expect(panel.locator('.acu-conv').first()).toBeVisible()
-    await expect(panel.locator('.agent-panel-chat')).toBeHidden()
-    // 头部整条让给「返回对话 + 会话列表」，列表按钮退场
-    await expect(panel.locator('.agent-panel-back-btn')).toBeVisible()
-    await expect(panel.locator('.agent-panel-title')).toHaveText('会话列表')
-    await expect(panel.locator('.agent-panel-list-btn')).toHaveCount(0)
-
-    // 点 ← 返回对话页
-    await panel.locator('.agent-panel-back-btn').click()
-    await expect(panel.locator('.agent-panel-chat')).toBeVisible()
-    await expect(panel.locator('.agent-panel-convs')).toBeHidden()
-
-    // 视口拉宽（面板跟着变宽）后**仍是两页** —— 这正是"恒两页"与旧版的分水岭：
-    // 旧版一宽就退回上下堆叠（列表与对话同屏），用户看到的就是"没变"。
-    await page.setViewportSize({ width: 1600, height: 900 })
-    await expect(panel).toBeVisible()
-    await expect(panel.locator('.agent-panel-chat')).toBeVisible()
-    await expect(panel.locator('.agent-panel-convs')).toBeHidden()
-  })
-
-  test('12. 窄屏：智能体视图折成「会话列表页 ↔ 对话页」', async ({ page }) => {
+  // ── dock 默认 560px 窄面板：AgentView 折成「会话列表页 ↔ 对话页」──
+  // 旧第 11/12 条分别守编辑器面板（恒两页）与智能体视图（窄屏两页）；
+  // 入口整合后 dock 恒窄屏（560 < 680），两条合成这一条。
+  // 注意 .agent-sidebar 现在是 v-show（不是 v-if）：窄屏下节点还在 DOM 里，
+  // 只是 display:none 不占布局 —— 断言"隐藏"而不是"不存在"。
+  test('11. g ai dock 默认窄面板：会话列表页 ↔ 对话页', async ({ page }) => {
     await page.setViewportSize({ width: 520, height: 720 })
-    await page.locator('.activity-bar button[aria-label^="智能体"]').first().click()
+    await page.locator('.agent-dock__mascot').click()
 
     const view = page.locator('.agent-view')
     await expect(view).toBeVisible({ timeout: 30_000 })
 
-    // 窄屏：宽屏那套并排的左侧栏 + 拖拽条整块不渲染
+    // 窄面板：宽屏那套并排的左侧栏 + 拖拽条藏起来（v-show，不占布局）
     await expect(view.locator('.agent-page-bar')).toBeVisible()
-    await expect(view.locator('.agent-sidebar')).toHaveCount(0)
-    await expect(view.locator('.sidebar-resizer')).toHaveCount(0)
+    await expect(view.locator('.agent-sidebar')).toBeHidden()
+    await expect(view.locator('.sidebar-resizer')).toBeHidden()
     await expect(view.locator('.acu-chat')).toBeVisible()
 
     // 返回箭头 → 会话列表页独占，对话整块退场
@@ -269,5 +234,58 @@ test.describe('App smoke', () => {
     await expect(view.locator('.agent-list-page .acu-conv').first()).toBeVisible()
     await expect(view.locator('.acu-chat')).toHaveCount(0)
     await expect(view.locator('.agent-page-bar')).toHaveCount(0)
+  })
+
+  // ── dock 开合与最大化（整合后新增的入口行为）──
+  test('12. g ai dock: mascot 开合 / Esc / ✕ / 最大化宽屏两栏', async ({ page }) => {
+    const panel = page.locator('.agent-dock__panel')
+    const view = page.locator('.agent-view')
+
+    // 初始收起：面板在 DOM 里但不可见（v-show）
+    await expect(page.locator('.agent-dock__mascot')).toBeVisible()
+    await expect(panel).toBeHidden()
+
+    // 点 mascot 展开
+    await page.locator('.agent-dock__mascot').click()
+    await expect(panel).toBeVisible()
+    await expect(view).toBeVisible({ timeout: 30_000 })
+
+    // Esc 收起（焦点归还 mascot）
+    await page.keyboard.press('Escape')
+    await expect(panel).toBeHidden()
+    await expect(page.locator('.agent-dock__mascot')).toBeFocused()
+
+    // 再点展开 → 头部 ✕ 收起
+    await page.locator('.agent-dock__mascot').click()
+    await expect(panel).toBeVisible()
+    await page.locator('.agent-dock__btn--close').click()
+    await expect(panel).toBeHidden()
+
+    // 最大化 → 宽屏两栏（会话列表侧栏真的可见）；还原 → 又藏起来
+    await page.locator('.agent-dock__mascot').click()
+    await expect(view).toBeVisible({ timeout: 30_000 })
+    await expect(view.locator('.agent-sidebar')).toBeHidden()
+    await page.locator('.agent-dock__btn--max').click()
+    await expect(view.locator('.agent-sidebar')).toBeVisible()
+    await page.locator('.agent-dock__btn--max').click()
+    await expect(view.locator('.agent-sidebar')).toBeHidden()
+  })
+
+  // ── dock 不随底层视图销毁：切走再切回，对话原地不动 ──
+  test('13. g ai dock: 切底层视图不关面板，会话状态保留', async ({ page }) => {
+    await page.locator('.agent-dock__mascot').click()
+    const view = page.locator('.agent-view')
+    await expect(view).toBeVisible({ timeout: 30_000 })
+
+    // 切到工作台视图：dock 是 fixed 覆盖层，不随 activeView 销毁
+    await page.locator('.activity-bar button[aria-label^="工作台"]').first().click()
+    await expect(page.locator('.workbench-pane')).toBeVisible()
+    await expect(page.locator('.agent-dock__panel')).toBeVisible()
+    await expect(view).toBeVisible()
+
+    // 切回 Git 视图：仍在
+    await page.locator('.activity-bar button[aria-label^="Git"]').first().click()
+    await expect(page.locator('.agent-dock__panel')).toBeVisible()
+    await expect(view).toBeVisible()
   })
 })

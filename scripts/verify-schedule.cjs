@@ -109,15 +109,16 @@ async function main() {
       await page.waitForSelector('.activity-bar', { timeout: 30000 })
     })
 
-    // ── A1 智能体视图 ────────────────────────────────────────────
-    await page.click('.activity-bar [aria-label*="智能体"]')
+    // ── A1 右下角 g ai dock（2026-10 起入口从活动栏整合为 dock）──────────
+    await page.click('.agent-dock__mascot')
     await page.waitForSelector('.agent-view', { timeout: 15000 })
-    check('A1 活动栏进入智能体视图', true)
+    check('A1 点开右下角 dock 进入 g ai 对话', true)
 
     // ── A2 定时任务 Tab ──────────────────────────────────────────
-    await page.click('.agent-tab:has-text("定时任务")')
+    // 窄面板下 Tab 是图标紧凑态，用 title 认（文字进 tooltip）
+    await page.click('.agent-tab[title="定时任务"]')
     await page.waitForSelector('.schedule-panel', { timeout: 10000 })
-    const tabActive = await page.locator('.agent-tab.active:has-text("定时任务")').count()
+    const tabActive = await page.locator('.agent-tab.active[title="定时任务"]').count()
     check('A2 切「定时任务」Tab 渲染面板且高亮', tabActive === 1)
 
     // ── A3 UI 表单新建 ───────────────────────────────────────────
@@ -225,13 +226,16 @@ async function main() {
     })
     fs.writeFileSync(SCHEDULES_FILE, JSON.stringify(store, null, 2), 'utf-8')
 
-    // 重载 + 重新进智能体视图：直接改文件没有 SSE 广播，面板不会自己出现这张卡
+    // 重载 + 重新点开 dock：直接改文件没有 SSE 广播，面板不会自己出现这张卡
     await page.reload({ waitUntil: 'domcontentloaded' })
     await page.waitForSelector('.activity-bar', { timeout: 30000 })
-    // 列表是进视图时拉的 —— 等这次响应落地再判"打开前有没有"，否则量到的是还没加载完的空列表
+    // 列表是 dock 展开时拉的 —— 等这次响应落地再判"打开前有没有"，否则量到的是还没加载完的空列表
     const sessionsLoaded = page.waitForResponse(r => r.url().includes('/api/agent/sessions?'), { timeout: 15000 })
-    await page.click('.activity-bar [aria-label*="智能体"]')
+    await page.click('.agent-dock__mascot')
     await page.waitForSelector('.agent-view', { timeout: 15000 })
+    // 最大化：窄面板下宽屏侧栏是 v-show 隐藏的，本组要数可见列表里的条目
+    await page.click('.agent-dock__btn--max')
+    await page.waitForSelector('.agent-sidebar', { timeout: 10000 })
     await sessionsLoaded.catch(() => {})
     await page.waitForSelector('.acu-conv-list', { timeout: 10000 })
     await sleep(300)

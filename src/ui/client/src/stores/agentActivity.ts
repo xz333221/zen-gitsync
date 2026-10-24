@@ -16,9 +16,9 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
 // 跨组件共享的「有多少条 g ai 对话正在生成」：
-// useAgentChat 的每个消费方（智能体视图「对话」Tab / 文件空间面板 / 工作台主 Agent
-// 控制台 / 常用目录追问区）各持一份独立实例，isStreaming 只活在自己那份 runs 里。
-// ActivityBar 是它们共同的祖先，拿不到任何一份 —— 想在左侧机器人图标上显示
+// useAgentChat 的每个消费方（右下角 g ai dock 的对话 / 思维导图 AI 面板 /
+// 工作台主 Agent 控制台）各持一份独立实例，isStreaming 只活在自己那份 runs 里。
+// 这些入口分散在各处，没有一个共同祖先拿得到任何一份 —— 想在悬浮 mascot 上显示
 // "正在生成"的数字，就得有一处跨实例的登记处（口径与 workbenchStatus / terminalSessions 一致）。
 //
 // 口径 = 在登记的令牌数，一轮流一条。

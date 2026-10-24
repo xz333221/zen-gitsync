@@ -137,9 +137,13 @@ async function main() {
     })
     await page.locator('.loading-container').waitFor({ state: 'detached', timeout: 30000 }).catch(() => {})
 
-    // ── 智能体页 ────────────────────────────────────────────────────────────
-    await page.locator('.activity-btn[aria-label^="智能体"]').first().click()
-    await page.waitForSelector('.agent-tabs', { timeout: 15000 })
+    // ── 右下角 g ai dock（2026-10 起 AI 对话入口从活动栏 tab 整合为 dock）────────
+    await page.click('.agent-dock__mascot')
+    await page.waitForSelector('.agent-view', { timeout: 15000 })
+    // 最大化：dock 默认 560px 是窄面板（会话列表折成独立页、复制按钮进紧凑态），
+    // 本探针守的会话列表 + 复制按钮契约要宽屏两栏，先拉满
+    await page.click('.agent-dock__btn--max')
+    await page.waitForSelector('.agent-sidebar', { timeout: 10000 })
     await sleep(1200)
 
     const COPY = '.agent-tabs .csb'
@@ -231,6 +235,10 @@ async function main() {
       `剪贴板${afterEmpty === '__SENTINEL__' ? '未被改写' : '被改写成 ' + afterEmpty.slice(0, 30)}`)
 
     // ── B1 主 Agent 控制台 ─────────────────────────────────────────────────
+    // 先把右下角 dock 关掉：它是 fixed 覆盖层，最大化态会盖住工作台右栏，
+    // 之后点控制台里的会话条目会被 dock 的会话列表拦截（pointer-events）。
+    await page.locator('.agent-dock__btn--close').first().click().catch(() => {})
+    await page.waitForSelector('.agent-dock__panel', { state: 'hidden', timeout: 5000 }).catch(() => {})
     await page.locator('.activity-btn[aria-label^="工作台"]').first().click()
     // 工作台是懒加载的独立 chunk，第一次进要等它挂上来（这里给足 25s，别用 catch 吞掉）
     const wbReady = await waitFor(async () =>
@@ -293,75 +301,9 @@ async function main() {
       }
     }
     await page.screenshot({ path: path.join(SHOT_DIR, 'console.png') }).catch(() => {})
-
-    // ── C1 文件空间 g ai 面板（三个容器共用一个组件，这里补上第三个的实地检查）──
-    // 这个面板要「有打开的文件」才挂（`v-show="showAgentChat && tabs.length > 0"`），
-    // 所以先开文件树里的一个文件，再点 .agent-toggle-btn。
-    // 从工作台切过来时那一下点击偶尔会被正在卸载的视图吃掉 —— 点完没出树就再点一次。
-    let treeReady = false
-    for (let i = 0; i < 3 && !treeReady; i++) {
-      await page.locator('.activity-btn[aria-label^="文件空间"], .activity-btn[aria-label^="编辑器"]').first().click().catch(() => {})
-      treeReady = await waitFor(async () => (await page.locator('.tree-node').count()) > 3, 10000, 300)
-    }
-    if (!treeReady) {
-      skip('C1 文件空间 g ai 面板', '文件树没加载出来')
-    } else {
-      const opened = await page.evaluate(() => {
-        const el = [...document.querySelectorAll('.tree-name')].find(e => (e.textContent || '').trim() === 'README.md')
-        const node = el ? el.closest('.tree-node') : null
-        if (!node) return false
-        node.click()
-        return true
-      })
-      if (!opened) {
-        skip('C1 文件空间 g ai 面板', '文件树里没找到 README.md')
-      } else {
-        await waitFor(async () => (await page.locator('.editor-tab.active').count()) > 0, 8000, 200)
-        await page.locator('.agent-toggle-btn').first().click().catch(() => {})
-        const PANEL_COPY = '.agent-panel-header .csb .csb__btn:not(.csb__caret)'
-        const panelShown = await waitFor(async () => {
-          const r = await page.evaluate(() => {
-            const head = document.querySelector('.agent-panel-header')
-            const btn = document.querySelector('.agent-panel-header .csb .csb__btn:not(.csb__caret)')
-            const hb = head ? head.getBoundingClientRect() : null
-            const bb = btn ? btn.getBoundingClientRect() : null
-            return { hw: hb ? Math.round(hb.width) : 0, bw: bb ? Math.round(bb.width) : 0 }
-          })
-          return r.hw > 150 && r.bw >= 18
-        }, 15000, 300)
-        check('C1 ★ 文件空间 g ai 面板头条也有可点的复制按钮', panelShown,
-          `DOM 里 ${await page.locator(PANEL_COPY).count()} 个`)
-        if (panelShown) {
-          // 同样是两页布局：先翻到「会话列表」选一条有内容的会话
-          const pListBtn = page.locator('.agent-panel-icon-btn.agent-panel-list-btn')
-          if ((await pListBtn.count()) && await pListBtn.isVisible().catch(() => false)) {
-            await pListBtn.click()
-            await sleep(700)
-          }
-          const pItems = page.locator('.agent-panel-convs .acu-conv-item')
-          const pHasConv = await waitFor(async () => (await pItems.count()) > 0, 15000, 400)
-          if (!pHasConv) {
-            skip('C1b 文件空间面板里复制一份出来', '面板会话列表 15s 内没出条目')
-          } else {
-            await pItems.first().click()
-            const pPainted = await waitFor(async () =>
-              (await page.locator('.agent-panel-chat .acu-bubble-row.is-user').count()) > 0, 20000, 400)
-            if (!pPainted) {
-              skip('C1b 文件空间面板里复制一份出来', '选中的会话没渲染出用户气泡')
-            } else {
-              await writeClipboard('__SENTINEL__')
-              await page.locator(PANEL_COPY).first().click()
-              await sleep(800)
-              const pText = await readClipboard()
-              check('C1b 文件空间面板复制出来的也是一份会话 Markdown',
-                pText.startsWith('# ') && (pText.includes('## 我') || pText.includes('## g ai')),
-                `长度 ${pText.length}：${pText.slice(0, 30).replace(/\n/g, '⏎')}`)
-            }
-          }
-        }
-        await page.screenshot({ path: path.join(SHOT_DIR, 'editor-panel.png') }).catch(() => {})
-      }
-    }
+    // C 组（原「文件空间 g ai 面板」实地检查）随 2026-10 入口整合移除：
+    // 编辑器 AI 面板已并入右下角 dock，复制按钮契约由 A1/A2 与
+    // verify-agent-input-facts 的 dock 侧用例守，这里不再重复。
   } catch (err) {
     check('脚本异常', false, String((err && err.message) || err))
   } finally {

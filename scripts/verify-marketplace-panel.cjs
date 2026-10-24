@@ -108,9 +108,11 @@ function catalogBody(installed, requested) {
 async function openMarketplace(page) {
   await page.goto(BASE, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('.activity-bar', { timeout: 30000 })
-  await page.locator('.activity-btn[aria-label^="智能体"]').first().click()
-  await page.waitForSelector('.agent-tabs', { timeout: 15000 })
-  await page.locator('.agent-tab').filter({ hasText: 'Skill 广场' }).first().click()
+  // AI 对话入口 2026-10 整合为右下角悬浮 dock：点 mascot 展开
+  await page.click('.agent-dock__mascot')
+  await page.waitForSelector('.agent-view', { timeout: 15000 })
+  // 窄面板下 Tab 是图标紧凑态，用 title 认（文字进 tooltip）
+  await page.locator('.agent-tab[title="Skill 广场"]').first().click()
   await page.waitForSelector('.marketplace-panel', { timeout: 15000 })
   await page.waitForSelector('.mp-chip', { timeout: 15000 })
   await page.waitForSelector('.mp-installed-row', { timeout: 15000 })

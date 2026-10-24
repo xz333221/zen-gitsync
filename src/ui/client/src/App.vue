@@ -43,6 +43,8 @@ import GitOperationsButton from '@/components/buttons/GitOperationsButton.vue'
 // Tab 才挂载,不占首屏请求;但它本身不大,不值得为它多开一个异步 chunk。
 import RemoteReposList from '@/components/RemoteReposList.vue'
 import ViewLoading from '@/components/ViewLoading.vue'
+// 右下角 g ai 悬浮 dock：静态导入（常驻，与活动栏无关）；里面的 AgentView 自己懒加载
+import AgentDock from '@/components/AgentDock.vue'
 // 控制台视图:默认加载(静态导入),首屏即打包进 chunk,切过去无需等待。
 import ConsoleView from '@views/ConsoleView.vue'
 // 视图懒加载:首屏只下载 git 视图,其它视图切过去才请求 chunk。
@@ -62,12 +64,12 @@ const WorkbenchView = defineAsyncComponent({ loader: () => import('@views/Workbe
 const ProjectManagerView = defineAsyncComponent({ loader: () => import('@views/ProjectManagerView.vue'), ...asyncOpts })
 const MonitorView = defineAsyncComponent({ loader: () => import('@views/MonitorView.vue'), ...asyncOpts })
 const MindmapView = defineAsyncComponent({ loader: () => import('@views/MindmapView.vue'), ...asyncOpts })
-const AgentView = defineAsyncComponent({ loader: () => import('@views/AgentView.vue'), ...asyncOpts })
 import { ElConfigProvider, ElButton, ElTooltip, ElIcon } from 'element-plus'
 import { WarningFilled } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
+import { useEditorTabsStore } from '@stores/editorTabs'
 import { useLocaleStore } from '@stores/localeStore'
 import { useInstancesStore } from '@stores/instancesStore'
 import { useToolsStore } from '@stores/toolsStore'
@@ -87,6 +89,8 @@ const gitStatusRef = ref<InstanceType<typeof GitStatus> | null>(null)
 const gitStore = useGitStore()
 // 使用Config Store
 const configStore = useConfigStore()
+// 编辑器 tab 状态：右下角 g ai dock 在编辑器视图激活时，靠它附带当前文件上下文
+const editorTabsStore = useEditorTabsStore()
 // 使用Locale Store
 const localeStore = useLocaleStore()
 // 使用实例注册 Store
@@ -329,7 +333,14 @@ function handleBranchChanged() {
 }
 
 // 活动视图切换
-const activeView = ref<'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'projects' | 'monitor' | 'mindmap' | 'agent'>('git')
+const activeView = ref<'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'projects' | 'monitor' | 'mindmap'>('git')
+
+// 右下角 g ai dock 的「当前文件」上下文：只在编辑器视图激活时带上
+// （EditorView 把激活文件同步进 editorTabsStore，见那边的 watch）
+const dockContextFile = computed(() => {
+  if (activeView.value !== 'editor' || !editorTabsStore.activeFilePath) return null
+  return { path: editorTabsStore.activeFilePath, name: editorTabsStore.activeFileName }
+})
 
 // Git 视图内的三个 Tab:
 //   current → 当前项目(原有的 GitStatus + CommitForm/最近项目 + LogList 布局,原样保留)
@@ -1067,15 +1078,15 @@ function stopVResize() {
         </KeepAlive>
       </div>
 
-      <!-- 智能体视图（懒加载 + KeepAlive 缓存：会话列表/对话状态切走不丢） -->
-      <div v-show="activeView === 'agent'" class="view-pane agent-pane">
-        <KeepAlive>
-          <AgentView v-if="activeView === 'agent'" />
-        </KeepAlive>
-      </div>
+      <!-- 智能体视图已整合为右下角悬浮 dock（AgentDock）：任何视图下都可唤起，
+           会话在服务端按项目共享，切视图 / 关面板都不打断进行中的流 -->
 
     </div><!-- /app-body -->
   </main>
+
+  <!-- 右下角 g ai 悬浮 dock：fixed 覆盖层，不随 activeView 销毁。
+       编辑器视图激活时经 :context-file 带上当前文件（发送时请求级注入） -->
+  <AgentDock v-if="initCompleted" :context-file="dockContextFile" />
 
   <footer class="main-footer app-footer">
     <div class="footer-left">

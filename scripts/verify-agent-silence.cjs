@@ -61,8 +61,8 @@ async function alive() {
 async function openAgent(page) {
   await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('.app-body', { timeout: 60000 })
-  // aria-label 可能带「· N 个对话正在生成」后缀，用前缀匹配
-  await page.click('.activity-bar button[aria-label^="智能体"]')
+  // AI 对话入口 2026-10 整合为右下角悬浮 dock：点 mascot 展开面板
+  await page.click('.agent-dock__mascot')
   await page.waitForSelector('.acu-input-textarea', { timeout: 30000 })
 }
 

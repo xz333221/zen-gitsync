@@ -128,6 +128,27 @@ async function captureView(page, ariaLabel, file, label) {
   return true
 }
 
+// AI 对话 2026-10 整合为右下角悬浮 dock（活动栏没有「智能体」tab 了）：
+// 点 mascot 展开；maximize 再拉满（宽屏两栏，旧智能体 tab 的完整体验）。
+// mascot 是 toggle：先确保面板是关的再点，否则第二次调用会把它点上关态。
+async function openDock(page, { maximize = false } = {}) {
+  if (await page.locator('.agent-dock__panel').isVisible().catch(() => false)) {
+    await page.locator('.agent-dock__btn--close').first().click().catch(() => {})
+    await page.waitForSelector('.agent-dock__panel', { state: 'hidden', timeout: 5000 }).catch(() => {})
+  }
+  const mascot = page.locator('.agent-dock__mascot').first()
+  await mascot.waitFor({ state: 'visible', timeout: 15000 })
+  await mascot.click()
+  await page.waitForSelector('.agent-view', { timeout: 15000 })
+  await waitSettled(page)
+  if (maximize) {
+    await page.locator('.agent-dock__btn--max').first().click()
+    await page.waitForSelector('.agent-sidebar', { timeout: 10000 })
+    await waitSettled(page)
+  }
+  return true
+}
+
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: 1 })
 page.on('pageerror', (e) => console.log(`  [pageerror] ${e.message}`))
@@ -172,13 +193,16 @@ if (theme !== 'dark') {
 }
 
 // ── 0. 预热巡航:把所有视图先点一遍 ──────────────────────────────────────────
-// 工作台/项目管理/智能体首帧要打 /api/workbench/projects 之类的接口,
+// 工作台/项目管理首帧要打 /api/workbench/projects 之类的接口,
 // 冷调用(全盘项目扫描 + favicon 探测)要 10 秒以上;先巡航一遍让服务端缓存热起来,
 // 正式截图时各个视图才能秒开。源码地图入口当前隐藏(SHOW_SOURCE_MAP=false),跳过。
 console.log('预热巡航(触发各视图的冷接口)...')
-for (const view of ['控制台', '智能体', '文件空间', '工作台', '项目管理', '系统监控', '思维导图']) {
+for (const view of ['控制台', '文件空间', '工作台', '项目管理', '系统监控', '思维导图']) {
   await gotoView(page, view)
 }
+// g ai dock：2026-10 起 AI 对话住右下角，预热它的异步 chunk + 会话列表冷接口
+await openDock(page)
+await page.locator('.agent-dock__btn--close').first().click().catch(() => {})
 await gotoView(page, 'Git')
 
 // ── 1. Git 面板(文件列表 + diff + 提交区)────────────────────────────────────
@@ -308,8 +332,14 @@ if (await captureView(page, '文件空间', path.join(L, '06-file-space-preview.
   }
 }
 
-// ── 10. 智能体(会话列表 + 对话)─────────────────────────────────────────────
-await captureView(page, '智能体', path.join(L, '04-agent-assistant-gui.png'), '智能体 g ai(官网)')
+// ── 10. g ai 悬浮 dock（右下角 mascot + 展开的对话面板）────────────────────
+if (await openDock(page)) {
+  await shot(page, path.join(L, '04-agent-assistant-gui.png'), 'g ai 悬浮 dock(官网)')
+}
+// 10b. 最大化态：宽屏两栏（会话列表 + 对话），即旧智能体 tab 的完整体验
+if (await openDock(page, { maximize: true })) {
+  await shot(page, path.join(L, '04-agent-assistant-full.png'), 'g ai dock 最大化(官网)')
+}
 
 // ── 11. 工作台看板 ─────────────────────────────────────────────────────────
 if (await captureView(page, '工作台', path.join(L, '02-workbench-board.png'), '工作台看板(官网)')) {

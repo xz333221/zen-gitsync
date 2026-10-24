@@ -45,6 +45,17 @@ import AgentEngineSelector from '@/components/AgentEngineSelector.vue'
 import CopySessionButton from '@/components/CopySessionButton.vue'
 import ChatSilenceBadge from '@/components/ChatSilenceBadge.vue'
 
+const props = defineProps<{
+  /**
+   * dock 传入：编辑器当前激活文件路径（绝对或相对都行，服务端会归一化）。
+   * 整合前这是 EditorAgentPanel 的 activeFilePath —— 文件空间的对话靠它把
+   * 「当前打开的文档」带给模型；入口收拢到右下角 dock 后由这里接管。
+   */
+  contextFilePath?: string
+  /** 当前激活文件名（只用于输入区那张上下文小卡） */
+  contextFileName?: string
+}>()
+
 const configStore = useConfigStore()
 const gitStore = useGitStore()
 
@@ -60,6 +71,13 @@ const { width, narrow } = useNarrowPane(rootRef)
  * 扣掉左侧会话列（240px）之后 ≈ 860px，够放下整行。
  */
 const TABS_SILENCE_MIN_WIDTH = 1100
+/**
+ * 再窄就把 Tab 行压成「图标 + tooltip」紧凑态：5 个文字 tab + 引擎选择器 + 复制按钮
+ * 在 640px 以下放不下（文字会被压折行，导航条突然长高一倍）。
+ * dock 默认面板 560px 恒触发；最大化（≥680）恢复完整文字态。
+ */
+const TABS_COMPACT_MAX_WIDTH = 640
+const tabsCompact = computed(() => width.value > 0 && width.value < TABS_COMPACT_MAX_WIDTH)
 /** 窄屏下的当前页。宽屏两栏并排时用不到它 */
 const chatPage = ref<'list' | 'chat'>('chat')
 
@@ -191,6 +209,94 @@ const currentSessionTitle = computed(
 // 里的第一个单引号截断，整条 background 声明作废（实测 bgImage=none，图标空白）。
 const welcomeAvatarStyle = { '--welcome-avatar': `url("${AGENT_ASSISTANT_AVATAR}")` }
 
+// ── 当前文档上下文卡：锚点插进库输入框容器，和附件同处一行 ────────
+// 与 EditorAgentPanel 同一套形状（那里是文件空间面板的常住实现）：组件库的
+// ChatContainer / ChatInput 没有任何插槽，只能往 `.acu-input-wrap` 插一个空锚点，
+// 再把卡片 Teleport 进去（节点仍由 Vue 渲染）。锚点是动态创建的、没有 scoped 属性，
+// 定位规则走 :deep()（见 <style>）。dock 在编辑器视图激活时经 props 传入当前文件。
+const chatHostRef = ref<HTMLElement | null>(null)
+const contextSlot = ref<HTMLElement | null>(null)
+/** 用户点了卡片上的 ✕：本轮不把当前文档带给模型（切换文档时恢复） */
+const contextDismissed = ref(false)
+let slotObserver: MutationObserver | null = null
+
+const showContextCard = computed(() => !!props.contextFileName && !contextDismissed.value)
+
+/** 库里真附件行的容器（.acu-input-attachments）—— 没有附件时库不渲染它 */
+function findAttachmentsHost(wrap: HTMLElement): HTMLElement | null {
+  return (Array.from(wrap.children).find(c =>
+    (c as HTMLElement).classList?.contains('acu-input-attachments')
+  ) as HTMLElement | undefined) ?? null
+}
+
+/**
+ * 让锚点落到正确的宿主里（两种形态与 EditorAgentPanel 一致）：
+ *   · 有附件行 → 住进 `.acu-input-attachments`，卡片就是那一行的 flex item，与附件并排；
+ *   · 没附件行 → 自己待在输入框最前面（样式复刻成同一行的样子）。
+ * ChatContainer 自带输入框，锚点在 .agent-chat-host 里找 `.acu-input-wrap`。
+ */
+function syncContextSlot() {
+  const wrap = chatHostRef.value?.querySelector('.acu-input-wrap') as HTMLElement | null | undefined
+  if (!wrap) return
+
+  const existing = wrap.querySelector('.agent-context-slot') as HTMLElement | null
+
+  // 不该显示（没打开文档 / 用户点了 ✕）：把锚点摘干净，别在输入框里留一行空白
+  if (!showContextCard.value) {
+    if (!existing) return
+    contextSlot.value = null          // 先让 Teleport 卸载卡片
+    nextTick(() => existing.remove()) // 再摘锚点（等 Vue 把卡片节点收走）
+    return
+  }
+
+  let slot = contextSlot.value && wrap.contains(contextSlot.value) ? contextSlot.value : existing
+  if (!slot) {
+    slot = document.createElement('div')
+    slot.className = 'agent-context-slot'
+  }
+
+  const attachments = findAttachmentsHost(wrap)
+  const host = attachments ?? wrap
+  if (slot.parentElement !== host) {
+    host.insertBefore(slot, attachments ? attachments.firstChild : wrap.firstChild)
+  }
+
+  contextSlot.value = slot
+}
+
+/** 锚点住在那条输入框里，盯着它：库在有/无附件时会动态增删附件行，锚点得跟着搬进搬出 */
+function watchChatDom() {
+  const host = chatHostRef.value
+  if (!host || typeof MutationObserver === 'undefined') return
+  slotObserver?.disconnect()
+  slotObserver = new MutationObserver(() => syncContextSlot())
+  slotObserver.observe(host, { childList: true, subtree: true })
+}
+
+onMounted(() => {
+  nextTick(() => {
+    syncContextSlot()
+    watchChatDom()
+  })
+})
+
+onBeforeUnmount(() => {
+  slotObserver?.disconnect()
+  slotObserver = null
+  // 锚点是插进库 DOM 的，随组件一起卸载；这里只清引用，别去 remove
+  contextSlot.value = null
+})
+
+// 换了个打开的文档 → 之前点掉的 ✕ 作废，新的文档要重新带上下文
+watch(() => props.contextFilePath, () => {
+  contextDismissed.value = false
+})
+
+// 没打开文档 / 又打开了 → 让锚点跟着来去（MutationObserver 只负责"位置"，不负责"有没有"）
+watch(showContextCard, (show) => {
+  if (show) nextTick(syncContextSlot)
+})
+
 // ── 预设问题 ──────────────────────────────────────────────
 // 内容可配（设置 → AI 模型配置 → 预设提示词）：configStore 里有自定义用自定义，
 // 否则回落 utils/agentPresets 的内置默认（原先是这里硬编码的 5 条）。
@@ -198,8 +304,11 @@ const welcomeAvatarStyle = { '--welcome-avatar': `url("${AGENT_ASSISTANT_AVATAR}
 const presetQuestions = computed(() => resolveAgentPresets(configStore.agentPresetPrompts))
 
 // ── 发送消息 ──────────────────────────────────────────────
+// 编辑器视图激活时把「当前打开的文档」一起发给服务端（请求级注入，不落会话历史，
+// 与旧文件空间面板同口径）。点过上下文卡上的 ✕ 就不带 —— 与"移除一个附件"同义。
 async function onSend(payload: { text: string; files: any[] }) {
-  await sendMessage(payload.text, payload.files)
+  const openFilePath = contextDismissed.value ? undefined : (props.contextFilePath || undefined)
+  await sendMessage(payload.text, payload.files, openFilePath ? { openFilePath } : undefined)
   await nextTick()
   scrollToBottom()
 }
@@ -330,43 +439,61 @@ onBeforeUnmount(() => {
   disposeScheduleEvents?.()
   disposeScheduleEvents = null
 })
+
+/**
+ * 外部入口（目前只有 Git 视图「AI 项目状态解读」下面的追问 chips）：把问题发进对话。
+ * 与服务端口径同旧追问区：问题卡的 prompt 与用户手输的文本没有区别，
+ * 带 dirStatus/dirSummary 时固定 g ai 引擎 + 目录上下文。
+ */
+defineExpose({
+  async askQuestion(text: string, ctx?: { dirStatus?: unknown[]; dirSummary?: string }) {
+    activeTab.value = 'chat'
+    chatPage.value = 'chat'
+    await sendMessage(text, [], ctx
+      ? { engine: 'gai', dirStatus: ctx.dirStatus, dirSummary: ctx.dirSummary }
+      : undefined)
+    await nextTick()
+    scrollToBottom()
+  },
+})
 </script>
 
 <template>
   <div ref="rootRef" class="agent-view">
     <!-- ═══ 宽屏：左侧会话列表（只在「对话」Tab 显示）═══
-         窄屏时这一整块不渲染，会话列表改成 body 里的一个整页（见 .agent-list-page） -->
-    <template v-if="activeTab === 'chat' && !narrow">
-      <aside
-        class="agent-sidebar"
-        :class="{ 'is-convs-collapsed': convListCollapsed }"
-        :style="{ width: (convListCollapsed ? CONV_RAIL_WIDTH : sidebarWidth) + 'px' }"
-      >
-      <!-- 会话列表：UI 与交互都在组件库的 ConversationList 里（含收起 / 展开） -->
-      <ConversationList
-        class="agent-conversations"
-        :items="conversationItems"
-        :active-id="currentSessionId"
-        :loading="sessionsLoading"
-        :labels="conversationLabels"
-        collapsible
-        :collapsed="convListCollapsed"
-        @update:collapsed="setConvListCollapsed"
-        @select="selectSession"
-        @new="handleNewSession"
-        @rename="renameSession"
-        @delete="deleteSession"
-      />
-      </aside>
+         窄屏时这一整块不渲染，会话列表改成 body 里的一个整页（见 .agent-list-page）。
+         v-show 而非 v-if：切到定时/广场再回来，列表的滚动位置不丢（display:none
+         不占 flex 空间，布局与 v-if 逐像素一致）。 -->
+    <aside
+      v-show="activeTab === 'chat' && !narrow"
+      class="agent-sidebar"
+      :class="{ 'is-convs-collapsed': convListCollapsed }"
+      :style="{ width: (convListCollapsed ? CONV_RAIL_WIDTH : sidebarWidth) + 'px' }"
+    >
+    <!-- 会话列表：UI 与交互都在组件库的 ConversationList 里（含收起 / 展开） -->
+    <ConversationList
+      class="agent-conversations"
+      :items="conversationItems"
+      :active-id="currentSessionId"
+      :loading="sessionsLoading"
+      :labels="conversationLabels"
+      collapsible
+      :collapsed="convListCollapsed"
+      @update:collapsed="setConvListCollapsed"
+      @select="selectSession"
+      @new="handleNewSession"
+      @rename="renameSession"
+      @delete="deleteSession"
+    />
+    </aside>
 
     <!-- 拖拽分隔条（收起时藏起来：40px 的收纳条没有可拖的余地） -->
     <div
-      v-if="!convListCollapsed"
+      v-show="activeTab === 'chat' && !narrow && !convListCollapsed"
       class="sidebar-resizer"
       @mousedown="startResize"
       :class="{ active: isResizing }"
     ></div>
-    </template>
 
     <!-- ═══ 右侧：Tab 栏 + 内容区 ═══ -->
     <main class="agent-chat-area">
@@ -379,10 +506,14 @@ onBeforeUnmount(() => {
           :class="{ active: activeTab === tab.id }"
           role="tab"
           :aria-selected="activeTab === tab.id"
+          :title="tab.label"
+          :aria-label="tab.label"
           @click="activeTab = tab.id"
         >
           <el-icon><component :is="tab.icon" /></el-icon>
-          <span>{{ tab.label }}</span>
+          <!-- 紧凑态（dock 默认 560px 面板）只留图标，文字进 tooltip；
+               最大化后宽度 ≥680，恢复完整文字 tab -->
+          <span v-if="!tabsCompact">{{ tab.label }}</span>
         </button>
 
         <!-- ═══ 引擎选择器 ═══
@@ -399,7 +530,7 @@ onBeforeUnmount(() => {
 
         <!-- 复制整条会话（默认精简范围，小箭头可选全量）——与工作台的「复制执行内容」同一套口径 -->
         <CopySessionButton
-          v-if="activeTab === 'chat'"
+          v-if="activeTab === 'chat' && !tabsCompact"
           class="agent-copy"
           :messages="messages"
           :title="currentSessionTitle"
@@ -407,9 +538,12 @@ onBeforeUnmount(() => {
         />
 
         <!-- 本轮静默：挂在 Tab 行最右端（与引擎 / 复制同一条右对齐线）。
-             等回答时不算静默 —— 那一轮挂着是在等用户点选项（见 ChatSilenceBadge 文件头）。 -->
+             等回答时不算静默 —— 那一轮挂着是在等用户点选项（见 ChatSilenceBadge 文件头）。
+             紧凑态（dock 默认 560px 面板）也显示：图标行的剩余宽度放得下这枚 ~90px
+             徽标，而「静默 N 秒」正是用户盯着面板时最需要的信号；TABS_SILENCE_MIN_WIDTH
+             那条 1100px 门槛是给整行文字 tab 定的，紧凑行不适用。 -->
         <ChatSilenceBadge
-          v-if="activeTab === 'chat' && width >= TABS_SILENCE_MIN_WIDTH"
+          v-if="activeTab === 'chat' && (tabsCompact || width >= TABS_SILENCE_MIN_WIDTH)"
           class="agent-silence"
           :silent-ms="silentMs"
           :streaming="isStreaming && !questionPanel"
@@ -459,6 +593,7 @@ onBeforeUnmount(() => {
             -->
             <div
               class="agent-chat-host"
+              ref="chatHostRef"
               :style="welcomeAvatarStyle"
             >
               <!-- 加载中 -->
@@ -505,6 +640,33 @@ onBeforeUnmount(() => {
               </ChatContainer>
             </div>
           </template>
+
+          <!--
+            当前文档上下文卡：与添加的附件同处一行、同一副样子。
+            组件库的 ChatContainer / ChatInput 没有任何插槽，只能往 `.acu-input-wrap`
+            插一个锚点（syncContextSlot 负责），再把卡片 Teleport 进去；
+            有附件行时锚点住进它内部，卡片就是那一行的 flex item（详见 script 里那段）。
+          -->
+          <Teleport v-if="contextSlot" :to="contextSlot">
+            <div v-if="showContextCard" class="agent-context-att" :title="props.contextFilePath || ''">
+              <svg class="agent-context-att-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 3 14 8 19 8"/>
+              </svg>
+              <span class="agent-context-att-name">{{ props.contextFileName }}</span>
+              <button
+                type="button"
+                class="agent-context-att-remove"
+                :title="$t('@EDITOR:不引用当前文档')"
+                :aria-label="$t('@EDITOR:不引用当前文档')"
+                @click="contextDismissed = true"
+              >
+                <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+          </Teleport>
         </div>
 
         <!-- ── 定时任务 ── -->
@@ -840,6 +1002,75 @@ onBeforeUnmount(() => {
 :global([data-theme='dark']) {
   .agent-sidebar {
     background: var(--bg-panel);
+  }
+}
+
+/* ── 当前文档上下文卡：和添加的附件同处一行、同一副样子 ─────────
+   锚点由 JS 插进库的输入框 DOM，动态创建的元素拿不到 scoped 属性，
+   所以定位规则必须走 :deep()（卡片本体是 Teleport 进来的、带 scoped 属性，用普通规则）。
+   形状逐项复刻 EditorAgentPanel 那份（同一个控件在两个宿主长得必须一样）。 */
+.agent-chat-host :deep(.acu-input-wrap) > .agent-context-slot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--acu-space-2, 8px);
+  padding: var(--acu-space-2, 8px) var(--acu-space-2, 8px) 0;
+}
+.agent-chat-host :deep(.acu-input-attachments) > .agent-context-slot {
+  display: inline-flex;
+}
+
+/* 卡片本体：逐项对齐库的 .acu-input-att-file（库的规则带 [data-v-...] 作用域，
+   宿主侧用同名 class 命不中，只能复刻；颜色/圆角仍取库变量，跟随主题）。 */
+.agent-context-att {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--acu-space-2, 8px);
+  max-width: 180px;
+  padding: var(--acu-space-2, 8px) var(--acu-space-3, 12px);
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-sm, 8px);
+  background: var(--acu-bg, var(--bg-container));
+  color: var(--acu-text-secondary, var(--text-secondary));
+  font-size: var(--acu-font-size-xs, 12px);
+}
+
+.agent-context-att-icon {
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.agent-context-att-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 移除按钮：复刻库的 .acu-input-att-remove（悬在卡片右上角外边） */
+.agent-context-att-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--acu-radius-full, 999px);
+  background: var(--acu-text, var(--text-primary));
+  color: var(--acu-bg, var(--bg-container));
+  cursor: pointer;
+  box-shadow: var(--acu-shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.2));
+  transition: transform var(--acu-duration-fast, 0.15s) var(--acu-easing, ease);
+
+  &:hover {
+    transform: scale(1.12);
+  }
+
+  &:active {
+    transform: scale(1.02);
   }
 }
 </style>

@@ -211,7 +211,10 @@ describe('源码守卫：渲染 ChatContainer 的地方都得接上侧边条', (
   test('接了用时的容器都得把元信息行钉到气泡头部（成组的三条 CSS 规则）', () => {
     const consumers = Object.entries(allSources)
       .filter(([, src]) => src.includes(':message-meta-config="MESSAGE_META_CONFIG"'))
-    expect(consumers.length).toBeGreaterThanOrEqual(4)
+    // 2026-10 AI 入口整合：常用目录追问区（RecentDirectoriesChat）已删，
+    // 消费方从 4 个（智能体视图 / 文件空间 / 工作台控制台 / 追问区）变成 3 个。
+    // 兜底下限跟着降；真正的契约是下面每个消费方都必须带齐三条规则。
+    expect(consumers.length).toBeGreaterThanOrEqual(3)
 
     for (const [file, src] of consumers) {
       const metaRule = /:deep\(\.acu-message-meta\)\s*\{[^}]*\}/.exec(src)
