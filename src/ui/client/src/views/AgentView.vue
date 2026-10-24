@@ -995,25 +995,9 @@ defineExpose({
 .agent-chat-host :deep(.acu-welcome-grid > .acu-preset-q) {
   flex: 1 1 260px;
   min-width: 0;
-  /* 库里每张预设是「白底 + 1px 描边 + 圆角」的小卡片，五张并排时边界比内容还抢眼
-     （用户点名不要这种形态）。宿主按广场的写法压成平铺块：去底、去描边，
-     hover 才铺一层淡底。序号保留 —— 它承担「一页目录」的定位，不是重复信息。
-     内边距比库里的 16px 收到 6/10：库的留白是按「独立卡片」配的，压成平铺之后
-     同样的留白会显得空（用户 2026-10-25 反馈「有点丑，少点padding」）。 */
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-base);
-  padding: 6px 10px 6px 0;
-  gap: 8px;
-}
-/* 标题行与说明行的间距也从库里的 3px 收到 2px，整块更紧凑 */
-.agent-chat-host :deep(.acu-welcome-grid > .acu-preset-q .acu-preset-q-body) {
-  gap: 2px;
-}
-.agent-chat-host :deep(.acu-welcome-grid > .acu-preset-q:hover) {
-  background: var(--bg-hover);
-  box-shadow: none;
-  transform: none;
+  /* 这里只剩布局。卡片外观（平铺、去底去描边、6/10 内边距、hover 中性底）
+     2026-10-25 已改到组件库的默认样式里（zen-ai-chat-ui 的 WelcomeScreen），
+     宿主不再重复覆盖 —— 两边各写一套必然会分叉。 */
 }
 
 /* ── 暗色主题适配 ───────────────────────────────── */
