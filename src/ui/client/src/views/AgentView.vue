@@ -54,6 +54,15 @@ const props = defineProps<{
   contextFilePath?: string
   /** 当前激活文件名（只用于输入区那张上下文小卡） */
   contextFileName?: string
+  /**
+   * dock 传入：强制窄屏单页（会话列表页 ↔ 对话页）。
+   *
+   * 为什么需要它：悬浮 dock 默认面板宽到 1120px，若按宽度阈值（680）自动进两栏，
+   * 中间会有一段「窗口变大、聊天区反而变窄」的怪区间（691px 面板 → 侧栏 240 + 聊天 451，
+   * 比 560px 单页时更挤）。dock 的规则改成与屏幕大小无关：
+   * **默认恒单页（聊天吃满面板宽），点最大化才两栏**（最大化 ≥680，切回宽屏体验）。
+   */
+  forceNarrow?: boolean
 }>()
 
 const configStore = useConfigStore()
@@ -62,7 +71,9 @@ const gitStore = useGitStore()
 // ── 面板宽度：够窄就把「会话列表」和「对话」折成两个页面 ──────────
 // 量的是这个视图容器自己的宽度（窄屏下拖动侧栏 / 分屏都会变；视口宽度反映不了）。
 const rootRef = ref<HTMLElement | null>(null)
-const { width, narrow } = useNarrowPane(rootRef)
+const { width, narrow: measuredNarrow } = useNarrowPane(rootRef)
+// forceNarrow（dock 默认态）压过实测值：见 props.forceNarrow 的注释
+const narrow = computed(() => props.forceNarrow === true || measuredNarrow.value)
 /**
  * 头部至少这么宽才摆「静默 x 秒」。
  *
