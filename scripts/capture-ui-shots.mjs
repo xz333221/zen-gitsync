@@ -340,6 +340,10 @@ if (await openDock(page)) {
 if (await openDock(page, { maximize: true })) {
   await shot(page, path.join(L, '04-agent-assistant-full.png'), 'g ai dock 最大化(官网)')
 }
+// 收起 dock 再继续后面的视图截图：点活动栏切视图**不会**再自动关面板
+//（切视图保对话是产品要求），不关的话后面每张图都会被这块面板挡住
+await page.locator('.agent-dock__btn--close').first().click().catch(() => {})
+await page.waitForSelector('.agent-dock__panel', { state: 'hidden', timeout: 5000 }).catch(() => {})
 
 // ── 11. 工作台看板 ─────────────────────────────────────────────────────────
 if (await captureView(page, '工作台', path.join(L, '02-workbench-board.png'), '工作台看板(官网)')) {

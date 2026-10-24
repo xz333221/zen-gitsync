@@ -351,9 +351,11 @@ onBeforeUnmount(() => {
   box-shadow: var(--shadow-hover);
   overflow: hidden;
 
-  /* 最大化：近满屏。宽度 ≥680 时 AgentView 自动进宽屏两栏（会话列表 + 对话并排） */
+  /* 最大化：近满屏，但**让出左侧活动栏**（48px + 边距）—— 否则最大化态会盖住
+     视图切换按钮，用户想切视图得先还原；旧智能体 tab 也是从活动栏右侧铺开的。
+     宽度 ≥680 时 AgentView 自动进宽屏两栏（会话列表 + 对话并排） */
   &.is-maximized {
-    width: calc(100vw - 32px);
+    width: calc(100vw - 72px);
     height: calc(100vh - 120px);
   }
 
