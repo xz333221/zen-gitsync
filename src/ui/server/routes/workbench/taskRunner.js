@@ -1393,7 +1393,37 @@ export function buildCodeArtsEnv() {
   env.CODEAGENT_USE_MESSAGE_FEEDBACK = 'false';
   env.OMO_SEND_ANONYMOUS_TELEMETRY = '0';
   env.LANG = 'zh_CN.UTF-8';
+  // 凭据兜底：用户常常是「装完/配完环境变量，应用还开着」——`setx` 只对新进程生效，
+  // 于是 env 里读不到 AK/SK，任务会以"认证失败 + 退出码 0"静默失败（最难查的那种）。
+  // 缺的时候回读一次用户级环境变量（HKCU\Environment），与 PATH 那个坑同一性质。
+  for (const key of ['CODEARTS_CLI_AK', 'CODEARTS_CLI_SK']) {
+    if (!env[key]) {
+      const fromUserEnv = readWindowsUserEnv(key);
+      if (fromUserEnv) env[key] = fromUserEnv;
+    }
+  }
   return env;
+}
+
+/**
+ * 读 Windows 用户级环境变量（HKCU\Environment），只在 process.env 里没有时用。
+ * 非 win32 或读不到一律返回空串 —— 调用方按"没配"处理。
+ */
+function readWindowsUserEnv(name) {
+  if (process.platform !== 'win32' || !name) return '';
+  try {
+    const out = execFileSync('reg', ['query', 'HKCU\\Environment', '/v', name], {
+      encoding: 'utf8',
+      windowsHide: true,
+    });
+    const line = out.split(/\r?\n/).find(row => new RegExp(`\\s${name}\\s+REG_`).test(row));
+    if (!line) return '';
+    // 形如 `    CODEARTS_CLI_AK    REG_SZ    HPUA...`
+    const parts = line.trim().split(/\s{2,}/);
+    return parts.length >= 3 ? parts.slice(2).join('  ').trim() : '';
+  } catch {
+    return '';
+  }
 }
 
 /** codearts 的 spawn argv（纯函数，理由同另几家的 buildXxxArgs）。 */

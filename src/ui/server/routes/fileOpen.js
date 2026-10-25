@@ -707,15 +707,22 @@ async function launchPi(dirPath) {
 /**
  * 用码道 CLI 打开目录（交互 TUI，2026-10-25 随执行器接入一起补）。
  *
- * `codearts <project>` 就是"在指定目录进入 TUI"。注意两点：
- *   - PATH 上是 installers\codearts.cmd（安装脚本加的），起 TUI 必须走它 ——
- *     那个 shim 会补齐 OPENCODE_CONFIG 等一串环境变量，裸起 bin\codearts.exe
- *     会读用户自己那套 opencode 的配置。
+ * `codearts <project>` 就是"在指定目录进入 TUI"。三个必须注意的点：
+ *   - 必须走 installers\codearts.cmd（安装脚本加的 shim）—— 它负责补齐
+ *     OPENCODE_CONFIG 等一串环境变量；裸起 bin\codearts.exe 会读用户自己那套
+ *     opencode 的配置。
+ *   - **必须用解析出的绝对路径，不能让 cmd 自己去 PATH 里找**：安装脚本只改用户
+ *     PATH，已经在跑的进程看不到 —— 实测 `start "" codearts <dir>` 直接弹
+ *     Windows「找不到文件 'codearts'」（2026-10-25 用户截图）。
  *   - 首次开会要求 AK/SK（CODEARTS_CLI_AK/SK）或浏览器登录，属于交互环节。
  */
 async function launchCodeArts(dirPath) {
   if (process.platform === 'win32') {
-    return spawnDetached('cmd.exe', ['/c', 'start', '""', 'codearts', dirPath], {
+    const exe = await findCodeArtsExecutable();
+    if (!exe) {
+      throw new Error('未检测到 codearts，请先安装（或重启 ZenGitSync 让其刷新 PATH）');
+    }
+    return spawnDetached('cmd.exe', ['/c', 'start', '""', exe, dirPath], {
       cwd: dirPath
     });
   }
