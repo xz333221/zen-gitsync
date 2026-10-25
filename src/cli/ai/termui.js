@@ -721,7 +721,16 @@ export function summarizeToolArgs(name, args, { chars = '字符' } = {}) {
   }
   switch (name) {
     case 'run_command':
-      return '$ ' + clamp(args?.command)
+      // 后台命令必须一眼看出来:否则卡片显示的命令和普通命令一样,用户不知道它还在跑
+      return (args?.run_in_background ? '[后台] $ ' : '$ ') + clamp(args?.command)
+    case 'background_task': {
+      const action = String(args?.action || 'read')
+      if (action === 'list') return '列出后台任务'
+      const id = String(args?.id || '')
+      if (action === 'kill') return clamp(`停止 ${id}`)
+      const wait = Number(args?.wait_seconds) || 0
+      return clamp(`${id || '?'}${wait ? ` · 等 ${wait}s` : ''}`)
+    }
     case 'read_file': {
       const range = (args?.offset || args?.limit)
         ? ` L${args?.offset || 1}-${(args?.offset || 1) + (args?.limit || 2000) - 1}`

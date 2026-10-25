@@ -653,7 +653,15 @@ function summarizeArgs(name, args) {
   try {
     switch (name) {
       case 'run_command':
-        return String(args.command || '').slice(0, 200);
+        // 后台命令要一眼看得出来(否则和普通命令长得一样,用户以为跑完了)
+        return (args.run_in_background ? '[后台] ' : '') + String(args.command || '').slice(0, 200);
+      case 'background_task': {
+        const action = String(args.action || 'read');
+        if (action === 'list') return '列出后台任务';
+        if (action === 'kill') return `停止 ${args.id || '?'}`;
+        const wait = Number(args.wait_seconds) || 0;
+        return `${args.id || '?'}${wait ? ` · 等 ${wait}s` : ''}`;
+      }
       case 'read_file':
       case 'read_image':
       case 'write_file':

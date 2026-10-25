@@ -342,7 +342,14 @@ function summarizeToolArgs(name: string, argsStr: string): string {
   try {
     const args = JSON.parse(argsStr)
     switch (name) {
-      case 'run_command': return String(args.command || '').slice(0, 200)
+      case 'run_command': return (args.run_in_background ? '[后台] ' : '') + String(args.command || '').slice(0, 200)
+      case 'background_task': {
+        const action = String(args.action || 'read')
+        if (action === 'list') return '列出后台任务'
+        if (action === 'kill') return `停止 ${args.id || '?'}`
+        const wait = Number(args.wait_seconds) || 0
+        return `${args.id || '?'}${wait ? ` · 等 ${wait}s` : ''}`
+      }
       case 'read_file':
       case 'write_file':
       case 'edit_file': return String(args.path || '')
