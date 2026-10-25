@@ -494,3 +494,41 @@ test('调用方显式传 promptSection 时不再自己读配置（定时任务 /
     clearSandboxFile('config.json')
   }
 })
+
+// 一轮里连续几个只读工具：CLI 与 Web 共用 tools.js 的 splitToolBatches 分组，
+// 这批会并发执行。前端靠 toolCallId 匹配卡片，所以结果到达顺序无所谓；
+// 但**入历史**的顺序必须与 assistant.tool_calls 一致，否则上下文会被污染。
+test('同一轮多个只读工具：都有 start/result，历史顺序与 tool_calls 一致', async () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'ag-par-'))
+  writeFileSync(path.join(dir, 'a.txt'), 'AAA-CONTENT')
+  writeFileSync(path.join(dir, 'b.txt'), 'BBB-CONTENT')
+  try {
+    const session = newSession('ag-sandbox-parallel', withSystem())
+    const calls = ['b.txt', 'a.txt'].map((file, i) => ({
+      index: i,
+      id: `call_par${i}`,
+      function: { name: 'read_file', arguments: JSON.stringify({ path: path.join(dir, file) }) },
+    }))
+    // 顺序故意与文件名反着来：断言不能靠"恰好按目录序返回"
+    const round = [
+      sse([event({ choices: [{ delta: { tool_calls: calls } }, { finish_reason: 'tool_calls' }] }), 'data: [DONE]\n\n']),
+      okStream(),
+    ]
+    let turn = 0
+    const { events } = await runWeb({ session, userMessage: '读两个文件', respond: () => round[turn++] || okStream() })
+
+    assert.equal(events.filter(e => e.type === 'tool_call_start').length, 2)
+    const results = events.filter(e => e.type === 'tool_result')
+    assert.equal(results.length, 2)
+    // 按 id 取，不按下标 —— 并发下完成顺序不保证
+    const byId = Object.fromEntries(results.map(r => [r.toolCallId, r.result]))
+    assert.match(byId.call_par0, /BBB-CONTENT/)
+    assert.match(byId.call_par1, /AAA-CONTENT/)
+
+    const tools = session.messages.filter(m => m.role === 'tool')
+    assert.deepEqual(tools.map(m => m.tool_call_id), ['call_par0', 'call_par1'],
+      '入历史顺序必须与 tool_calls 一致')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

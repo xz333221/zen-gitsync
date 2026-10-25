@@ -1,4 +1,4 @@
-import { executeTool, splitToolOutput, toolMessageContent } from './tools.js'
+import { executeTool, splitToolOutput, toolMessageContent, splitToolBatches } from './tools.js'
 import { streamChatOnce } from './transport.js'
 import { createThinkFilter } from './streamFilter.js'
 import { imageToDataUrl } from './images.js'
@@ -13,6 +13,9 @@ import * as terminal from './termui.js'
 // 一起清掉,屏幕上只剩下一个不断跳秒数的「执行 ask_user...」,看起来就像"选不了"。
 // 它自己的交互界面(问题 + 编号选项 + 提示符)就是进度提示,不需要再叠一层。
 const INTERACTIVE_TOOLS = new Set(['ask_user'])
+
+// 取消时回给模型的占位文本(串行/并发两条路径共用一份口径)
+const NOT_EXECUTED = 'Cancelled by user; this tool was not executed.'
 
 export async function runAgentTurn(state, userText, t, images = [], dependencies = {}) {
   const chat = dependencies.chat || streamChatOnce
@@ -136,14 +139,67 @@ export async function runAgentTurn(state, userText, t, images = [], dependencies
       toolCalls.forEach((call, i) => { if (!call.id) call.id = `call_${iter}_${i}` })
       state.messages.push({ ...assistant, tool_calls: toolCalls })
       await checkpoint()
-      for (const tc of toolCalls) {
+      // 同一轮里模型经常一次发好几个只读工具(并行读 3 个文件、同时搜两处)。
+      // 串行跑等于把 IO 延迟叠 N 遍,所以按批执行:连续的只读工具并发,
+      // 其余(写文件 / 跑命令 / 问用户)一律串行 —— 它们有顺序依赖或会接管终端。
+      for (const batch of splitToolBatches(toolCalls)) {
+        if (batch.parallel) {
+          // 执行阶段并发;渲染和入栈仍按模型给的顺序,保证 tool 消息与
+          // assistant.tool_calls 一一对齐(协议要求顺序一致,乱序会污染后续上下文)。
+          const calls = batch.calls
+          const names = calls.map(c => c.function?.name || '').filter(Boolean).join(' · ')
+          const spinText = typeof t.toolRunningBatch === 'function'
+            ? t.toolRunningBatch(calls.length, names)
+            : t.toolRunning(names)
+          // 只能开一个 spinner:ora 是单实例单行,并发起多个会互抢同一行刷屏
+          const batchSpinner = ui.startSpinner(spinText)
+          const batchStart = performance.now()
+          let results
+          try {
+            results = await Promise.all(calls.map(async (tc) => {
+              const name = tc.function?.name || ''
+              if (cancelled()) return { tc, name, output: NOT_EXECUTED, executed: false }
+              let args
+              try { args = JSON.parse(tc.function?.arguments || '{}') }
+              catch { return { tc, name, output: '错误: 工具参数不是合法 JSON，请修正后重试。', executed: false } }
+              const toolStart = performance.now()
+              let output
+              // 并发路径必须自己兜住异常:一个工具抛错会让 Promise.all 整体 reject,
+              // 把同一批里其他已经成功的结果一起丢掉
+              try { output = await execute(name, args, { ...state.ctx, signal: state.abortController?.signal }) }
+              catch (err) { output = `错误: ${name} 执行失败: ${err?.message || err}` }
+              return { tc, name, args, output, executed: true, ms: performance.now() - toolStart }
+            }))
+          } finally {
+            batchSpinner.stop()
+          }
+          // 工具耗时按墙钟记:并发批里各工具耗时之和会大于实际等待时间,
+          // 累加会让 summary 的「工具」时长超过整轮时长
+          stats.toolsMs += performance.now() - batchStart
+          for (const r of results) {
+            const { text: outText, images: outImages } = splitToolOutput(r.output)
+            if (r.executed) {
+              stats.toolCalls++
+              ui.printToolHeader(r.name, ui.summarizeToolArgs(r.name, r.args, { chars: t.chars }), undefined, { locale: state.locale })
+              ui.printToolResult(outText, undefined, r.ms, { full: state.fullTools, locale: state.locale })
+              ui.afterTool?.(r.name, r.args, outText, { locale: state.locale })
+            } else if (r.output !== NOT_EXECUTED) {
+              // 取消的那几条和串行路径一样:只入历史、不渲染;参数错误要显式回显
+              ui.printToolResult(r.output)
+            }
+            state.messages.push({ role: 'tool', tool_call_id: r.tc.id, name: r.name, content: toolMessageContent(outText, outImages) })
+          }
+          await checkpoint()
+          continue
+        }
+        const tc = batch.calls[0]
         const name = tc.function?.name || ''
         let output
         let args
         let toolMs            // 只有真执行过的工具才有耗时(见下面的渲染判断)
         if (cancelled()) {
           // 与改动前一致:取消的这次调用只入历史,不渲染结果块
-          output = 'Cancelled by user; this tool was not executed.'
+          output = NOT_EXECUTED
         } else {
           try { args = JSON.parse(tc.function?.arguments || '{}') }
           catch { output = '错误: 工具参数不是合法 JSON，请修正后重试。' }

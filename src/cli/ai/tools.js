@@ -60,6 +60,12 @@ const MAX_IMAGE_BYTES = 4 * 1024 * 1024   // read_image 单张上限(原始字�
 // 超了让模型自己先压缩(它手上有 run_command),比我们默默截断成半张图好。
 const CMD_TIMEOUT_DEFAULT = 120    // run_command 默认超时(秒)
 const CMD_TIMEOUT_MAX = 600        // run_command 超时上限(秒)
+// 后台命令的输出缓冲上限(字符,stdout/stderr 各一份)。dev server 一晚上能吐几十兆,
+// 全留着会把 agent 进程撑爆;超了丢最老的,记住丢了多少在结果里说明。
+const MAX_BG_CHARS = 100000
+// 同时保留的后台任务数。g ai 是长会话工具,模型忘了 kill 的命令会堆积,
+// 超过就淘汰最老的**已结束**任务(还在跑的绝不淘汰,那是用户的服务)。
+const MAX_BG_TASKS = 20
 
 // 已知的长耗时命令(装依赖 / 构建 / 测试 / clone …)。模型不给 timeout_seconds 时
 // 默认只有 120s,这类命令经常跑不完就被终止,模型再换个写法重试 —— 白等好几轮。
@@ -91,6 +97,36 @@ const BINARY_EXTS = new Set([
 ])
 
 // ──────────────────────────────────────────────
+// 并发执行分组(CLI 的 turn.js 与 Web 智能体的 agentChat.js 共用一份口径)
+// ──────────────────────────────────────────────
+//
+// 可以并发的工具:只读、无终端交互、彼此没有先后依赖。
+// 写类(edit_file / write_file)和 run_command 绝不能进这个名单 —— 模型经常在同一轮里
+// 发「write_file + run_command」表示"写完就跑",并发会把顺序打乱,命令可能在文件落盘前执行。
+// 用白名单而不是黑名单:漏加一个只读工具只是慢,错加一个写工具会改错文件。
+export const PARALLEL_SAFE_TOOLS = new Set([
+  'read_file', 'read_image', 'list_files', 'search_text', 'list_projects',
+])
+
+/**
+ * 把同一轮的 tool_calls 切成执行批次:连续的只读工具合成一个并发批,其余各自成批。
+ * 长度为 1 的批强制走串行路径 —— 单元素并发只会多一层 Promise 包装。
+ *
+ * @param {Array<object>} toolCalls - assistant 消息里的 tool_calls
+ * @returns {Array<{ parallel: boolean, calls: Array<object> }>}
+ */
+export function splitToolBatches(toolCalls) {
+  const batches = []
+  for (const call of toolCalls || []) {
+    const safe = PARALLEL_SAFE_TOOLS.has(call?.function?.name)
+    const last = batches[batches.length - 1]
+    if (safe && last?.parallel) last.calls.push(call)
+    else batches.push({ parallel: safe, calls: [call] })
+  }
+  return batches.map(b => (b.calls.length > 1 ? b : { parallel: false, calls: b.calls }))
+}
+
+// ──────────────────────────────────────────────
 // 工具 schema(OpenAI function calling 格式)
 // ──────────────────────────────────────────────
 export const TOOL_DEFINITIONS = [
@@ -98,15 +134,36 @@ export const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'run_command',
-      description: '在系统默认 shell 执行一条命令(Windows 为 cmd.exe,POSIX 为 /bin/sh)。可用于构建、测试、安装依赖、git 操作(add/commit/push)、查看系统信息等。命令以当前用户权限运行;会把系统搞崩的命令(格式化、删根目录、关机等)会被安全守卫拒绝。',
+      description: '在系统默认 shell 执行一条命令(Windows 为 cmd.exe,POSIX 为 /bin/sh)。可用于构建、测试、安装依赖、git 操作(add/commit/push)、查看系统信息等。命令以当前用户权限运行;会把系统搞崩的命令(格式化、删根目录、关机等)会被安全守卫拒绝。'
+        + '要起**长时间运行**的东西(dev server、watch、监听端口、持续日志)请传 run_in_background=true —— 它会立刻返回一个后台任务 id,你用 background_task 去看输出或停掉它;直接在前台跑这类命令会一直占着直到超时被终止。',
       parameters: {
         type: 'object',
         properties: {
           command: { type: 'string', description: '要执行的完整命令行' },
           cwd: { type: 'string', description: '执行目录,默认是智能体启动目录;可传任意绝对/相对路径' },
-          timeout_seconds: { type: 'number', description: `超时秒数,默认 ${CMD_TIMEOUT_DEFAULT},最大 ${CMD_TIMEOUT_MAX}` },
+          timeout_seconds: { type: 'number', description: `超时秒数,默认 ${CMD_TIMEOUT_DEFAULT},最大 ${CMD_TIMEOUT_MAX};后台执行时忽略` },
+          run_in_background: { type: 'boolean', description: 'true = 后台执行,立刻拿到 bg_N 形式的任务 id,不阻塞本轮对话' },
         },
         required: ['command'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'background_task',
+      description: '查看或停止 run_command 起的后台命令。'
+        + 'action=read(默认):拿到**自上次读取以来**的新增输出 + 当前状态(还在跑 / 已退出 + 退出码);'
+        + 'action=kill:终止该后台进程;action=list:列出全部后台任务。'
+        + '刚起服务时输出往往还没出来,直接 read 会拿到空内容 —— 用 wait_seconds 等几秒再返回,别连续空转轮询。',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['read', 'kill', 'list'], description: '要做的动作,默认 read' },
+          id: { type: 'string', description: 'run_command 返回的后台任务 id(形如 bg_1)。read / kill 必填' },
+          wait_seconds: { type: 'number', description: 'read 时最多等待多少秒(有新输出或进程退出就提前返回),默认 0,上限 60' },
+        },
+        required: [],
       },
     },
   },
@@ -193,7 +250,9 @@ export const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'search_text',
-      description: '搜索正则匹配的行,返回 文件:行号: 内容。path 可以是目录(递归搜全部文本文件)或单个文件。用于定位符号、关键字、调用点。',
+      description: '搜索正则匹配的行,返回 文件:行号: 内容。path 可以是目录(递归搜全部文本文件)或单个文件。用于定位符号、关键字、调用点。'
+        + '只看"这个符号出现在哪些文件"用 files_only=true(比读完内容省很多 token);'
+        + '要看匹配处的上下午文(判断是不是真的那个调用点)用 context_lines。',
       parameters: {
         type: 'object',
         properties: {
@@ -201,6 +260,8 @@ export const TOOL_DEFINITIONS = [
           path: { type: 'string', description: '搜索目录或单个文件路径,默认智能体启动目录' },
           ext: { type: 'string', description: '限定扩展名过滤,如 "js" 或 "js,ts,vue";不传则搜全部文本文件' },
           ignore_case: { type: 'boolean', description: '忽略大小写,默认 false' },
+          files_only: { type: 'boolean', description: 'true = 只返回命中的文件路径(每个文件一次),不返回行内容' },
+          context_lines: { type: 'number', description: '每条命中前后各显示几行上下文,默认 0,上限 5。上下文行用 "文件-行号- 内容" 标记' },
         },
         required: ['pattern'],
       },
@@ -513,6 +574,163 @@ function execCommand(command, options) {
 }
 
 // ──────────────────────────────────────────────
+// 后台命令(run_in_background)
+// ──────────────────────────────────────────────
+//
+// 为什么需要:起 dev server / watch / 监听端口这类命令在前台跑只会占着到超时被
+// terminateCommand 杀掉 —— 模型看不到启动成功的日志,用户还得自己再起一遍。
+// 后台执行让它立刻拿到输出句柄,继续干活。
+//
+// 与 execCommand 的区别:那边是"跑完给我结果"的 Promise,这边是"活着,随时能读"。
+// 输出按 stdout/stderr 分别缓冲,读走的部分记游标 —— 每次 read 只回**新增**内容,
+// 否则一个 dev server 的启动日志会被反复回喂进上下文。
+//
+// 生命周期:登记进 cleanup(trackChild),g ai 退出时统一终止。**不**接 ctx.onChild,
+// 所以 Ctrl+C 停当前任务不会顺手杀掉用户刚起的服务。
+const backgroundTasks = new Map()
+let bgSeq = 0
+
+function trimBackgroundTasks() {
+  if (backgroundTasks.size <= MAX_BG_TASKS) return
+  // Map 保持插入序:从最老的开始淘汰,但只淘汰已经结束的(还在跑的是用户的服务)
+  for (const [id, task] of backgroundTasks) {
+    if (backgroundTasks.size <= MAX_BG_TASKS) break
+    if (!task.running) backgroundTasks.delete(id)
+  }
+}
+
+function wakeBackgroundWaiters(task) {
+  const waiters = task.waiters
+  task.waiters = []
+  for (const resolve of waiters) resolve()
+}
+
+function spawnBackground(command, { cwd, env }) {
+  const id = `bg_${++bgSeq}`
+  const child = spawn(command, {
+    cwd,
+    env,
+    shell: true,
+    detached: process.platform !== 'win32',
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  const task = {
+    id, command, cwd, child,
+    stdout: '', stderr: '',
+    stdoutRead: 0, stderrRead: 0,      // 已经回给模型的位置
+    dropped: 0,                         // 被缓冲上限挤掉的字符数
+    code: null, signal: null,
+    running: true,
+    startedAt: Date.now(), endedAt: null,
+    waiters: [],
+  }
+  // 增量解码:一次 data 事件可能切在多字节字符中间,留着尾巴等下一块
+  const decoders = { stdout: new TextDecoder('utf-8'), stderr: new TextDecoder('utf-8') }
+  const append = (stream, text) => {
+    if (!text) return
+    task[stream] += text
+    if (task[stream].length > MAX_BG_CHARS) {
+      const drop = task[stream].length - MAX_BG_CHARS
+      task[stream] = task[stream].slice(drop)
+      // 游标跟着一起往前挪,否则下次 read 会从被截掉的区域开始、吐出重复内容
+      task[`${stream}Read`] = Math.max(0, task[`${stream}Read`] - drop)
+      task.dropped += drop
+    }
+    wakeBackgroundWaiters(task)
+  }
+  child.stdout?.on('data', buf => append('stdout', decoders.stdout.decode(buf, { stream: true })))
+  child.stderr?.on('data', buf => append('stderr', decoders.stderr.decode(buf, { stream: true })))
+  child.on('error', () => {})
+  child.on('close', (code, signal) => {
+    task.running = false
+    task.code = typeof code === 'number' ? code : 1
+    task.signal = signal || null
+    task.endedAt = Date.now()
+    // decoder 里可能还压着半个字符,进程都退了就不用等下一块了
+    append('stdout', decoders.stdout.decode())
+    append('stderr', decoders.stderr.decode())
+    wakeBackgroundWaiters(task)
+  })
+  trackChild(child)
+  backgroundTasks.set(id, task)
+  trimBackgroundTasks()
+  return task
+}
+
+/** 取出自上次读取以来的新增输出,并推进游标 */
+function takeBackgroundOutput(task) {
+  const out = { stdout: task.stdout.slice(task.stdoutRead), stderr: task.stderr.slice(task.stderrRead) }
+  task.stdoutRead = task.stdout.length
+  task.stderrRead = task.stderr.length
+  return out
+}
+
+/** 等新输出或进程退出,最多 seconds 秒(到点返回,不报错) */
+function waitForBackground(task, seconds) {
+  if (!(seconds > 0) || !task.running) return Promise.resolve()
+  return new Promise(resolve => {
+    const timer = setTimeout(done, seconds * 1000)
+    timer.unref?.()
+    function done() {
+      clearTimeout(timer)
+      task.waiters = task.waiters.filter(fn => fn !== done)
+      resolve()
+    }
+    task.waiters.push(done)
+  })
+}
+
+function describeBackground(task) {
+  const secs = Math.max(0, Math.round(((task.endedAt || Date.now()) - task.startedAt) / 1000))
+  return task.running
+    ? `[${task.id}] 运行中 · ${secs}s · ${task.command}`
+    : `[${task.id}] 已退出(exit ${task.code}${task.signal ? ` · ${task.signal}` : ''}) · ${secs}s · ${task.command}`
+}
+
+async function toolBackgroundTask(args) {
+  const action = String(args.action || 'read').toLowerCase()
+
+  if (action === 'list') {
+    if (!backgroundTasks.size) return '当前没有后台任务。用 run_command({ run_in_background: true, ... }) 起一个。'
+    return [...backgroundTasks.values()].map(describeBackground).join('\n')
+  }
+
+  const id = String(args.id || '').trim()
+  if (!id) return `错误: ${action} 需要 id(就是 run_command 返回的那个 bg_N)`
+  const task = backgroundTasks.get(id)
+  if (!task) return `错误: 没有找到后台任务 ${id}。用 background_task({ action: "list" }) 看现有任务。`
+
+  if (action === 'kill') {
+    if (!task.running) return `${describeBackground(task)}\n它已经退出了,不需要停止。`
+    await terminateCommand(task.child)
+    // taskkill 是异步的:close 事件可能在上面 await 期间就已经落定了,
+    // 这时候再等 waiter 会白等满 5s(实测)
+    if (task.running) {
+      await new Promise(resolve => {
+        const timer = setTimeout(resolve, 5000)
+        timer.unref?.()
+        task.waiters.push(() => { clearTimeout(timer); resolve() })
+      })
+    }
+    return `已终止 ${describeBackground(task)}`
+  }
+
+  if (action !== 'read') return `错误: 未知 action "${action}"(支持 read / kill / list)`
+
+  const waitSec = Math.max(0, Math.min(60, Number(args.wait_seconds) || 0))
+  await waitForBackground(task, waitSec)
+  const { stdout, stderr } = takeBackgroundOutput(task)
+
+  const parts = [describeBackground(task)]
+  if (task.dropped) parts.push(`[缓冲区已丢弃最老的 ${task.dropped} 字符]`)
+  parts.push(stdout.trim() ? `--- 新增输出 ---\n${truncateMiddle(stdout.trimEnd(), MAX_CMD_OUTPUT)}` : '(stdout 无新增输出)')
+  if (stderr.trim()) parts.push(`--- 新增 stderr ---\n${truncateMiddle(stderr.trimEnd(), MAX_CMD_OUTPUT)}`)
+  if (!task.running) parts.push(`进程已结束,退出码 ${task.code}。`)
+  return parts.join('\n')
+}
+
+// ──────────────────────────────────────────────
 // 「建了仓库」的识别：run_command 之后把新项目顺手登记进常用目录
 // ──────────────────────────────────────────────
 //
@@ -634,6 +852,19 @@ async function toolRunCommand(args, ctx) {
     if (!st.isDirectory()) return `错误: 执行目录不是目录: ${cwd}`
   } catch {
     return `错误: 执行目录不存在: ${cwd}`
+  }
+
+  if (args.run_in_background) {
+    // PATH 补丁与前台一致:后台命令照样要能找到刚装的 CLI
+    const env = await augmentEnvPath({ ...process.env, FORCE_COLOR: '0' })
+    const task = spawnBackground(command, { cwd, env })
+    return [
+      `$ ${command}`,
+      `(后台运行 · id ${task.id} · pid ${task.child.pid || '?'})`,
+      `查看输出: background_task({ action: "read", id: "${task.id}", wait_seconds: 3 })`
+        + `(刚启动时日志还没出来,带上 wait_seconds 等一会儿)\n`
+        + `停止: background_task({ action: "kill", id: "${task.id}" })`,
+    ].join('\n')
   }
 
   // 子进程的 PATH 每次补一次注册表最新值。
@@ -857,6 +1088,8 @@ async function toolSearchText(args, ctx) {
   const extFilter = args.ext
     ? new Set(String(args.ext).split(',').map(e => e.trim().replace(/^\./, '').toLowerCase()).filter(Boolean))
     : null
+  const filesOnly = args.files_only === true
+  const contextLines = Math.max(0, Math.min(5, Number(args.context_lines) || 0))
 
   const hits = []
   let scanned = 0
@@ -868,11 +1101,23 @@ async function toolSearchText(args, ctx) {
     let text
     try { text = await fs.readFile(full, 'utf-8') } catch { return }
     scanned++
+    const rel = path.relative(ctx.cwd, full) || full
     const lines = text.split('\n')
     for (let i = 0; i < lines.length && hits.length < MAX_SEARCH_HITS; i++) {
       regex.lastIndex = 0
-      if (regex.test(lines[i])) {
-        hits.push(`${path.relative(ctx.cwd, full) || full}:${i + 1}: ${lines[i].trim().slice(0, 300)}`)
+      if (!regex.test(lines[i])) continue
+      // 只要文件名:同一文件命中多次也只记一条,否则 100 条上限全被一个文件吃掉
+      if (filesOnly) { hits.push(rel); break }
+      if (contextLines === 0) {
+        hits.push(`${rel}:${i + 1}: ${lines[i].trim().slice(0, 300)}`)
+        continue
+      }
+      const from = Math.max(0, i - contextLines)
+      const to = Math.min(lines.length - 1, i + contextLines)
+      for (let j = from; j <= to && hits.length < MAX_SEARCH_HITS; j++) {
+        // 命中行用 `:N:`、上下文行用 `-N-`,与本仓库其他探针脚本的 grep 习惯一致
+        const sep = j === i ? ':' : '-'
+        hits.push(`${rel}:${j + 1}${sep} ${lines[j].trim().slice(0, 300)}`)
       }
     }
   }
@@ -1142,6 +1387,7 @@ async function toolScheduleTask(args, ctx) {
 // ──────────────────────────────────────────────
 const TOOL_HANDLERS = {
   run_command: toolRunCommand,
+  background_task: toolBackgroundTask,
   read_file: toolReadFile,
   read_image: toolReadImage,
   write_file: toolWriteFile,

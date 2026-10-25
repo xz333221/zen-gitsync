@@ -752,7 +752,7 @@ export function summarizeToolArgs(name, args, { chars = '字符' } = {}) {
 export function printToolHeader(name, summary, write = (s) => process.stdout.write(s), { locale = 'zh-CN' } = {}) {
   // ▶ 保留青色作为工具执行的标识色;name 用白色加粗与下方结果区分;
   // summary 用浅灰(#a0aec0)— dim 在黑底下太暗看不清,浅灰可读且仍比 name 低调
-  const labels = { run_command: '执行命令', read_file: '读取文件', write_file: '写入文件', edit_file: '修改文件', list_files: '浏览目录', search_text: '搜索内容', update_plan: '更新计划' }
+  const labels = { run_command: '执行命令', background_task: '后台任务', read_file: '读取文件', write_file: '写入文件', edit_file: '修改文件', list_files: '浏览目录', search_text: '搜索内容', update_plan: '更新计划' }
   const rows = wrapTerminalText(summary || '', Math.max(16, Math.min(100, termWidth() - 6)))
   const label = String(locale).startsWith('en') ? name : labels[name] || name
   write('\n' + chalk.cyan('▸ ') + chalk.bold.white(label) + (label !== name ? chalk.gray(`  ${name}`) : '') + '\n')

@@ -116,7 +116,7 @@ export async function streamChatOnce({ model, messages, signal, onToken = () => 
   maxRetries = MAX_LLM_RETRIES, sleepFn = defaultSleep }) {
   const { url, headers } = buildAiChatRequest({ ...model, sessionId })
   const providerKey = `${url}\n${model.model}`
-  // 内置 7 个工具是底座;extraTools 是 MCP 等外部能力的叠加(见 extensions.js)。
+  // 内置工具(TOOL_DEFINITIONS)是底座;extraTools 是 MCP 等外部能力的叠加(见 extensions.js)。
   // 扩展工具为空时**必须回落到原始数组**,避免把 tools: [] 发给模型。
   const tools = Array.isArray(extraTools) && extraTools.length ? [...TOOL_DEFINITIONS, ...extraTools] : TOOL_DEFINITIONS
   const body = { model: model.model, messages, tools, temperature: 0.3, stream: true }

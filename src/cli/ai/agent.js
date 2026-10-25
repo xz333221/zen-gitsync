@@ -19,8 +19,9 @@
 // 能力:
 //   - 默认使用 g ui 里配置的模型(~/.zen-gitsync/config.json 顶层 models,
 //     isDefault 优先,否则取第一个);--model=<序号|名称> 或会话内 /model 切换
-//   - OpenAI 兼容流式 function calling:模型可以调用 run_command /
-//     read_file / write_file / edit_file / list_files / search_text / ask_user
+//   - OpenAI 兼容流式 function calling:模型可以调用内置工具(文件读写、
+//     命令执行、搜索、后台任务、计划、问用户…完整清单见 tools.js 的 TOOL_DEFINITIONS)
+//   - 同一轮的只读工具并发执行(连续的 read/search 合成一批),写类与命令串行
 //   - 图片:Alt+V 粘贴剪贴板图片、/image <路径> 附加本地图片,
 //     以多模态(image_url)消息发给模型(需模型支持视觉)
 //   - 权限:启动目录内全开放,其他目录可读写;唯一红线由 safety.js 拦截
@@ -76,6 +77,7 @@ const STRINGS = {
     llmRetrying: (attempt, max, reason) => `LLM 请求中断,正在重试(第 ${attempt}/${max} 次): ${reason}`,
     toolIterLimit: (n) => `已达单轮最大工具调用次数(${n}),本轮结束。如需继续请再发一条消息。`,
     toolRunning: (name) => `执行 ${name}…`,
+    toolRunningBatch: (n) => `并行执行 ${n} 个工具…`,
     busy: '任务执行中，请稍候，或按 Ctrl+C 停止当前任务。',
     bye: '已退出 g ai',
     cleared: '对话历史已清空',
@@ -136,6 +138,7 @@ const STRINGS = {
     llmRetrying: (attempt, max, reason) => `LLM request interrupted, retrying (${attempt}/${max}): ${reason}`,
     toolIterLimit: (n) => `Hit max tool iterations (${n}) for this turn. Send another message to continue.`,
     toolRunning: (name) => `Running ${name}…`,
+    toolRunningBatch: (n) => `Running ${n} tools in parallel…`,
     busy: 'Agent is working. Wait or press Ctrl+C to stop the task.',
     bye: 'Bye',
     cleared: 'Conversation cleared',
@@ -293,6 +296,8 @@ ${isWin ? `- 当前是 Windows cmd.exe,以下 Unix 命令**不存在**,用了必
 - 大文件用 offset/limit 分段读取,不要一次读爆上下文
 - git 操作用 run_command 执行;提交代码可以用 git 命令,也可以用本 CLI 的 g -y(默认信息提交并推送)或 g --ai(AI 生成提交信息)
 - run_command 默认就在工作目录执行,不要再加 cd / cd /d 前缀;默认超时 120 秒,长任务加大 timeout_seconds(最大 600)
+- 起 dev server / watch / 监听端口这类不会自己结束的命令,用 run_in_background=true(立刻拿到 bg_N),再用 background_task 看日志或 kill;直接前台跑只会一直占着,到超时被杀
+- 一轮里要读多个文件 / 搜多处时,把它们放进同一次响应里一起发 —— 只读工具会并发执行,比一个个来回快得多
 - 命令在 ${shellDesc} 下执行,注意语法兼容
 - 先读取当前项目的规范、依赖与测试配置，再选择对应的验证命令，不要假定所有项目都使用 npm
 - 用户要求概述或简短回答时，只读取必要的结构与入口文件，控制探索范围
@@ -400,6 +405,8 @@ ${isWin ? `- This is Windows cmd.exe. The following Unix commands do NOT exist h
 - Read large files in segments (offset/limit)
 - Git operations go through run_command; to commit, use git commands or this CLI's g -y / g --ai
 - run_command already executes in the working directory — do NOT prefix with cd; default timeout 120s, raise timeout_seconds (max 600) for long tasks
+- For processes that never exit on their own (dev server, watch, port listeners) pass run_in_background=true (you get a bg_N id immediately), then use background_task to read logs or kill it; running them in the foreground just blocks until the timeout kills them
+- When a turn needs several files or several searches, issue them in the same response — read-only tools run concurrently, which is far faster than one round-trip each
 - Commands run under ${shellDesc}; keep syntax compatible
 - Read this project's instructions, dependencies and test configuration before choosing verification commands; do not assume npm
 - For a brief overview, inspect only the necessary structure and entry points; keep exploration proportional to the request

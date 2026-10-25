@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { streamChatOnce } from './transport.js'
 import { normalizeUsage, addUsage } from './telemetry.js'
 import { runAgentTurn } from './turn.js'
+import { splitToolBatches } from './tools.js'
 import { buildRequestMessages, repairToolHistory, resolveRequestBudget } from './context.js'
 import { createAssistantWriter, stripAnsi } from './termui.js'
 
@@ -188,6 +189,8 @@ test('用户点了停止就不再重试', async () => {
 })
 
 const call = n => ({ id: `call${n}`, type: 'function', function: { name: 'read_file', arguments: '{}' } })
+const readCall = (n, file) => ({ id: `call${n}`, type: 'function', function: { name: 'read_file', arguments: JSON.stringify({ path: file }) } })
+const writeCall = n => ({ id: `call${n}`, type: 'function', function: { name: 'write_file', arguments: '{}' } })
 const askCall = (id = 'ask1') => ({ id, type: 'function', function: {
   name: 'ask_user',
   arguments: JSON.stringify({ question: 'Which option?', options: ['A', 'B'], allow_free_text: false }),
@@ -277,8 +280,10 @@ test('ask_user pauses a turn until the answer arrives, then continues the model 
 
 test('cancellation during a tool skips the remaining batch and keeps valid tool history', async () => {
   const s = state(), executed = []
+  // 用写类工具验取消语义:只读工具现在会并发,取消时它们早已一起发出去了;
+  // 真正需要"取消后别再动"的是写文件这种有副作用的操作。
   const stats = await runAgentTurn(s, 'task', strings, [], { ui: quiet,
-    chat: async () => ({ content: '', toolCalls: [call(1), call(2)] }),
+    chat: async () => ({ content: '', toolCalls: [writeCall(1), writeCall(2)] }),
     execute: async name => { executed.push(name); s.abortController.abort(); return 'first result' },
   })
   assert.equal(stats.status, 'cancelled')
@@ -323,4 +328,55 @@ test('resume marks missing tool results without replaying actions', () => {
   assert.equal(repaired[2].content, 'saved')
   assert.equal(repaired[3].tool_call_id, 'call2')
   assert.match(repaired[3].content, /status is unknown/)
+})
+
+test('consecutive read-only calls in one round run concurrently and keep call order', async () => {
+  const s = state()
+  let active = 0, maxActive = 0, round = 0
+  const stats = await runAgentTurn(s, 'task', strings, [], { ui: quiet,
+    chat: async () => (++round === 1
+      ? { content: '', toolCalls: [readCall(1, 'a.js'), readCall(2, 'b.js'), readCall(3, 'c.js')] }
+      : { content: 'done', toolCalls: [] }),
+    execute: async (name, args) => {
+      active++
+      maxActive = Math.max(maxActive, active)
+      await new Promise(resolve => setTimeout(resolve, 15))
+      active--
+      return `contents of ${args.path}`
+    },
+  })
+
+  assert.equal(stats.status, 'completed')
+  // 真并发:三个工具的执行区间必须重叠(串行时 maxActive 恒为 1)
+  assert.equal(maxActive, 3, '只读工具应该同时执行')
+  assert.equal(stats.toolCalls, 3)
+  const tools = s.messages.filter(m => m.role === 'tool')
+  assert.deepEqual(tools.map(m => m.tool_call_id), ['call1', 'call2', 'call3'], 'tool 消息必须按模型给的顺序入栈')
+  assert.deepEqual(tools.map(m => m.content), ['contents of a.js', 'contents of b.js', 'contents of c.js'])
+})
+
+test('write tools break the parallel batch instead of joining it', () => {
+  const batches = splitToolBatches([call(1), call(2), writeCall(3), call(4), call(5)])
+  assert.deepEqual(batches.map(b => [b.parallel, b.calls.length]), [[true, 2], [false, 1], [true, 2]])
+  // 单个只读工具没必要走并发路径(多一层 Promise 包装和聚合 spinner)
+  assert.deepEqual(splitToolBatches([call(1)]).map(b => b.parallel), [false])
+})
+
+test('one throwing tool in a parallel batch does not drop its siblings', async () => {
+  const s = state()
+  let round = 0
+  const stats = await runAgentTurn(s, 'task', strings, [], { ui: quiet,
+    chat: async () => (++round === 1
+      ? { content: '', toolCalls: [readCall(1, 'a.js'), readCall(2, 'boom.js')] }
+      : { content: 'done', toolCalls: [] }),
+    execute: async (_name, args) => {
+      if (args.path === 'boom.js') throw new Error('disk on fire')
+      return 'ok'
+    },
+  })
+  assert.equal(stats.status, 'completed')
+  const tools = s.messages.filter(m => m.role === 'tool')
+  assert.equal(tools.length, 2)
+  assert.equal(tools[0].content, 'ok')
+  assert.match(tools[1].content, /disk on fire/)
 })

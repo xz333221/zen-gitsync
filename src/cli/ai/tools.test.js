@@ -193,6 +193,30 @@ test('search_text 非法正则不抛异常', async () => {
   assert.match(r, /正则无效/)
 })
 
+test('search_text 的 files_only 只回文件名，context_lines 带上下文并区分命中行', async () => {
+  await fs.mkdir(path.join(tmpDir, 'ctxcase'), { recursive: true })
+  await fs.writeFile(path.join(tmpDir, 'ctxcase/one.js'), 'alpha\nbeta\nTARGET\ndelta\nepsilon')
+  await fs.writeFile(path.join(tmpDir, 'ctxcase/two.js'), 'TARGET\ngamma\nTARGET')
+
+  // files_only:一个文件只记一条(否则同文件多次命中会把 100 条上限吃光),不吐行内容
+  const files = await executeTool('search_text', { pattern: 'TARGET', path: 'ctxcase', files_only: true }, ctx)
+  assert.equal(files.trim().split('\n').length, 2)
+  assert.match(files, /one\.js/)
+  assert.match(files, /two\.js/)
+  assert.doesNotMatch(files, /beta/)
+
+  // 命中行 `:N:`、上下文行 `:N-`(行号前固定冒号,与 ripgrep 一致);窗口外的行不该混进来
+  const withCtx = await executeTool('search_text', { pattern: 'TARGET', path: 'ctxcase/one.js', context_lines: 1 }, ctx)
+  assert.match(withCtx, /one\.js:2- beta/)
+  assert.match(withCtx, /one\.js:3: TARGET/)
+  assert.match(withCtx, /one\.js:4- delta/)
+  assert.doesNotMatch(withCtx, /epsilon/)
+
+  // 不传 context_lines 时输出格式不变(默认 0 不能退化成带上下文)
+  const plain = await executeTool('search_text', { pattern: 'TARGET', path: 'ctxcase/one.js' }, ctx)
+  assert.match(plain.trim(), /^ctxcase[\\/]one\.js:3: TARGET$/)
+})
+
 // ========== run_command ==========
 
 test('run_command 执行成功并返回输出与退出码', async () => {
@@ -573,4 +597,61 @@ test('register_project：目录不存在 / 未注入实现 / 空路径都给可�
   assert.match(await executeTool('register_project', {}, withImpl), /path 不能为空/)
   // CLI 下没有「常用目录」这个概念 —— 要回一句说明，而不是崩掉
   assert.match(await executeTool('register_project', { path: tmpDir }, ctx), /只在 g ui/)
+})
+
+// ──────────────────────────────────────────────
+// 后台命令：起服务不该占着前台等到超时
+// ──────────────────────────────────────────────
+test('run_command(run_in_background) 立刻返回 id，background_task 能读到输出且只回新增部分', async () => {
+  // 注意引号层次:外层双引号是给 cmd 的,JS 代码里只能用单引号,
+  // 否则 cmd 会在内层双引号处截断(实测 exit 1 + 无输出)
+  const script = "console.log('boot ok'); setTimeout(() => console.log('second line'), 120)"
+  const started = await executeTool('run_command',
+    { command: `"${process.execPath}" -e "${script}"`, run_in_background: true }, ctx)
+  const id = (started.match(/\bbg_\d+\b/) || [])[0]
+  assert.ok(id, `后台结果里应该带任务 id，实际: ${started}`)
+  assert.match(started, /background_task/)
+
+  const first = await executeTool('background_task', { action: 'read', id, wait_seconds: 10 }, ctx)
+  assert.match(first, /boot ok/)
+
+  // 增量语义：读走的内容不再重复回吐，否则 dev server 日志会被反复喂进上下文。
+  // 判据只能看「新增输出」段落 —— 整个返回值里还带着命令行原文(含 boot ok 字样)，直接对全文断言会自命中。
+  await new Promise(r => setTimeout(r, 200))
+  const second = await executeTool('background_task', { action: 'read', id, wait_seconds: 10 }, ctx)
+  const secondBody = second.split('--- 新增输出 ---')[1] || ''
+  assert.doesNotMatch(secondBody, /boot ok/)
+  assert.match(secondBody, /second line/)
+
+  // 进程跑完了要如实报退出码，模型才知道"服务挂了"还是"还活着"
+  assert.match(second, /exit 0/)
+
+  // 读干净之后再读：如实说没有新输出，而不是把旧内容再吐一遍
+  const third = await executeTool('background_task', { action: 'read', id }, ctx)
+  assert.match(third, /stdout 无新增输出/)
+
+  const list = await executeTool('background_task', { action: 'list' }, ctx)
+  assert.match(list, new RegExp(id))
+})
+
+test('background_task 的 kill 会真的结束进程，未知 id / 空 id 给可照做的提示', async () => {
+  // 起一个不会自己退出的进程
+  const started = await executeTool('run_command',
+    { command: `"${process.execPath}" -e "setInterval(() => {}, 1000)"`, run_in_background: true }, ctx)
+  const id = (started.match(/\bbg_\d+\b/) || [])[0]
+  assert.ok(id)
+
+  // 起来之后立刻读，应该是 running
+  const running = await executeTool('background_task', { action: 'read', id }, ctx)
+  assert.match(running, /运行中/)
+
+  const killed = await executeTool('background_task', { action: 'kill', id }, ctx)
+  assert.match(killed, /已终止/)
+
+  const after = await executeTool('background_task', { action: 'read', id }, ctx)
+  assert.match(after, /已退出/)
+
+  assert.match(await executeTool('background_task', { action: 'read' }, ctx), /需要 id/)
+  assert.match(await executeTool('background_task', { action: 'read', id: 'bg_99999' }, ctx), /没有找到/)
+  assert.match(await executeTool('background_task', { action: 'nope', id }, ctx), /未知 action/)
 })

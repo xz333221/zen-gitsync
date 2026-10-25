@@ -53,7 +53,7 @@ import os from 'os';
 import { logger } from './shared.js';
 
 // 从 CLI 侧导入工具定义、执行器与 LLM 传输层（同一 monorepo，路径可达）
-import { TOOL_DEFINITIONS, executeTool, normalizePlanSteps, summarizePlan, splitToolOutput, toolMessageContent } from '../../../../cli/ai/tools.js';
+import { TOOL_DEFINITIONS, executeTool, normalizePlanSteps, summarizePlan, splitToolOutput, toolMessageContent, splitToolBatches } from '../../../../cli/ai/tools.js';
 import { prepareRequestMessages, measureContextUsage, resolveRequestBudget } from '../../../../cli/ai/context.js';
 import { streamChatOnce } from '../../../../cli/ai/transport.js';
 import { checkDangerousCommand } from '../../../../cli/ai/safety.js';
@@ -166,6 +166,8 @@ ${isWin ? `- 当前是 Windows,以下 Unix 命令**不存在**,用了必定报"�
 - 大文件用 offset/limit 分段读取,不要一次读爆上下文
 - git 操作用 run_command 执行
 - run_command 默认就在工作目录执行,不要再加 cd 前缀;默认超时 120 秒,长任务加大 timeout_seconds(最大 600)
+- 起 dev server / watch / 监听端口这类不会自己结束的命令,用 run_in_background=true(立刻拿到 bg_N),再用 background_task 看日志或 kill;直接前台跑只会一直占着,到超时被杀
+- 一轮里要读多个文件 / 搜多处时,把它们放进同一次响应里一起发 —— 只读工具会并发执行,比一个个来回快得多
 - 命令在 ${shellDesc} 下执行,注意语法兼容
 
 # 任务计划(多步任务必用)
@@ -281,6 +283,8 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 - Use offset/limit for large files
 - git operations via run_command
 - run_command defaults to the working directory; default timeout 120s, max 600s
+- For processes that never exit on their own (dev server, watch, port listeners) pass run_in_background=true (you get a bg_N id immediately), then use background_task to read logs or kill it; running them in the foreground just blocks until the timeout kills them
+- When a turn needs several files or several searches, issue them in the same response — read-only tools run concurrently, which is far faster than one round-trip each
 - Images reach you two ways:
   · The user attached one to a message → it arrives as an image_url part in the user message; you can see it directly
   · The user only gave you a **path** (or you run into an image while exploring) → read it with the read_image tool, not read_file
@@ -564,8 +568,10 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
       tool_calls: toolCalls
     }));
 
-    // 逐个执行工具
-    for (const tc of toolCalls) {
+    // 单个工具的执行:发 tool_call_start → 执行 → 发 tool_result,返回要入历史的 tool 消息。
+    // 抽成函数是为了让"串行批"和"并发批"共用同一条路径(包括参数错误、ask_user 的
+    // interactionId 绑定这些边角),两条分支只在**什么时候 push 历史**上不同。
+    const runOneTool = async (tc) => {
       const name = tc.function?.name || '';
       const rawArgs = tc.function?.arguments || '';
       const toolCallId = tc.id || name;
@@ -577,8 +583,7 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
         const errResult = `错误: 工具参数不是合法 JSON: ${rawArgs.slice(0, 200)}`;
         send({ type: 'tool_call_start', toolCallId, name, argsPreview: rawArgs.slice(0, 200), arguments: rawArgs });
         send({ type: 'tool_result', toolCallId, name, result: errResult });
-        session.messages.push({ role: 'tool', tool_call_id: toolCallId, name, content: errResult });
-        continue;
+        return { toolCallId, name, content: errResult };
       }
 
       // 工具参数预览(前端收起态那一行副标题)。这里截断是**故意的** ——
@@ -610,7 +615,20 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
       // 多模态 tool 消息 —— 模型看得见图,用户看到的是"已读取图片 xxx.png"。
       const { text: outText, images: outImages } = splitToolOutput(output);
       send({ type: 'tool_result', toolCallId, name, result: outText });
-      session.messages.push({ role: 'tool', tool_call_id: toolCallId, name, content: toolMessageContent(outText, outImages) });
+      return { toolCallId, name, content: toolMessageContent(outText, outImages) };
+    };
+
+    // 执行工具。连续的只读工具并发跑(分组规则与 CLI turn.js 共用 tools.js 的
+    // splitToolBatches),写类 / 命令 / 问用户仍串行 —— 它们有顺序依赖或要占住交互。
+    // 前端按 toolCallId 更新卡片,谁先完成谁先亮 "done";而**入历史**的顺序必须
+    // 与 assistant.tool_calls 一致,所以统一等这一批全部结束再按 batch 顺序 push。
+    for (const batch of splitToolBatches(toolCalls)) {
+      const results = batch.parallel
+        ? await Promise.all(batch.calls.map(tc => runOneTool(tc)))
+        : [await runOneTool(batch.calls[0])];
+      for (const r of results) {
+        session.messages.push({ role: 'tool', tool_call_id: r.toolCallId, name: r.name, content: r.content });
+      }
     }
     // 工具结果全部入历史后继续循环，让模型基于结果决定下一步
   }
