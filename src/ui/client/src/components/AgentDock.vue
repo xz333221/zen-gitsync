@@ -57,6 +57,10 @@ const AgentView = defineAsyncComponent({
 const props = defineProps<{
   /** 编辑器当前激活文件；仅 App.vue 判定 activeView==='editor' 时非空 */
   contextFile?: { path: string; name: string } | null
+  /** 视图级补充上下文（思维导图视图的「你在导图视图 + 当前文件是哪个」）。
+   *  随每轮请求的 docNote 注入 —— 导图多在项目根之外，openFilePath 会被服务端丢掉。
+   *  编辑器视图不传：那边 openFilePath 就够了。 */
+  contextNote?: string
 }>()
 
 const agentStatus = useAgentActivityStore()
@@ -250,6 +254,7 @@ onBeforeUnmount(() => {
           ref="agentViewRef"
           :context-file-path="props.contextFile?.path"
           :context-file-name="props.contextFile?.name"
+          :context-note="props.contextNote"
           :force-narrow="!maximized"
         />
       </div>

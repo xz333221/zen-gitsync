@@ -70,6 +70,7 @@ import logo from '@assets/logo.svg'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
 import { useEditorTabsStore } from '@stores/editorTabs'
+import { useMindmapStore } from '@stores/mindmapStore'
 import { useLocaleStore } from '@stores/localeStore'
 import { useInstancesStore } from '@stores/instancesStore'
 import { useToolsStore } from '@stores/toolsStore'
@@ -80,6 +81,7 @@ import { useThemeObserver } from '@/composables/useThemeObserver'
 import { useTaskNotifier } from '@/composables/useTaskNotifier'
 import { useServerLifecycle } from '@/composables/useServerLifecycle'
 import { providerLogoUrlForBaseURL, type ProviderTheme } from '@/utils/providerLogo'
+import { buildMindmapAiNote } from '@/utils/mindmapAiNote'
 
 const configInfo = ref('')
 // 添加组件实例类型
@@ -91,6 +93,8 @@ const gitStore = useGitStore()
 const configStore = useConfigStore()
 // 编辑器 tab 状态：右下角 g ai dock 在编辑器视图激活时，靠它附带当前文件上下文
 const editorTabsStore = useEditorTabsStore()
+// 思维导图视图：dock 也要能带上「当前打开的导图」作为上下文
+const mindmapStore = useMindmapStore()
 // 使用Locale Store
 const localeStore = useLocaleStore()
 // 使用实例注册 Store
@@ -338,8 +342,24 @@ const activeView = ref<'git' | 'console' | 'editor' | 'source-map' | 'workbench'
 // 右下角 g ai dock 的「当前文件」上下文：只在编辑器视图激活时带上
 // （EditorView 把激活文件同步进 editorTabsStore，见那边的 watch）
 const dockContextFile = computed(() => {
-  if (activeView.value !== 'editor' || !editorTabsStore.activeFilePath) return null
-  return { path: editorTabsStore.activeFilePath, name: editorTabsStore.activeFileName }
+  if (activeView.value === 'editor' && editorTabsStore.activeFilePath) {
+    return { path: editorTabsStore.activeFilePath, name: editorTabsStore.activeFileName }
+  }
+  // 思维导图视图：同样把「当前打开的导图」作为上下文带出去（用户 2026-10-25
+  // 反馈「点击思维导图文件后没有默认引用」）。导图文件常在项目根之外，
+  // 所以文本说明（dockContextNote）才是可靠通道，路径连同说明一起注入。
+  if (activeView.value === 'mindmap' && mindmapStore.current?.path) {
+    const p = mindmapStore.current.path
+    return { path: p, name: p.split(/[\\/]/).pop() || p }
+  }
+  return null
+})
+
+/** dock 的补充上下文说明：只有思维导图视图需要（编辑器那条靠 openFilePath 就够）。
+ *  不带「输出 ```mindmap 块」的约定 —— 那段只有导图页自己的面板能消费。 */
+const dockContextNote = computed(() => {
+  if (activeView.value !== 'mindmap') return undefined
+  return buildMindmapAiNote(mindmapStore.current?.path, localeStore.currentLocale, { withConvention: false })
 })
 
 // Git 视图内的三个 Tab:
@@ -1086,7 +1106,7 @@ function stopVResize() {
 
   <!-- 右下角 g ai 悬浮 dock：fixed 覆盖层，不随 activeView 销毁。
        编辑器视图激活时经 :context-file 带上当前文件（发送时请求级注入） -->
-  <AgentDock v-if="initCompleted" :context-file="dockContextFile" />
+  <AgentDock v-if="initCompleted" :context-file="dockContextFile" :context-note="dockContextNote" />
 
   <footer class="main-footer app-footer">
     <div class="footer-left">

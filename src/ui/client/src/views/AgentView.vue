@@ -55,6 +55,13 @@ const props = defineProps<{
   /** 当前激活文件名（只用于输入区那张上下文小卡） */
   contextFileName?: string
   /**
+   * 视图级补充上下文说明（如思维导图视图的「你在导图视图 + 当前打开的导图是 X」）。
+   * 与 openFilePath 一起随每轮请求注入（docNote）—— 导图文件常在项目根之外，
+   * openFilePath 那条注入会被服务端按「项目外」丢掉，文本说明才是可靠通道。
+   * 用户点掉上下文卡（✕）时一并停止注入，语义同「移除一个附件」。
+   */
+  contextNote?: string
+  /**
    * dock 传入：强制窄屏单页（会话列表页 ↔ 对话页）。
    *
    * 为什么需要它：悬浮 dock 默认面板宽到 1120px，若按宽度阈值（680）自动进两栏，
@@ -319,7 +326,12 @@ const presetQuestions = computed(() => resolveAgentPresets(configStore.agentPres
 // 与旧文件空间面板同口径）。点过上下文卡上的 ✕ 就不带 —— 与"移除一个附件"同义。
 async function onSend(payload: { text: string; files: any[] }) {
   const openFilePath = contextDismissed.value ? undefined : (props.contextFilePath || undefined)
-  await sendMessage(payload.text, payload.files, openFilePath ? { openFilePath } : undefined)
+  const docNote = contextDismissed.value ? undefined : (props.contextNote || undefined)
+  const ctx = {
+    ...(openFilePath ? { openFilePath } : {}),
+    ...(docNote ? { docNote } : {}),
+  }
+  await sendMessage(payload.text, payload.files, Object.keys(ctx).length ? ctx : undefined)
   await nextTick()
   scrollToBottom()
 }
