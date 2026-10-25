@@ -52,10 +52,5 @@ describe('主题选择器守卫', () => {
     expect(offenders).toEqual([])
   })
 
-  test('OrchestratorConsole 拨片选中档的深色覆盖保留（曾因选择器写错实测 1.70:1）', () => {
-    const file = join(SRC_ROOT, 'views', 'components', 'OrchestratorConsole.vue')
-    expect(existsSync(file), 'OrchestratorConsole.vue 应存在').toBe(true)
-    const style = stripComments(styleText(file, readFileSync(file, 'utf8')))
-    expect(style).toContain('[data-theme="dark"] .oc__mode-btn.is-active')
-  })
+  // 2026-10-25：控制台的「对话/指令」拨片已删（只剩指令），这条守卫随之移除。
 })

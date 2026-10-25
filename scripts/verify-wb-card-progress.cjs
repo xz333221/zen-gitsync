@@ -222,8 +222,7 @@ async function openCommandMode(page) {
   await page.waitForSelector('.activity-bar', { timeout: 30000 })
   await page.locator('.activity-btn[aria-label^="工作台"]').first().click()
   await page.waitForSelector('.oc', { timeout: 30000 })
-  const cmdTab = page.locator('.oc__mode-btn').filter({ hasText: '指令' }).first()
-  if (await cmdTab.count()) await cmdTab.click()
+  // 2026-10-25：控制台只剩「指令」一档（对话档并进右下角 dock），不用再切 tab
   await sleep(400)
 }
 

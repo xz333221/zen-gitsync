@@ -2637,10 +2637,6 @@ export default {
   '@WORKBENCH:已停止：{name}': 'Stopped: {name}',
   // @WORKBENCH: file end (append: task finished notice)
   // @WORKBENCH: file path: components/AgentChatSurface.vue, components/TaskExecutorPicker.vue (append: orchestrator console dispatches via g ai)
-  '@WORKBENCH:对话': 'Chat',
-  '@WORKBENCH:指令': 'Command',
-  '@WORKBENCH:切换主 Agent 控制台的工作方式': 'Switch how the orchestrator console works',
-  '@WORKBENCH:g ai 对话': 'g ai chat',
   '@WORKBENCH:派发执行器': 'Dispatch executor',
   '@WORKBENCH:它派出去的任务由这个执行器跑（与执行按钮的临时切换共用）': 'Tasks it dispatches run with this executor (shared with the run button toggle)',
   '@WORKBENCH:当前引擎「{name}」只能对话，不能派发任务 —— 切到内置 g ai 才能派活': 'Engine "{name}" can only chat, not dispatch tasks — switch to the built-in g ai to dispatch',

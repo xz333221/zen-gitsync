@@ -271,59 +271,9 @@ async function main() {
     if (!r1done) skip('R1 单轮反向护栏', `单轮样本（${singleCandidates.length} 条候选）都没能在看板上打开`)
     await closeEditor()
 
-    // ── B1 主 Agent 控制台 ────────────────────────────────────────────────
-    // 弹窗关干净（否则读到的还是它的对话流），再展开面板、切「对话」Tab
-    await closeEditor()
-    if (await page.locator('.oc__rail').count()) { await page.locator('.oc__rail').first().click(); await sleep(600) }
-    const chatTab = page.locator('.oc__mode-btn', { hasText: '对话' }).first()
-    if (await chatTab.count()) { await chatTab.click(); await sleep(600) }
-    await page.locator('.acs__convs .acu-conv-item').first().waitFor({ timeout: 10000 }).catch(() => {})
-
-    const CONSOLE_LIST = '.acs__chat .acu-message-list'
-    const items = page.locator('.acs__convs .acu-conv-item')
-    const n = await items.count()
-    // 先把每条会话的"条数"读全（有的会话上千条，渲染慢 —— 挑**最短且 ≥4 条**的先试）
-    const cands = []
-    for (let i = 0; i < n; i += 1) {
-      const meta = await items.nth(i).locator('.acu-conv-meta').first().textContent().catch(() => '')
-      const count = Number((String(meta).match(/(\d+)\s*条/) || [])[1] || 0)
-      if (count >= 4) cands.push({ i, count, title: norm(await items.nth(i).textContent()).slice(0, 18) })
-    }
-    cands.sort((a, b) => a.count - b.count)
-    /** 窄面板里"列表"与"对话"是两页：选过一条之后列表被 v-show 藏了，
-     *  不点回来下一条会等一个不可见的元素（第一版就卡在这 30s 超时上） */
-    async function backToList() {
-      const btn = page.locator('.acs__icon-btn[aria-label="会话列表"]')
-      if ((await btn.count()) && await btn.isVisible().catch(() => false)) {
-        await btn.click().catch(() => {})
-        await sleep(500)
-      }
-    }
-    let b1done = false
-    for (const cand of cands.slice(0, 3)) {
-      await backToList()
-      await items.nth(cand.i).click()
-      // 大会话渲染要几秒：轮询等它出结果（≥2 轮），等不到就换下一条
-      const ok = await waitFor(async () => {
-        const rb = await readRail(page, CONSOLE_LIST)
-        return rb.list && rb.users >= 2
-      }, 20000, 500)
-      if (!ok) continue
-      const rb = await readRail(page, CONSOLE_LIST)
-      check('B1 ★ 主 Agent 控制台：≥2 轮的会话也画出侧边条',
-        rb.rail === true && rb.bars === rb.users,
-        `bars=${rb.bars} users=${rb.users}（会话「${cand.title}」，${cand.count} 条）`)
-      check('B1b 主 Agent 控制台：侧边条不压内容列',
-        rb.railRight <= rb.innerLeft + 2,
-        `rail.right=${rb.railRight} vs 内容列.left=${rb.innerLeft}（超出 ${(rb.railRight - rb.innerLeft).toFixed(0)}px）`)
-      b1done = true
-      break
-    }
-    if (!b1done) {
-      // 没找到合适会话是夹具问题，不该算产品缺陷，但也不能当通过
-      skip('B1 主 Agent 控制台', `会话列表里没有 ≥4 条、≥2 轮的样本（列表共 ${n} 条）`)
-    }
-    await page.screenshot({ path: path.join(SHOT_DIR, 'rail-console.png') }).catch(() => {})
+    // B 组（原「主 Agent 控制台对话面」的侧边条检查）随 2026-10-25 控制台改造移除：
+    // 控制台不再有「对话」档，AgentChatSurface 已删；对话侧的侧边条契约由右下角
+    // dock 的 AgentView 承担（A 组已经在任务弹窗上验过同一套库渲染）。
   } catch (err) {
     check('脚本异常', false, String((err && err.message) || err))
   } finally {

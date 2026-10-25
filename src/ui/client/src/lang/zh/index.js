@@ -2645,10 +2645,6 @@ export default {
   '@WORKBENCH:已停止：{name}': '已停止：{name}',
   // @WORKBENCH: file end (追加: 任务执行结束提示)
   // @WORKBENCH: file path: components/AgentChatSurface.vue, components/TaskExecutorPicker.vue (追加: 主 Agent 控制台改用 g ai 派发)
-  '@WORKBENCH:对话': '对话',
-  '@WORKBENCH:指令': '指令',
-  '@WORKBENCH:切换主 Agent 控制台的工作方式': '切换主 Agent 控制台的工作方式',
-  '@WORKBENCH:g ai 对话': 'g ai 对话',
   '@WORKBENCH:派发执行器': '派发执行器',
   '@WORKBENCH:它派出去的任务由这个执行器跑（与执行按钮的临时切换共用）': '它派出去的任务由这个执行器跑（与执行按钮的临时切换共用）',
   '@WORKBENCH:当前引擎「{name}」只能对话，不能派发任务 —— 切到内置 g ai 才能派活': '当前引擎「{name}」只能对话，不能派发任务 —— 切到内置 g ai 才能派活',

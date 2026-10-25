@@ -7,7 +7,7 @@
  *   反馈"对话页没显示出分支和模型"。本探针钉住补上之后的契约，防回归。
  *   2026-10 AI 入口整合：原「文件空间 g ai 面板」宿主（自己摆的 ChatInput）
  *   随编辑器 AI 面板并入 dock 移除，那份同契约的实地检查一并收编到这里。
- *   数据口径与 AgentChatSurface / App.vue 底栏一致：分支读 gitStore.currentBranch，
+ *   数据口径与主 Agent 控制台的派发栏 / App.vue 底栏一致：分支读 gitStore.currentBranch，
  *   模型读设置里标了「默认」的那一条（name || model），库只排版不猜。
  *
  * 验收契约（改这块时别破坏）：

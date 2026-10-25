@@ -48,7 +48,6 @@ import {
   reportPercent,
 } from '@/utils/progressReport'
 import AttachmentZone from '@/components/AttachmentZone.vue'
-import AgentChatSurface from '@/components/AgentChatSurface.vue'
 import TaskExecutorPicker from '@/components/TaskExecutorPicker.vue'
 import { useWorkbenchAttachments, type AttachmentTarget } from '@/composables/useWorkbenchAttachments'
 import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection'
@@ -146,25 +145,6 @@ const useDefaultPrompt = ref(true)
 // 与工作台执行按钮、看板卡片「执行」共用同一份选择（config.json 的 ui.lastTaskExecutor），
 // 任何一处切了另外两处立刻跟手 —— 连"换个端口重开还在"也一起做到了（见 composable 头注释）。
 const { active: selectedExecutor } = useTaskExecutorSelection()
-
-// ── 工作方式：对话（g ai 派活）/ 指令（人敲一句话派一条）──────────────────
-// 两种方式落到的都是同一条派发链路与同一条指令流水，差别只在"谁决定派什么"：
-// 对话是 g ai 边聊边派（可多轮、可反问），指令是你自己写好一句话。
-// 选择记在 localStorage：控制台是常驻栏，刷新一次就跳回默认值会很烦。
-// key 升到 v2：默认方式改成「指令」后，旧的 v1 存着 'chat' 会让新默认不生效。
-const MODE_KEY = 'wb.ocMode.v2'
-const mode = ref<'chat' | 'command'>((() => {
-  try {
-    return localStorage.getItem(MODE_KEY) === 'chat' ? 'chat' : 'command'
-  } catch {
-    // 隐私模式：不记偏好而已，不影响用
-    return 'command'
-  }
-})())
-function setMode(next: 'chat' | 'command') {
-  mode.value = next
-  try { localStorage.setItem(MODE_KEY, next) } catch { /* 同上 */ }
-}
 
 // ── 附件 ────────────────────────────────────────────────────────────────
 // 派发这一刻任务还不存在，没有 task/sub 可挂 → 先落服务端的暂存区
@@ -683,7 +663,7 @@ const gitSummary = computed(() => {
  * 所以两个区块默认折成一行。折起来不是"藏起来"：标题行本身带着最该一眼看到的信息
  * （历史的份数 / 概览的分支 + 工作区），要全量内容再点开。
  * 选择记在 localStorage —— 控制台是常驻栏，每次刷新都跳回默认值会很烦
- * （与 MODE_KEY / INPUT_H_KEY 同一套做法，隐私模式下不记偏好但不影响用）。
+ * （与 INPUT_H_KEY 同一套做法，隐私模式下不记偏好但不影响用）。
  */
 const SECT_KEY = {
   history: 'wb.ocHistoryOpen.v1',
@@ -729,7 +709,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
     class="oc"
     :class="{
       'is-collapsed': collapsed,
-      'is-report-empty': mode === 'command' && !collapsed && !currentReport,
+      'is-report-empty': !collapsed && !currentReport,
     }"
   >
     <!-- 折叠后的收纳条：只剩一枚展开按钮 + 竖排标题，宽度收到 32px。
@@ -763,49 +743,11 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
       </button>
     </header>
 
-    <!-- 工作方式：对话 = g ai 边聊边派（可以多轮、可以反问你）；指令 = 你自己敲一句话派一条。
-         两种方式落到的是**同一条派发链路、同一条指令流水**，变的只是"谁决定派什么"。
-         （标题行下方原来还有一条「{n} 个执行中」状态栏，2026-10-16 删掉 ——
-         执行数看板「进行中」列与左栏「全部项目」行各有，用户要求这里不再重复。） -->
-    <div
-      v-show="!collapsed"
-      class="oc__mode"
-      role="tablist"
-      :aria-label="$t('@WORKBENCH:切换主 Agent 控制台的工作方式')"
-    >
-      <button
-        type="button"
-        role="tab"
-        class="oc__mode-btn"
-        :class="{ 'is-active': mode === 'chat' }"
-        :aria-selected="mode === 'chat'"
-        @click="setMode('chat')"
-      >{{ $t('@WORKBENCH:对话') }}</button>
-      <button
-        type="button"
-        role="tab"
-        class="oc__mode-btn"
-        :class="{ 'is-active': mode === 'command' }"
-        :aria-selected="mode === 'command'"
-        @click="setMode('command')"
-      >{{ $t('@WORKBENCH:指令') }}</button>
-    </div>
-
-    <AgentChatSurface
-      v-show="!collapsed && mode === 'chat'"
-      class="oc__chat"
-      :active="!collapsed && mode === 'chat'"
-      allow-dispatch
-      :dispatch-use-default-prompt="useDefaultPrompt"
-      :title="$t('@WORKBENCH:g ai 对话')"
-      :git-branch="selectedProject?.git?.branch ?? null"
-    />
-
     <!-- 进度报告：主 Agent 隔一会儿读一遍正在跑的 job，写一段"现在到哪一步了"。
          报告由服务端生成（自动那份由服务端定时器产生），这里只渲染 + 两个入口：
          改间隔、立即报告。 -->
     <div
-      v-show="!collapsed && mode === 'command'"
+      v-show="!collapsed"
       class="oc__report"
       :class="{ 'is-empty': !currentReport }"
     >
@@ -984,7 +926,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
     </div>
 
     <div
-      v-show="!collapsed && mode === 'command'"
+      v-show="!collapsed"
       class="oc__git"
       :class="{ 'is-collapsed': !gitOpen }"
     >
@@ -1022,7 +964,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
     </div>
 
     <div
-      v-show="!collapsed && mode === 'command'"
+      v-show="!collapsed"
       class="oc__compose"
       @paste="onPaste"
       @drop.prevent="onDrop"
@@ -1244,53 +1186,7 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
    （它原来的样式与两段演化史留此存证：底色从 --gradient-accent-soft 退回 --bg-subtle；
    「调度状态 / 调度中」两枚 2026-10-14 随调度开关删除；最后一项也没活过 10-16。） */
 
-/* 工作方式切换：一个两段式拨片。
-   为什么不做成两个独立按钮：它们互斥且只有两档，拨片能一眼看出"现在是哪一档"，
-   而两个按钮在窄栏里看起来像"两个动作"（栏里另外几枚才是真的动作按钮）。 */
-.oc__mode {
-  display: flex;
-  gap: 2px;
-  flex-shrink: 0;
-  margin: 8px 12px 0;
-  padding: 2px;
-  border-radius: var(--radius-pill);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-color);
-}
-.oc__mode-btn {
-  flex: 1;
-  height: 22px;
-  border: none;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--text-meta);
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-  transition: var(--transition-ui-fast);
-}
-.oc__mode-btn:hover { color: var(--text-secondary); }
-/* 2026-10-04：选中档吃 primary 10% 淡底 + primary-dark 字色 + 600 字重。
-   拨片只有两档，不需要第四个色相，靠「这块底色比旁边亮一档 + 字变主色」分得开；
-   原来选中档只比未选中档白一点点，扫过去基本看不出选了哪个。 */
-.oc__mode-btn.is-active {
-  background: color-mix(in srgb, var(--color-primary) 10%, var(--bg-panel));
-  color: var(--color-primary-dark);
-  font-weight: 600;
-  box-shadow: var(--shadow-sm);
-}
-/* 2026-10-12：上一版写的是 `html.dark` —— 死选择器。本项目深色挂的是
-   `<html data-theme="dark">` 属性（configStore.applyTheme），不是 .dark class，
-   所以那条覆盖从未命中；用户二次截图实测选中档只有 1.70:1（深蓝压深底）。
-   修正选择器后，primary-light（#60a5fa）在这块底上实测也只有 3.76:1 ——
-   选中底是「10% primary + 6% 白（bg-panel-dark）」叠出来的，比 commit-hash 那类
-   深底亮一档，需要再亮一档的字色：blue-300 #93c5fd 实测 4.87:1，过 WCAG AA
-   （与 --gradient-progress 的收尾色同一档）。 */
-[data-theme="dark"] .oc__mode-btn.is-active { color: #93c5fd; }
-.oc__mode-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
-
 /* 对话模式：整块对话面吃满"活动流 + 项目概览 + 派发栏"让出来的那块高度 */
-.oc__chat { min-height: 0; }
-
 /* 进度报告：整块吃掉"项目概览 + 派发栏"让出来的高度，内部两段各自滚 ——
    上面是正在看的那一份（可长可短），下面是历史（固定一截，够点就行） */
 .oc__report {
@@ -1822,6 +1718,11 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   flex-wrap: wrap;
   row-gap: 6px;
   margin-top: 6px;
+  /* 右下角给 g ai 悬浮 mascot 让位（48px + 左右留白 ≈ 56px）：
+     控制台是最右一栏，派发按钮原来有一角被 mascot 盖住，点右半边会点到 mascot
+     把对话面板弹出来（2026-10-25 实测：mascot 1536-1584 × 908-956，
+     派发按钮 1520-1588 × 891-919，右下角重叠）。 */
+  padding-right: 56px;
 }
 /* 派发栏里的字段小标签（2026-10-14：「任务执行器」）。
    执行器 picker 本体只显示品牌名，旁边不标明身份会被当成模型选择 */

@@ -163,10 +163,11 @@ describe('源码守卫：渲染 ChatContainer 的地方都得接上侧边条', (
    */
   const META_EXEMPT_SURFACES = ['../views/WorkbenchView.vue']
 
-  test('五个对话容器都传了 :message-rail-config="MESSAGE_RAIL_CONFIG"', () => {
+  test('四个对话容器都传了 :message-rail-config="MESSAGE_RAIL_CONFIG"', () => {
     const consumers = Object.entries(allSources).filter(([, src]) => src.includes('<ChatContainer'))
-    // 兜底：glob 没扫到就是守卫自己坏了，不是"全都没接"
-    expect(consumers.length).toBeGreaterThanOrEqual(5)
+    // 兜底：glob 没扫到就是守卫自己坏了，不是"全都没接"。
+    // 2026-10-25 工作台控制台的对话面（AgentChatSurface）删除，5 → 4。
+    expect(consumers.length).toBeGreaterThanOrEqual(4)
 
     for (const [file, src] of consumers) {
       if (SINGLE_TURN_SURFACES.includes(file)) continue
@@ -211,10 +212,10 @@ describe('源码守卫：渲染 ChatContainer 的地方都得接上侧边条', (
   test('接了用时的容器都得把元信息行钉到气泡头部（成组的三条 CSS 规则）', () => {
     const consumers = Object.entries(allSources)
       .filter(([, src]) => src.includes(':message-meta-config="MESSAGE_META_CONFIG"'))
-    // 2026-10 AI 入口整合：常用目录追问区（RecentDirectoriesChat）已删，
-    // 消费方从 4 个（智能体视图 / 文件空间 / 工作台控制台 / 追问区）变成 3 个。
+    // 2026-10 整合：常用目录追问区（RecentDirectoriesChat）与工作台控制台的
+    // 对话面（AgentChatSurface）先后删除，消费方只剩智能体视图 / 文件空间（思维导图）/ 工作台。
     // 兜底下限跟着降；真正的契约是下面每个消费方都必须带齐三条规则。
-    expect(consumers.length).toBeGreaterThanOrEqual(3)
+    expect(consumers.length).toBeGreaterThanOrEqual(2)
 
     for (const [file, src] of consumers) {
       const metaRule = /:deep\(\.acu-message-meta\)\s*\{[^}]*\}/.exec(src)

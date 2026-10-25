@@ -234,73 +234,9 @@ async function main() {
       afterEmpty === '__SENTINEL__',
       `剪贴板${afterEmpty === '__SENTINEL__' ? '未被改写' : '被改写成 ' + afterEmpty.slice(0, 30)}`)
 
-    // ── B1 主 Agent 控制台 ─────────────────────────────────────────────────
-    // 先把右下角 dock 关掉：它是 fixed 覆盖层，最大化态会盖住工作台右栏，
-    // 之后点控制台里的会话条目会被 dock 的会话列表拦截（pointer-events）。
-    await page.locator('.agent-dock__btn--close').first().click().catch(() => {})
-    await page.waitForSelector('.agent-dock__panel', { state: 'hidden', timeout: 5000 }).catch(() => {})
-    await page.locator('.activity-btn[aria-label^="工作台"]').first().click()
-    // 工作台是懒加载的独立 chunk，第一次进要等它挂上来（这里给足 25s，别用 catch 吞掉）
-    const wbReady = await waitFor(async () =>
-      (await page.locator('.board').count()) > 0 || (await page.locator('.acs__head').count()) > 0, 25000, 300)
-    check('B1a 工作台视图已挂载', wbReady, `board=${await page.locator('.board').count()} acs__head=${await page.locator('.acs__head').count()}`)
-    if (await page.locator('.oc__rail').count()) { await page.locator('.oc__rail').first().click(); await sleep(800) }
-    // ★ 先切到「对话」档：控制台默认停在「指令」档，而 AgentChatSurface 是
-    // `v-show="!collapsed && mode === 'chat'"` —— 停在指令档时它**在 DOM 里但 display:none**，
-    // 按钮 rect 恒为 0。第一版只数 count 就宣布通过，等于验了个看不见的元素（探针假绿）。
-    const chatMode = page.locator('.oc__mode-btn', { hasText: '对话' }).first()
-    if (await chatMode.count()) { await chatMode.click().catch(() => {}); await sleep(800) }
-    const CONSOLE_COPY = '.acs__head .csb .csb__btn:not(.csb__caret)'
-    // 判据是**几何**而不是"在不在 DOM 里"：控制台展开后头条得有宽度
-    const consoleShown = await waitFor(async () => {
-      const r = await page.evaluate(() => {
-        const head = document.querySelector('.acs__head')
-        const btn = document.querySelector('.acs__head .csb .csb__btn:not(.csb__caret)')
-        const hb = head ? head.getBoundingClientRect() : null
-        const bb = btn ? btn.getBoundingClientRect() : null
-        return { hw: hb ? Math.round(hb.width) : 0, bw: bb ? Math.round(bb.width) : 0, bh: bb ? Math.round(bb.height) : 0 }
-      })
-      return r.hw > 200 && r.bw >= 18 && r.bh >= 18
-    }, 15000, 300)
-    const cRect = await page.evaluate(() => {
-      const b = document.querySelector('.acs__head .csb .csb__btn:not(.csb__caret)').getBoundingClientRect()
-      return `${Math.round(b.width)}×${Math.round(b.height)}`
-    })
-    check('B1 ★ 主 Agent 控制台头条出现可点的复制按钮（真占了版面，不是 display:none）',
-      consoleShown, `按钮 ${cRect}；DOM 里 ${await page.locator(CONSOLE_COPY).count()} 个`)
-    if (consoleShown) {
-      // 控制台在窄栏里「列表 / 对话」是**两页**（v-show 切换）：列表默认被藏着，
-      // 不先点「会话列表」翻过去，条目数得到但点不动（第一版就卡在这个 30s 点击超时上）
-      const listBtn = page.locator('.acs__icon-btn[aria-label="会话列表"]')
-      if ((await listBtn.count()) && await listBtn.isVisible().catch(() => false)) {
-        await listBtn.click()
-        await sleep(700)
-      }
-      const cItems = page.locator('.acs__convs .acu-conv-item')
-      // 列表是懒加载的（控制台的 useAgentChat 自己拉一次），等它出条目 —— 不给死等：
-      // 夹具里没有会话是环境问题，不该算产品缺陷，但也不能当通过
-      const hasConv = await waitFor(async () => (await cItems.count()) > 0, 15000, 400)
-      if (!hasConv) {
-        skip('B1c 控制台里复制一份出来', '控制台会话列表 15s 内没出条目')
-      } else {
-        await cItems.first().click()
-        // 等对话真的画出来（大会话要几秒），没画出来就说明点错了条目
-        const painted = await waitFor(async () =>
-          (await page.locator('.acs__chat .acu-bubble-row.is-user').count()) > 0, 20000, 400)
-        if (!painted) {
-          skip('B1c 控制台里复制一份出来', '选中的会话没渲染出用户气泡')
-        } else {
-          await writeClipboard('__SENTINEL__')
-          await page.locator(CONSOLE_COPY).first().click()
-          await sleep(800)
-          const cText = await readClipboard()
-          const hasBody = cText.startsWith('# ') && (cText.includes('## 我') || cText.includes('## g ai'))
-          check('B1c 控制台复制出来的也是一份会话 Markdown', hasBody,
-            `长度 ${cText.length}：${cText.slice(0, 30).replace(/\n/g, '⏎')}`)
-        }
-      }
-    }
-    await page.screenshot({ path: path.join(SHOT_DIR, 'console.png') }).catch(() => {})
+    // B 组（原「主 Agent 控制台对话面的复制按钮」）随 2026-10-25 控制台改造移除：
+    // 工作台控制台不再有「对话」档（聊天统一走右下角 dock），复制契约随
+    // AgentChatSurface 组件一起下线。
     // C 组（原「文件空间 g ai 面板」实地检查）随 2026-10 入口整合移除：
     // 编辑器 AI 面板已并入右下角 dock，复制按钮契约由 A1/A2 与
     // verify-agent-input-facts 的 dock 侧用例守，这里不再重复。
