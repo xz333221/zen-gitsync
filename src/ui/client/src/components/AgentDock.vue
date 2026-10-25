@@ -61,6 +61,12 @@ const props = defineProps<{
    *  随每轮请求的 docNote 注入 —— 导图多在项目根之外，openFilePath 会被服务端丢掉。
    *  编辑器视图不传：那边 openFilePath 就够了。 */
   contextNote?: string
+  /**
+   * 当前所在板块（App 的 activeView）。透传给 AgentView 挑一组贴题的欢迎页预设：
+   * 在「系统运行状态」页问"哪些端口被占了"，比"查看项目结构"合理得多。
+   * 切 Tab 时会跟着变（AgentView 常驻，靠 props 响应，不需要重开面板）。
+   */
+  view?: string
 }>()
 
 const agentStatus = useAgentActivityStore()
@@ -255,6 +261,7 @@ onBeforeUnmount(() => {
           :context-file-path="props.contextFile?.path"
           :context-file-name="props.contextFile?.name"
           :context-note="props.contextNote"
+          :view="props.view"
           :force-narrow="!maximized"
         />
       </div>

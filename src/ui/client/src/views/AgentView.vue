@@ -72,6 +72,14 @@ const props = defineProps<{
    * **默认恒单页（聊天吃满面板宽），点最大化才两栏**（最大化 ≥680，切回宽屏体验）。
    */
   forceNarrow?: boolean
+  /**
+   * 当前所在板块（App 的 activeView：git / console / editor / monitor …）。
+   *
+   * 只影响欢迎页那组预设提示词 —— 同一个浮窗在任何板块都能唤起，但"查看项目结构"
+   * 摆在「系统运行状态」页就很突兀，那一刻用户想问的是 CPU / 内存 / 端口。
+   * 用户在设置里自定义过预设时这条不起作用（自定义是全局一份明确的用户意图）。
+   */
+  view?: string
 }>()
 
 const configStore = useConfigStore()
@@ -323,9 +331,9 @@ watch(showContextCard, (show) => {
 
 // ── 预设问题 ──────────────────────────────────────────────
 // 内容可配（设置 → AI 模型配置 → 预设提示词）：configStore 里有自定义用自定义，
-// 否则回落 utils/agentPresets 的内置默认（原先是这里硬编码的 5 条）。
-// computed 依赖 store，改完设置回来看欢迎页即时生效，不需要新开会话或刷新。
-const presetQuestions = computed(() => resolveAgentPresets(configStore.agentPresetPrompts))
+// 否则按当前板块取一组贴题的（utils/agentPresets 的 VIEW_PRESETS），再没有才用通用内置 5 条。
+// computed 依赖 store 与 props.view：改完设置 / 切 Tab 回来看欢迎页即时生效，不用刷新。
+const presetQuestions = computed(() => resolveAgentPresets(configStore.agentPresetPrompts, props.view))
 
 // ── 发送消息 ──────────────────────────────────────────────
 // 编辑器视图激活时把「当前打开的文档」一起发给服务端（请求级注入，不落会话历史，

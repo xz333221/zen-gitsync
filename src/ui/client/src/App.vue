@@ -1106,7 +1106,7 @@ function stopVResize() {
 
   <!-- 右下角 g ai 悬浮 dock：fixed 覆盖层，不随 activeView 销毁。
        编辑器视图激活时经 :context-file 带上当前文件（发送时请求级注入） -->
-  <AgentDock v-if="initCompleted" :context-file="dockContextFile" :context-note="dockContextNote" />
+  <AgentDock v-if="initCompleted" :context-file="dockContextFile" :context-note="dockContextNote" :view="activeView" />
 
   <footer class="main-footer app-footer">
     <div class="footer-left">
