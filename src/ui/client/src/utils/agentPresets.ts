@@ -19,9 +19,11 @@
 //   2. 设置面板（GitGlobalSettingsDialog）：编辑预设时拿它当初始草稿 / 「恢复默认」的目标。
 // 两处各写一份迟早分叉（而且内置文案是 i18n 的，分叉了肉眼很难发现）。
 //
-// 数据流：~/.zen-gitsync/config.json 的 agentPresetPrompts（全局，跨项目共享）
-//   → configStore.agentPresetPrompts
-//   → resolveAgentPresets()（空数组时回落这里的内置默认）
+// 数据流：~/.zen-gitsync/config.json 的
+//   · agentPresetPrompts        —— 通用那一套（所有板块的兜底）
+//   · agentPresetPromptsByView  —— { [板块]: 该板块专属的一套 }
+//   → configStore（两个 ref）
+//   → resolveAgentPresets()（按优先级回落内置）
 //   → ChatContainer 的 preset-questions。
 
 import { $t } from '@/lang/static'
@@ -32,6 +34,35 @@ export interface AgentPresetPrompt {
   label: string
   prompt: string
 }
+
+/** 按板块存的预设：键是板块 id，值是那一套（非空；没配过的板块不出现在这里） */
+export type AgentPresetsByView = Record<string, AgentPresetPrompt[]>
+
+/**
+ * 有专属预设的板块（与活动栏的 view id 一一对应）。
+ * ⚠️ 必须与后端 src/config.js 的 AGENT_PRESET_VIEW_IDS 一致 —— 那边按它做白名单，
+ * 多写一个前端要用的板块、后端不认识，保存时会被静默丢掉。
+ */
+export const AGENT_PRESET_VIEW_IDS = [
+  'git', 'console', 'editor', 'source-map', 'workbench', 'projects', 'monitor', 'mindmap'
+] as const
+
+/**
+ * 设置面板里的作用域列表：''（通用，所有板块的兜底）+ 每个板块。
+ * labelKey 指向活动栏那套文案（@ACTBAR），别在这里另写一份中英文 —— 板块改名时
+ * 两处必然对不上。
+ */
+export const AGENT_PRESET_SCOPES: { id: string; labelKey: string }[] = [
+  { id: '', labelKey: '@42BB9:通用（兜底）' },
+  { id: 'git', labelKey: '@ACTBAR:Git' },
+  { id: 'console', labelKey: '@ACTBAR:控制台' },
+  { id: 'editor', labelKey: '@ACTBAR:编辑器' },
+  { id: 'source-map', labelKey: '@ACTBAR:源码地图' },
+  { id: 'workbench', labelKey: '@ACTBAR:工作台' },
+  { id: 'projects', labelKey: '@ACTBAR:项目管理' },
+  { id: 'monitor', labelKey: '@ACTBAR:系统监控' },
+  { id: 'mindmap', labelKey: '@ACTBAR:思维导图' }
+]
 
 /**
  * 内置默认的 5 条（文案随界面语言走）。
@@ -48,15 +79,36 @@ export function builtinAgentPresets(): AgentPresetPrompt[] {
   ]
 }
 
-/** 生效的预设：配置里有自定义（非空数组）用自定义，否则回落内置默认 */
+/**
+ * 生效的预设：优先级只有这一处实现，别在组件里再写一遍。
+ *
+ *   本板块自定义（byView[view]）> 通用自定义（custom）> 板块内置 > 通用内置
+ *
+ * 为什么板块自定义排在通用自定义前面：通用那套是"所有板块的兜底"。用户专门给某个
+ * 板块写了一套，再让通用覆盖它就是白写 —— 这也是 2026-10-25 用户提这条需求的理由
+ *（"每个板块有不同的预设提示词"）。
+ */
 export function resolveAgentPresets(
   custom: AgentPresetPrompt[] | null | undefined,
-  view?: string | null
+  view?: string | null,
+  byView?: AgentPresetsByView | null
 ): AgentPresetPrompt[] {
+  const scoped = view && byView && typeof byView === 'object' ? byView[view] : null
+  if (Array.isArray(scoped) && scoped.length > 0) return scoped
   if (Array.isArray(custom) && custom.length > 0) return custom
   const viewPresets = viewAgentPresets(view)
   if (viewPresets.length > 0) return viewPresets
   return builtinAgentPresets()
+}
+
+/**
+ * 某个设置作用域的内置文案：'' = 通用内置 5 条；板块 = 该板块的内置那一套。
+ * 设置面板用它在"没自定义"时当草稿（用户改了才落成自定义）。
+ */
+export function builtinPresetsForScope(scope: string): AgentPresetPrompt[] {
+  if (!scope) return builtinAgentPresets()
+  const viewPresets = viewAgentPresets(scope)
+  return viewPresets.length > 0 ? viewPresets : builtinAgentPresets()
 }
 
 /**
@@ -66,9 +118,7 @@ export function resolveAgentPresets(
  * 摆在「系统运行状态」页就很突兀 —— 用户此刻看的是 CPU / 内存 / 端口，
  * 想问的自然是这些。所以每个板块给一组更贴题的问题。
  *
- * 优先级：**用户在设置里自定义过 → 全板块统一用自定义**。
- * 这是刻意的：自定义是一份明确的用户意图，混进内置的板块预设会让人以为设置没生效。
- * 想要板块专属 → 现在只能改内置（未来若做"按板块配置"，入口应加到设置面板里）。
+ * 这些是**内置**文案；用户在设置里给某个板块单独配过就用他那套（见 resolveAgentPresets）。
  */
 const VIEW_PRESETS: Record<string, () => AgentPresetPrompt[]> = {
   git: () => [

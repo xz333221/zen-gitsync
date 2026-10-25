@@ -1138,6 +1138,19 @@ export function registerConfigRoutes({
         }
         updates.agentPresetPrompts = normalized
       }
+      // 按板块的预设提示词：{ [viewId]: [{id?, label, prompt}] }。
+      // 空对象合法（= 所有板块都不单独配置，全部继承「通用」那套）；
+      // 结构坏的值整体拒绝（400），与 normalizeAgentPresetPromptsByView 语义一致。
+      if (body.agentPresetPromptsByView !== undefined) {
+        const normalized = configManager.normalizeAgentPresetPromptsByView(body.agentPresetPromptsByView)
+        if (normalized === null) {
+          return res.status(400).json({
+            success: false,
+            error: 'agentPresetPromptsByView 非法: 需要 { [板块]: [{label, prompt}] } 对象（每项都不能为空）'
+          })
+        }
+        updates.agentPresetPromptsByView = normalized
+      }
       // g ai 智能体的默认提示词（全局配置）：和 g ai 对话时每轮拼进系统提示词。
       // **空串是合法值**（= 清除），所以判空用 !== undefined；非字符串整体拒绝（400），
       // 与 normalizeAgentDefaultPrompt 的语义一致。

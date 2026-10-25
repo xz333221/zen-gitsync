@@ -6,8 +6,10 @@
  *     不是"查看项目结构"这种通用开发问题
  *   B 切到「Git」页（dock 保持打开）→ 卡片换成 Git 那组
  *   C 两组内容不重叠（复制粘贴漏改会立刻红）
- *   D 用户在设置里自定义过预设 → 所有板块统一用自定义（自定义优先级最高）
+ *   D 只配了「通用」自定义 → 所有板块都用它（自定义优先级高于内置）
  *     （用 route 劫持 /api/config 造"已自定义"，不改用户真实配置）
+ *   E 同时配了「通用」和某板块专属 → 那个板块用专属，别的板块仍用通用
+ *     （这条是"按板块区分"的核心：专属不能被通用覆盖）
  *
  * 反向验证：--reverse 时把 A/B 的期望值对调，应当红 —— 证明断言真的在读内容。
  *
@@ -121,8 +123,36 @@ async function openDock(page) {
     await sleep(1200)
     await openDock(page)
     const custom = await waitPresets(page)
-    check('D 自定义预设后所有板块统一用它', custom.length === 1 && custom[0] === '我的自定义',
+    check('D 只配了通用自定义 → 没单独配置的板块都用它', custom.length === 1 && custom[0] === '我的自定义',
       `实测 ${custom.length} 条：${custom.join(' / ')}`)
+
+    // ── E 板块专属 > 通用自定义 ─────────────────────────────────
+    // 同一份劫持里再加一份「系统监控」专属：该板块必须换成它，Git 板块仍用通用那套
+    await ctx.unroute('**/api/config/getConfig')
+    await ctx.route('**/api/config/getConfig', async (route) => {
+      const res = await route.fetch()
+      const json = await res.json().catch(() => ({}))
+      json.agentPresetPrompts = [{ id: 'u1', label: '我的自定义', prompt: '跑一遍冒烟测试' }]
+      json.agentPresetPromptsByView = { monitor: [{ id: 'um1', label: '监控专用', prompt: '看谁在吃内存' }] }
+      await route.fulfill({ response: res, json })
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.waitForSelector('.activity-bar', { timeout: 20000 })
+    await page.locator('.activity-btn[aria-label^="系统监控"]').first().click()
+    await sleep(1200)
+    await openDock(page)
+    const monitorScoped = await waitPresets(page)
+    check('E1 板块专属优先于通用自定义', monitorScoped.length === 1 && monitorScoped[0] === '监控专用',
+      `实测 ${monitorScoped.length} 条：${monitorScoped.join(' / ')}`)
+
+    await page.evaluate(() => {
+      const btn = document.querySelectorAll('.activity-bar .activity-btn')[0]
+      btn?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await sleep(1200)
+    const gitFallback = await waitPresets(page)
+    check('E2 没配专属的板块回落通用自定义', gitFallback.length === 1 && gitFallback[0] === '我的自定义',
+      `实测 ${gitFallback.length} 条：${gitFallback.join(' / ')}`)
   } catch (err) {
     check('脚本异常', false, String((err && err.message) || err))
   } finally {

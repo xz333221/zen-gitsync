@@ -330,10 +330,15 @@ watch(showContextCard, (show) => {
 })
 
 // ── 预设问题 ──────────────────────────────────────────────
-// 内容可配（设置 → AI 模型配置 → 预设提示词）：configStore 里有自定义用自定义，
-// 否则按当前板块取一组贴题的（utils/agentPresets 的 VIEW_PRESETS），再没有才用通用内置 5 条。
-// computed 依赖 store 与 props.view：改完设置 / 切 Tab 回来看欢迎页即时生效，不用刷新。
-const presetQuestions = computed(() => resolveAgentPresets(configStore.agentPresetPrompts, props.view))
+// 内容可配（设置 → AI 模型配置 → 预设提示词）：本板块单独配过就用它，
+// 否则用「通用」那套自定义，再否则按当前板块取一组贴题的（utils/agentPresets 的
+// VIEW_PRESETS），最后才用通用内置 5 条。优先级只在 resolveAgentPresets 里实现。
+// computed 依赖两个 store ref 与 props.view：改完设置 / 切 Tab 回来看欢迎页即时生效。
+const presetQuestions = computed(() => resolveAgentPresets(
+  configStore.agentPresetPrompts,
+  props.view,
+  configStore.agentPresetPromptsByView
+))
 
 // ── 发送消息 ──────────────────────────────────────────────
 // 编辑器视图激活时把「当前打开的文档」一起发给服务端（请求级注入，不落会话历史，

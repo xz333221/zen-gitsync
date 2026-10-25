@@ -19,7 +19,8 @@ import { ElMessage } from 'element-plus'
 import type { SupportLocale } from '@/locales'
 import { setLocale } from '@/locales'
 import { isTaskExecutorId, type TaskExecutorId } from '@/utils/taskExecutor'
-import type { AgentPresetPrompt } from '@/utils/agentPresets'
+import type { AgentPresetPrompt, AgentPresetsByView } from '@/utils/agentPresets'
+import { AGENT_PRESET_VIEW_IDS } from '@/utils/agentPresets'
 import { useLocaleStore } from './localeStore'
 import {
   applyMarkdownTheme,
@@ -217,6 +218,9 @@ export const useConfigStore = defineStore('config', () => {
   // 空数组 = 使用内置默认（utils/agentPresets 的 builtinAgentPresets，随界面语言）；
   // 非空 = 用户自定义全量。后端 loadConfig 已归一化，这里只收合法数组。
   const agentPresetPrompts = ref<AgentPresetPrompt[]>([])
+  // 按板块的「预设提示词」：{ [viewId]: 该板块专属的一套 }。只存配过的板块。
+  // 优先级见 utils/agentPresets 的 resolveAgentPresets（本板块 > 通用 > 板块内置 > 通用内置）。
+  const agentPresetPromptsByView = ref<AgentPresetsByView>({})
   // g ai 智能体的默认提示词（全局配置，跨项目共享，'' = 不注入）。
   // 和 g ai 对话时每一轮都会拼进系统提示词（服务端 chatPrompts.js 现读现拼，
   // 不落进会话历史 —— 所以改完这里下一次发消息就生效，不用新开会话）。
@@ -555,6 +559,20 @@ export const useConfigStore = defineStore('config', () => {
         agentPresetPrompts.value = (configData.agentPresetPrompts as any[])
           .filter(x => x && typeof x.label === 'string' && typeof x.prompt === 'string')
           .map(x => ({ id: String(x.id ?? ''), label: x.label, prompt: x.prompt }))
+      }
+      // 按板块的预设：后端已按白名单归一化（只留非空板块），这里同样做一遍防御性映射
+      if (configData.agentPresetPromptsByView && typeof configData.agentPresetPromptsByView === 'object'
+        && !Array.isArray(configData.agentPresetPromptsByView)) {
+        const byView: AgentPresetsByView = {}
+        for (const [view, list] of Object.entries(configData.agentPresetPromptsByView as Record<string, any>)) {
+          if (!(AGENT_PRESET_VIEW_IDS as readonly string[]).includes(view)) continue
+          if (!Array.isArray(list)) continue
+          const cleaned = list
+            .filter(x => x && typeof x.label === 'string' && typeof x.prompt === 'string')
+            .map(x => ({ id: String(x.id ?? ''), label: x.label, prompt: x.prompt }))
+          if (cleaned.length > 0) byView[view] = cleaned
+        }
+        agentPresetPromptsByView.value = byView
       }
       // 加载工作台任务执行器默认值（后端已规范化为 claude | opencode | codex）
       if (isTaskExecutorId(configData.taskExecutor)) {
@@ -1596,7 +1614,7 @@ export const useConfigStore = defineStore('config', () => {
 
   // 保存 AI 智能体运行时设置（单轮最大工具调用次数 / 单轮请求上下文预算 / 预设提示词 /
   // g ai 默认提示词）。各键可选：只传要改的那个，其它不动（后端同样"没传的不动"）。
-  async function saveAiSettings(settings: { aiMaxToolIterations?: number; aiMaxRequestTokens?: number; agentPresetPrompts?: AgentPresetPrompt[]; agentDefaultPrompt?: string }): Promise<boolean> {
+  async function saveAiSettings(settings: { aiMaxToolIterations?: number; aiMaxRequestTokens?: number; agentPresetPrompts?: AgentPresetPrompt[]; agentPresetPromptsByView?: AgentPresetsByView; agentDefaultPrompt?: string }): Promise<boolean> {
     try {
       const response = await fetch('/api/config/save-ai-settings', {
         method: 'POST',
@@ -1606,6 +1624,8 @@ export const useConfigStore = defineStore('config', () => {
           ...(settings.aiMaxRequestTokens !== undefined ? { aiMaxRequestTokens: settings.aiMaxRequestTokens } : {}),
           // 空数组也发（= 恢复内置默认），所以判断 undefined 而不是 length —— 与后端同一语义
           ...(settings.agentPresetPrompts !== undefined ? { agentPresetPrompts: settings.agentPresetPrompts } : {}),
+          // 空对象也发（= 所有板块都不单独配置），同一套判断
+          ...(settings.agentPresetPromptsByView !== undefined ? { agentPresetPromptsByView: settings.agentPresetPromptsByView } : {}),
           // 空串也发（= 清除），同一套判断
           ...(settings.agentDefaultPrompt !== undefined ? { agentDefaultPrompt: settings.agentDefaultPrompt } : {}),
         })
@@ -1632,6 +1652,11 @@ export const useConfigStore = defineStore('config', () => {
         // 空数组也照收 —— 它是"已恢复内置默认"的有效状态
         if (Array.isArray(result.agentPresetPrompts)) {
           agentPresetPrompts.value = result.agentPresetPrompts
+        }
+        // 按板块的那份同理：回执里是归一化后的对象（丢掉白名单外的键、空板块不落），
+        // 空对象照收 = 已全部恢复内置
+        if (result.agentPresetPromptsByView && typeof result.agentPresetPromptsByView === 'object' && !Array.isArray(result.agentPresetPromptsByView)) {
+          agentPresetPromptsByView.value = result.agentPresetPromptsByView
         }
         // g ai 默认提示词同样以回执为准（服务端会截断到上限），空串照收 = 已清除
         if (typeof result.agentDefaultPrompt === 'string') {
@@ -1723,6 +1748,7 @@ export const useConfigStore = defineStore('config', () => {
     aiMaxToolIterations,
     aiMaxRequestTokens,
     agentPresetPrompts,
+    agentPresetPromptsByView,
     agentDefaultPrompt,
     aiRequestBudget,
     taskExecutor,

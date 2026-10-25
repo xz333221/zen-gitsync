@@ -354,6 +354,50 @@ test('预设提示词：空数组合法写盘(恢复内置默认)；非法值不
   assert.deepEqual((await readRawConfig()).agentPresetPrompts, [], '半截条目同样不落盘')
 })
 
+// ========== agentPresetPromptsByView(按板块的预设提示词)顶层全局键 ==========
+
+test('按板块的预设：默认是空对象(全走内置) ', async () => {
+  await writeRawConfig({ defaultCommitMessage: 'test', projects: {} })
+  const cfg = await configMod.default.loadConfig()
+  assert.deepEqual(cfg.agentPresetPromptsByView, {}, '未配置时应是空对象，由前端回落内置')
+})
+
+test('按板块的预设：存成顶层全局键，且不漏进项目配置', async () => {
+  await writeRawConfig({ defaultCommitMessage: 'test', projects: {} })
+  const byView = { monitor: [{ id: 'm1', label: '看内存', prompt: '看看谁在吃内存' }] }
+  await saveConfig({ defaultCommitMessage: 'test', agentPresetPromptsByView: byView })
+  const raw = await readRawConfig()
+  assert.deepEqual(raw.agentPresetPromptsByView, byView, '应写在 config.json 顶层')
+  const polluted = Object.entries(raw.projects || {})
+    .filter(([, p]) => p && typeof p === 'object' && 'agentPresetPromptsByView' in p)
+    .map(([k]) => k)
+  assert.deepEqual(polluted, [], `不该出现在项目配置里: ${polluted.join(', ')}`)
+})
+
+test('按板块的预设：空对象合法写盘；空板块的键不落盘；白名单外的板块丢弃', async () => {
+  await saveConfig({
+    defaultCommitMessage: 'test',
+    agentPresetPromptsByView: { monitor: [], git: [{ id: 'g1', label: 'a', prompt: 'b' }], 'no-such-board': [{ id: 'x', label: 'c', prompt: 'd' }] },
+  })
+  // monitor 是空数组 = 该板块没自定义（继承通用那套），不该留一个空数组的键
+  assert.deepEqual((await readRawConfig()).agentPresetPromptsByView,
+    { git: [{ id: 'g1', label: 'a', prompt: 'b' }] })
+
+  // 空对象是"所有板块都不单独配置"的合法表达，必须真的写盘
+  await saveConfig({ defaultCommitMessage: 'test', agentPresetPromptsByView: {} })
+  assert.deepEqual((await readRawConfig()).agentPresetPromptsByView, {})
+})
+
+test('按板块的预设：非法值不落盘保留磁盘旧值', async () => {
+  const good = { monitor: [{ id: 'm1', label: '看内存', prompt: '看看谁在吃内存' }] }
+  await saveConfig({ defaultCommitMessage: 'test', agentPresetPromptsByView: good })
+  for (const bad of ['oops', [1, 2], { monitor: [{ label: '缺 prompt' }] }, { monitor: 'not-array' }]) {
+    await saveConfig({ defaultCommitMessage: 'test', agentPresetPromptsByView: bad })
+    assert.deepEqual((await readRawConfig()).agentPresetPromptsByView, good,
+      `非法值不该覆盖磁盘上的合法值: ${JSON.stringify(bad)}`)
+  }
+})
+
 // ========== agentDefaultPrompt(g ai 智能体的默认提示词)顶层全局键 ==========
 
 test('g ai 默认提示词的默认值是空串(不注入)', async () => {
@@ -406,6 +450,7 @@ test('默认导出对象必须包含路由要用的规范化函数（漏加 = un
     'normalizeTaskExecutor',
     'normalizeNotifySwitch',
     'normalizeAgentPresetPrompts',
+    'normalizeAgentPresetPromptsByView',
     'normalizeAgentDefaultPrompt'
   ]) {
     assert.equal(typeof configMod.default[name], 'function', `默认导出缺少 ${name}`)

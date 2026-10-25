@@ -179,6 +179,43 @@ export function normalizeAgentPresetPrompts(value) {
   return out;
 }
 
+/**
+ * 「按板块的预设提示词」允许的板块 id。必须与前端 utils/agentPresets.ts 的
+ * AGENT_PRESET_VIEW_IDS 一致。
+ *
+ * 白名单之外的键**丢弃**而不是整组拒绝：磁盘上可能留着旧版本删掉的板块（或手改时
+ * 写错一个键），一个不认识的板块不该让整份配置失效 —— 与"单个条目不合法就整组拒绝"
+ * 是不同层级的判断（条目坏了会点出空卡片，键坏了只是没人读）。
+ */
+const AGENT_PRESET_VIEW_IDS = [
+  'git', 'console', 'editor', 'source-map', 'workbench', 'projects', 'monitor', 'mindmap',
+];
+
+/**
+ * 规范化「按板块的预设提示词」（全局配置，跨项目/跨板块共享）。
+ *
+ * 形状：{ [viewId]: [{id, label, prompt}] }
+ *
+ * 语义约定（2026-10-25 新增）：
+ *   · undefined / null → null（没配过，调用方回落 defaultConfig = {}）
+ *   · 非普通对象（含数组）/ 任一条目结构坏 → null（整体拒绝，理由同
+ *     normalizeAgentPresetPrompts：宁可整组回落内置，也不生成半截卡片）
+ *   · 某个板块的值归一化后为空数组 → **不写这个键**（= 该板块没有自定义，
+ *     继承「通用」那套）。两种"没有"在磁盘上只留一种表达。
+ */
+export function normalizeAgentPresetPromptsByView(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) return null;
+  const out = {};
+  for (const view of AGENT_PRESET_VIEW_IDS) {
+    if (!Object.prototype.hasOwnProperty.call(value, view)) continue;
+    const normalized = normalizeAgentPresetPrompts(value[view]);
+    if (normalized === null) return null;
+    if (normalized.length > 0) out[view] = normalized;
+  }
+  return out;
+}
+
 // 「g ai 智能体的默认提示词」上限。
 // 与派发预设提示词同值（4000）：两者都是"每一轮对话都会被拼进 prompt 的约束"，
 // 到这个量级已经能写下一整套规范，再长只是让每次请求都白烧一遍 token。
@@ -291,7 +328,12 @@ const defaultConfig = {
   // 智能体视图欢迎页的「预设提示词」快捷卡片（全局配置，CLI 不消费、只有 Web 端用）。
   // 空数组 = 使用前端内置的 5 条默认（zh/en 文案随界面语言走，见 utils/agentPresets.ts）；
   // 非空 = 用户自定义全量（每条 {id, label, prompt}）。归一化见 normalizeAgentPresetPrompts。
+  // 这一份是**所有板块的兜底**：某个板块没有单独配置时用它。
   agentPresetPrompts: [],
+  // 按板块的「预设提示词」：{ [viewId]: [{id, label, prompt}] }，只收配过的板块。
+  // 优先级（前端 resolveAgentPresets）：本板块自定义 > 上面那份通用自定义 > 板块内置 > 通用内置。
+  // 归一化见 normalizeAgentPresetPromptsByView。
+  agentPresetPromptsByView: {},
   // g ai 智能体的默认提示词（全局配置，跨项目共享）。
   // 和 g ai 对话时每一轮都会拼进系统提示词（Web 智能体视图 / 文件空间面板 / 定时任务，
   // 见 workbench/chatPrompts.js）。空串 = 不注入。
@@ -645,6 +687,8 @@ async function loadConfig() {
       taskExecutor: normalizeTaskExecutor(raw.taskExecutor) ?? defaultConfig.taskExecutor,
       agentPresetPrompts: normalizeAgentPresetPrompts(raw.agentPresetPrompts)
         ?? defaultConfig.agentPresetPrompts,
+      agentPresetPromptsByView: normalizeAgentPresetPromptsByView(raw.agentPresetPromptsByView)
+        ?? defaultConfig.agentPresetPromptsByView,
       agentDefaultPrompt: normalizeAgentDefaultPrompt(raw.agentDefaultPrompt)
         ?? defaultConfig.agentDefaultPrompt,
       ...resolveNotifySwitches(raw)
@@ -670,6 +714,9 @@ async function loadConfig() {
     // 同 taskExecutor：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
     agentPresetPrompts: normalizeAgentPresetPrompts(raw?.agentPresetPrompts)
       ?? defaultConfig.agentPresetPrompts,
+    // 同 agentPresetPrompts：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
+    agentPresetPromptsByView: normalizeAgentPresetPromptsByView(raw?.agentPresetPromptsByView)
+      ?? defaultConfig.agentPresetPromptsByView,
     // 同 agentPresetPrompts：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
     agentDefaultPrompt: normalizeAgentDefaultPrompt(raw?.agentDefaultPrompt)
       ?? defaultConfig.agentDefaultPrompt,
@@ -726,7 +773,7 @@ async function saveConfig(config) {
   // 项目级是这一族键最容易踩的坑。解构出来本身不写回顶层（它已不再被任何地方读取）。
   const {
     theme, locale, models, ui, aiMaxToolIterations, aiMaxRequestTokens, taskExecutor,
-    agentPresetPrompts, agentDefaultPrompt,
+    agentPresetPrompts, agentPresetPromptsByView, agentDefaultPrompt,
     notifyOnTaskDone: legacyNotifyOnTaskDone,
     notifyPageOnTaskDone, notifyBrowserOnTaskDone, notifySoundOnTaskDone,
     ...projectConfig
@@ -779,6 +826,12 @@ async function saveConfig(config) {
   const normalizedPresets = normalizeAgentPresetPrompts(agentPresetPrompts);
   if (normalizedPresets !== null) {
     raw.agentPresetPrompts = normalizedPresets;
+  }
+  // 按板块的预设提示词：空对象是**合法值**（= 所有板块都不单独配置），照写；
+  // 非法值（结构坏）不落盘，保留磁盘旧值 —— 与上面各键同一套语义。
+  const normalizedPresetsByView = normalizeAgentPresetPromptsByView(agentPresetPromptsByView);
+  if (normalizedPresetsByView !== null) {
+    raw.agentPresetPromptsByView = normalizedPresetsByView;
   }
   // g ai 默认提示词同属全局设置：**空串是合法值**（= 清除），照写；
   // 非字符串不落盘，保留磁盘旧值 —— 与上面各键同一套语义。
@@ -994,6 +1047,8 @@ export default {
   normalizeNotifySwitch,
   // 智能体视图「预设提示词」的规范化(GUI 保存前也要用,见 /api/config/save-ai-settings)
   normalizeAgentPresetPrompts,
+  // 按板块的预设提示词的规范化(同上)
+  normalizeAgentPresetPromptsByView,
   // g ai 智能体默认提示词的规范化(同上,见 /api/config/save-ai-settings)
   normalizeAgentDefaultPrompt,
 };

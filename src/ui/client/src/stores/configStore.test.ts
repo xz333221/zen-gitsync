@@ -183,4 +183,36 @@ describe('configStore 预设提示词（agentPresetPrompts）', () => {
 
     expect(store.agentPresetPrompts).toEqual([{ id: 'preset-1', label: 'a', prompt: 'b' }])
   })
+
+  // 按板块的那份：读取时只留非空板块（空数组 = 没自定义 = 继承通用那套），
+  // 保存空对象也要真的发出去（= 所有板块都恢复内置）。
+  test('按板块的预设：load 只留非空板块，保存空对象也真的发出', async () => {
+    stubFetch({
+      agentPresetPromptsByView: {
+        monitor: [{ id: 'm1', label: '看内存', prompt: '看看谁在吃内存' }],
+        git: [],
+        'no-such-board': [{ id: 'x', label: 'c', prompt: 'd' }],
+      },
+    })
+    const store = useConfigStore()
+    await store.loadConfig()
+
+    expect(store.agentPresetPromptsByView).toEqual({
+      monitor: [{ id: 'm1', label: '看内存', prompt: '看看谁在吃内存' }],
+    })
+
+    vi.mocked(fetch).mockClear()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      success: true,
+      agentPresetPromptsByView: {},
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+
+    const ok = await store.saveAiSettings({ agentPresetPromptsByView: {} })
+
+    expect(ok).toBe(true)
+    const saveCall = vi.mocked(fetch).mock.calls.find(c => c[0] === '/api/config/save-ai-settings')
+    expect(JSON.parse(String(saveCall![1]?.body))).toEqual({ agentPresetPromptsByView: {} })
+    // 以回执为准：空对象照收（= 全部板块恢复内置）
+    expect(store.agentPresetPromptsByView).toEqual({})
+  })
 })

@@ -567,7 +567,7 @@
             </div>
           </div>
 
-          <!-- 预设提示词（智能体视图欢迎页的快捷卡片，全局配置、跨项目共享） -->
+          <!-- 预设提示词（智能体视图欢迎页的快捷卡片，按板块分开配，全局配置、跨项目共享） -->
           <div class="settings-section">
             <div class="section-title model-section-title">
               <span>{{ $t('@42BB9:预设提示词') }}</span>
@@ -579,7 +579,37 @@
               >+ {{ $t('@42BB9:添加一条') }}</button>
             </div>
             <p class="preset-hint">
-              {{ $t('@42BB9:智能体欢迎页的快捷卡片。留空时按当前板块给一组贴题的（系统运行状态问端口、编辑器问代码），自定义后所有板块统一用这套') }}
+              {{ $t('@42BB9:智能体欢迎页的快捷卡片，按板块分开配。「通用」是所有板块的兜底；单独给某个板块配一套后，只在该板块生效') }}
+            </p>
+
+            <!-- 作用域切换：通用 + 各板块。有自定义的板块带一枚小圆点（不然得逐个点开才知道配过没） -->
+            <div class="preset-scopes" role="tablist" :aria-label="$t('@42BB9:选择要配置的板块')">
+              <button
+                v-for="scope in AGENT_PRESET_SCOPES"
+                :key="scope.id || 'common'"
+                type="button"
+                role="tab"
+                class="preset-scope"
+                :class="{ active: presetScope === scope.id }"
+                :aria-selected="presetScope === scope.id"
+                :title="savedPresetsFor(scope.id).length > 0 ? $t('@42BB9:已单独配置') : ''"
+                @click="presetScope = scope.id"
+              >
+                <span>{{ scopeLabel(scope.id) }}</span>
+                <span v-if="savedPresetsFor(scope.id).length > 0" class="preset-scope-dot" aria-hidden="true" />
+              </button>
+            </div>
+
+            <p class="preset-scope-note">
+              <template v-if="presetScope === ''">
+                {{ $t('@42BB9:「通用」是所有板块的兜底 —— 某个板块没单独配置时用它') }}
+              </template>
+              <template v-else-if="presetScopeIsCustom">
+                {{ $t('@42BB9:「{scope}」用的是你单独配的那套，只在这个板块生效', { scope: scopeLabel(presetScope) }) }}
+              </template>
+              <template v-else>
+                {{ $t('@42BB9:「{scope}」还没单独配置，下面是内置文案 —— 改完保存就会成为它的自定义', { scope: scopeLabel(presetScope) }) }}
+              </template>
             </p>
 
             <div v-if="presetDraft.length === 0" class="preset-empty">
@@ -641,7 +671,7 @@
             <div class="preset-foot">
               <span class="preset-count">{{ presetDraft.length }} / {{ PRESET_MAX }}</span>
               <button type="button" class="model-btn" @click="handleResetPresets">
-                {{ $t('@42BB9:恢复默认') }}
+                {{ presetScope === '' ? $t('@42BB9:恢复通用默认') : $t('@42BB9:恢复本板块默认') }}
               </button>
             </div>
           </div>
@@ -914,7 +944,7 @@ import { useLocaleStore } from '@/stores/localeStore'
 import { useConfigStore, type ModelInfo } from '@/stores/configStore'
 import { useToolsStore, type ToolId } from '@/stores/toolsStore'
 import { TASK_EXECUTOR_OPTIONS, type TaskExecutorId } from '@/utils/taskExecutor'
-import { builtinAgentPresets, newAgentPresetId, type AgentPresetPrompt } from '@/utils/agentPresets'
+import { AGENT_PRESET_SCOPES, builtinPresetsForScope, newAgentPresetId, type AgentPresetPrompt, type AgentPresetsByView } from '@/utils/agentPresets'
 import { DARK_TILE_ICON_IDS, TOOL_DISPLAY_NAMES } from '@/composables/useDirectoryOpenActions'
 import {
   notificationPermission,
@@ -1178,49 +1208,111 @@ async function onReportIntervalChange(value: number) {
 }
 
 // ── 预设提示词（智能体视图欢迎页的快捷卡片）──────────────────
-// 编辑走**草稿模式**（与「通用设置」「Git 设置」同一套交互）：改动先落 presetDraft，
+// **按板块分开配**：'' 是「通用」（所有板块的兜底），其余键是各板块自己的那一套
+// （数据在 config.json 的 agentPresetPrompts / agentPresetPromptsByView）。
+// 编辑走**草稿模式**（与「通用设置」「Git 设置」同一套交互）：改动先落 presetDrafts，
 // footer 的「保存设置」按 hasChanges 出现，保存时全量提交；
-// 「恢复默认」是例外 —— 它是个明确动作，点了立即提交空数组（= 内置默认）并重置草稿。
+// 「恢复默认」是例外 —— 它是个明确动作，点了立即把**当前板块**恢复成内置并重置它的草稿。
 // 条数上限与后端 src/config.js 的 AGENT_PRESET_PROMPTS_MAX 保持一致。
 const PRESET_MAX = 12
-const presetDraft = ref<AgentPresetPrompt[]>([])
+/** 当前编辑的作用域：'' = 通用，其余 = 板块 id */
+const presetScope = ref('')
+/** 各作用域的草稿（键同 presetScope）。没配过的作用域，草稿 = 那一套内置文案 */
+const presetDrafts = ref<Record<string, AgentPresetPrompt[]>>({})
 
-/** 用「当前生效值」重置草稿：配置里有自定义 → 拷贝自定义；否则 → 内置默认（当前语言） */
-function initPresetDraft() {
-  const custom = configStore.agentPresetPrompts
-  presetDraft.value = (custom.length > 0 ? custom : builtinAgentPresets()).map(x => ({ ...x }))
+/** 某个作用域已保存的自定义；没配过 → 空数组 */
+function savedPresetsFor(scope: string): AgentPresetPrompt[] {
+  if (!scope) return configStore.agentPresetPrompts || []
+  return configStore.agentPresetPromptsByView?.[scope] || []
 }
 
-/** 草稿 vs 当前生效值（自定义或内置）的差异 —— 有差异 footer 才出现「保存设置」 */
+/** 某个作用域当前"生效"的内容：自定义优先，否则内置 —— 设置面板拿它当编辑起点 */
+function effectivePresetsFor(scope: string): AgentPresetPrompt[] {
+  const saved = savedPresetsFor(scope)
+  return saved.length > 0 ? saved : builtinPresetsForScope(scope)
+}
+
+/** 用当前生效值重置**全部**作用域的草稿（打开弹窗 / 保存成功后各一次） */
+function initPresetDraft() {
+  const drafts: Record<string, AgentPresetPrompt[]> = {}
+  for (const { id } of AGENT_PRESET_SCOPES) {
+    drafts[id] = effectivePresetsFor(id).map(x => ({ ...x }))
+  }
+  presetDrafts.value = drafts
+}
+
+const presetDraft = computed<AgentPresetPrompt[]>(() => presetDrafts.value[presetScope.value] || [])
+/** 作用域的显示名。模板里当函数调用（切语言时跟着重渲染），别缓存成 computed */
+function scopeLabel(id: string): string {
+  const found = AGENT_PRESET_SCOPES.find(s => s.id === id)
+  return found ? $t(found.labelKey) : id
+}
+/** 当前作用域是不是"用户自定义过"（false = 正在编辑内置文案） */
+const presetScopeIsCustom = computed(() => savedPresetsFor(presetScope.value).length > 0)
+
+/** 草稿 vs 当前生效值（自定义或内置）—— 有差异 footer 才出现「保存设置」 */
 const presetDirty = computed(() =>
-  JSON.stringify(presetDraft.value) !== JSON.stringify(
-    configStore.agentPresetPrompts.length > 0 ? configStore.agentPresetPrompts : builtinAgentPresets()
+  AGENT_PRESET_SCOPES.some(({ id }) =>
+    JSON.stringify(presetDrafts.value[id] || []) !== JSON.stringify(effectivePresetsFor(id))
   )
 )
 
 function addPreset() {
-  if (presetDraft.value.length >= PRESET_MAX) return
-  presetDraft.value.push({ id: newAgentPresetId(), label: '', prompt: '' })
+  const list = presetDrafts.value[presetScope.value]
+  if (!list || list.length >= PRESET_MAX) return
+  list.push({ id: newAgentPresetId(), label: '', prompt: '' })
 }
 
 function removePreset(idx: number) {
-  presetDraft.value.splice(idx, 1)
+  presetDrafts.value[presetScope.value]?.splice(idx, 1)
 }
 
 function movePreset(idx: number, delta: number) {
+  const list = presetDrafts.value[presetScope.value]
+  if (!list) return
   const next = idx + delta
-  if (next < 0 || next >= presetDraft.value.length) return
+  if (next < 0 || next >= list.length) return
   // splice 出再插回：Vue 会按 key 复用节点，输入框焦点/光标都不丢
-  const [item] = presetDraft.value.splice(idx, 1)
-  presetDraft.value.splice(next, 0, item)
+  const [item] = list.splice(idx, 1)
+  list.splice(next, 0, item)
 }
 
+/**
+ * 把草稿拼成提交载荷。
+ *
+ * 只提交**和内置文案不一样**的作用域：没动过的作用域不该被快照成自定义 ——
+ * 那会让它不再跟随内置文案更新，也不再跟随界面语言切换。
+ * 拼出来的形状就是磁盘形状（通用是数组，板块是对象；没自定义的板块连键都不出现）。
+ */
+function buildPresetsPayload(): { agentPresetPrompts: AgentPresetPrompt[]; agentPresetPromptsByView: AgentPresetsByView } {
+  let globalPresets: AgentPresetPrompt[] = []
+  const byView: AgentPresetsByView = {}
+  for (const { id } of AGENT_PRESET_SCOPES) {
+    const draft = (presetDrafts.value[id] || []).map(x => ({ id: x.id, label: x.label.trim(), prompt: x.prompt.trim() }))
+    if (JSON.stringify(draft) === JSON.stringify(builtinPresetsForScope(id))) continue
+    if (!id) globalPresets = draft
+    else byView[id] = draft
+  }
+  return { agentPresetPrompts: globalPresets, agentPresetPromptsByView: byView }
+}
+
+/** 某个作用域恢复成内置：通用 → 存空数组；板块 → 去掉那个键（= 继承通用那套） */
 async function handleResetPresets() {
-  // 提交**空数组**（不是内置文案的全量）—— 语义是"恢复内置默认"而不是"把当前语言
-  // 的内置文案快照成自定义"。后端存 []，之后切语言时内置文案仍会跟着切。
-  const ok = await configStore.saveAiSettings({ agentPresetPrompts: [] })
-  if (!ok) return
-  initPresetDraft()
+  const scope = presetScope.value
+  if (!scope) {
+    const ok = await configStore.saveAiSettings({ agentPresetPrompts: [] })
+    if (!ok) return
+  } else {
+    const next = { ...(configStore.agentPresetPromptsByView || {}) }
+    delete next[scope]
+    const ok = await configStore.saveAiSettings({ agentPresetPromptsByView: next })
+    if (!ok) return
+  }
+  // 只重置当前作用域的草稿：别的板块可能改了一半，别一起丢掉
+  presetDrafts.value = {
+    ...presetDrafts.value,
+    [scope]: builtinPresetsForScope(scope).map(x => ({ ...x }))
+  }
   ElMessage.success($t('@42BB9:已恢复为内置预设'))
 }
 
@@ -1798,23 +1890,30 @@ async function handleSave() {  // 配置编辑 tab 单独处理
     visible.value = false
     return
   }
-  // 预设提示词：草稿全量提交。校验只拦"点了没反应"的坏数据（空条目），
+  // 预设提示词：草稿全量提交（按板块）。校验只拦"点了没反应"的坏数据（空条目），
   // 长度/条数上限由 input 的 maxlength 与后端归一化兜底。
   if (activeTab.value === 'ai-models') {
-    const cleaned = presetDraft.value.map(x => ({ id: x.id, label: x.label.trim(), prompt: x.prompt.trim() }))
-    if (cleaned.length === 0) {
-      ElMessage.warning($t('@42BB9:至少保留一条预设 —— 想用回内置版本请点「恢复默认」'))
-      return
+    for (const scope of AGENT_PRESET_SCOPES) {
+      const draft = presetDrafts.value[scope.id] || []
+      const scopeName = $t(scope.labelKey)
+      if (draft.length === 0) {
+        ElMessage.warning($t('@42BB9:「{scope}」一条预设都没有 —— 想用回内置版本请点「恢复默认」，或先添加一条', { scope: scopeName }))
+        return
+      }
+      if (draft.some(x => !x.label.trim() || !x.prompt.trim())) {
+        ElMessage.warning($t('@42BB9:「{scope}」有预设的标题或内容为空', { scope: scopeName }))
+        return
+      }
     }
-    if (cleaned.some(x => !x.label || !x.prompt)) {
-      ElMessage.warning($t('@42BB9:每条预设的标题和内容都不能为空'))
-      return
-    }
-    const ok = await configStore.saveAiSettings({ agentPresetPrompts: cleaned })
+    const payload = buildPresetsPayload()
+    const ok = await configStore.saveAiSettings({
+      agentPresetPrompts: payload.agentPresetPrompts,
+      agentPresetPromptsByView: payload.agentPresetPromptsByView,
+    })
     if (!ok) return
     // 用 trim 后的值对齐草稿：否则"看着一样但还挂着 dirty"（末尾空格造成假差异），
     // footer 的保存按钮会一直杵在那儿
-    presetDraft.value = cleaned.map(x => ({ ...x }))
+    initPresetDraft()
     ElMessage.success($t('@42BB9:预设提示词已保存'))
     visible.value = false
     return
@@ -2606,6 +2705,56 @@ async function openSystemConfigFile() {
   margin: 0 0 10px;
 }
 
+/* 作用域切换：一行平铺的文字标签，选中态只靠底色 + 主色文字（不画边框、不做胶囊） */
+.preset-scopes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.preset-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--el-text-color-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  line-height: 20px;
+  cursor: pointer;
+  transition: var(--transition-ui-base);
+}
+
+.preset-scope:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.preset-scope.active {
+  background: var(--tint-primary-12);
+  color: var(--color-primary);
+}
+
+/* 有自定义的板块带一枚小圆点 —— 否则要逐个点开才知道哪些配过 */
+.preset-scope-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.7;
+}
+
+.preset-scope-note {
+  font-size: var(--font-size-xs);
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
+  margin: 0 0 10px;
+}
+
 .preset-empty {
   font-size: var(--font-size-sm);
   color: var(--el-text-color-secondary);
@@ -2615,20 +2764,19 @@ async function openSystemConfigFile() {
 .preset-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 2px;
   margin-bottom: 10px;
 }
 
+/* 列表行不画卡片：padding + hover 底色区分（与项目列表 .proj-item 同一套语言） */
 .preset-card {
-  padding: 10px 12px;
-  border: 1px solid var(--el-border-color);
-  border-radius: var(--radius-lg);
-  background: var(--bg-container);
-  transition: border-color var(--transition-base);
+  padding: 7px 10px;
+  border-radius: var(--radius-md);
+  transition: background var(--transition-base);
 }
 
 .preset-card:hover {
-  border-color: var(--color-primary);
+  background: var(--bg-hover);
 }
 
 .preset-card-head {
