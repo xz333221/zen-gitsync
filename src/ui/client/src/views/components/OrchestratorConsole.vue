@@ -1238,24 +1238,27 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 .oc__report-head .oc__panel-title { margin: 0; flex: 1; min-width: 0; }
 
 /* 间隔下拉。原生 <select>：弹出层在深色主题下的可读性由 common.scss 的
-   `select option` 规则兜着（见 scripts/verify-native-select-popup.cjs） */
+   `select option` 规则兜着（见 scripts/verify-native-select-popup.cjs）。
+   2026-10-25：跟着整块去掉「1px 描边 + 全圆角」，改成栏内的小号文字控件 ——
+   头部两个控件都挂描边时，那一行看着像一条胶囊工具栏，与下面刚平铺的报告块
+   不是一套语言。静息透明，hover / focus 才出淡底。 */
 .oc__interval {
   flex-shrink: 0;
   height: 22px;
   max-width: 116px;
-  padding: 0 2px 0 6px;
+  padding: 0 2px 0 4px;
   font-size: var(--font-size-xs);
   font-family: inherit;
   color: var(--text-secondary);
-  background: var(--surface-elevated);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-pill);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-base);
   cursor: pointer;
   outline: none;
-  transition: border-color var(--transition-fast) var(--ease-custom),
-              color var(--transition-fast) var(--ease-custom);
+  transition: color var(--transition-fast) var(--ease-custom),
+              background var(--transition-fast) var(--ease-custom);
 }
-.oc__interval:hover { color: var(--text-primary); border-color: var(--border-color); }
+.oc__interval:hover { color: var(--text-primary); background: var(--bg-subtle); }
 .oc__interval:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
 .oc__report-run {
@@ -1264,18 +1267,18 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   gap: 3px;
   flex-shrink: 0;
   height: 22px;
-  padding: 0 8px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-pill);
-  background: var(--surface-elevated);
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--radius-base);
+  background: transparent;
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
   font-family: inherit;
   cursor: pointer;
   transition: color var(--transition-fast) var(--ease-custom),
-              border-color var(--transition-fast) var(--ease-custom);
+              background var(--transition-fast) var(--ease-custom);
 }
-.oc__report-run:hover:not(:disabled) { color: var(--color-primary); border-color: var(--color-primary); }
+.oc__report-run:hover:not(:disabled) { color: var(--color-primary); background: var(--bg-subtle); }
 .oc__report-run:disabled { opacity: var(--disabled-opacity); cursor: default; }
 .oc__report-run:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 .oc__report-run-icon { font-size: var(--font-size-xs); }
@@ -1297,30 +1300,20 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   min-height: 0;
 }
 
-/* ── 报告卡片 ─────────────────────────────────────────── */
-/* 卡片本体。边界用 --border-color 而不是 --border-color-light：后者在浅色
-   主题下只有 3% 黑，压在 #f5f7fa 的栏底上肉眼等于没有 —— 整块报告看起来就是
-   一大片没有边界的字（这正是"不清晰"的根，不是字号问题） */
-/* 2026-10-04：这一块永远是「正在看的那一份」（模板是 v-if="currentReport"，
-   没有别的形态），所以直接给 active 角色即可。之前是纯灰卡片，跟下面历史列表里
-   的旧报告长得一模一样，「我现在看的哪份」要靠位置猜。
-   （历史上这里还有个 .rp.is-current，但模板从来没绑这个类，是条死规则。）
-
-   2026-10-05：底色原本是 `color-mix(--role-active-ink 4%, --bg-subtle)` ——
-   而 --bg-subtle 本身带 alpha(rgba(0,0,0,.02))，混出来仍是**半透明**的暖灰，
-   压在栏底 #f5f7fa 上再叠一圈 42% 的琥珀描边，整张卡看着发浑发脏（README
-   第三轮的原话是"淡底一律从 hue 兑进 --surface-elevated"，这一处没跟上）。
-   现在把卡面退回体系内的白（--surface-elevated）+ 中性描边，"这一份在跑"
-   的身份改由**顶部 2px 的 --role-active-bar 色带**承担 —— 面积从整张卡收到
-   一条线，同样的信息，不再让整块报告换一个色系。
-   （顶部色带不属于被禁的 left/right 侧边色条。） */
+/* ── 报告正文块 ───────────────────────────────────────── */
+/* 2026-10-25 用户又点了一次："我不喜欢这种单边框加圆角的设计"（圈的是整个
+   右栏「进度报告」区，卡面正是四边 1px 描边 + radius-lg + shadow-sm 的老写法）。
+   照 2026-10-17 看板卡的口径改**平铺**：描边 / 常驻圆角 / 静息阴影一件不留 ——
+   留任何一件它还是一张"浮在栏底上的卡片"。边界改由块自己的 --surface-elevated
+   承担（和看板卡同一套语言：底白、直角、靠分隔活着）。
+   信息没丢：原先顶部 2px 的 active 色带是"这一份在跑"的身份，
+   而这一块本来就只有「正在看的那一份」（模板 v-if="currentReport"），
+   身份由头部那枚「自动 / 手动」+「N 个任务进行中」说清，不需要再染一道边。
+   内边距跟着收（10/11 → 8/10）：描边和圆角去掉后，原来按"独立卡片"配的留白
+   会显成一大块空白。 */
 .rp {
-  padding: 10px 11px;
-  border-radius: var(--radius-lg);
+  padding: 8px 10px 10px;
   background: var(--surface-elevated);
-  border: 1px solid var(--border-color);
-  border-top: 2px solid var(--role-active-bar);
-  box-shadow: var(--shadow-sm);
 }
 .rp__head {
   display: flex;

@@ -39,6 +39,8 @@
  *       设置里设」）：通用设置里有「自动报告间隔」、显示的当前档与控制台逐字一致、
  *       档位就是服务端白名单那 6 档、在设置里改档服务端跟着落盘且控制台下拉跟着变；
  *       反证：接口返 500 时不当成功（服务端没被改 + 弹错误），重开弹窗显示回到旧档
+ *   P16 报告块与头部两个控件都是**平铺**的（无 1px 描边 / 无常驻圆角 / 无静息阴影）——
+ *       2026-10-25 用户第二次点同一件事，口径同看板卡 .kb-card
  *
  * 前置：dev server 已启动（npm run dev，后端 5545 / 前端 5544）。
  * 用法：node scripts/verify-wb-progress-report.cjs
@@ -146,13 +148,21 @@ async function clearToasts(page) {
   })
 }
 
-/** 切到工作台 -> 「指令」模式 */async function openCommandMode(page) {
+/**
+ * 切到工作台。
+ *
+ * ⚠️ 2026-10-25：原来这里还要点一次「指令」档（`.oc__mode-btn`）——
+ * 4b593034 把「对话」那一档下掉后这个按钮就不存在了，脚本卡在第一次点击上，
+ * 后面所有断言一条都没跑（红的表现是 30s 超时，不是断言失败，很容易被当成环境问题）。
+ */
+async function openCommandMode(page) {
   await page.waitForSelector('.activity-bar', { timeout: 30000 })
   await page.locator('.activity-btn[aria-label^="工作台"]').first().click()
   await page.waitForSelector('.oc', { timeout: 30000 })
-  const cmdTab = page.locator('.oc__mode-btn').filter({ hasText: '指令' }).first()
-  await cmdTab.click()
-  await sleep(400)
+  // 面板出现 ≠ 数据到了：间隔档位、历史份数、Git 概览都是各自来一份接口，
+  // 刷完页面立刻读会读到默认值（P3b / P12a 就这么假红过）。
+  await page.waitForLoadState('networkidle').catch(() => {})
+  await sleep(600)
 }
 
 /**
@@ -984,6 +994,36 @@ async function main() {
     await page.unroute('**/api/workbench/orchestrator')
     extraRunning = [PROBE_JOB]
     dropRealRunning = false
+
+    /* ══ P16 报告块是平铺的（2026-10-25 用户："我不喜欢这种单边框加圆角的设计"）══
+       描边 / 常驻圆角 / 静息阴影一件都不能留 —— 留任何一件它还是一张浮在栏底上的
+       卡片（看板卡的同一套口径，见 WorkbenchKanban 的 .kb-card）。
+       这里只断**计算值**：改回「1px 描边 + radius-lg + shadow-sm」这组必红。
+       头部那两个控件（间隔下拉 / 立即报告）同轮去掉描边与全圆角，
+       否则那一行又变回一条胶囊工具栏，与下面的报告块不是一套语言。 */
+    await page.waitForSelector('.rp', { timeout: 8000 }).catch(() => {})
+    const flat = await page.evaluate(() => {
+      const g = (sel, props) => {
+        const el = document.querySelector(sel)
+        if (!el) return null
+        const c = getComputedStyle(el)
+        return Object.fromEntries(props.map(k => [k, c[k]]))
+      }
+      return {
+        rp: g('.rp', ['borderTopWidth', 'borderRightWidth', 'borderRadius', 'boxShadow']),
+        interval: g('.oc__interval', ['borderTopWidth', 'borderRadius']),
+        run: g('.oc__report-run', ['borderTopWidth', 'borderRadius']),
+      }
+    })
+    check('P16a 报告块没有描边 / 圆角 / 静息阴影（平铺）',
+      !!flat.rp && flat.rp.borderTopWidth === '0px' && flat.rp.borderRightWidth === '0px'
+        && parseFloat(flat.rp.borderRadius) === 0 && /^none$|^$/.test(flat.rp.boxShadow),
+      JSON.stringify(flat.rp))
+    check('P16b 头部两个控件也是无描边的小圆角（不是一排胶囊）',
+      !!flat.interval && !!flat.run
+        && flat.interval.borderTopWidth === '0px' && flat.run.borderTopWidth === '0px'
+        && parseFloat(flat.interval.borderRadius) <= 6 && parseFloat(flat.run.borderRadius) <= 6,
+      `interval=${JSON.stringify(flat.interval)} run=${JSON.stringify(flat.run)}`)
 
     /* ══ P8 无异常 ══ */
     check('P8a 无 JS 运行时异常', pageErrors.length === 0, pageErrors.join(' | ').slice(0, 300))

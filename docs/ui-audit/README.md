@@ -856,3 +856,29 @@ Element Plus 的 `--color-success` / `--color-warning`，浅色下 **2.24 / 2.19
 回归网：`verify:ui-consistency`（38 PASS，剩 5 条失败全在 `SchedulePanel` /
 `ProjectManageItem` / `CopySessionButton` 与本轮无关的存量，另有一条运行时图标尺寸棘轮在浮动）、
 `verify:project-manager` 50/50、`verify:marketplace-panel` 15/15、`tsc` + `build` 绿。
+
+## 补记（2026-10-25）：右栏「进度报告」也去卡片化
+
+用户第三次说同一句话（截图圈的是整个右栏「进度报告」区）：**「我不喜欢这种单边框加圆角的
+设计」**。那块正是老写法：四边 1px 描边 + `radius-lg` + `shadow-sm`，顶上加一条 2px
+`--role-active-bar` 当"这一份在跑"的身份。
+
+改法与 2026-10-17 的看板卡同口径（`.kb-card`）：**描边 / 常驻圆角 / 静息阴影一件不留**，
+边界交给块自己的 `--surface-elevated`。身份信息没丢 —— 这一块本来就只有「正在看的那一份」
+（模板 `v-if="currentReport"`），头部的「自动 / 手动」+「N 个任务进行中」已经说清，
+不需要再染一道色带。内边距跟着收（`10/11 → 8/10`）：留白是按"独立卡片"配的，
+平铺之后同样的留白就成了一大块空白。
+
+头部两个控件（间隔下拉 /「立即报告」）同轮去掉 1px 描边 + 全圆角：两者都挂描边时，
+那一行读起来是一条胶囊工具栏，与下面的报告块不是一套语言。改成静息透明、hover 出淡底
+的小号文字控件。
+
+| 改前（描边 + 圆角 + 阴影 + 顶部色带） | 改后（平铺） |
+|---|---|
+| ![改前](./orchestrator-report-flat-before.png) | ![改后](./orchestrator-report-flat-after.png) |
+
+回归网：`verify:wb-progress-report` 新增 **P16a/P16b**（量 `getComputedStyle` 的
+border / radius / box-shadow，注回旧 CSS 会立刻翻红 —— 反证做过）。
+顺手修了同一脚本里两处**假红**：`openCommandMode` 还在点 4b593034 已删掉的「指令」档
+（卡在第一次点击，后面全部断言一条没跑），以及刷完页面立刻读面板（间隔 / 历史 / Git
+各来一份接口，读到的是默认值）。修完 68/68。
