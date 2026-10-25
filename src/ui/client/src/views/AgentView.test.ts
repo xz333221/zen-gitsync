@@ -528,12 +528,19 @@ describe('AgentView 当前文档上下文卡（dock 编辑器上下文）', () =
     const chat = w.findComponent({ name: 'ChatContainer' })
 
     await chat.vm.$emit('send', { text: '看看这个文件', files: [] })
-    expect(agent.sendMessage).toHaveBeenCalledWith('看看这个文件', [], { openFilePath: 'd:/repo/a.ts' })
+    // 2026-10-25：dock 的对话现在就是「主 Agent」，发送时会带上派活开关与执行器
+    expect(agent.sendMessage).toHaveBeenCalledWith(
+      '看看这个文件',
+      [],
+      expect.objectContaining({ openFilePath: 'd:/repo/a.ts', allowDispatch: true }),
+    )
 
     agent.sendMessage.mockClear()
     await w.find('.agent-context-att-remove').trigger('click')
     await nextTick()
     await chat.vm.$emit('send', { text: '第二个问题', files: [] })
-    expect(agent.sendMessage).toHaveBeenCalledWith('第二个问题', [], undefined)
+    const sent = agent.sendMessage.mock.calls[0][2]
+    expect(sent.allowDispatch).toBe(true)
+    expect(sent.openFilePath).toBeUndefined()
   })
 })

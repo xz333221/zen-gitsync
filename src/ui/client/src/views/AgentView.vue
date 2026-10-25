@@ -42,6 +42,8 @@ import MarketplacePanel from '@/components/MarketplacePanel.vue'
 import SchedulePanel from '@/components/SchedulePanel.vue'
 import AgentPromptSettings from '@/components/AgentPromptSettings.vue'
 import AgentEngineSelector from '@/components/AgentEngineSelector.vue'
+import TaskExecutorPicker from '@/components/TaskExecutorPicker.vue'
+import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection'
 import CopySessionButton from '@/components/CopySessionButton.vue'
 import ChatSilenceBadge from '@/components/ChatSilenceBadge.vue'
 
@@ -74,6 +76,8 @@ const props = defineProps<{
 
 const configStore = useConfigStore()
 const gitStore = useGitStore()
+// 派发执行器：与工作台指令栏 / 看板卡片共用同一份全局选择（ui.lastTaskExecutor）
+const { active: dispatchExecutor } = useTaskExecutorSelection()
 
 // ── 面板宽度：够窄就把「会话列表」和「对话」折成两个页面 ──────────
 // 量的是这个视图容器自己的宽度（窄屏下拖动侧栏 / 分屏都会变；视口宽度反映不了）。
@@ -183,6 +187,8 @@ const {
 // 下拉本体、可用性映射、未安装→安装弹窗都收口在 AgentEngineSelector 里
 //（文件空间 g ai 面板同一处消费，免得同一套实现抄两遍）。
 const displayEngine = computed(() => (isEngineLocked.value ? currentEngine.value : pendingEngine.value))
+/** 外部 CLI 引擎自带一套工具集、根本不认识 dispatch_task —— 切到它们时对话不能派活 */
+const engineCantDispatch = computed(() => displayEngine.value !== 'gai')
 
 function handleEngineSelect(id: AgentEngineId) {
   // 已落盘的会话不允许中途换引擎（服务端也会拦），要换必须新建会话
@@ -330,6 +336,16 @@ async function onSend(payload: { text: string; files: any[] }) {
   const ctx = {
     ...(openFilePath ? { openFilePath } : {}),
     ...(docNote ? { docNote } : {}),
+    // 派活能力：只有内置 g ai 认识 dispatch_task（外部 CLI 自带工具集，不认识它）。
+    // 服务端以 `allowDispatch === true` 为闸门注入工具；executor / useDefaultPrompt
+    // 与工作台指令栏共用同一份全局选择。
+    ...(engineCantDispatch.value
+      ? {}
+      : {
+          allowDispatch: true,
+          dispatchExecutor: dispatchExecutor.value,
+          dispatchUseDefaultPrompt: true,
+        }),
   }
   await sendMessage(payload.text, payload.files, Object.keys(ctx).length ? ctx : undefined)
   await nextTick()
@@ -690,6 +706,21 @@ defineExpose({
               </button>
             </div>
           </Teleport>
+
+          <!-- 派发执行器：dock 的对话就是"主 Agent"—— 聊着聊着可以直接把活派到看板
+               （服务端按请求里的 allowDispatch 注入 dispatch_task）。这一行交代"派出去的
+               活谁跑"，与工作台指令栏共用同一份全局选择；外部 CLI 引擎不认识这个工具，
+               换成一句提示。 -->
+          <div class="agent-dispatch-foot">
+            <p v-if="engineCantDispatch" class="agent-dispatch-notice">
+              {{ $t('@WORKBENCH:当前引擎「{name}」只能对话，不能派发任务 —— 切到内置 g ai 才能派活', { name: agentEngineName(displayEngine) }) }}
+            </p>
+            <template v-else>
+              <span class="agent-dispatch-label">{{ $t('@WORKBENCH:派发执行器') }}</span>
+              <TaskExecutorPicker :title="$t('@WORKBENCH:它派出去的任务由这个执行器跑（与执行按钮的临时切换共用）')" />
+              <span class="agent-dispatch-hint">{{ $t('@WORKBENCH:任务会落到看板，跑完有完成提示') }}</span>
+            </template>
+          </div>
         </div>
 
         <!-- ── 定时任务 ── -->
@@ -933,6 +964,29 @@ defineExpose({
    它的背景是透明的，叠上去会在图标后面露出一个灰圈。 */
 .agent-chat-host :deep(.acu-avatar--left) {
   background: transparent;
+}
+
+/* 派发执行器行：贴在输入框下方，交代"派出去的活谁跑"。
+   保持平铺（不加分隔线/底色）—— 它是输入区的脚注，不是独立区块。 */
+.agent-dispatch-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 12px 8px;
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--text-meta);
+}
+
+.agent-dispatch-label {
+  color: var(--text-secondary);
+}
+
+.agent-dispatch-notice {
+  margin: 0;
+  color: var(--text-meta);
 }
 
 /* ── 本轮用时：钉在气泡头部右端（与「g ai」那一行同排） ──────────────
