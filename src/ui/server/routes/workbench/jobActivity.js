@@ -216,7 +216,7 @@ export function jobDurationMs(job) {
 }
 
 /**
- * 本轮跑的是哪个执行器（`claude` | `opencode` | `codex` | `codebuddy` | `pi`）。
+ * 本轮跑的是哪个执行器（`claude` | `opencode` | `codex` | `codebuddy` | `pi` | `codearts`）。
  *
  * 只在**认出是已知执行器**时才回值：job.agent 来自 jobs.json（会被手工编辑、也读过
  * 别实例写的旧记录），回一个前端不认识的字符串只会让卡片上的图标位空着或显示错品牌。
@@ -227,7 +227,7 @@ export function jobDurationMs(job) {
  * 运行时模块，而本模块被 projectRegistry（5s 轮询的看板）直接引用，没必要为了五个
  * 字符串把整条执行链拖进来。新增执行器时这里和 taskRunner 一起改。
  */
-const KNOWN_EXECUTORS = ['claude', 'opencode', 'codex', 'codebuddy', 'pi'];
+const KNOWN_EXECUTORS = ['claude', 'opencode', 'codex', 'codebuddy', 'pi', 'codearts'];
 
 export function jobAgent(job) {
   const v = job && typeof job.agent === 'string' ? job.agent.trim().toLowerCase() : '';

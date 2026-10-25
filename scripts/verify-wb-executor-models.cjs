@@ -79,6 +79,7 @@ const FIXTURE = {
   },
   codebuddy: { name: 'deepseek-v4-1-flash-260910', detail: null, provider: null, source: 'config' },
   pi: { name: 'deepseek-v4.1-flash', detail: null, provider: 'cc-switch-open-code-go', source: 'state' },
+  codearts: { name: 'huaweicloud-maas/GLM-5.3', detail: null, provider: null, source: 'config' },
 }
 /** 与前端 i18n（@42BB9:未在配置中指定 / 当前模型：{model} / CLI 内最近使用）同一份口径 */
 const UNSET_TEXT = '未在配置中指定'
@@ -239,8 +240,8 @@ async function main() {
   } catch (err) {
     check('A1 接口可用：GET /api/workbench/executor-models 返回 success', false, err.message)
   }
-  check('A2 接口返回四个执行器的 key（与 TASK_EXECUTOR_OPTIONS 对齐）',
-    !!apiModels && ['claude', 'codex', 'opencode', 'codebuddy'].every(k => k in apiModels),
+  check('A2 接口返回六个执行器的 key（与 TASK_EXECUTOR_OPTIONS 对齐）',
+    !!apiModels && ['claude', 'codex', 'opencode', 'codebuddy', 'pi', 'codearts'].every(k => k in apiModels),
     JSON.stringify(apiModels))
   // claude 的别名两层是这套机制存在的理由：只报 CLI 别名等于没报
   check('A3 claude 这类"别名两层"的形态：模型名与服务商都带出来（有则 name≠detail）',
@@ -301,7 +302,7 @@ async function main() {
         body: JSON.stringify({ success: true, checkedAt: new Date().toISOString(), models: FIXTURE }),
       })
     })
-    // 五个执行器都判"已安装"：否则下拉项被置灰、picker 还会自作主张回落到别的值
+    // 六个执行器都判"已安装"：否则下拉项被置灰、picker 还会自作主张回落到别的值
     // （pi 尤其要显式给 true —— 少了它 G9b「切到 Pi Agent」那半条永远跳过，
     //  等于这条执行器的展示链没验过）
     await page.route('**/api/check-tools*', (route) => {
@@ -310,7 +311,7 @@ async function main() {
         contentType: 'application/json',
         body: JSON.stringify({
           success: true, platform: 'win32',
-          vscode: true, claude: true, codex: true, opencode: true, codebuddy: true, pi: true, kimi: false, zcode: false, dsh: false,
+          vscode: true, claude: true, codex: true, opencode: true, codebuddy: true, pi: true, codearts: true, kimi: false, zcode: false, dsh: false,
           installers: {}, versions: {},
         }),
       })
@@ -539,11 +540,24 @@ async function main() {
     await page.waitForSelector('.wb-executor-split', { timeout: 10000 })
     await sleep(500)
     const splitHintTitle = await page.locator('.wb-executor-split__hint').first().getAttribute('title')
-    check('D1 执行按钮的 title 带出当前模型（悬停就知道这活谁跑）',
-      !!splitHintTitle && splitHintTitle.includes(FIXTURE.claude.name), String(splitHintTitle))
     await page.locator('.wb-executor-split button').last().click()
     await sleep(500)
     const wbDrop = await readDropdown(page, '.wb-executor-split', '.wb-executor-item', '.wb-executor-item__model')
+    // ⚠️ 基准不能写死 claude：当前选中的执行器存在 config.json 的 ui.lastTaskExecutor
+    // （用户共享状态，夹具定不了）。本机被选成 codebuddy 时写死 claude 的版本恒红 ——
+    // 从下拉里那颗带勾的项读，问的才是"按钮 title 有没有带出它现在真的要用的模型"。
+    const checkedModel = await page.evaluate(() => {
+      const menu = Array.from(document.querySelectorAll('.el-dropdown-menu'))
+        .find(m => m.offsetParent !== null)
+      if (!menu) return null
+      const el = Array.from(menu.querySelectorAll('.wb-executor-item'))
+        .find(i => i.querySelector('.wb-executor-item__check'))
+      const m = el && el.querySelector('.wb-executor-item__model')
+      return m ? m.textContent.replace(/\s+/g, ' ').trim() : null
+    })
+    check('D1 执行按钮的 title 带出当前模型（悬停就知道这活谁跑）',
+      !!splitHintTitle && !!checkedModel && splitHintTitle.includes(checkedModel),
+      `${splitHintTitle} / 带勾项=${checkedModel}`)
     check('D2 执行按钮下拉：每个执行器右侧标出模型',
       wbDrop.found && wbDrop.items.some(i => i.model === FIXTURE.claude.name),
       JSON.stringify(wbDrop.items.map(i => `${i.text}|${i.model}`)))

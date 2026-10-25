@@ -79,7 +79,7 @@ function makeTrackerSpy() {
 }
 
 test('normalizeTaskExecutor：codebuddy 在白名单里，非法值回落 claude', () => {
-  assert.deepEqual(TASK_EXECUTORS, ['claude', 'opencode', 'codex', 'codebuddy', 'pi']);
+  assert.deepEqual(TASK_EXECUTORS, ['claude', 'opencode', 'codex', 'codebuddy', 'pi', 'codearts']);
   assert.equal(normalizeTaskExecutor('codebuddy'), 'codebuddy');
   assert.equal(normalizeTaskExecutor('CodeBuddy'), 'codebuddy');
   assert.equal(normalizeTaskExecutor('codebuddy '), 'codebuddy');

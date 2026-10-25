@@ -314,6 +314,7 @@ const TOOL_ACTIONS: Record<SimpleToolId, () => void | Promise<void>> = {
   opencode: () => onOpenInOpencode(TOOL_PRIMARY_MODE.opencode),
   codebuddy: onOpenInCodebuddy,
   pi: onOpenInPi,
+  codearts: onOpenInCodeArts,
   kimi: onOpenInKimi,
   zcode: onOpenInZcode,
   dsh: onOpenInDsh,
@@ -558,6 +559,16 @@ async function onOpenInPi() {
   toastOpenResult(
     await openPathWithTool('pi', currentDirectory.value),
     '@67CE7:已用 Pi Agent 打开目录',
+    '@67CE7:打开失败: ',
+  );
+}
+
+// 用码道 CLI 打开当前目录（交互 TUI；首次要 AK/SK 或浏览器登录，属于交互环节）
+async function onOpenInCodeArts() {
+  if (warnIfEmptyDirectory()) return;
+  toastOpenResult(
+    await openPathWithTool('codearts', currentDirectory.value),
+    '@67CE7:已用 CodeArts 码道打开目录',
     '@67CE7:打开失败: ',
   );
 }

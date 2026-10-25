@@ -118,6 +118,16 @@ function codebuddyConfigPath() {
 }
 
 /**
+ * 码道 CLI 的 MCP 配置：~/.codeartsdoer/codearts_cli.json 的 mcp 段。
+ * 路径与文件名取自它自己 shim 里的 OPENCODE_CONFIG / OPENCODE_CONFIG_FILE
+ * （与 taskRunner.buildCodeArtsEnv 同一口径，两处不能分叉）。
+ * 它是 opencode 的 fork，所以 entry 形状照抄 opencode 那条（type: local + command 数组）。
+ */
+function codeArtsConfigPath() {
+  return path.join(homeDir(), '.codeartsdoer', 'codearts_cli.json');
+}
+
+/**
  * Pi Agent 的全局 MCP 配置:<agentDir>/mcp.json。agentDir 默认 ~/.pi/agent,
  * 可被官方环境变量 PI_CODING_AGENT_DIR 覆盖(executorModels.js 读 settings.json
  * 用的就是同一个口径,两处不能分叉)。
@@ -206,6 +216,15 @@ export const TARGETS = [
     label: 'Pi Agent',
     kind: 'json',
     file: piConfigPath,
+  },
+  {
+    id: 'codearts',
+    label: 'CodeArts 码道',
+    kind: 'json',
+    file: codeArtsConfigPath,
+    jsonPath: ['mcp'],
+    entry: { type: 'local', command: [COMMAND, ...ARGS], enabled: true },
+    note: '写进 codearts_cli.json（码道是 opencode 的 fork，段形状同 OpenCode）',
   },
   {
     id: 'codex',

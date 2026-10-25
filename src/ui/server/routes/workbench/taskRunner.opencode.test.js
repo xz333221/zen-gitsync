@@ -54,7 +54,7 @@ function makeSink() {
 }
 
 test('normalizeTaskExecutor：白名单 + 大小写 + 非法回落', () => {
-  assert.deepEqual(TASK_EXECUTORS, ['claude', 'opencode', 'codex', 'codebuddy', 'pi']);
+  assert.deepEqual(TASK_EXECUTORS, ['claude', 'opencode', 'codex', 'codebuddy', 'pi', 'codearts']);
   assert.equal(normalizeTaskExecutor('opencode'), 'opencode');
   assert.equal(normalizeTaskExecutor('codex'), 'codex');
   assert.equal(normalizeTaskExecutor('codebuddy'), 'codebuddy');

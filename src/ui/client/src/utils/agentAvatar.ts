@@ -15,7 +15,7 @@
 // 工作台对话的助手头像。
 //
 // 这条链路（任务连续对话 / 执行日志详情）的执行者有 claude / opencode / codex /
-// codebuddy / pi 五种（taskRunner 执行器，job.agent 记录本轮实际用的是谁），头像按
+// codebuddy / pi / codearts 六种（taskRunner 执行器，job.agent 记录本轮实际用的是谁），头像按
 // job.agent 切换。前三家用 zen-ai-chat-ui 内置品牌头像（0.1.0-beta.8 起提供 13 个，
 // 见 dist/avatars）；codebuddy 与 pi 不在库里（2026-10-12 / 2026-10-13 先后核对过键名），
 // 用自家资源 assets/icons/svg/{codebuddy,pi}.svg 顶上 —— Vite 会把它变成 URL 字符串，
@@ -33,6 +33,8 @@ import { resolveAvatar } from 'zen-ai-chat-ui'
 import codebuddyAvatar from '@/assets/icons/svg/codebuddy.svg?inline'
 // pi 官方标（pi.dev/logo-auto.svg，2026-10-13 随执行器接入一起补）
 import piAvatar from '@/assets/icons/svg/pi.svg?inline'
+// 码道：华为云标 + 华为红（2026-10-25 随执行器接入一起补）
+import codeartsAvatar from '@/assets/icons/svg/codearts.svg?inline'
 
 /** Claude Code 品牌头像（内联 data URL）。WorkbenchView 任务对话与 JobLogDetails 共用。 */
 export const CLAUDE_AVATAR = resolveAvatar('claude')
@@ -44,6 +46,8 @@ export const CODEX_AVATAR = resolveAvatar('codex')
 export const CODEBUDDY_AVATAR = codebuddyAvatar
 /** Pi Agent 品牌头像（自家 SVG 资源，库内置头像里没有它）。 */
 export const PI_AVATAR = piAvatar
+/** CodeArts 码道品牌头像（自家 SVG 资源，库内置头像里没有它）。 */
+export const CODEARTS_AVATAR = codeartsAvatar
 
 /** 按执行器 id 取头像；未知/缺省（老 job 没有 agent 字段）回落 Claude（与标签口径一致）。 */
 export function avatarForExecutor(agent?: string | null): string {
@@ -51,5 +55,6 @@ export function avatarForExecutor(agent?: string | null): string {
   if (agent === 'codex') return CODEX_AVATAR
   if (agent === 'codebuddy') return CODEBUDDY_AVATAR
   if (agent === 'pi') return PI_AVATAR
+  if (agent === 'codearts') return CODEARTS_AVATAR
   return CLAUDE_AVATAR
 }

@@ -123,14 +123,17 @@ const CODEX_TOML = [
 const OPENCODE_JSONC = '{\n  // 注释\n  "model": "anthropic/claude-x",\n}'
 const CODEBUDDY_JSON = JSON.stringify({ model: 'deepseek-v4-1-flash-260910' })
 const PI_JSON = JSON.stringify({ defaultModel: 'deepseek/deepseek-v4-flash' })
+// 码道的配置文件由它自己 shim 的 OPENCODE_CONFIG_FILE 指定：codearts_cli.json（json 优先）
+const CODEARTS_JSON = JSON.stringify({ model: 'huaweicloud-maas/GLM-5.3' })
 
-test('detectExecutorModels: 五家配置齐全时各自读出模型', async () => {
+test('detectExecutorModels: 六家配置齐全时各自读出模型', async () => {
   const home = await makeHome({
     '.claude/settings.json': CLAUDE_JSON,
     '.codex/config.toml': CODEX_TOML,
     '.config/opencode/opencode.jsonc': OPENCODE_JSONC,
     '.codebuddy/settings.json': CODEBUDDY_JSON,
     '.pi/agent/settings.json': PI_JSON,
+    '.codeartsdoer/codearts_cli.json': CODEARTS_JSON,
   })
   const out = await detectExecutorModels({ homeDir: home })
 
@@ -153,6 +156,30 @@ test('detectExecutorModels: 五家配置齐全时各自读出模型', async () =
   assert.deepEqual(out.pi, {
     model: 'deepseek/deepseek-v4-flash', display: null, provider: null, source: 'config',
   })
+  // codearts：它是 opencode 的 fork，配置 schema 与键名都同源（model 可以是
+  // "provider/model" 字符串）；路径换成它自己的 ~/.codeartsdoer/codearts_cli.json
+  assert.deepEqual(out.codearts, {
+    model: 'huaweicloud-maas/GLM-5.3', display: null, provider: null, source: 'config',
+  })
+})
+
+test('detectExecutorModels: codearts 只有 .jsonc 时也读（OPENCODE_CONFIG_FILE 两个名都认）', async () => {
+  const home = await makeHome({
+    // JSONC：带注释（码道认 json 优先、jsonc 兜底，与 opencode 同一套读取规则）
+    '.codeartsdoer/codearts_cli.jsonc': '{\n  // 注释\n  "model": "huaweicloud-maas/GLM-5.2",\n}',
+  })
+  const out = await detectExecutorModels({ homeDir: home })
+  assert.equal(out.codearts?.model, 'huaweicloud-maas/GLM-5.2')
+})
+
+test('detectExecutorModels: codearts 没配 model 时为 null（CLI 自己选默认，不猜）', async () => {
+  // 实测本机装完就是这样：codearts_cli.json 只有 $schema/logLevel/lsp
+  const home = await makeHome({
+    '.codeartsdoer/codearts_cli.json': JSON.stringify({
+      $schema: 'https://opencode.ai/config.json', logLevel: 'INFO', lsp: false,
+    }),
+  })
+  assert.equal((await detectExecutorModels({ homeDir: home })).codearts, null)
 })
 
 test('detectExecutorModels: codebuddy 没配 model 时为 null（CLI 内置默认不冒名）', async () => {
@@ -456,10 +483,10 @@ test('detectExecutorModels: claude 显式 ANTHROPIC_MODEL 优先于档位别名'
   })
 })
 
-test('detectExecutorModels: 一个配置文件都没有时五项全 null 且不抛', async () => {
+test('detectExecutorModels: 一个配置文件都没有时六项全 null 且不抛', async () => {
   const home = await makeHome()
   const out = await detectExecutorModels({ homeDir: home })
-  assert.deepEqual(out, { claude: null, codex: null, opencode: null, codebuddy: null, pi: null })
+  assert.deepEqual(out, { claude: null, codex: null, opencode: null, codebuddy: null, pi: null, codearts: null })
 })
 
 test('detectExecutorModels: 配置残缺/是目录/内容不是 JSON 时只让自己变 null', async () => {
@@ -471,7 +498,7 @@ test('detectExecutorModels: 配置残缺/是目录/内容不是 JSON 时只让�
     '.pi/agent/settings.json': '{ 也不是 JSON', // 解析失败 → null
   })
   const out = await detectExecutorModels({ homeDir: home })
-  assert.deepEqual(out, { claude: null, codex: null, opencode: null, codebuddy: null, pi: null })
+  assert.deepEqual(out, { claude: null, codex: null, opencode: null, codebuddy: null, pi: null, codearts: null })
 })
 
 test('detectExecutorModels: 返回值里绝不出现任何密钥', async () => {

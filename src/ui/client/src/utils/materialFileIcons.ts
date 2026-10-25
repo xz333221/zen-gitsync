@@ -44,6 +44,7 @@ const CUSTOM_FOLDER_OVERRIDES: Record<string, string> = {
   '.qoder': 'mit-folder-config',
   '.codebuddy': 'mit-folder-config',
   '.pi': 'mit-folder-config',
+  '.codeartsdoer': 'mit-folder-config',
   '.windsurf': 'mit-folder-config',
   '.workbuddy': 'mit-folder-config',
   '.trae': 'mit-folder-config',

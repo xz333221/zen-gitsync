@@ -15,7 +15,7 @@
 // 任务执行引擎：spawn 本地 agent CLI 跑子任务，流式收集输出，更新 job 状态。
 // 拆分自原 routes/workbench.js 1108-1564 行。
 //
-// 支持五种执行器（executor）：
+// 支持六种执行器（executor）：
 //   - claude    —— claude -p --output-format stream-json（默认，历史行为）
 //   - opencode  —— opencode run --format json --auto（sst/opencode CLI，跟随其自身默认模型）
 //   - codex     —— codex exec --json（OpenAI Codex CLI，跟随其自身配置；2026-09-27 加入）
@@ -25,12 +25,16 @@
 //   - pi        —— pi --mode json -a [--session <id>]
 //                  （earendil-works 开源终端编程 Agent，npm @earendil-works/pi-coding-agent；
 //                   2026-10-13 加入，**自有 JSONL 协议**，见该段注释）
+//   - codearts  —— codearts run --format json --auto [-s <ses_id>]
+//                  （华为云码道 CLI，2026-10-25 加入；它就是 opencode 的 fork，
+//                   事件流与 opencode 逐字同构，handler 直接转调，见该段注释）
 //
 // 核心 API：
 //   - launchClaudeInNewWindow(cwd, prompt, resumeSessionId)  spawn claude，返回 {pid, child}
 //   - launchOpencodeRun(cwd, prompt, resumeSessionId)        spawn opencode，返回 {pid, child}
 //   - launchCodexExec(cwd, prompt, resumeSessionId)          spawn codex，返回 {pid, child}
 //   - launchPiPrint(cwd, prompt, resumeSessionId)            spawn pi，返回 {pid, child}
+//   - launchCodeArtsRun(cwd, prompt, resumeSessionId)        spawn codearts，返回 {pid, child}
 //   - normalizeTaskExecutor(value)                           非法值回落 'claude'
 //   - runSingleSubtask(task, sub, repoPath, branch, opts)    跑一次任务（sub 是运行载体，见下）
 //   - waitProcessExit(pid)                                   polling 等进程退出
@@ -40,6 +44,7 @@
 // 续聊时同一任务会造出新的载体（`{taskId}__simple__r1` 等），job.subId 记的就是它。
 
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { spawn, execFileSync } from 'child_process';
 import {
@@ -224,16 +229,17 @@ function attachPromptStdin(child, promptText, resolve, reject) {
 
 // ── 执行器（executor） ──────────────────────────────────────────────────
 // 工作台任务默认由 claude CLI 执行；opencode（2026-09-20）、codex（2026-09-27）、
-// codebuddy（2026-10-12）、pi（2026-10-13）作为可选执行器。五者都用「stdin 喂 prompt +
-// stdout 结构化 JSON 事件流」的同构形态，差异只在协议：claude / codebuddy 是 stream-json，
-// opencode 是 --format json 的事件 NDJSON，codex 是 exec --json 的 thread/item 事件 NDJSON，
-// pi 是 --mode json 的自有 JSONL（session/turn/message/tool_execution，与另四家都不同）。
+// codebuddy（2026-10-12）、pi（2026-10-13）、codearts（2026-10-25）作为可选执行器。
+// 六者都用「stdin 喂 prompt + stdout 结构化 JSON 事件流」的同构形态，差异只在协议：
+// claude / codebuddy 是 stream-json，opencode 是 --format json 的事件 NDJSON，
+// codex 是 exec --json 的 thread/item 事件 NDJSON，pi 是 --mode json 的自有 JSONL，
+// codearts 的 --format json 与 opencode 逐字同构（它是 opencode 的 fork）。
 //
 // ⚠️ 这份清单与 src/config.js 的 TASK_EXECUTORS 是**同一份口径的两处书写**——
 // 历史上为此吵过（见 agentEngines.js 文件头）：config.js 那份是"配置/归一化"的
 // 真相源，本文件这份服务"运行时分发"。两边不一致的失效方式是 normalize 放行、
-// 这里查无此人 → 静默回落 claude。加第五家时两处都要改，taskRunner.*.test.js 有钉子。
-export const TASK_EXECUTORS = ['claude', 'opencode', 'codex', 'codebuddy', 'pi'];
+// 这里查无此人 → 静默回落 claude。加第六家时两处都要改，taskRunner.*.test.js 有钉子。
+export const TASK_EXECUTORS = ['claude', 'opencode', 'codex', 'codebuddy', 'pi', 'codearts'];
 
 /** 执行器 → launcher。runSingleSubtask 与 runExternalTurn 共用这一张表。 */
 export const EXECUTOR_LAUNCHERS = {
@@ -242,6 +248,7 @@ export const EXECUTOR_LAUNCHERS = {
   codex: launchCodexExec,
   codebuddy: launchCodebuddyPrint,
   pi: launchPiPrint,
+  codearts: launchCodeArtsRun,
 };
 
 /** 执行器 → NDJSON 事件处理器工厂。 */
@@ -251,6 +258,7 @@ export const EXECUTOR_HANDLERS = {
   codex: createCodexEventHandler,
   codebuddy: createCodebuddyEventHandler,
   pi: createPiEventHandler,
+  codearts: createCodeArtsEventHandler,
 };
 
 /** 非法/缺省的 executor 一律回落 'claude'（历史行为的兼容兜底）。
@@ -1302,6 +1310,177 @@ export function createOpencodeEventHandler(job, appendOutput, appendThinking, to
         || 'opencode 执行出错';
       if (!job.agentError) job.agentError = msg;
     }
+  };
+}
+
+// ── codearts 执行器（2026-10-25 加入） ────────────────────────────────────
+// 华为云码道代码智能体 CLI（CodeArts Agent CLI，华为云产品）。与另五家同构：
+//   codearts run --format json --auto [-s <ses_id>]
+//     - prompt 从 stdin 喂（无位置参数时读 stdin，与 opencode 同效）
+//     - --auto 以 always_allow 模式跑 bash。**必须带**：默认档是沙箱
+//       （安装器往 ~/.codeartsdoer/cli-data/storage/permission/config.json 写
+//       "bash_mode": "sandbox"），沙箱里 git 读不到真实仓库状态（实测 git log /
+//       diff / status 拿不到），而派发链要求 agent 自己 commit。
+//     - -s <ses_id> 原地续接（sessionID 不变，实测记得上文）
+//     - 不传 -m：模型跟随它自己的配置（与另五家同一口径）
+//
+// **它就是 opencode 的 fork**（2026-10-25 实测，四处实锤）：配置首行写着
+// "$schema": "https://opencode.ai/config.json"；`auth login --help` 的位置参数
+// 说明原文是 "opencode auth provider"；入口 codearts.cmd 里全是 OPENCODE_* 环境
+// 变量；--attach 的示例端口就是 opencode 的 4096。所以 --format json 的事件流
+// （step_start / text / reasoning / tool_use / step_finish / error、顶层 sessionID、
+// part.state.{status,input,output}）与 opencode 逐字一致，handler 直接转调。
+//
+// 三个必须记住的坑：
+//   1. **鉴权只认 AK/SK 环境变量**（CODEARTS_CLI_AK / CODEARTS_CLI_SK），没有
+//      浏览器登录那一出（TUI 会弹，run 不会）。缺了它们 CLI 打一行中文错误后
+//      **退出码仍是 0** —— 与 codebuddy 同款坑，判失败不能只看 exit code。
+//   2. **不经 codearts.cmd 就必须自己补齐它那串环境变量**（见 buildCodeArtsEnv）：
+//      少了 OPENCODE_CONFIG / KERNEL_DATA_DIR，它会去读用户自己那套 opencode 的
+//      配置和数据目录（~/.config/opencode、~/.local/share/opencode 的 db）。
+//   3. **它会往项目根写 .codeartsdoer/**（memory/experience 的落地目录，--pure
+//      也拦不住），里面 mem-exp-config.json 不在它自己的 .gitignore 里 → 每个被
+//      派发的仓库都会多出一条未跟踪文件。launchCodeArtsRun 会顺手写
+//      .git/info/exclude（只改本地仓库元数据，不动工作区、不入库）。
+
+/**
+ * 解析 codearts 可执行文件。
+ *
+ * 安装器（官网 install.ps1）把 shim 放在 ~/.codeartsdoer/installers、真身放在
+ * 同目录 bin/codearts.exe；PATH 上能查到的也是 shim。Node 23+ 拒绝 spawn .cmd
+ * （EINVAL），所以固定走 bin 下的 exe —— 环境变量由 buildCodeArtsEnv 补齐。
+ */
+export function resolveCodeArtsExe() {
+  const exe = path.join(os.homedir(), '.codeartsdoer', 'installers', 'bin', 'codearts.exe');
+  if (fs.existsSync(exe)) return { exe, prefixArgs: [] };
+  // 兜底：装到别处时按 PATH 找原生 exe（非 Windows 上就是这个）
+  try {
+    const lines = execFileSync('where', ['codearts'], { encoding: 'utf8', windowsHide: true })
+      .split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    const directExe = lines.find(s => /\.exe$/i.test(s));
+    if (directExe && fs.existsSync(directExe)) return { exe: directExe, prefixArgs: [] };
+  } catch { /* fallback */ }
+  return { exe: process.platform === 'win32' ? 'codearts.cmd' : 'codearts', prefixArgs: [] };
+}
+
+/**
+ * codearts 子进程环境：复刻 ~/.codeartsdoer/installers/codearts.cmd 里那串 SET。
+ *
+ * 为什么逐个抄而不是直接 spawn .cmd：Node 23+ 对 .cmd 直接 EINVAL，走 shell 会让
+ * stdin 管道与杀进程树都变复杂。这些变量是它"认自己是谁"的全部依据（少了就走
+ * opencode 的目录），照抄比猜依赖关系稳。
+ *
+ * 刻意**不抄** NODE_TLS_REJECT_UNAUTHORIZED=0：shim 里关掉了全局证书校验，抄进
+ * 来会污染本进程派生的所有 TLS 请求。实测不设它也能正常连华为云。
+ * （导出仅为回归测试可见：taskRunner.codearts.test.js）
+ */
+export function buildCodeArtsEnv() {
+  const root = path.join(os.homedir(), '.codeartsdoer');
+  const env = { ...process.env };
+  env.SCENARIO = 'codeartsdoer';
+  env.KERNEL_DATA_DIR = path.join(root, 'cli-data');
+  env.KERNEL_STATE_DIR = path.join(root, 'state');
+  env.KERNEL_CONFIG_DIR = root;
+  env.OPENCODE_CHANNEL = 'latest';
+  env.OPENCODE_CONFIG = path.join(root, 'codearts_cli.json');
+  env.OPENCODE_CONFIG_FILE = 'codearts_cli.json,codearts_cli.jsonc';
+  env.OPENCODE_MODE = 'tui';
+  env.PLUGIN_ENV = 'hc';
+  env.OPENCODE_DISABLE_MODELS_FETCH = '1';
+  env.OPENCODE_DISABLE_AUTOUPDATE = 'true';
+  env.OPENCODE_ALWAYS_NOTIFY_UPDATE = 'false';
+  env.CODEARTS_DISABLE_AUTO_UPDATE = 'true';
+  env.CODEAGENT_USE_MESSAGE_FEEDBACK = 'false';
+  env.OMO_SEND_ANONYMOUS_TELEMETRY = '0';
+  env.LANG = 'zh_CN.UTF-8';
+  return env;
+}
+
+/** codearts 的 spawn argv（纯函数，理由同另几家的 buildXxxArgs）。 */
+export function buildCodeArtsArgs(resumeSessionId) {
+  const args = ['run', '--format', 'json', '--auto'];
+  if (resumeSessionId) {
+    args.push('-s', String(resumeSessionId));
+  }
+  return args;
+}
+
+/**
+ * 保证 .codeartsdoer/ 不进版本库。
+ *
+ * codearts 每次运行都会在项目根生成 .codeartsdoer/mem-exp-config.json（经验沉淀的
+ * 落地目录），它自己的 .codeartsdoer/.gitignore 不覆盖这个文件，--pure 也拦不住。
+ * 本仓的派发链让 agent 自己 git add，看到未跟踪文件很可能顺手带上 —— 于是往
+ * .git/info/exclude 补一行（只影响本地，不产生任何工作区改动）。
+ *
+ * 失败一律吞掉：没有 .git（非仓库目录）或没有写权限时，让任务照常跑。
+ * （导出仅为回归测试可见：taskRunner.codearts.test.js）
+ */
+export function ensureCodeArtsGitExclude(cwd) {
+  try {
+    const gitDir = path.join(cwd, '.git');
+    if (!fs.existsSync(gitDir) || !fs.statSync(gitDir).isDirectory()) return;
+    const excludeFile = path.join(gitDir, 'info', 'exclude');
+    const marker = '.codeartsdoer/';
+    let current = '';
+    try { current = fs.readFileSync(excludeFile, 'utf8'); } catch { /* 首次没有这个文件 */ }
+    if (current.split(/\r?\n/).some(line => line.trim() === marker)) return;
+    fs.mkdirSync(path.dirname(excludeFile), { recursive: true });
+    const next = current && !current.endsWith('\n') ? `${current}\n${marker}\n` : `${current}${marker}\n`;
+    fs.writeFileSync(excludeFile, next, 'utf8');
+  } catch { /* 忽略：排除失败不影响任务本身 */ }
+}
+
+/** spawn codearts 跑一个 prompt（非交互），返回 { pid, child }。 */
+export async function launchCodeArtsRun(cwd, promptText, resumeSessionId) {
+  ensureCodeArtsGitExclude(cwd);
+  const args = buildCodeArtsArgs(resumeSessionId);
+  const { exe, prefixArgs } = resolveCodeArtsExe();
+  const spawnArgs = [...prefixArgs, ...args];
+  return new Promise((resolve, reject) => {
+    let child;
+    if (process.platform === 'win32') {
+      child = spawn(exe, spawnArgs, {
+        cwd,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: false,
+        env: buildCodeArtsEnv()
+      });
+    } else {
+      child = spawn(exe, spawnArgs, {
+        cwd,
+        detached: true,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: buildCodeArtsEnv()
+      });
+    }
+    attachPromptStdin(child, promptText, resolve, reject);
+  });
+}
+
+/**
+ * codearts --format json 事件处理器：**转调 opencode 那一份**。
+ *
+ * 2026-10-25 用本机 26.10.9 实跑核对过事件形状（文本、工具调用、step_finish 的
+ * tokens、顶层 sessionID 逐字段一致），因此不再抄第二份实现 —— 本仓库为"同一份
+ * 口径写两遍"吃过太多亏（分叉时不报错，只是悄悄少一半数据）。
+ *
+ * 仍留独立入口而不是在表里直接写 createOpencodeEventHandler：华为是 fork 持有方，
+ * 协议随时可能被它改（它已经改过鉴权：从浏览器登录改成 AK/SK），那时在这里加分支，
+ * 不会顺带改坏 opencode 那条链路。
+ *
+ * 另外记住：它的 stdout 会混进非 JSON 行（免费套餐限流时的"模型排队"提示，实测
+ * 一次问答刷 48 行）—— 解析循环的 try/catch 跳过即可，不要当成协议错误。
+ * （导出仅为回归测试可见：taskRunner.codearts.test.js）
+ */
+export function createCodeArtsEventHandler(job, appendOutput, appendThinking, toolCalls) {
+  const inner = createOpencodeEventHandler(job, appendOutput, appendThinking, toolCalls);
+  // opencode 那份假定入参一定是解析好的对象（它的调用方只在 JSON.parse 成功后才喂）。
+  // 码道这边 stdout 会混进非 JSON 行，解析层多一层保险不打紧 —— 顺手把
+  // `null` / 标量挡在门外（`JSON.parse('null')` 也会成功返回 null）。
+  return (evt) => {
+    if (!evt || typeof evt !== 'object') return;
+    inner(evt);
   };
 }
 

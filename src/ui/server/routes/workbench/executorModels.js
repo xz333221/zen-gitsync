@@ -445,28 +445,44 @@ function detectPi(json, sessionState) {
   return sessionState;
 }
 
+function detectCodeArts(json) {
+  // 与 opencode 同一条判定：它是 opencode 的 fork，配置 schema 都写着 opencode.ai/config.json。
+  // 顶层 `model` 可以是 "provider/model" 字符串，也可以是 { model, variant } 对象。
+  const raw = json && json.model;
+  if (typeof raw === 'string' && raw.trim()) {
+    return { model: raw.trim(), display: null, provider: null, source: 'config' };
+  }
+  if (raw && typeof raw === 'object' && typeof raw.model === 'string' && raw.model.trim()) {
+    const variant = typeof raw.variant === 'string' && raw.variant.trim() ? ` (${raw.variant.trim()})` : '';
+    return { model: raw.model.trim() + variant, display: null, provider: null, source: 'config' };
+  }
+  return null;
+}
+
 function escapeRe(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
- * 探测五个执行器当前在用的模型。
+ * 探测六个执行器当前在用的模型。
  *
  * @param {object} [opts]
  * @param {string} [opts.homeDir] 测试沙箱用（默认 os.homedir()）
- * @returns {Promise<{ claude: object|null, codex: object|null, opencode: object|null, codebuddy: object|null, pi: object|null }>}
+ * @returns {Promise<{ claude: object|null, codex: object|null, opencode: object|null, codebuddy: object|null, pi: object|null, codearts: object|null }>}
  *          每项 `{ model, display, provider, source }`；该执行器没配模型时为 null。
  *          source = 'config'（配置文件里写死的）| 'state'（CLI 自己记的"上次用的"）。
  *
- * 八路并发、互不阻塞：任何一个文件读失败都只让**它自己**变成 null。
+ * 多路并发、互不阻塞：任何一个文件读失败都只让**它自己**变成 null。
  * 两处来源的执行器（opencode / pi）都是 config 优先、state 兜底，
  * 由 detectOpencode / detectPi 各自收口。
  */
 export async function detectExecutorModels({ homeDir } = {}) {
   const home = homeDir || os.homedir();
   const piDir = piAgentDir(home);
+  // 码道的 OPENCODE_CONFIG / OPENCODE_CONFIG_FILE（见 taskRunner.buildCodeArtsEnv）
+  const codeArtsDir = path.join(home, '.codeartsdoer');
 
-  const [claudeRaw, codexRaw, opencodeJsonRaw, opencodeJsoncRaw, opencodeStateRaw, codebuddyRaw, piRaw, piState] = await Promise.all([
+  const [claudeRaw, codexRaw, opencodeJsonRaw, opencodeJsoncRaw, opencodeStateRaw, codebuddyRaw, piRaw, piState, codeArtsJsonRaw, codeArtsJsoncRaw] = await Promise.all([
     readTextOrNull(path.join(home, '.claude', 'settings.json')),
     readTextOrNull(path.join(home, '.codex', 'config.toml')),
     // .json 优先（标准名），.jsonc 兜底。opencode 两个都认。
@@ -480,6 +496,9 @@ export async function detectExecutorModels({ homeDir } = {}) {
     readTextOrNull(path.join(piDir, 'settings.json')),
     // Pi 的"最近使用"（defaultModel 只在显式「设为默认」时才写，见 detectPiSessionState）
     detectPiSessionState(piDir),
+    // 码道 CLI：文件名由 codearts.cmd 的 OPENCODE_CONFIG_FILE 指定（json 优先、jsonc 兜底）
+    readTextOrNull(path.join(codeArtsDir, 'codearts_cli.json')),
+    readTextOrNull(path.join(codeArtsDir, 'codearts_cli.jsonc')),
   ]);
 
   const pickJson = (raw) => {
@@ -494,6 +513,7 @@ export async function detectExecutorModels({ homeDir } = {}) {
   const opencodeState = pickJson(opencodeStateRaw);
   const codebuddyCfg = pickJson(codebuddyRaw);
   const piCfg = pickJson(piRaw);
+  const codeArtsCfg = pickJson(codeArtsJsonRaw) || pickJson(codeArtsJsoncRaw);
 
   return {
     claude: claudeCfg && typeof claudeCfg.env === 'object' && claudeCfg.env
@@ -503,6 +523,7 @@ export async function detectExecutorModels({ homeDir } = {}) {
     opencode: detectOpencode(opencodeCfg, opencodeState),
     codebuddy: detectCodebuddy(codebuddyCfg),
     pi: detectPi(piCfg, piState),
+    codearts: detectCodeArts(codeArtsCfg),
   };
 }
 

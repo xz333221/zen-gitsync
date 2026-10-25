@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 任务执行器的品牌图标：claude / opencode / codex / codebuddy / pi 各一张彩色 SVG。
+// 任务执行器的品牌图标：claude / opencode / codex / codebuddy / pi / codearts 各一张彩色 SVG。
 // 统一收口成组件的原因：执行按钮下拉、派发控制台、设置弹窗三处都要用，
 // 图标路径和尺寸口径只写一遍，以后加执行器也只改这里。
 //
@@ -20,6 +20,8 @@ import codexIcon from '@/assets/icons/svg/codex.svg'
 import codebuddyIcon from '@/assets/icons/svg/codebuddy.svg?inline'
 // pi 官方标（pi.dev/logo-auto.svg，2026-10-13 随执行器接入一起补）
 import piIcon from '@/assets/icons/svg/pi.svg?inline'
+// 码道：华为云标 + 华为红（2026-10-25 随执行器接入一起补，1.4KB 未超内联阈值）
+import codeartsIcon from '@/assets/icons/svg/codearts.svg'
 import type { TaskExecutorId } from '@/utils/taskExecutor'
 
 const props = defineProps<{ executor: TaskExecutorId }>()
@@ -30,6 +32,7 @@ const ICONS: Record<TaskExecutorId, string> = {
   codex: codexIcon,
   codebuddy: codebuddyIcon,
   pi: piIcon,
+  codearts: codeartsIcon,
 }
 
 const src = computed(() => ICONS[props.executor])

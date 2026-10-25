@@ -975,7 +975,7 @@ const configStore = useConfigStore()
 const toolsStore = useToolsStore()
 
 /** 顶栏工具图标的勾选项（顺序 = 顶栏渲染顺序；claude 在顶栏是单独带右键菜单渲染的） */
-const HEADER_TOOL_IDS: ToolId[] = ['vscode', 'claude', 'codex', 'opencode', 'codebuddy', 'pi', 'kimi', 'zcode', 'dsh']
+const HEADER_TOOL_IDS: ToolId[] = ['vscode', 'claude', 'codex', 'opencode', 'codebuddy', 'pi', 'codearts', 'kimi', 'zcode', 'dsh']
 /** 各工具在 sprite 里的图标名：除 claude 外都与 tool id 同名，claude 用 -color 后缀的彩色版 */
 const HEADER_TOOL_ICONS: Record<ToolId, string> = {
   vscode: 'vscode',
@@ -984,6 +984,7 @@ const HEADER_TOOL_ICONS: Record<ToolId, string> = {
   opencode: 'opencode',
   codebuddy: 'codebuddy',
   pi: 'pi',
+  codearts: 'codearts',
   kimi: 'kimi',
   zcode: 'zcode',
   dsh: 'dsh',

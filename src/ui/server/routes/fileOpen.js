@@ -43,6 +43,9 @@ const TOOL_DOCS_URLS = Object.freeze({
   opencode: 'https://opencode.ai/docs',
   codebuddy: 'https://www.codebuddy.cn/docs/cli/installation',
   pi: 'https://pi.dev',
+  // 码道 CLI 没有 npm 包（官方是 PowerShell/bash 安装脚本），所以它只在
+  // TOOL_DOCS_URLS 里出现、不进 TOOL_INSTALL_PACKAGES —— 安装引导走官网。
+  codearts: 'https://codearts.huaweicloud.com/download.html',
   kimi: 'https://moonshotai.github.io/kimi-code/en/guides/getting-started',
   zcode: 'https://zcode.z.ai/',
   dsh: 'https://github.com/deepseek-ai/deepseek-harness',
@@ -685,6 +688,24 @@ async function launchPi(dirPath) {
     });
   }
   return launchInTerminal(dirPath, 'pi', []);
+}
+
+/**
+ * 用码道 CLI 打开目录（交互 TUI，2026-10-25 随执行器接入一起补）。
+ *
+ * `codearts <project>` 就是"在指定目录进入 TUI"。注意两点：
+ *   - PATH 上是 installers\codearts.cmd（安装脚本加的），起 TUI 必须走它 ——
+ *     那个 shim 会补齐 OPENCODE_CONFIG 等一串环境变量，裸起 bin\codearts.exe
+ *     会读用户自己那套 opencode 的配置。
+ *   - 首次开会要求 AK/SK（CODEARTS_CLI_AK/SK）或浏览器登录，属于交互环节。
+ */
+async function launchCodeArts(dirPath) {
+  if (process.platform === 'win32') {
+    return spawnDetached('cmd.exe', ['/c', 'start', '""', 'codearts', dirPath], {
+      cwd: dirPath
+    });
+  }
+  return launchInTerminal(dirPath, 'codearts', [dirPath]);
 }
 
 // Run the CLI shipped with this server, even when `g` is not in PATH or points
@@ -1484,6 +1505,34 @@ export function registerFileOpenRoutes({
       }
     }));
 
+  // 用码道 CLI 打开目录
+  app.post('/api/open-directory-with-codearts', asyncRoute(async (req, res) => {
+      try {
+        const { path: dirPath } = req.body || {};
+        if (!dirPath) {
+          throw new HttpError(400, '目录路径不能为空');
+        }
+
+        try {
+          await fs.access(dirPath);
+        } catch (error) {
+          throw new HttpError(400, `目录不存在或不可访问: ${dirPath}`);
+        }
+
+        try {
+          await launchCodeArts(dirPath);
+          res.json({ success: true, message: '已用 CodeArts 码道打开目录' });
+        } catch (error) {
+          res.status(400).json({
+            success: false,
+            error: error.message || '未检测到 codearts，请先安装并确保可以在终端中直接运行 codearts'
+          });
+        }
+      } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    }));
+
   // 用 Kimi Code 打开目录
   app.post('/api/open-directory-with-kimi', asyncRoute(async (req, res) => {
     const { path: dirPath, permissionMode } = req.body || {};
@@ -1675,13 +1724,14 @@ export function registerFileOpenRoutes({
       // (find 会跑两次——一次拿路径一次链版本——都是纯 fs/注册表查询,开销可忽略)
       // ⚠️ codebuddy 的 --version 是安全的:实测它只打印版本号就退出,不起引擎服务器
       // (裸跑 codebuddy 才会占 62443,与 checkCmd 的 --version 用法无关)。
-      const [vscodeRes, claudeRes, codexRes, opencodeRes, codebuddyRes, piRes, kimiExecutable, zcodeExecutable, dshExecutable, kimiVersion, dshVersion] = await Promise.all([
+      const [vscodeRes, claudeRes, codexRes, opencodeRes, codebuddyRes, piRes, codeArtsRes, kimiExecutable, zcodeExecutable, dshExecutable, kimiVersion, dshVersion] = await Promise.all([
         checkCmd('code'),
         checkCmd('claude'),
         checkCmd('codex'),
         checkCmd('opencode'),
         checkCmd('codebuddy'),
         checkCmd('pi'),
+        checkCmd('codearts'),
         findKimiExecutable(),
         findZCodeExecutable(),
         findDshExecutable(),
@@ -1717,6 +1767,7 @@ export function registerFileOpenRoutes({
         opencode: opencodeRes.installed,
         codebuddy: codebuddyRes.installed,
         pi: piRes.installed,
+        codearts: codeArtsRes.installed,
         kimi: !!kimiExecutable,
         zcode: !!zcodeExecutable,
         dsh: !!dshExecutable,
@@ -1727,6 +1778,7 @@ export function registerFileOpenRoutes({
           opencode: opencodeRes.version,
           codebuddy: codebuddyRes.version,
           pi: piRes.version,
+          codearts: codeArtsRes.version,
           kimi: kimiExecutable ? kimiVersion : null,
           zcode: null, // 桌面应用,无 CLI 版本通道
           dsh: dshExecutable ? dshVersion : null,

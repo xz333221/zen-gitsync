@@ -1,9 +1,9 @@
-// 本地工具检测 store — vscode / claude / codex / opencode / codebuddy / pi 是否安装
+// 本地工具检测 store — vscode / claude / codex / opencode / codebuddy / pi / codearts 是否安装
 // 调用 /api/check-tools,启动时一次 + 每 10 分钟刷新
 // 组件始终显示工具按钮；available 决定点击后是直接打开还是展示安装引导
 //
-// 另外持有**执行器当前配置的模型**（claude / codex / opencode / codebuddy / pi
-// 五个 CLI 各自的配置文件里写了什么模型）。归到这里的原因：同属"本机 CLI 环境探测"、
+// 另外持有**执行器当前配置的模型**（claude / codex / opencode / codebuddy / pi /
+// codearts 六个 CLI 各自的配置文件里写了什么模型）。归到这里的原因：同属"本机 CLI 环境探测"、
 // 同一批执行器、同一个刷新节奏；三处执行器下拉（主 Agent 控制台 ×2、工作台执行按钮、
 // 设置弹窗）要的是同一份数据，各拉一次只会各踩各的缓存。
 import { defineStore } from 'pinia'
@@ -19,7 +19,7 @@ import {
 
 const POLL_INTERVAL_MS = 10 * 60 * 1000 // 10 分钟
 
-export type ToolId = 'vscode' | 'claude' | 'codex' | 'opencode' | 'codebuddy' | 'pi' | 'kimi' | 'zcode' | 'dsh'
+export type ToolId = 'vscode' | 'claude' | 'codex' | 'opencode' | 'codebuddy' | 'pi' | 'codearts' | 'kimi' | 'zcode' | 'dsh'
 
 export interface ToolInstallerInfo {
   supported: boolean
@@ -68,6 +68,7 @@ export const useToolsStore = defineStore('tools', () => {
   const opencodeAvailable = ref(false)
   const codebuddyAvailable = ref(false)
   const piAvailable = ref(false)
+  const codeartsAvailable = ref(false)
   const kimiAvailable = ref(false)
   const zcodeAvailable = ref(false)
   const dshAvailable = ref(false)
@@ -128,6 +129,7 @@ export const useToolsStore = defineStore('tools', () => {
           opencodeAvailable.value = !!data.opencode
           codebuddyAvailable.value = !!data.codebuddy
           piAvailable.value = !!data.pi
+          codeartsAvailable.value = !!data.codearts
           kimiAvailable.value = !!data.kimi
           zcodeAvailable.value = !!data.zcode
           dshAvailable.value = !!data.dsh
@@ -161,6 +163,7 @@ export const useToolsStore = defineStore('tools', () => {
       case 'opencode': return opencodeAvailable.value
       case 'codebuddy': return codebuddyAvailable.value
       case 'pi': return piAvailable.value
+      case 'codearts': return codeartsAvailable.value
       case 'kimi': return kimiAvailable.value
       case 'zcode': return zcodeAvailable.value
       case 'dsh': return dshAvailable.value
@@ -288,6 +291,7 @@ export const useToolsStore = defineStore('tools', () => {
     opencodeAvailable,
     codebuddyAvailable,
     piAvailable,
+    codeartsAvailable,
     kimiAvailable,
     zcodeAvailable,
     dshAvailable,
