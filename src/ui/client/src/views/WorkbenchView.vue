@@ -42,7 +42,7 @@ import ExecutionLogManager from '@components/ExecutionLogManager.vue'
 import { canonicalProjectPath } from '@/utils/path'
 import { relativeTimeFromIso } from '@/utils/relativeTime'
 import { taskDurationText, taskTimeIso, taskTimeTitle } from '@/utils/taskTime'
-import type { BoardTask, Task } from '@/types/workbench'
+import type { BoardTask, ProjectSummary, Task } from '@/types/workbench'
 import { useWorkbenchAttachments, ALLOWED_EXT_HINT, MAX_ATTACHMENT_BYTES } from '@/composables/useWorkbenchAttachments'
 import { useWorkbenchSimpleConversation } from '@/composables/useWorkbenchSimpleConversation'
 import { buildTaskExecutionText, type TaskExecutionScope } from '@/utils/taskExecutionExport'
@@ -53,6 +53,7 @@ import TaskExecutorIcon from '@components/TaskExecutorIcon.vue'
 import { useWorkbenchData } from '@/composables/useWorkbenchData'
 import WorkbenchSidebar from '@/views/components/WorkbenchSidebar.vue'
 import WorkbenchBoard from '@/views/components/WorkbenchBoard.vue'
+import WorkbenchTaskDraftPanel from '@/views/components/WorkbenchTaskDraftPanel.vue'
 import CommonDialog from '@/components/CommonDialog.vue'
 
 // ── 按 projectPath 记忆「该项目最后一次打开的 task」───────────────────────
@@ -129,8 +130,92 @@ function rememberLastTask(projectPath: string, taskId: string) {
 // 也正因为弹窗天生是临时的，不再持久化"上次在哪一层"：刷新后落在看板才是对的行为。
 const editorOpen = ref(false)
 
+/**
+ * 新建草稿态：编辑器顶起来、中栏换成新建表单（WorkbenchTaskDraftPanel）。
+ *
+ * 为什么搬进编辑器的全屏弹窗（2026-10-25）：新建和编辑是同一件事的两步，
+ * 原来的 600px 窄窗填完就关，想接着补细节还得再点一次「创建并打开编辑器」。
+ * 现在建完就地变成选中任务，描述 / 附件 / 执行全在同一处，少一次跳转。
+ *
+ * 草稿期 selectedTaskId 会清空 —— 顶栏不显示"某条任务的"状态与用时，
+ * 左栏也没有高亮（否则会指向一条跟表单无关的任务）。关掉草稿时恢复到原来那条。
+ */
+const draftOpen = ref(false)
+const draftProjects = ref<ProjectSummary[]>([])
+const draftDefaultProjectPath = ref('')
+const draftPanelRef = ref<InstanceType<typeof WorkbenchTaskDraftPanel> | null>(null)
+/** 进草稿前选中的任务：取消新建后还给人，别因为点了一下"新建"就丢失上下文 */
+let selectedBeforeDraft: string | null = null
+
+/** 看板「新建任务」→ 编辑器草稿态（项目清单由看板带上来，不在这里再拉一条轮询） */
+function openDraft(payload: { projects: ProjectSummary[]; defaultProjectPath: string }) {
+  clearMetaSaveTimers()
+  if (selectedTask.value && isTaskBlank(selectedTask.value)) {
+    // 上一条是"点了新建什么都没填"的空条目：直接丢掉，别在列表里攒空白行
+    void discardBlankTask(selectedTask.value)
+  }
+  selectedBeforeDraft = selectedTaskId.value
+  draftProjects.value = payload.projects
+  draftDefaultProjectPath.value = payload.defaultProjectPath
+  draftOpen.value = true
+  selectedTaskId.value = null
+  editorOpen.value = true
+}
+
+/** 关掉草稿：有内容先问一句，避免填了一半的表单被点别的卡片顺手清掉 */
+async function leaveDraft(silent = false) {
+  if (!draftOpen.value) return
+  if (!silent && draftPanelRef.value?.hasContent()) {
+    try {
+      await ElMessageBox.confirm(
+        $t('@WORKBENCH:这次新建还没保存，确定放弃吗？'),
+        $t('@WORKBENCH:放弃新建'),
+        { type: 'warning', confirmButtonText: $t('@WORKBENCH:放弃'), cancelButtonText: $t('@WORKBENCH:继续填写') }
+      )
+    } catch { return false }
+  }
+  draftOpen.value = false
+  draftPanelRef.value = null
+  // 恢复进草稿前那条：取消新建不该改变"我在看哪条任务"
+  if (!selectedTaskId.value) selectedTaskId.value = selectedBeforeDraft
+  selectedBeforeDraft = null
+  return true
+}
+
 function closeEditor() {
+  if (draftOpen.value) {
+    void leaveDraft().then((ok) => {
+      if (ok) editorOpen.value = false
+    })
+    return
+  }
   editorOpen.value = false
+}
+
+/** 编辑器弹窗的关闭（X / ESC）也要经过同一套草稿确认 */
+function onEditorVisibleChange(open: boolean) {
+  if (!open && draftOpen.value) {
+    void leaveDraft().then((ok) => {
+      if (ok) editorOpen.value = false
+    })
+    return
+  }
+  editorOpen.value = open
+}
+
+/** 草稿建成正式任务：留在编辑器里，直接切到它 */
+async function onDraftCreated(task: Task) {
+  draftOpen.value = false
+  draftPanelRef.value = null
+  selectedBeforeDraft = null
+  await _loadDataTasks()
+  selectedTaskId.value = task.id
+  boardOpenedTaskId.value = task.id
+  captureSnapshot()
+  rememberLastTask(canonicalProjectPath(currentProject.value.path), task.id)
+  ElMessage.success($t('@WORKBENCH:已新建任务'))
+  await nextTick()
+  titleInputRef.value?.focus()
 }
 
 /**
@@ -158,6 +243,7 @@ const boardOpenedTaskId = ref<string | null>(null)
  *      重挑选中项，把我们要打开的那条覆盖掉（跨项目任务尤其明显）。
  */
 async function openTaskFromBoard(payload: { taskId: string; projectPath: string }) {
+  if (draftOpen.value && !(await leaveDraft())) return
   await _loadDataTasks()
   selectedTaskId.value = payload.taskId
   boardOpenedTaskId.value = payload.taskId
@@ -811,6 +897,9 @@ watch(
 )
 async function createTaskDirect() {
   if (creatingTask.value) return
+  // 草稿态下点侧栏的「新建」= 换一次草稿（有内容先问一句），否则会出现
+  // "表单还开着、选中项却跳到刚建的空白任务"这种自相矛盾的画面
+  if (draftOpen.value && !(await leaveDraft())) return
   creatingTask.value = true
   const body: any = {
     title: '',
@@ -902,6 +991,8 @@ async function copyTask(t: Task) {
   }
 }
 async function selectTask(t: Task) {
+  // 草稿态下点左栏的任务 = 放弃这次新建（有内容会先问一句）
+  if (draftOpen.value && !(await leaveDraft())) return
   if (selectedTaskId.value === t.id) return
   // 切换前先把当前 task 的未保存 title/desc 落盘
   clearMetaSaveTimers()
@@ -1109,19 +1200,23 @@ const selectedTaskQueue = computed(() =>
     <WorkbenchBoard
       :opened-task-id="boardOpenedTaskId"
       @open-task="openTaskFromBoard"
+      @create-task="openDraft"
       @board-tasks="boardTasks = $event"
       @locate-task="locateTaskFromBoard"
     />
 
     <!-- L2：单任务编辑器 —— 默认整屏铺开（原来是 1520px 居中浮层），关掉即回到看板，全程无跳转。
+         同一层还承载"新建任务"的草稿态（draftOpen）：新建与编辑本来就是一件事的两步，
+         没必要一个窄窗问完再关掉重开。
          custom-class 是给文件末尾那段非 scoped 样式用的：全屏下要抹掉圆角 / 单线边框，
          并把 el-dialog__body 变成撑满剩余高度的 flex 容器。 -->
     <CommonDialog
-      v-model="editorOpen"
-      :title="$t('@WORKBENCH:任务执行')"
+      :model-value="editorOpen"
+      :title="draftOpen ? $t('@WORKBENCH:新建任务') : $t('@WORKBENCH:任务执行')"
       size="fullscreen"
       type="flex"
       custom-class="wb-task-dialog"
+      @update:model-value="onEditorVisibleChange"
     >
     <div class="wb-editor">
     <!-- 顶部细栏：关闭入口做成独立一条，而不是塞进任务头 ——
@@ -1136,7 +1231,7 @@ const selectedTaskQueue = computed(() =>
         <el-icon class="wb-back-btn__icon"><ArrowLeft /></el-icon>
         <span>{{ $t('@WORKBENCH:返回看板') }}</span>
       </button>
-      <span class="wb-editor-bar__project" :title="currentProject.path">{{ currentProject.name }}</span>
+      <span v-if="!draftOpen" class="wb-editor-bar__project" :title="currentProject.path">{{ currentProject.name }}</span>
       <!--
         任务状态徽标（见脚本里 barStatus 那段为什么要有它）：
         紧挨项目名 —— 它和"我在哪 / 打开的是谁"同属"这条任务是什么"的上下文，
@@ -1178,7 +1273,7 @@ const selectedTaskQueue = computed(() =>
         <span v-if="barTimeText && barDurationText" class="wb-editor-bar__sep" aria-hidden="true">·</span>
         <span v-if="barDurationText" class="wb-editor-bar__spent">{{ barDurationText }}</span>
       </span>
-      <span class="wb-editor-bar__hint">{{ $t('@WORKBENCH:任务执行') }}</span>
+      <span class="wb-editor-bar__hint">{{ draftOpen ? $t('@WORKBENCH:新建任务') : $t('@WORKBENCH:任务执行') }}</span>
     </div>
     <div class="workbench__editor-row">
     <WorkbenchSidebar
@@ -1209,9 +1304,18 @@ const selectedTaskQueue = computed(() =>
       @keydown.right.prevent="nudgeSidebarWidth(16)"
     />
 
-    <!-- 中：单任务编辑区 -->
+    <!-- 中：单任务编辑区。新建草稿也落在这里（同一块屏幕，建完原地变成任务编辑器） -->
     <section class="wb-split">
-      <div v-if="!selectedTask" class="wb-placeholder">
+      <WorkbenchTaskDraftPanel
+        v-if="draftOpen"
+        ref="draftPanelRef"
+        :projects="draftProjects"
+        :default-project-path="draftDefaultProjectPath"
+        :current-project-path="currentProject.path"
+        @created="onDraftCreated"
+        @cancel="closeEditor"
+      />
+      <div v-else-if="!selectedTask" class="wb-placeholder">
         <p>{{ $t('@WORKBENCH:左侧选择任务，或新建一个任务开始') }}</p>
       </div>
       <template v-else>

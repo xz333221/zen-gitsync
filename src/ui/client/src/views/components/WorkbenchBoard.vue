@@ -37,7 +37,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Fold, Expand } from '@element-plus/icons-vue'
-import type { Attachment, BoardTask, ProjectSummary, Task } from '@/types/workbench'
+import type { Attachment, BoardTask, ProjectSummary } from '@/types/workbench'
 import { canonicalProjectPath } from '@/utils/path'
 import { taskPercentIndex } from '@/utils/progressReport'
 import type { TaskExecutorId } from '@/utils/taskExecutor'
@@ -49,7 +49,6 @@ import WorkbenchProjectPanel from './WorkbenchProjectPanel.vue'
 import WorkbenchKanban from './WorkbenchKanban.vue'
 import OrchestratorConsole from './OrchestratorConsole.vue'
 import WorkbenchDefaultPromptDialog from './WorkbenchDefaultPromptDialog.vue'
-import WorkbenchTaskCreateDialog from './WorkbenchTaskCreateDialog.vue'
 
 const props = defineProps<{
   /** 用户从看板上点开过的任务 id（null = 还没点开过）。透传给看板，卡片据此取消 hover */
@@ -59,6 +58,14 @@ const props = defineProps<{
 const emit = defineEmits<{
   /** 请求上层切到任务编辑器的某个任务（只由弹窗里的「打开编辑器」显式触发） */
   'open-task': [payload: { taskId: string; projectPath: string }]
+  /**
+   * 看板的「新建任务」→ 交给 L2 编辑器以草稿态承接。
+   *
+   * 项目清单一起递上去：新建表单要选项目，而编辑器那边没有这条轮询
+   * （它读的是看板递上来的 boardTasks，见下一条）。让编辑器自己再拉一份
+   * /api/workbench/projects 就是多一条 5s 轮询 + 两个可能不一致的快照。
+   */
+  'create-task': [payload: { projects: ProjectSummary[]; defaultProjectPath: string }]
   /**
    * 看板任务快照往上透一份（每次轮询拿到新数组就发一次）。
    *
@@ -483,23 +490,14 @@ function onSelectProject(p: ProjectSummary | null) {
 // WorkbenchProjectPanel：它们都作用于"某一行的项目路径"而不是看板选中态，
 // 放在行组件里才不用为一个菜单往回抛六七个子事件（也不再改看板选中态）。
 
-// ── 新建任务：弹窗里问清字段，建完就关，卡片直接落在看板上 ──────────────
-// 不再"先建一个空任务再把人甩进编辑器" —— 那既让人离开看板，
-// 又没说清任务属于哪个项目，还会在看板上留一个需要清理的空条目。
-const createOpen = ref(false)
-
+// ── 新建任务：交给 L2 编辑器（全屏弹窗）以草稿态承接 ─────────────────────
+// 2026-10-25 之前这里是 600px 窄弹窗：问完字段就关，想接着补细节还得再点一次
+// 「创建并打开编辑器」。同一个动作被拆成两次跳转，而编辑器里本来就该能新建。
 function onCreateClick() {
-  createOpen.value = true
-}
-
-/** @param openEditor 来自「创建并打开编辑器」——那是显式动作，不是在背后偷偷跳转 */
-async function onTaskCreated(payload: { task: Task; openEditor: boolean }) {
-  await refresh(true)
-  if (payload.openEditor) {
-    emit('open-task', { taskId: payload.task.id, projectPath: payload.task.projectPath || '' })
-    return
-  }
-  ElMessage.success($t('@WORKBENCH:已创建任务'))
+  emit('create-task', {
+    projects: projects.value,
+    defaultProjectPath: defaultProjectPath.value,
+  })
 }
 
 async function runTask(t: BoardTask) {
@@ -1084,13 +1082,6 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
       @save="onSavePromptDraft"
     />
 
-    <!-- 新建任务：弹窗里问清字段，建完就关 -->
-    <WorkbenchTaskCreateDialog
-      v-model="createOpen"
-      :projects="projects"
-      :default-project-path="defaultProjectPath"
-      @created="onTaskCreated"
-    />
   </div>
 </template>
 

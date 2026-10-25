@@ -14,26 +14,23 @@
   ~ limitations under the License.
   -->
 <!--
-  多项目编排台 · 新建任务弹窗。
+  新建任务表单 —— **内嵌在任务编辑器（全屏弹窗）里**，不是独立弹窗。
 
-  原来「新建开发任务」是"先悄悄建一个空任务、再把你甩进编辑器"，
-  在编排台里这是个反模式：点一下按钮就离开看板，而且还没说明任务属于哪个项目。
-  这里把该问的一次问清（项目 / 标题 / 描述），建完就关，卡片直接出现在看板上。
+  由来（2026-10-25）：看板「新建任务」原来弹一个 600px 窄窗，问完字段再关掉，
+  想接着填细节就得再点一次「创建并打开编辑器」。那个按钮本身就是割裂的证据：
+  新建和编辑本该是同一件事的两步。现在点新建直接把编辑器顶起来、中栏换成这张表单，
+  建完就地变成选中的任务，描述/附件/执行全在同一处。
 
-  一个刻意的决定：
-    **标题与描述至少填一个**。看板上的空任务会被 pruneBlankTasks 清掉，
-    从这里放行一个空任务只会让用户以为"建成功了"，然后它自己消失。
+  附件仍然先落服务端派发暂存区（`_dispatch/`）：这一刻任务还不存在，任务侧端点必然 404。
+  创建请求带 stagedAttachments，服务端认领进 `_task-{id}/` —— 与主 Agent 控制台同一条链路。
 
-  附件（2026-10-09 补）：这一刻任务还不存在，所以和主 Agent 控制台一样先落到
-  服务端的派发暂存区（`_dispatch/`），创建时按 id 被服务端认领进 `_task-{id}/`。
-  两条链路共用 useWorkbenchAttachments + 服务端的 claimStagedAttachments ——
-  附件口径只该有一份。
+  一个刻意的决定：**标题与描述至少填一个**。看板上的空任务会被 pruneBlankTasks 清掉，
+  放行一个空任务只会让用户以为"建成功了"，然后它自己消失。
 -->
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { $t } from '@/lang/static'
 import { canonicalProjectPath } from '@/utils/path'
-import CommonDialog from '@/components/CommonDialog.vue'
 import AttachmentZone from '@/components/AttachmentZone.vue'
 import {
   useWorkbenchAttachments,
@@ -42,21 +39,20 @@ import {
 import type { Attachment, ProjectSummary, Task } from '@/types/workbench'
 
 const props = defineProps<{
-  modelValue: boolean
   projects: ProjectSummary[]
   /** 默认归属项目：看板当前选中的项目，选中「全部项目」时是应用当前项目 */
   defaultProjectPath: string
+  /** 创建请求里是否带上当前应用目录（没有项目清单时后端走默认） */
+  currentProjectPath?: string
 }>()
 
 const emit = defineEmits<{
-  'update:modelValue': [open: boolean]
-  /** openEditor=true 表示「创建并打开编辑器」 */
-  created: [payload: { task: Task; openEditor: boolean }]
+  created: [task: Task]
+  cancel: []
 }>()
 
 const title = ref('')
 const desc = ref('')
-const projectPath = ref('')
 const submitting = ref(false)
 const error = ref('')
 
@@ -69,7 +65,7 @@ const dragging = ref(false)
 /** 草稿阶段附件还在暂存区，缩略图 / 预览必须走暂存端点，任务侧端点此刻一定 404 */
 const DRAFT_RAW_BASE = '/api/workbench/orchestrator/attachments'
 
-/** 本次是否已经创建成功 —— 决定关窗时该不该把暂存文件删掉（见 discardDrafts） */
+/** 本次是否已经创建成功 —— 决定卸载时该不该把暂存文件删掉（见 discardDrafts） */
 let committed = false
 
 const attachTarget = computed<AttachmentTarget>(() => ({
@@ -93,7 +89,7 @@ const {
 const attachBusy = computed(() => isUploading('draft'))
 
 /**
- * 粘贴统一入口，挂在弹窗根节点（`.nc`）上。
+ * 粘贴统一入口，挂在表单根节点上。
  *
  * 只挂这一层：`<input>` / `<textarea>` 上的 paste **会冒泡**到根节点，
  * 所以"在标题里 / 在描述里 / 点在附件区"三种位置都能收到。
@@ -112,11 +108,11 @@ function onPickAttachment() { pickAttachmentFile(attachTarget.value) }
 function onRemoveAttachment(att: Attachment) { removeAttachment(attachTarget.value, att) }
 
 /**
- * 关掉弹窗时清掉还没被认领的草稿附件。
+ * 放弃这次新建时清掉还没被认领的草稿附件。
  *
  * 与主 Agent 控制台的取舍**相反**：那边派发失败（超长 / 目录不存在）后刻意留着
- * 暂存文件，好让用户改一改重发；而这里是用户主动关窗放弃这次新建，
- * 那些文件永远不会被认领，留着只会在 `_dispatch/` 里堆截图，等到下次进程启动才被清。
+ * 暂存文件，好让用户改一改重发；而这里是用户主动放弃新建，那些文件永远不会被认领，
+ * 留着只会在 `_dispatch/` 里堆截图，等到下次进程启动才被清。
  *
  * 创建成功那一路不算放弃（服务端已把文件搬进 `_task-{id}/`，删了就是把附件删掉）。
  */
@@ -129,6 +125,14 @@ function discardDrafts() {
     fetch(`${DRAFT_RAW_BASE}/${encodeURIComponent(a.id)}`, { method: 'DELETE' }).catch(() => {})
   }
 }
+
+onBeforeUnmount(discardDrafts)
+
+/** 表单是否有内容 —— 父组件关窗时用它决定要不要问一句「放弃新建？」 */
+function hasContent(): boolean {
+  return title.value.trim().length > 0 || desc.value.trim().length > 0 || drafts.value.length > 0
+}
+defineExpose({ hasContent, discardDrafts })
 
 /**
  * 把「默认项目路径」映射到下拉里真正存在的那个 option 值。
@@ -147,21 +151,7 @@ function matchOptionPath(raw: string): string {
   return hit ? hit.path : ''
 }
 
-// 打开时重置成一个干净的草稿（并带上默认项目），关掉时丢弃
-watch(() => props.modelValue, (open) => {
-  if (!open) {
-    discardDrafts()
-    return
-  }
-  title.value = ''
-  desc.value = ''
-  drafts.value = []
-  dragging.value = false
-  committed = false
-  projectPath.value = matchOptionPath(props.defaultProjectPath)
-  error.value = ''
-  submitting.value = false
-})
+const projectPath = ref(matchOptionPath(props.defaultProjectPath))
 
 /** 项目下拉的候选：只列真实的项目条目（含目录已失效的，用户可能就是想建个占位） */
 const projectOptions = computed(() => props.projects)
@@ -180,7 +170,7 @@ const projectName = computed(() => {
   return p ? p.name : ''
 })
 
-async function submit(openEditor: boolean) {
+async function submit() {
   if (!canSubmit.value) return
   submitting.value = true
   error.value = ''
@@ -190,6 +180,7 @@ async function submit(openEditor: boolean) {
       desc: desc.value,
     }
     if (projectPath.value) body.projectPath = projectPath.value
+    else if (props.currentProjectPath) body.projectPath = props.currentProjectPath
     // 只回传 id / ext / originalName：服务端按 id 回暂存区找文件，路径不由前端拼。
     // 字段名是 stagedAttachments 而不是 attachments —— 后者是任务上已挂好的附件记录
     // （编辑器整 task 体提交时带的就是它），混用会让服务端把已挂好的附件当草稿去认领。
@@ -210,11 +201,10 @@ async function submit(openEditor: boolean) {
       error.value = res?.error || $t('@WORKBENCH:保存失败')
       return
     }
-    // 置在 emit 之前：关窗那一下 watch 就会跑 discardDrafts，
-    // 晚一行写就会把刚认领进任务目录的附件删掉。
+    // 置在 emit 之前：父组件收到 created 就会卸载这张表单，
+    // 晚一行写就会在卸载钩子里把刚认领进任务目录的附件删掉。
     committed = true
-    emit('update:modelValue', false)
-    emit('created', { task: res.task, openEditor })
+    emit('created', res.task as Task)
   } finally {
     submitting.value = false
   }
@@ -222,150 +212,145 @@ async function submit(openEditor: boolean) {
 </script>
 
 <template>
-  <CommonDialog
-    :model-value="modelValue"
-    :title="$t('@WORKBENCH:新建开发任务')"
-    width="min(600px, 94vw)"
-    :close-on-click-modal="false"
-    @update:model-value="emit('update:modelValue', $event)"
+  <div
+    class="ncf"
+    @paste="onPaste"
+    @drop.prevent="onDrop"
+    @dragover.prevent="dragging = true"
+    @dragenter.prevent="dragging = true"
+    @dragleave="dragging = false"
   >
-    <div
-      class="nc"
-      @paste="onPaste"
-      @drop.prevent="onDrop"
-      @dragover.prevent="dragging = true"
-      @dragenter.prevent="dragging = true"
-      @dragleave="dragging = false"
-    >
-      <div class="nc__field">
-        <label class="nc__label" for="nc-project">{{ $t('@WORKBENCH:项目') }}</label>
-        <select id="nc-project" v-model="projectPath" class="nc__select">
-          <option value="">{{ $t('@WORKBENCH:跟随当前项目') }}</option>
-          <option v-for="p in projectOptions" :key="p.key" :value="p.path">
-            {{ p.name }}{{ p.exists === false ? ` · ${$t('@WORKBENCH:目录不存在')}` : '' }}
-          </option>
-        </select>
-        <p class="nc__hint" :title="projectPath">
-          {{ projectName ? $t('@WORKBENCH:任务会在「{name}」目录下执行', { name: projectName }) : $t('@WORKBENCH:任务会跟随应用当前的工作目录') }}
-        </p>
-      </div>
-
-      <div class="nc__field">
-        <label class="nc__label" for="nc-title">{{ $t('@WORKBENCH:标题') }}</label>
-        <input
-          id="nc-title"
-          v-model="title"
-          class="nc__input"
-          type="text"
-          maxlength="200"
-          :placeholder="$t('@WORKBENCH:一句话说清要做什么')"
-          @keydown.enter.prevent="submit(false)"
-        />
-      </div>
-
-      <div class="nc__field">
-        <label class="nc__label" for="nc-desc">{{ $t('@WORKBENCH:描述') }}</label>
-        <textarea
-          id="nc-desc"
-          v-model="desc"
-          class="nc__input nc__input--area"
-          rows="6"
-          :placeholder="$t('@WORKBENCH:把背景、验收标准、相关文件路径写进来，执行时用它当上下文')"
-          @keydown.ctrl.enter.prevent="submit(false)"
-          @keydown.meta.enter.prevent="submit(false)"
-        />
-      </div>
-
-      <!--
-        附件：任务还不存在，所以先落暂存区，创建时由服务端认领进 `_task-{id}/`。
-        刻意**常驻**渲染（控制台那边是"有附件才出现"+ 一枚回形针按钮）：
-        弹窗里没有别的入口能挂"添加附件"，空态只有一行 "附件 0 [添加附件]"，
-        这也是唯一能让"可以粘图"这件事被看见的地方 —— 没发现这个能力等于没有。
-      -->
-      <div class="nc__field">
-        <AttachmentZone
-          :attachments="drafts"
-          :is-image="isImageAttachment"
-          :human-size="humanSize"
-          :is-uploading="attachBusy"
-          :is-paste-hover="dragging"
-          :on-pick="onPickAttachment"
-          :on-remove="onRemoveAttachment"
-          :raw-base="DRAFT_RAW_BASE"
-          @dragover.prevent="dragging = true"
-          @dragenter.prevent="dragging = true"
-          @dragleave="dragging = false"
-        />
-        <p class="nc__hint">{{ $t('@WORKBENCH:粘贴图片以快速添加') }}</p>
-      </div>
-
-      <p v-if="error" class="nc__error">{{ error }}</p>
+    <div class="ncf__head">
+      <p class="ncf__sub">{{ $t('@WORKBENCH:填完直接创建，接着就能在同一个界面里执行') }}</p>
     </div>
 
-    <template #footer>
-      <div class="nc__foot">
-        <button type="button" class="nc__btn" @click="emit('update:modelValue', false)">
-          {{ $t('@WORKBENCH:取消') }}
-        </button>
-        <span class="nc__foot-spacer" />
-        <button
-          type="button"
-          class="nc__btn"
-          :disabled="!canSubmit"
-          @click="submit(true)"
-        >{{ $t('@WORKBENCH:创建并打开编辑器') }}</button>
-        <button
-          type="button"
-          class="nc__btn nc__btn--primary"
-          :disabled="!canSubmit"
-          @click="submit(false)"
-        >{{ submitting ? $t('@WORKBENCH:创建中…') : $t('@WORKBENCH:创建') }}</button>
-      </div>
-    </template>
-  </CommonDialog>
+    <div class="ncf__field">
+      <label class="ncf__label" for="ncf-project">{{ $t('@WORKBENCH:项目') }}</label>
+      <select id="ncf-project" v-model="projectPath" class="ncf__select">
+        <option value="">{{ $t('@WORKBENCH:跟随当前项目') }}</option>
+        <option v-for="p in projectOptions" :key="p.key" :value="p.path">
+          {{ p.name }}{{ p.exists === false ? ` · ${$t('@WORKBENCH:目录不存在')}` : '' }}
+        </option>
+      </select>
+      <p class="ncf__hint" :title="projectPath">
+        {{ projectName ? $t('@WORKBENCH:任务会在「{name}」目录下执行', { name: projectName }) : $t('@WORKBENCH:任务会跟随应用当前的工作目录') }}
+      </p>
+    </div>
+
+    <div class="ncf__field">
+      <label class="ncf__label" for="ncf-title">{{ $t('@WORKBENCH:标题') }}</label>
+      <input
+        id="ncf-title"
+        v-model="title"
+        class="ncf__input ncf__input--title"
+        type="text"
+        maxlength="200"
+        :placeholder="$t('@WORKBENCH:一句话说清要做什么')"
+        @keydown.enter.prevent="submit"
+      />
+    </div>
+
+    <div class="ncf__field">
+      <label class="ncf__label" for="ncf-desc">{{ $t('@WORKBENCH:描述') }}</label>
+      <textarea
+        id="ncf-desc"
+        v-model="desc"
+        class="ncf__input ncf__input--area"
+        :placeholder="$t('@WORKBENCH:把背景、验收标准、相关文件路径写进来，执行时用它当上下文')"
+        @keydown.ctrl.enter.prevent="submit"
+        @keydown.meta.enter.prevent="submit"
+      />
+    </div>
+
+    <!--
+      附件：任务还不存在，所以先落暂存区，创建时由服务端认领进 `_task-{id}/`。
+      刻意**常驻**渲染：表单里没有别的入口能挂"添加附件"，空态那一行
+      也是唯一能让"可以粘图"这件事被看见的地方 —— 没发现这个能力等于没有。
+    -->
+    <div class="ncf__field">
+      <AttachmentZone
+        :attachments="drafts"
+        :is-image="isImageAttachment"
+        :human-size="humanSize"
+        :is-uploading="attachBusy"
+        :is-paste-hover="dragging"
+        :on-pick="onPickAttachment"
+        :on-remove="onRemoveAttachment"
+        :raw-base="DRAFT_RAW_BASE"
+        @dragover.prevent="dragging = true"
+        @dragenter.prevent="dragging = true"
+        @dragleave="dragging = false"
+      />
+      <p class="ncf__hint">{{ $t('@WORKBENCH:粘贴图片以快速添加') }}</p>
+    </div>
+
+    <p v-if="error" class="ncf__error">{{ error }}</p>
+
+    <div class="ncf__foot">
+      <button type="button" class="ncf__btn" @click="emit('cancel')">
+        {{ $t('@WORKBENCH:取消') }}
+      </button>
+      <span class="ncf__foot-spacer" />
+      <button
+        type="button"
+        class="ncf__btn ncf__btn--primary"
+        :disabled="!canSubmit"
+        @click="submit"
+      >{{ submitting ? $t('@WORKBENCH:创建中…') : $t('@WORKBENCH:创建任务') }}</button>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.nc {
+.ncf {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
+  /* 中栏可能是 1400px 宽 —— 表单拉满一行读起来太散，收在 760 并居中 */
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px 4px 24px;
   /* el-dialog__body 的 line-height 会一路继承，小字号提示会被撑开 —— 在根元素重置 */
   line-height: 1.5;
 }
-.nc__field { display: flex; flex-direction: column; gap: 5px; }
-.nc__label {
+.ncf__head { display: flex; flex-direction: column; gap: 4px; }
+.ncf__sub { margin: 0; font-size: var(--font-size-sm); color: var(--text-meta); }
+
+.ncf__field { display: flex; flex-direction: column; gap: 6px; }
+.ncf__label {
   font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-secondary);
 }
-.nc__input,
-.nc__select {
+.ncf__input,
+.ncf__select {
   width: 100%;
-  padding: 7px 9px;
+  padding: 8px 10px;
   font-size: var(--font-size-mid);
   font-family: inherit;
   line-height: 1.5;
   color: var(--text-primary);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-color);
+  background: var(--bg-container);
+  border: 1px solid var(--border-color-medium);
   border-radius: var(--radius-md);
   outline: none;
   transition: border-color var(--transition-fast) var(--ease-custom);
   box-sizing: border-box;
 }
-.nc__input:focus,
-.nc__select:focus { border-color: var(--color-primary); }
-.nc__input::placeholder { color: var(--text-meta); }
-.nc__select { cursor: pointer; }
-.nc__input--area {
+.ncf__input--title { font-size: var(--font-size-lg); font-weight: 500; }
+.ncf__input:focus,
+.ncf__select:focus { border-color: var(--color-primary); }
+.ncf__input::placeholder { color: var(--text-meta); }
+.ncf__select { cursor: pointer; }
+.ncf__input--area {
   resize: vertical;
-  min-height: 92px;
-  max-height: 260px;
+  min-height: 180px;
+  max-height: 460px;
 }
-.nc__hint { margin: 0; font-size: var(--font-size-xs); color: var(--text-meta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ncf__hint { margin: 0; font-size: var(--font-size-xs); color: var(--text-meta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.nc__error {
+.ncf__error {
   margin: 0;
   padding: 6px 8px;
   font-size: var(--font-size-sm);
@@ -374,22 +359,27 @@ async function submit(openEditor: boolean) {
   background: color-mix(in srgb, var(--color-danger) 10%, transparent);
 }
 
-.nc__foot { display: flex; align-items: center; gap: 8px; width: 100%; }
-.nc__foot-spacer { flex: 1; }
-.nc__btn {
+.ncf__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+.ncf__foot-spacer { flex: 1; }
+.ncf__btn {
   border: none;
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
-  line-height: 28px;
-  padding: 0 12px;
+  line-height: 30px;
+  padding: 0 14px;
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: color var(--transition-fast) var(--ease-custom), background var(--transition-fast) var(--ease-custom);
 }
-.nc__btn:hover:not(:disabled) { color: var(--color-primary); background: var(--bg-container-hover); }
-.nc__btn:disabled { opacity: var(--disabled-opacity); cursor: default; }
-.nc__btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
-.nc__btn--primary { background: var(--color-primary); color: #fff; }
-.nc__btn--primary:hover:not(:disabled) { background: var(--color-primary); color: #fff; opacity: 0.88; }
+.ncf__btn:hover:not(:disabled) { color: var(--color-primary); background: var(--bg-container-hover); }
+.ncf__btn:disabled { opacity: var(--disabled-opacity); cursor: default; }
+.ncf__btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
+.ncf__btn--primary { background: var(--color-primary); color: #fff; }
+.ncf__btn--primary:hover:not(:disabled) { background: var(--color-primary); color: #fff; opacity: 0.88; }
 </style>
