@@ -59,13 +59,13 @@ const emit = defineEmits<{
   /** 请求上层切到任务编辑器的某个任务（只由弹窗里的「打开编辑器」显式触发） */
   'open-task': [payload: { taskId: string; projectPath: string }]
   /**
-   * 看板的「新建任务」→ 交给 L2 编辑器以草稿态承接。
+   * 看板的「新建任务」→ 上层建一条空白任务并把编辑器顶起来（复用编辑器里那套组件）。
    *
-   * 项目清单一起递上去：新建表单要选项目，而编辑器那边没有这条轮询
-   * （它读的是看板递上来的 boardTasks，见下一条）。让编辑器自己再拉一份
-   * /api/workbench/projects 就是多一条 5s 轮询 + 两个可能不一致的快照。
+   * 只递项目路径：新建表单已经没有了，字段全在编辑器里。路径取"看板当前选中的项目"，
+   * 选中「全部项目」时是应用当前目录 —— 这样在某个项目的筛选下点新建，
+   * 任务就落在那个项目，不用再问一次。
    */
-  'create-task': [payload: { projects: ProjectSummary[]; defaultProjectPath: string }]
+  'create-task': [payload: { projectPath: string }]
   /**
    * 看板任务快照往上透一份（每次轮询拿到新数组就发一次）。
    *
@@ -490,14 +490,12 @@ function onSelectProject(p: ProjectSummary | null) {
 // WorkbenchProjectPanel：它们都作用于"某一行的项目路径"而不是看板选中态，
 // 放在行组件里才不用为一个菜单往回抛六七个子事件（也不再改看板选中态）。
 
-// ── 新建任务：交给 L2 编辑器（全屏弹窗）以草稿态承接 ─────────────────────
+// ── 新建任务：交给 L2 编辑器（全屏弹窗）本体承接 ─────────────────────────
 // 2026-10-25 之前这里是 600px 窄弹窗：问完字段就关，想接着补细节还得再点一次
-// 「创建并打开编辑器」。同一个动作被拆成两次跳转，而编辑器里本来就该能新建。
+// 「创建并打开编辑器」。现在直接建空白任务 + 顶起编辑器，标题/描述/附件/执行
+// 全用编辑器里已有的组件，不再另做一张表单。
 function onCreateClick() {
-  emit('create-task', {
-    projects: projects.value,
-    defaultProjectPath: defaultProjectPath.value,
-  })
+  emit('create-task', { projectPath: defaultProjectPath.value || '' })
 }
 
 async function runTask(t: BoardTask) {

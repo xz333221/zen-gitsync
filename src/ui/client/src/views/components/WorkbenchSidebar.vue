@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { Plus, Close, DocumentAdd, Folder, ArrowDown, ArrowRight, CopyDocument } from '@element-plus/icons-vue'
 import type { Task } from '@/types/workbench'
@@ -39,13 +39,32 @@ function isOtherProject(t: Task): boolean {
   return !!t.projectPath && canonicalProjectPath(t.projectPath) !== currentProjectKey.value
 }
 
+/**
+ * 选中项滚进可见区。
+ *
+ * 任务列表按创建时间升序（后端顺序），新任务永远排在这一组的最后 —— 点「新建任务」
+ * 之后光标虽然落在标题上，左栏却看不到自己刚建的那条（要往下翻一大截）。
+ * 用 block:'nearest' 而不是 'center'：选中项本来就在视野里时不该再抖一下。
+ *
+ * 必须 immediate：编辑器弹窗是从关闭态打开的，Sidebar 是**新挂载**的，
+ * 而 selectedTaskId 在挂载前就已经设好了 —— 不带 immediate 的话这次变化压根看不到。
+ */
+watch(() => props.selectedTaskId, async (id) => {
+  if (!id) return
+  await nextTick()
+  const el = document.querySelector<HTMLElement>(`.wb-task-item[data-task-id="${id}"]`)
+  el?.scrollIntoView({ block: 'nearest' })
+}, { immediate: true })
+
 // 单行展示的标题来源:优先任务标题;没写标题用任务描述(多行压平成一行),
-// 超出交给 CSS ellipsis。两者都没有的返回空串——这种空任务不保存,
-// 只会以"刚新建、还没填内容"的选中态短暂存在,行内留白即可
+// 超出交给 CSS ellipsis。两者都没有的落在「未命名任务」——
+// 新建流程会让这样的空白任务在列表里停留一会儿（等你填标题），
+// 留一行空白反而像渲染坏了
 function taskDisplayName(t: Task): string {
   const title = (t.title || '').trim()
   if (title) return title
-  return (t.desc || '').replace(/\s+/g, ' ').trim()
+  const desc = (t.desc || '').replace(/\s+/g, ' ').trim()
+  return desc || $t('@WORKBENCH:未命名任务')
 }
 function taskTooltip(t: Task): string {
   const name = taskDisplayName(t)

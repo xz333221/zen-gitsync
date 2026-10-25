@@ -5,34 +5,33 @@
  *   A 看板是**常驻底图** —— 它不再和编辑器二选一
  *   B 点看板卡片 -> **直接打开任务编辑器弹窗**，看板仍在（不再有中间的只读详情弹窗）
  *   C 关掉编辑器 -> 还在看板原处
- *   D 看板「待处理」列末尾的「新建任务」-> **同一个全屏弹窗**里的草稿表单（.ncf），
- *     不再有独立的 600px 窄窗（2026-10-25；判据落在"表单是否长在 .wb-editor 那个弹窗里"）
- *   E 创建成功 -> 成功提示 + 草稿表单退出、原地切到该任务的编辑器 + 卡片落在看板上
- *     （编辑器**不关** —— 这是"新建与编辑是同一件事的两步"的直接体现）
+ *   D 看板「待处理」列末尾的「新建任务」-> **直接打开任务编辑器**（2026-10-25），
+ *     不再有独立的 600px 窄窗，也没有另做的"草稿表单"：标题 / 描述 / 附件 / 执行
+ *     全部复用编辑器里已有的那套组件，光标直接落在标题输入框里
+ *   E 填标题即落盘 -> 卡片出现在看板上（同一个编辑器里完成，不用再点"创建"）
  *   F 点卡片 -> 编辑器以**大弹窗**浮在看板上，看板仍在
  *   G 点「返回看板」-> 编辑器弹窗关闭，看板仍在
  *   H 编辑器里点「执行日志」-> 日志弹窗必须压在编辑器之上
  *     （app shell 的 main-container 是 fixed + z-index:1001 的层叠上下文，
  *      内部弹窗不加 append-to-body 就会被关在里面、永远盖不过 body 层的编辑器弹窗）
  *
- * 另含两条易回归的点：
- *   D3/D4 项目下拉必须自动选中**当前项目**（项目条目 key 是归一化路径、path 是原始路径，
- *         两个口径搞混就会让下拉显示空白、提示错说成"跟随当前目录"）
+ * 另含几条易回归的点：
+ *   D2b   光标必须真落在**空的**标题框里 —— 只看"编辑器开着"的话，
+ *         新建退化成"打开某条老任务"也照样绿
+ *   D3    新任务必须带上 projectPath（新建下拉没了，落点跟看板当前筛选走；
+ *         不验这条，任务会默默落到另一个项目下）
+ *   D7b   什么都没填就返回 -> 那条空任务要被丢弃，看板不留「未命名任务」
  *   F2    编辑器弹窗宽度必须 ≥1200px（用户明确要求"弹窗可以做得比较大"）
  *
- * 新建草稿的附件链路（2026-10-09 补，契约是「任务还不存在时先落暂存区」）：
- *   D5 在草稿表单里粘一张图 -> 恰好 1 个草稿附件（回归：@paste 只挂一层，挂两层会重复上传）
- *   D6 缩略图必须走**暂存端点** /api/workbench/orchestrator/attachments/:id/raw
- *      且真的加载出来（任务侧端点此刻一定 404）—— 顺带记下 id 供后面查暂存文件
- *   D9 中文文件名也要传得上去（HTTP 头只认 ISO-8859-1，前端不 encode 就发不出去）
- *   D7 草稿有内容时点「取消」-> 先确认 -> 暂存文件被删掉（放弃新建不该在 _dispatch/ 里堆截图）
- *   D8 再次打开 -> 草稿为空（上一条的附件不会跟到这一次）
- *   E5 创建请求带上附件后，任务记录里的附件已落到 `_task-{id}/`（不是还躺在暂存区）
+ * 草稿附件（先落 `_dispatch/` 暂存区、创建时认领进 `_task-{id}/`）那条链路
+ * 现在只存在于主 Agent 控制台的派发入口，由 verify-workbench-dispatch-attach.cjs 覆盖 ——
+ * 新建任务已经没有"任务还不存在"的中间态了，所以这里不再验暂存端点。
  *
  * 前置：dev server 已启动（npm run dev，前端 5544）。
  * 用法：node scripts/verify-workbench-dialogs.cjs
  * 退出码：0 全通过，1 有失败项。
  */
+
 const path = require('node:path')
 
 // playwright 装在 src/ui/client 下，这里把它的 node_modules 挂进解析路径，脚本可独立运行
@@ -60,7 +59,6 @@ async function visibleDialogs(page) {
       .map(d => ({
         title: d.querySelector('.el-dialog__title')?.textContent?.trim() || '',
         hasEditor: !!d.querySelector('.wb-editor'),
-        hasCreate: !!d.querySelector('.ncf')
       }))
   )
 }
@@ -97,48 +95,6 @@ async function waitUntil(fn, timeout = 12000, interval = 150) {
     await sleep(interval)
   }
   return false
-}
-
-// 1x1 红点 PNG
-const PNG_B64 =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
-
-/** 往新建弹窗根节点派发一次「粘贴了一张 PNG」事件（模拟用户 Ctrl+V） */
-async function pastePng(page, fileName) {
-  await page.evaluate(({ b64, fileName }) => {
-    const el = document.querySelector('.ncf')
-    if (!el) throw new Error('找不到新建弹窗根节点 .ncf')
-    const bin = atob(b64)
-    const arr = new Uint8Array(bin.length)
-    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
-    const file = new File([arr], fileName, { type: 'image/png' })
-    const dt = new DataTransfer()
-    dt.items.add(file)
-    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
-  }, { b64: PNG_B64, fileName })
-}
-
-/** 弹窗里草稿附件的原始文件地址形如 /api/workbench/orchestrator/attachments/<id>/raw */
-const STAGING_RE = /\/api\/workbench\/orchestrator\/attachments\/([^/]+)\/raw/
-
-/**
- * 等这一轮上传真的结束。
- *
- * 必须先等"开始了"（出现附件或按钮转成「上传中…」）再等"结束了"：
- * 直接看按钮文案会在上传还没开始时就读到「添加附件」，把还在飞的那一份漏掉，
- * 于是重复上传（@paste 挂两层）反而"通过"。
- */
-async function uploadSettled(page) {
-  await waitUntil(async () => {
-    const n = await page.locator('.ncf .wb-attachment').count()
-    if (n > 0) return true
-    const t = await page.locator('.ncf .wb-attachments__add').first().textContent().catch(() => '')
-    return !!t && /上传中/.test(t)
-  })
-  return await waitUntil(async () => {
-    const t = await page.locator('.ncf .wb-attachments__add').first().textContent().catch(() => '')
-    return !!t && !/上传中/.test(t)
-  })
 }
 
 async function main() {
@@ -186,129 +142,78 @@ async function main() {
     check('C 关闭编辑器后无可见弹窗', await noVisibleDialog(page, 12000))
     check('C2 关闭后看板仍在', await boardVisible(page))
 
-    // ── D 新建走编辑器（全屏弹窗）的草稿态 ───────────────────────────
-    // 入口是看板「待处理」列末尾的幽灵项（顶栏那个「新建开发任务」按钮 2026-09-29 去掉了）。
-    // 2026-10-25 起不再有独立的 600px 新建弹窗：同一个全屏弹窗里中栏换成草稿表单。
+    // ── D 新建 = 直接进任务编辑器（复用编辑器里的那套组件）──────────────
+    // 2026-10-25：不再有独立的 600px 新建弹窗，也没有另做的"草稿表单"。
+    // 点新建 = 立刻建一条空白任务 + 顶起编辑器 + 光标落在标题上。
+    const beforeIds = await fetch(`${BASE}/api/workbench/tasks`)
+      .then(r => r.json()).then(j => (j.tasks || []).map(t => t.id)).catch(() => [])
     await page.locator('.kb-col__add-btn').first().click()
-    const cdlg = await waitDialog(page, d => d.hasCreate)
-    check('D 「新建任务」打开草稿表单', !!cdlg, cdlg ? `title="${cdlg.title}"` : '未出现草稿表单')
-    // 判据要落在"同一个弹窗"上：只断 .ncf 存在的话，将来又冒出一个独立窄窗照样绿
-    check('D2 草稿表单长在任务编辑器的全屏弹窗里（复用同一个容器）', await page.evaluate(() => {
-      const dlg = Array.from(document.querySelectorAll('.el-dialog'))
-        .find(d => d.offsetParent !== null && d.querySelector('.wb-editor'))
-      return !!dlg && !!dlg.querySelector('.ncf')
-    }))
-    check('D2b 新建时看板仍在（弹窗浮在它上面）', await boardVisible(page))
+    const cdlg = await waitDialog(page, d => d.hasEditor, 12000)
+    check('D 「新建任务」直接打开任务编辑器', !!cdlg, cdlg ? `title="${cdlg.title}"` : '未出现编辑器')
+    check('D2 新建时看板仍在（弹窗浮在它上面）', await boardVisible(page))
 
-    // ── D3/D4 项目下拉口径 ───────────────────────────────────────────
-    const sel = await page.evaluate(() => {
-      const s = document.querySelector('#ncf-project')
-      if (!s) return null
-      const opt = Array.from(s.options).find(o => o.value === s.value)
-      return { value: s.value, matchedText: opt ? opt.textContent.trim() : null, hint: document.querySelector('.ncf__hint')?.textContent?.trim() || '' }
+    // 光标必须落在标题框、且值为空 —— 否则"新建"就退化成"打开某条老任务"
+    const dInfo = await waitUntil(async () => {
+      const v = await page.evaluate(() => {
+        const inp = document.querySelector('.wb-split__title-wrap .wb-input--title')
+        return inp ? { value: inp.value, focused: document.activeElement === inp } : null
+      })
+      return v && v.value === '' && v.focused ? v : null
     })
-    check('D3 项目下拉自动匹配到当前项目（非空白）', !!(sel && sel.value && sel.matchedText), sel ? `value="${sel.value}" -> "${sel.matchedText}"` : '找不到下拉')
-    check('D4 归属提示指向真实项目', !!(sel && sel.hint && !/跟随/.test(sel.hint)), sel ? `hint="${sel.hint}"` : '')
+    check('D2b 光标落在空的标题输入框里（直接打字即可）', !!dInfo)
 
-    // ── D5/D6 附件：草稿先落暂存区，缩略图必须走暂存端点 ──────────────
-    await pastePng(page, 'dialog-draft.png')
-    await uploadSettled(page)
-    const draftN = await page.locator('.ncf .wb-attachment').count()
-    check('D5 弹窗里粘图 -> 恰好 1 个草稿附件', draftN === 1, `实测 ${draftN} 个`)
-
-    const thumb = await page.evaluate(() => {
-      const img = document.querySelector('.ncf .wb-attachment__icon img')
-      return img ? { src: img.getAttribute('src') || '', w: img.naturalWidth } : null
+    // 任务列表按创建时间升序，新任务排在这一组最后 —— 不自动滚过去的话，
+    // 用户建完只看到一堆老任务，会以为没建上
+    const inView = await page.evaluate(() => {
+      const el = document.querySelector('.wb-task-item.active')
+      if (!el) return null
+      const r = el.getBoundingClientRect()
+      return r.top >= 0 && r.bottom <= window.innerHeight
     })
-    const draftId = (thumb?.src.match(STAGING_RE) || [])[1] || ''
-    // 任务还不存在，走任务侧端点必然 404；这里同时钉住"端点对"与"图真的加载出来了"
-    check('D6 草稿缩略图走暂存端点且真的加载出来',
-      !!thumb && /orchestrator\/attachments/.test(thumb.src) && thumb.w > 0,
-      thumb ? `src=${thumb.src} naturalWidth=${thumb.w}` : '没渲染出缩略图')
+    check('D2c 新建的任务在左栏可见（自动滚到它）', inView === true, String(inView))
 
-    // ── D9 中文文件名 ─────────────────────────────────────────────────
-    // HTTP 头只允许 ISO-8859-1，前端不 encodeURIComponent 的话浏览器在 fetch 阶段
-    // 就抛错 —— 上传根本没发出去，用户只看到"上传失败"（截图存成中文名太常见了）。
-    await pastePng(page, '登录模块-改造前.png')
-    const cnN = await waitUntil(async () => (await page.locator('.ncf .wb-attachment').count()) === 2)
-    await uploadSettled(page)
-    const cnName = ((await page.locator('.ncf .wb-attachment__name').last().textContent().catch(() => '')) || '').trim()
-    check('D9 中文文件名能传上去且名字不走样', cnN && cnName === '登录模块-改造前.png',
-      `实测 ${await page.locator('.ncf .wb-attachment').count()} 个，末条名字="${cnName}"`)
+    // D3 项目落点：新建表单里的下拉没有了，落点跟看板当前筛选走
+    // （脚本前面切到了「全部项目」→ 用应用当前目录）。这条得验，否则任务会默默落错项目。
+    const fresh = (await fetch(`${BASE}/api/workbench/tasks`).then(r => r.json()).catch(() => ({})))
+      .tasks?.find(t => t && !beforeIds.includes(t.id)) || null
+    const curDir = await fetch(`${BASE}/api/current_directory`).then(r => r.json()).catch(() => ({}))
+    const norm = (p) => String(p || '').trim().toLowerCase().replace(/[\\/]+$/, '')
+    check('D3 新任务落在「全部项目」视图下的应用当前目录',
+      !!fresh && !!norm(fresh.projectPath) && norm(fresh.projectPath) === norm(curDir.directory),
+      fresh ? `projectPath="${fresh.projectPath}" 当前目录="${curDir.directory || ''}"` : '没找到刚建的任务')
 
-    // ── D7/D8 取消 -> 暂存文件清掉；再打开 -> 草稿不留痕 ───────────────
-    const draftIds = await page.evaluate(() =>
-      Array.from(document.querySelectorAll('.ncf .wb-attachment__icon img'))
-        .map(img => (img.getAttribute('src') || '').match(/\/orchestrator\/attachments\/([^/]+)\/raw/)?.[1])
-        .filter(Boolean)
-    )
-    await page.locator('.ncf__foot .ncf__btn').first().click()
-    // 草稿有内容时先问一句再走（挪进编辑器之后新加的护栏：点左栏任务 / 点返回都可能手滑）
-    const confirmBox = page.locator('.el-message-box', { hasText: '放弃新建' }).first()
-    const asked = await confirmBox.waitFor({ state: 'visible', timeout: 4000 }).then(() => true).catch(() => false)
-    check('D7 放弃有内容的草稿要先确认', asked)
-    if (asked) await confirmBox.locator('.el-button--primary').first().click()
-    check('D7c 确认后编辑器关闭', await noVisibleDialog(page))
-    const allGone = draftIds.length > 0 && await waitUntil(async () => {
-      for (const id of draftIds) {
-        const r = await fetch(`${BASE}/api/workbench/orchestrator/attachments/${encodeURIComponent(id)}/raw`)
-        if (r.status !== 404) return false
-      }
-      return true
+    // ── D7/D8 空着没填就走 -> 不留「未命名任务」；再新建仍是空的 ────────
+    const blankId = fresh?.id || ''
+    await page.locator('.wb-back-btn').first().click()
+    check('D7 返回看板关闭编辑器', await noVisibleDialog(page, 12000))
+    const gone = await waitUntil(async () => {
+      const list = await fetch(`${BASE}/api/workbench/tasks`)
+        .then(r => r.json()).then(j => j.tasks || []).catch(() => [])
+      return !!blankId && !list.some(t => t.id === blankId)
     })
-    check('D7b 取消后暂存区的草稿附件全部被清掉', allGone,
-      draftIds.length ? `${draftIds.length} 个：${draftIds.join(', ')}（含最初粘的那个 ${draftId}）` : '没从缩略图拿到草稿 id')
+    check('D7b 没填内容的空任务被丢弃（看板不留脏卡）', gone, `id=${blankId}`)
 
     await page.locator('.kb-col__add-btn').first().click()
-    const cdlg2 = await waitDialog(page, d => d.hasCreate)
-    const reopenN = await page.locator('.ncf .wb-attachment').count()
-    check('D8 重新打开弹窗时草稿为空（上一次的附件不跟过来）', !!cdlg2 && reopenN === 0, `实测 ${reopenN} 个`)
+    const cdlg2 = await waitDialog(page, d => d.hasEditor, 12000)
+    const again = await page.locator('.wb-split__title-wrap .wb-input--title').first().inputValue().catch(() => '?')
+    check('D8 再次新建时标题为空（上一次的残渣不跟过来）', !!cdlg2 && again === '', `value="${again}"`)
 
-    // ── E 创建 -> 提示 + 关闭 + 上板（这一次带一张附件）─────────────────
-    await page.fill('#ncf-title', MARK)
-    await pastePng(page, 'dialog-created.png')
-    await uploadSettled(page)
-    await page.locator('.ncf__foot .ncf__btn--primary').first().click()
-    // 认「已新建任务」这条，而不是"随便哪条 success toast" —— 前面粘图时的那条
-    // 「已添加：xxx」还在屏幕上挂着，按 `.el-message--success` 取第一条会白捡一个绿。
-    const toastOk = await page.locator('.el-message--success', { hasText: '已新建任务' }).first()
-      .waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false)
-    check('E 创建成功出现成功提示', toastOk, toastOk ? ((await page.locator('.el-message--success', { hasText: '已新建任务' }).first().textContent()) || '').trim() : '')
-
-    // 创建后**编辑器不关**：草稿表单退出，原地换成这条任务的编辑器 ——
-    // 这正是这次改造的意义（不用"创建"再点一次"打开编辑器"）
-    const switched = await waitUntil(async () => {
-      if ((await page.locator('.ncf').count()) > 0) return false
-      const t = await page.locator('.wb-input--title').first().inputValue().catch(() => '')
-      return t === MARK
-    })
-    check('E2 创建后草稿表单退出、原地切到该任务的编辑器', switched,
-      `editorTitle="${(await page.locator('.wb-input--title').first().inputValue().catch(() => '')).trim()}"`)
+    // ── E 填标题 -> 自动落盘 -> 卡片上板（全程在这一个编辑器里完成）──────
+    await page.fill('.wb-split__title-wrap .wb-input--title', MARK)
+    check('E 直接复用编辑器：标题写进输入框（没有第二个"创建"按钮）',
+      (await page.locator('.wb-split__title-wrap .wb-input--title').first().inputValue()) === MARK)
 
     let cardThere = false
-    for (let i = 0; i < 20 && !cardThere; i++) {
+    for (let i = 0; i < 40 && !cardThere; i++) {
       cardThere = (await page.locator('.kb-card', { hasText: MARK }).count()) > 0
       if (!cardThere) await sleep(500)
     }
-    check('E3 新任务卡片出现在看板上（未离开看板）', cardThere)
-    check('E4 创建全程看板仍在', await boardVisible(page))
+    check('E2 标题落盘后卡片出现在看板上（未离开看板）', cardThere)
+    check('E3 填写全程看板仍在', await boardVisible(page))
 
-    // F 要回到看板点卡片：创建后编辑器还开着（这是本轮的预期），先正常关掉
+    // F 要回到看板点卡片：先把编辑器正常关掉
     await page.locator('.wb-back-btn').first().click()
-    check('E4b 创建后从编辑器返回看板', await noVisibleDialog(page, 12000))
-
-    // ── E5/E6 服务端把暂存附件认领进了任务目录 ─────────────────────────
-    // 按"带附件的那条 MARK 任务"取样：开头为了验弹窗直接 POST 过一条同名任务（无附件）。
-    const withAtt = (await fetch(`${BASE}/api/workbench/tasks`).then(r => r.json()).catch(() => ({})))
-      .tasks?.find(t => t && t.title === MARK && (t.attachments || []).length > 0) || null
-    const atts = withAtt?.attachments || []
-    check('E5 新任务的附件已从暂存区搬进 _task-{id}/',
-      atts.length === 1 && /[\\/]_task-[^\\/]+[\\/]/.test(atts[0]?.absolutePath || ''),
-      atts.length ? `count=${atts.length} path=${atts[0].absolutePath}` : '任务上没有附件')
-    const claimed = atts[0]
-      ? await fetch(`${BASE}/api/workbench/orchestrator/attachments/${encodeURIComponent(atts[0].id)}/raw`).then(r => r.status === 404)
-      : false
-    check('E6 暂存区里那份已被认领（raw 404，不留双份）', claimed)
+    check('E3b 从编辑器返回看板', await noVisibleDialog(page, 12000))
 
     // ── F 点卡片 -> 编辑器大弹窗 ─────────────────────────────────────
     // （这里顺带钉住"点卡片不再被中间的只读详情弹窗拦一道"：一次点击就该看到 .wb-editor）
