@@ -503,9 +503,11 @@ function onBeforeUnloadPersist() {
   }
 }
 
-// 任务描述（主任务 desc + 附件）默认折叠，避免撑满首屏、把对话区挤到折叠线以下
-// （内容不空也不自动展开：有内容时摘要行右侧有「已填写」徽标 + 附件数作为信号）
-const taskDescExpanded = ref(false)
+// 任务描述（主任务 desc + 附件）默认展开：任务描述是执行前的必看信息，
+// 收起后只留一行摘要、还得再点一次才看得到正文（用户反馈）。textarea 自身
+// 按内容自适应高度并带 max 上限，展开也不会把对话区挤没。
+// 用户手动收起时这个 ref 只在本组件存活期内有效，不落盘 —— 下次进来仍是展开态。
+const taskDescExpanded = ref(true)
 
 /** 复制文本到剪贴板，失败时降级到 textarea + execCommand。 */
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -1464,7 +1466,7 @@ const selectedTaskQueue = computed(() =>
             <span class="sr-only">{{ $t('@WORKBENCH:执行日志') }}</span>
           </button>
         </div>
-        <!-- 任务描述区域：默认折叠，节省首屏空间；展开后可编辑/上传附件 -->
+        <!-- 任务描述区域：默认展开（执行前必看）；用户可点 summary 收起 -->
         <details
           class="wb-task-desc"
           :open="taskDescExpanded"
@@ -1872,7 +1874,7 @@ const selectedTaskQueue = computed(() =>
 
 /* 顶部条已移除：执行日志入口直接合到任务头（与「执行任务」按钮同处），节省首屏纵向空间。 */
 
-/* 任务描述折叠：默认收起，点击 summary 展开。 */
+/* 任务描述折叠块：默认展开，点 summary 可收起。 */
 .wb-task-desc {
   border-radius: var(--radius-md);
   background: var(--bg-subtle);
