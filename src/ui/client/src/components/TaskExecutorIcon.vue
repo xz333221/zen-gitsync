@@ -20,8 +20,9 @@ import codexIcon from '@/assets/icons/svg/codex.svg'
 import codebuddyIcon from '@/assets/icons/svg/codebuddy.svg?inline'
 // pi 官方标（pi.dev/logo-auto.svg，2026-10-13 随执行器接入一起补）
 import piIcon from '@/assets/icons/svg/pi.svg?inline'
-// 码道：华为云标 + 华为红（2026-10-25 随执行器接入一起补，1.4KB 未超内联阈值）
-import codeartsIcon from '@/assets/icons/svg/codearts.svg'
+// 码道官方产品标（2026-10-25 随执行器接入一起补）。13.5KB 超 vite 默认内联阈值，
+// 与 codebuddy / pi 同一条消费路径：?inline 强制变 data URL，零网络请求。
+import codeartsIcon from '@/assets/icons/svg/codearts.svg?inline'
 import type { TaskExecutorId } from '@/utils/taskExecutor'
 
 const props = defineProps<{ executor: TaskExecutorId }>()

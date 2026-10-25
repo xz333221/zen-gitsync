@@ -19,7 +19,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
-import { fetchLatestVersion, findDshExecutable, getToolInstallers, parseVersionOutput, registerFileOpenRoutes } from './fileOpen.js'
+import { fetchLatestVersion, findCodeArtsExecutable, findDshExecutable, getToolInstallers, parseVersionOutput, registerFileOpenRoutes } from './fileOpen.js'
 
 // ── parseVersionOutput(版本号采集,2026-09-05 check-tools 增强)────────────
 
@@ -74,6 +74,44 @@ test('getToolInstallers: npm 包工具的升级变体带 @latest', () => {
     )
     // 安装命令不被升级字段污染
     assert.doesNotMatch(inst.command, /@latest/, `${tool}.command 不应带 @latest`)
+  }
+})
+
+test('getToolInstallers: codearts 只给手动安装卡片（没有 npm 包，不提供一键安装）', () => {
+  for (const platform of ['win32', 'darwin', 'linux']) {
+    const inst = getToolInstallers(platform, () => true).codearts
+    // 缺这条时前端弹窗会一直停在「正在获取安装方式」（2026-10-25 实测）
+    assert.ok(inst, `${platform} 缺 codearts 安装信息`)
+    // 官方只有 PowerShell / bash 安装脚本，代跑等于把远程脚本塞进用户终端
+    assert.equal(inst.supported, false)
+    assert.equal(inst.packageManager, 'official-script')
+    assert.match(inst.command, /codearts\/cli_tui\/install_script\/install\.(ps1|sh)/)
+    assert.equal(inst.docsUrl, 'https://codearts.huaweicloud.com/download.html')
+    // 没有升级变体：升级靠它自己的 `codearts upgrade`
+    assert.equal(inst.updateCommand, undefined)
+  }
+})
+
+test('findCodeArtsExecutable: 按安装位置硬找，不依赖当前进程的 PATH', async () => {
+  const os = await import('node:os')
+  const path = await import('node:path')
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'zen-codearts-inst-'))
+  const binDir = path.join(home, '.codeartsdoer', 'installers')
+  await fs.mkdir(binDir, { recursive: true })
+  const shim = path.join(binDir, 'codearts.cmd')
+  await fs.writeFile(shim, '@echo off\r\n')
+
+  const prev = process.env.USERPROFILE
+  process.env.USERPROFILE = home
+  try {
+    // 关键契约：安装脚本只改了**用户 PATH**，已运行的进程看不到 —— 必须硬找成功，
+    // 否则界面永远显示「未安装」，用户重启前怎么点都修复不了（2026-10-25 实测）
+    if (process.platform === 'win32') {
+      assert.equal(await findCodeArtsExecutable(), shim)
+    }
+  } finally {
+    if (prev === undefined) delete process.env.USERPROFILE
+    else process.env.USERPROFILE = prev
   }
 })
 

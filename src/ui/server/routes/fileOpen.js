@@ -241,6 +241,20 @@ export function getToolInstallers(platform = process.platform, hasCommand = comm
     };
   }
 
+  // 码道 CLI 没有 npm 包（官方是 PowerShell / bash 安装脚本），所以只给一张「手动安装」
+  // 卡片：supported 恒 false —— 前端据此不显示"一键安装"按钮，只保留复制命令 + 文档。
+  // 刻意不代跑那条远程脚本：`irm <url> | iex` 等于把一段网上拉下来的代码塞进用户终端，
+  // 属于要用户自己看清楚的动作用（与别家 npm 安装不同，那个至少有包名可审计）。
+  installers.codearts = {
+    supported: false,
+    command: platform === 'win32'
+      ? 'irm https://cnnorth4-cloudide-marketplace.obs.cn-north-4.myhuaweicloud.com/codearts/cli_tui/install_script/install.ps1 | iex'
+      : 'sh -c "$(curl -L https://cnnorth4-cloudide-marketplace.obs.cn-north-4.myhuaweicloud.com/codearts/cli_tui/install_script/install.sh)"',
+    packageManager: 'official-script',
+    docsUrl: TOOL_DOCS_URLS.codearts,
+    note: '复制命令到终端执行（装完会自动加入 PATH）。装好后点「重新检测」；若仍显示未安装，重启 ZenGitSync —— 已运行的进程读不到新的 PATH。',
+  };
+
   if (platform === 'win32') {
     const wingetAvailable = hasCommand('winget', platform);
     installers.vscode = {
@@ -706,6 +720,47 @@ async function launchCodeArts(dirPath) {
     });
   }
   return launchInTerminal(dirPath, 'codearts', [dirPath]);
+}
+
+/**
+ * 找 codearts 的可执行文件（2026-10-25 加）。
+ *
+ * 为什么不能像别家那样直接 `checkCmd('codearts')` 靠 PATH：
+ * 官方安装脚本把 `%USERPROFILE%\.codeartsdoer\installers` 追加到**用户 PATH**，
+ * 而 Windows 的 PATH 变更只对新进程生效 —— 已经在跑的 g ui 进程永远看不到。
+ * 于是"明明装了却显示未安装"，而且用户重启应用前怎么点都修复不了。
+ * 这里按已知安装位置硬找，与 taskRunner.resolveCodeArtsExe 同一份口径。
+ */
+export async function findCodeArtsExecutable() {
+  const home = process.env.USERPROFILE || '';
+  if (process.platform !== 'win32') {
+    return commandExists('codearts') ? 'codearts' : null;
+  }
+
+  const candidates = [
+    path.join(home, '.codeartsdoer', 'installers', 'codearts.cmd'),
+    path.join(home, '.codeartsdoer', 'installers', 'bin', 'codearts.exe'),
+  ];
+  const registryPath = spawnSync('reg.exe', ['query', 'HKCU\\Environment', '/v', 'Path'], {
+    encoding: 'utf8',
+    windowsHide: true,
+  }).stdout || '';
+  const pathLine = registryPath.split(/\r?\n/).find(line => /\sPath\s+REG_(?:EXPAND_)?SZ\s+/i.test(line));
+  if (pathLine) {
+    const userPath = pathLine.replace(/^.*?REG_(?:EXPAND_)?SZ\s+/i, '').trim();
+    for (const directory of userPath.split(';').map(value => value.trim()).filter(Boolean)) {
+      candidates.push(path.join(directory, 'codearts.cmd'));
+      candidates.push(path.join(directory, 'codearts.exe'));
+    }
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const stat = await fs.stat(candidate);
+      if (stat.isFile()) return candidate;
+    } catch {}
+  }
+  return commandExists('codearts') ? 'codearts' : null;
 }
 
 // Run the CLI shipped with this server, even when `g` is not in PATH or points
@@ -1724,19 +1779,20 @@ export function registerFileOpenRoutes({
       // (find 会跑两次——一次拿路径一次链版本——都是纯 fs/注册表查询,开销可忽略)
       // ⚠️ codebuddy 的 --version 是安全的:实测它只打印版本号就退出,不起引擎服务器
       // (裸跑 codebuddy 才会占 62443,与 checkCmd 的 --version 用法无关)。
-      const [vscodeRes, claudeRes, codexRes, opencodeRes, codebuddyRes, piRes, codeArtsRes, kimiExecutable, zcodeExecutable, dshExecutable, kimiVersion, dshVersion] = await Promise.all([
+      const [vscodeRes, claudeRes, codexRes, opencodeRes, codebuddyRes, piRes, codeArtsExecutable, kimiExecutable, zcodeExecutable, dshExecutable, kimiVersion, dshVersion, codeArtsVersion] = await Promise.all([
         checkCmd('code'),
         checkCmd('claude'),
         checkCmd('codex'),
         checkCmd('opencode'),
         checkCmd('codebuddy'),
         checkCmd('pi'),
-        checkCmd('codearts'),
+        findCodeArtsExecutable(),
         findKimiExecutable(),
         findZCodeExecutable(),
         findDshExecutable(),
         findKimiExecutable().then(versionOfExecutable),
         findDshExecutable().then(versionOfExecutable),
+        findCodeArtsExecutable().then(versionOfExecutable),
       ]);
 
       const installers = getToolInstallers();
@@ -1767,7 +1823,7 @@ export function registerFileOpenRoutes({
         opencode: opencodeRes.installed,
         codebuddy: codebuddyRes.installed,
         pi: piRes.installed,
-        codearts: codeArtsRes.installed,
+        codearts: !!codeArtsExecutable,
         kimi: !!kimiExecutable,
         zcode: !!zcodeExecutable,
         dsh: !!dshExecutable,
@@ -1778,7 +1834,7 @@ export function registerFileOpenRoutes({
           opencode: opencodeRes.version,
           codebuddy: codebuddyRes.version,
           pi: piRes.version,
-          codearts: codeArtsRes.version,
+          codearts: codeArtsVersion,
           kimi: kimiExecutable ? kimiVersion : null,
           zcode: null, // 桌面应用,无 CLI 版本通道
           dsh: dshExecutable ? dshVersion : null,

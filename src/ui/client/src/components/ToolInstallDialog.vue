@@ -203,7 +203,13 @@ onBeforeUnmount(stopPolling)
         <el-button v-if="desktopInfo" @click="downloadDesktop">
           {{ $t('@TINST:下载 {app}', { app: desktopInfo.name }) }}
         </el-button>
-        <el-button v-if="status === 'waiting'" :loading="toolsStore.isChecking" @click="recheck">
+        <!-- 手动安装（installer.supported === false，例如码道走官方脚本）时没有"一键安装"
+             这一步，检测只能靠用户自己点 —— 所以这个按钮不能只在 waiting 态出现 -->
+        <el-button
+          v-if="status === 'waiting' || (installer && !installer.supported)"
+          :loading="toolsStore.isChecking"
+          @click="recheck"
+        >
           {{ $t('@TINST:重新检测') }}
         </el-button>
         <el-button

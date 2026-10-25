@@ -33,7 +33,7 @@ import { resolveAvatar } from 'zen-ai-chat-ui'
 import codebuddyAvatar from '@/assets/icons/svg/codebuddy.svg?inline'
 // pi 官方标（pi.dev/logo-auto.svg，2026-10-13 随执行器接入一起补）
 import piAvatar from '@/assets/icons/svg/pi.svg?inline'
-// 码道：华为云标 + 华为红（2026-10-25 随执行器接入一起补）
+// 码道官方产品标（2026-10-25 随执行器接入一起补，?inline 同上）
 import codeartsAvatar from '@/assets/icons/svg/codearts.svg?inline'
 
 /** Claude Code 品牌头像（内联 data URL）。WorkbenchView 任务对话与 JobLogDetails 共用。 */
