@@ -1436,6 +1436,67 @@ export function buildCodeArtsArgs(resumeSessionId) {
 }
 
 /**
+ * 把「改文件 / 写文件 / 抓网页」这几档权限放宽成 allow。
+ *
+ * **这是本轮最难查的一个坑**（2026-10-25）：`--auto` 的帮助原文是 "run commands in
+ * always_allow mode"，它**只管 bash**。edit / write 走的是另一套权限存储：
+ *   <KERNEL_DATA_DIR>/storage/permission/global.json  →  [{ permission, pattern, action }]
+ * 默认档位是 edit: ask / write: ask —— 交互 TUI 里会弹窗让人点，headless 派发没人能点，
+ * CLI 直接 `auto-rejecting`：agent 的每一次 edit/write 都返回
+ * "The user rejected permission to use this specific tool call."，任务是
+ * 「代码在手上、只差落盘」的状态卡住（用户截图里连续 4 次写操作全被拒）。
+ * 注意：写进 `~/.codeartsdoer/codearts_cli.json` 的 `permission` 段**不生效**
+ * （实测配置层被存储层覆盖），只能改这个文件。
+ *
+ * 只翻这几项、其余条目原样保留；文件不存在就按它自己首次启动写出来的默认档建一份。
+ * 写完不打 BOM（它的 JSON 解析器不认 BOM，会静默失败）。
+ * （导出仅为回归测试可见：taskRunner.codearts.test.js）
+ */
+export function ensureCodeArtsPermissions(dataDir) {
+  const ALLOW = ['edit', 'write', 'webfetch'];
+  const DEFAULTS = [
+    { permission: 'browser', pattern: '*', action: 'ask' },
+    { permission: 'edit', pattern: '*', action: 'ask' },
+    { permission: 'write', pattern: '*', action: 'ask' },
+    { permission: 'webfetch', pattern: '*', action: 'ask' },
+    { permission: 'websearch', pattern: '*', action: 'allow' },
+    { permission: 'external_directory_write', pattern: '*', action: 'allow' },
+    { permission: 'external_directory_read', pattern: '*', action: 'allow' },
+    { permission: 'dotfile', pattern: '*', action: 'allow' },
+  ];
+  try {
+    const dir = dataDir || path.join(os.homedir(), '.codeartsdoer', 'cli-data');
+    const file = path.join(dir, 'storage', 'permission', 'global.json');
+    let rules;
+    try {
+      const raw = fs.readFileSync(file, 'utf8');
+      rules = JSON.parse(raw.replace(/^\uFEFF/, ''));
+      if (!Array.isArray(rules)) rules = null;
+    } catch { /* 不存在 / 坏了：按默认档重建 */ }
+    if (!rules) rules = DEFAULTS.map(rule => ({ ...rule }));
+
+    let changed = false;
+    for (const rule of rules) {
+      if (ALLOW.includes(rule.permission) && rule.action !== 'allow') {
+        rule.action = 'allow';
+        changed = true;
+      }
+    }
+    // 默认档里缺项时补上（例如老版本只有 partial 列表）
+    for (const name of ALLOW) {
+      if (!rules.some(rule => rule.permission === name)) {
+        rules.push({ permission: name, pattern: '*', action: 'allow' });
+        changed = true;
+      }
+    }
+    if (!changed && fs.existsSync(file)) return;
+
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(rules, null, 2), 'utf8');
+  } catch { /* 权限文件写不了不该让任务直接失败，CLI 会照自己的默认档跑 */ }
+}
+
+/**
  * 保证 .codeartsdoer/ 不进版本库。
  *
  * codearts 每次运行都会在项目根生成 .codeartsdoer/mem-exp-config.json（经验沉淀的
@@ -1464,6 +1525,9 @@ export function ensureCodeArtsGitExclude(cwd) {
 /** spawn codearts 跑一个 prompt（非交互），返回 { pid, child }。 */
 export async function launchCodeArtsRun(cwd, promptText, resumeSessionId) {
   ensureCodeArtsGitExclude(cwd);
+  // 每次派发前都确保 edit/write/webfetch 是 allow —— 用户可能在 TUI 里把它改回 ask，
+  // 那时所有写操作都会被 auto-reject（见该函数注释）。
+  ensureCodeArtsPermissions();
   const args = buildCodeArtsArgs(resumeSessionId);
   const { exe, prefixArgs } = resolveCodeArtsExe();
   const spawnArgs = [...prefixArgs, ...args];

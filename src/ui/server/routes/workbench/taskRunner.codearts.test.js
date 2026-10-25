@@ -58,6 +58,7 @@ const {
   buildCodeArtsEnv,
   resolveCodeArtsExe,
   ensureCodeArtsGitExclude,
+  ensureCodeArtsPermissions,
   TASK_EXECUTORS,
   EXECUTOR_LAUNCHERS,
   EXECUTOR_HANDLERS,
@@ -212,6 +213,61 @@ test('handler：非 JSON 行（免费套餐的"模型排队"提示）不会写�
   assert.doesNotThrow(() => handler({ type: 'unknown-event' }));
   assert.equal(out.text, '');
   assert.equal(job.agentError, '');
+});
+
+test('ensureCodeArtsPermissions：edit / write / webfetch 从 ask 放宽成 allow，其余原样', () => {
+  // 用户现场（2026-10-25 实测）：默认档 edit:ask / write:ask，headless 下每次
+  // edit 都被 auto-reject —— 任务卡在"代码在手上、只差落盘"。--auto 只管 bash。
+  const dataDir = mkdtempSync(path.join(os.tmpdir(), 'zen-codearts-perm-'));
+  const file = path.join(dataDir, 'storage', 'permission', 'global.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify([
+    { permission: 'browser', pattern: '*', action: 'ask' },
+    { permission: 'edit', pattern: '*', action: 'ask' },
+    { permission: 'write', pattern: '*', action: 'ask' },
+    { permission: 'webfetch', pattern: '*', action: 'ask' },
+    { permission: 'websearch', pattern: '*', action: 'allow' },
+  ]), 'utf8');
+
+  ensureCodeArtsPermissions(dataDir);
+  const rules = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const actionOf = (name) => rules.find(r => r.permission === name)?.action;
+
+  assert.equal(actionOf('edit'), 'allow');
+  assert.equal(actionOf('write'), 'allow');
+  assert.equal(actionOf('webfetch'), 'allow');
+  // 没点名的档位不许被动
+  assert.equal(actionOf('browser'), 'ask');
+  assert.equal(actionOf('websearch'), 'allow');
+
+  // 幂等：再跑一次内容不变
+  const before = fs.readFileSync(file, 'utf8');
+  ensureCodeArtsPermissions(dataDir);
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+});
+
+test('ensureCodeArtsPermissions：文件不存在时按默认档建一份，且不带 BOM', () => {
+  const dataDir = mkdtempSync(path.join(os.tmpdir(), 'zen-codearts-perm-new-'));
+  ensureCodeArtsPermissions(dataDir);
+  const file = path.join(dataDir, 'storage', 'permission', 'global.json');
+  const raw = fs.readFileSync(file, 'utf8');
+  // 它的 JSON 解析器不认 BOM（带了会静默失败 → 又回到全部 auto-reject）
+  assert.notEqual(raw.charCodeAt(0), 0xFEFF);
+  assert.equal(raw.charCodeAt(0), '['.charCodeAt(0));
+  const rules = JSON.parse(raw);
+  for (const name of ['edit', 'write', 'webfetch']) {
+    assert.equal(rules.find(r => r.permission === name)?.action, 'allow', `${name} 应为 allow`);
+  }
+});
+
+test('ensureCodeArtsPermissions：文件内容坏掉时不抛，重建可用档位', () => {
+  const dataDir = mkdtempSync(path.join(os.tmpdir(), 'zen-codearts-perm-bad-'));
+  const file = path.join(dataDir, 'storage', 'permission', 'global.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, '{ 这不是数组', 'utf8');
+  assert.doesNotThrow(() => ensureCodeArtsPermissions(dataDir));
+  const rules = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.equal(rules.find(r => r.permission === 'edit')?.action, 'allow');
 });
 
 test('ensureCodeArtsGitExclude：写 <repo>/.git/info/exclude，幂等，非仓库目录不炸', () => {
