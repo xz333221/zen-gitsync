@@ -605,7 +605,7 @@ function wakeBackgroundWaiters(task) {
   for (const resolve of waiters) resolve()
 }
 
-function spawnBackground(command, { cwd, env }) {
+function spawnBackground(command, { cwd, env, onOutput }) {
   const id = `bg_${++bgSeq}`
   const child = spawn(command, {
     cwd,
@@ -636,6 +636,10 @@ function spawnBackground(command, { cwd, env }) {
       // 游标跟着一起往前挪,否则下次 read 会从被截掉的区域开始、吐出重复内容
       task[`${stream}Read`] = Math.max(0, task[`${stream}Read`] - drop)
       task.dropped += drop
+    }
+    // 实时推给界面(Web 端把它塞进那张卡的 result;CLI 不传,等于没有副作用)
+    if (typeof onOutput === 'function') {
+      try { onOutput(text) } catch { /* 推流失败不能影响进程本身 */ }
     }
     wakeBackgroundWaiters(task)
   }
@@ -686,6 +690,17 @@ function describeBackground(task) {
   return task.running
     ? `[${task.id}] 运行中 · ${secs}s · ${task.command}`
     : `[${task.id}] 已退出(exit ${task.code}${task.signal ? ` · ${task.signal}` : ''}) · ${secs}s · ${task.command}`
+}
+
+/**
+ * 后台任务是否还在跑。
+ * 给界面用:agentChat 在 background_task 返回后靠它判断"那个 bg 是不是已经结束了",
+ * 结束了就把原来那张"后台运行中"的卡改成完成。
+ * @returns {boolean|null} null = 没有这个 id 的任务
+ */
+export function backgroundTaskRunning(id) {
+  const task = backgroundTasks.get(String(id || ''))
+  return task ? task.running : null
 }
 
 async function toolBackgroundTask(args) {
@@ -857,7 +872,7 @@ async function toolRunCommand(args, ctx) {
   if (args.run_in_background) {
     // PATH 补丁与前台一致:后台命令照样要能找到刚装的 CLI
     const env = await augmentEnvPath({ ...process.env, FORCE_COLOR: '0' })
-    const task = spawnBackground(command, { cwd, env })
+    const task = spawnBackground(command, { cwd, env, onOutput: ctx.onOutput })
     return [
       `$ ${command}`,
       `(后台运行 · id ${task.id} · pid ${task.child.pid || '?'})`,

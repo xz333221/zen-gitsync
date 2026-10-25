@@ -532,3 +532,53 @@ test('同一轮多个只读工具：都有 start/result，历史顺序与 tool_c
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+// 后台命令在 Web 侧的三条契约（前端卡片靠它们决定长什么样）：
+//   1. tool_result 带 status=background —— 进程还在跑，不能标成完成
+//   2. 输出走 tool_output 实时推 —— 这是"看得到 dev server 在吐日志"的唯一来源
+//   3. background_task 把进程停掉后带 endsBackground —— 前端据此把那张卡收尾
+test('后台命令：启动结果带 background 状态、输出实时推送、停止后带 endsBackground', async () => {
+  const session = newSession('ag-sandbox-bg', withSystem())
+  // 不会自己退出的进程，等第二轮把它 kill 掉
+  const runTurn = sse([event({ choices: [{ delta: { tool_calls: [{
+    index: 0,
+    id: 'bg_run',
+    function: {
+      name: 'run_command',
+      arguments: JSON.stringify({
+        command: `"${process.execPath}" -e "setInterval(()=>{},1000)"`,
+        run_in_background: true,
+      }),
+    },
+  }] } }, { finish_reason: 'tool_calls' }] }), 'data: [DONE]\n\n'])
+
+  let turn = 0
+  const { events } = await runWeb({
+    session,
+    userMessage: '起个常驻进程',
+    respond: () => {
+      turn++
+      if (turn === 1) return runTurn
+      if (turn === 2) {
+        // bg_N 是执行期才有的：第一轮的工具结果已经进了 session.messages，从这里取
+        const runMsg = session.messages.find(m => m.role === 'tool' && m.tool_call_id === 'bg_run')
+        const id = (String(runMsg?.content || '').match(/\bbg_\d+\b/) || [])[0]
+        return sse([event({ choices: [{ delta: { tool_calls: [{
+          index: 0,
+          id: 'bg_kill',
+          function: { name: 'background_task', arguments: JSON.stringify({ action: 'kill', id }) },
+        }] } }, { finish_reason: 'tool_calls' }] }), 'data: [DONE]\n\n'])
+      }
+      return okStream()
+    },
+  })
+
+  const started = events.find(e => e.type === 'tool_result' && e.toolCallId === 'bg_run')
+  assert.ok(started, '后台命令必须有一个 tool_result')
+  assert.equal(started.status, 'background', '进程还活着时不能标成 done')
+  const bgId = (String(started.result).match(/\bbg_\d+\b/) || [])[0]
+  assert.ok(bgId, `启动结果里要带任务 id，实际: ${started.result}`)
+
+  const killed = events.find(e => e.type === 'tool_result' && e.toolCallId === 'bg_kill')
+  assert.equal(killed.endsBackground, bgId, '停止后台任务后要告诉前端是哪一张卡收尾了')
+})

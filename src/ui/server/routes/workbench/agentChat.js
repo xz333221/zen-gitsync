@@ -53,7 +53,7 @@ import os from 'os';
 import { logger } from './shared.js';
 
 // 从 CLI 侧导入工具定义、执行器与 LLM 传输层（同一 monorepo，路径可达）
-import { TOOL_DEFINITIONS, executeTool, normalizePlanSteps, summarizePlan, splitToolOutput, toolMessageContent, splitToolBatches } from '../../../../cli/ai/tools.js';
+import { TOOL_DEFINITIONS, executeTool, normalizePlanSteps, summarizePlan, splitToolOutput, toolMessageContent, splitToolBatches, backgroundTaskRunning } from '../../../../cli/ai/tools.js';
 import { prepareRequestMessages, measureContextUsage, resolveRequestBudget } from '../../../../cli/ai/context.js';
 import { streamChatOnce } from '../../../../cli/ai/transport.js';
 import { checkDangerousCommand } from '../../../../cli/ai/safety.js';
@@ -614,7 +614,21 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
       // 直接把对象丢过去会渲染成 "[object Object]"),图片进会话历史里的
       // 多模态 tool 消息 —— 模型看得见图,用户看到的是"已读取图片 xxx.png"。
       const { text: outText, images: outImages } = splitToolOutput(output);
-      send({ type: 'tool_result', toolCallId, name, result: outText });
+      // 后台命令：这一轮的工具调用已经返回（模型能接着干活），但进程还活着。
+      // 带上 status 让前端别把卡片标成"完成"—— 绿勾会让人以为 dev server 跑完了。
+      const isBackground = name === 'run_command' && args?.run_in_background === true;
+      // 后台任务刚结束（进程自己退出 / 被 kill）：叫前端把那张"运行中"的卡收尾
+      const endedBg = name === 'background_task' && args?.id && backgroundTaskRunning(args.id) === false
+        ? args.id
+        : undefined;
+      send({
+        type: 'tool_result',
+        toolCallId,
+        name,
+        result: outText,
+        ...(isBackground ? { status: 'background' } : {}),
+        ...(endedBg ? { endsBackground: endedBg } : {}),
+      });
       return { toolCallId, name, content: toolMessageContent(outText, outImages) };
     };
 

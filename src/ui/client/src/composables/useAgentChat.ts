@@ -1354,9 +1354,18 @@ export function useAgentChat() {
             case 'tool_result': {
               const tc = currentToolCalls.find(t => t.id === evt.toolCallId)
               if (tc) {
-                tc.result = String(evt.result || '')
-                tc.status = 'done'
+                const text = String(evt.result || '')
+                // 后台命令：先到的实时输出(tool_output)不能被这张"启动信息"覆盖掉
+                tc.result = evt.status === 'background' && tc.result ? `${tc.result}\n${text}` : text
+                // 后台进程还活着 → 不是 done。绿勾会让人以为 dev server 已经跑完了
+                tc.status = evt.status === 'background' ? 'background' : 'done'
                 if (tc.name === 'ask_user') run.pendingQuestion = null
+              }
+              // 后台任务刚结束(自己退出 / 被 kill)：把对应那张"运行中"的卡收尾。
+              // 靠结果里的 bg_N 匹配 —— run_command 的结果里写着 id，标识够用且不用扩协议。
+              if (evt.endsBackground) {
+                const bg = currentToolCalls.find(t => t.status === 'background' && String(t.result || '').includes(evt.endsBackground))
+                if (bg) bg.status = 'done'
               }
               break
             }

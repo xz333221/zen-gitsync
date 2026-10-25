@@ -464,6 +464,75 @@ describe('useAgentChat parallel sessions', () => {
     await sendPromise
   })
 
+  // 后台命令和普通命令的关键差别：这一轮的工具调用已经返回了（模型能接着干活），
+  // 但进程还活着。所以状态必须是 background 而不是 done —— 绿勾会让用户以为
+  // dev server 已经跑完了；而且先到的实时输出不能被这张"启动信息"覆盖掉。
+  test('后台命令：tool_result 带 status=background 不算完成，日志追加而不是覆盖', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const sendPromise = chat.sendMessage('起个 dev server')
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    chatStreams[0].send({ type: 'tool_call_start', toolCallId: 'b1', name: 'run_command', argsPreview: '[后台] npm run dev' })
+    chatStreams[0].send({ type: 'tool_output', toolCallId: 'b1', chunk: 'VITE v5 ready\n' })
+    await flush()
+
+    chatStreams[0].send({
+      type: 'tool_result', toolCallId: 'b1', name: 'run_command',
+      result: '$ npm run dev\n(后台运行 · id bg_1 · pid 4242)', status: 'background',
+    })
+    await flush()
+
+    const msg = chat.messages.value[chat.messages.value.length - 1]
+    const card = msg.toolCalls?.[0]
+    expect(card?.status).toBe('background')
+    expect(card?.result).toContain('VITE v5 ready')
+    expect(card?.result).toContain('bg_1')
+
+    // 之后的日志继续往上追加（这正是"看得到后台命令在跑"的核心）
+    chatStreams[0].send({ type: 'tool_output', toolCallId: 'b1', chunk: 'Local: http://localhost:5544\n' })
+    await flush()
+    expect(card?.result).toContain('Local: http://localhost:5544')
+
+    chatStreams[0].send({ type: 'done', content: '起来了' })
+    chatStreams[0].close()
+    await sendPromise
+  })
+
+  test('后台任务收尾：endsBackground 把对应那张卡从 background 改成 done', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const sendPromise = chat.sendMessage('看看 dev server 还活着吗')
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    chatStreams[0].send({ type: 'tool_call_start', toolCallId: 'b1', name: 'run_command', argsPreview: '[后台] npm run dev' })
+    chatStreams[0].send({
+      type: 'tool_result', toolCallId: 'b1', name: 'run_command',
+      result: '(后台运行 · id bg_7 · pid 4242)', status: 'background',
+    })
+    await flush()
+
+    // 模型下一轮去 read，读到进程已经退出
+    chatStreams[0].send({ type: 'tool_call_start', toolCallId: 'b2', name: 'background_task', argsPreview: 'bg_7' })
+    chatStreams[0].send({
+      type: 'tool_result', toolCallId: 'b2', name: 'background_task',
+      result: '[bg_7] 已退出(exit 0)', endsBackground: 'bg_7',
+    })
+    await flush()
+
+    const cards = chat.messages.value.flatMap(m => m.toolCalls || [])
+    expect(cards.find(c => c.id === 'b1')?.status).toBe('done')
+    expect(cards.find(c => c.id === 'b2')?.status).toBe('done')
+
+    chatStreams[0].send({ type: 'done', content: '已经退出了' })
+    chatStreams[0].close()
+    await sendPromise
+  })
+
   // 工具块的两副面孔：收起态那行副标题用 argsPreview(截断摘要)，展开后的
   // 「参数」框用 arguments(全文)。服务端现在每种工具都发 arguments，前端必须
   // 优先用它 —— 退回摘要就等于展开后看到的还是那 200 字。
