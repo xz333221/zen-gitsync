@@ -2138,27 +2138,32 @@ async function openSystemConfigFile() {
 .user-settings-content {
   display: flex;
   gap: var(--spacing-lg);
-  min-height: 400px;
+  /* 高度链：全局把 .el-dialog__body 设成「flex 列 + 剩余高度」（common.scss），
+     这里顶满它，左右两列各自管自己的滚动 —— 左侧导航固定，只有右侧内容滚。 */
+  height: 100%;
+  min-height: 0;
 }
 
-/* 左侧标签页 - 现代化侧边栏设计 */
+/* 左侧标签页 - 平铺导航栏（一条底色的导航轨，不画 border / 不做卡片） */
 .settings-tabs {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   width: 180px;
   flex-shrink: 0;
-  padding: var(--spacing-sm);
-  background: var(--bg-container);
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border-color);
+  min-height: 0;
+  /* 标签多起来时自己滚，不把右侧一起顶长 */
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--bg-panel);
+  border-radius: var(--radius-md);
 }
 
 .tab-item {
   display: flex;
   align-items: center;
-  padding: 10px 14px;
-  border-radius: var(--radius-lg);
+  padding: 9px 12px;
+  border-radius: var(--radius-base);
   cursor: pointer;
   transition: var(--transition-ui-base);
   color: var(--el-text-color-regular);
@@ -2203,14 +2208,20 @@ async function openSystemConfigFile() {
   font-size: var(--font-size-md);
 }
 
-/* 右侧面板 */
+/* 右侧面板：唯一的纵向滚动容器
+   预留滚动条槽位，切 tab 时内容不会左右抖一下 */
 .settings-panels {
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-gutter: stable;
 }
 
 .settings-panel {
-  height: 100%;
+  /* 内容比可视高度短时也要占满，否则底部留白归滚动容器管，会被滚掉 */
+  min-height: 100%;
   /* 设置项统一的两列节奏：标签列宽度 + 间隙 = 控件列的起始缩进 */
   --setting-label-width: 160px;
 }

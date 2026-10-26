@@ -882,3 +882,32 @@ border / radius / box-shadow，注回旧 CSS 会立刻翻红 —— 反证做过
 顺手修了同一脚本里两处**假红**：`openCommandMode` 还在点 4b593034 已删掉的「指令」档
 （卡在第一次点击，后面全部断言一条没跑），以及刷完页面立刻读面板（间隔 / 历史 / Git
 各来一份接口，读到的是默认值）。修完 68/68。
+
+## 补记（2026-10-27）：设置弹窗「左侧固定 / 右侧滚动」
+
+用户提的原文是「我希望设置的左侧固定，右侧滚动」，配图把左栏和右栏各圈了一遍。
+改之前整个弹窗是一块整体在滚：`el-dialog__body` 是唯一的滚动容器，`settings-tabs`
+被拉成内容高度，往下滚时导航跟着一起走（长 tab 里滚到「预设提示词」那一屏，左边七项
+已经滚没了）。左栏还套着 `--radius-xl` 圆角 + 1px 描边 + `--bg-container` 底 —— 白底
+叠白底只剩那圈线，正好是他反复说过不喜欢的那种「圆角加单 border 的卡片」。
+
+改法（`GitGlobalSettingsDialog.vue` 只动样式，模板一行没改）：
+
+- `.user-settings-content` 顶满 body 高度（`height:100%` + `min-height:0`）。高度链
+  是现成的 —— `common.scss` 把**所有** `el-dialog__body` 设成「flex 列 + 剩余高度」。
+- `.settings-panels` 成为唯一的纵向滚动容器（`overflow-y:auto` + `scrollbar-gutter:stable`，
+  切 tab 时内容不左右抖）；`.settings-tabs` 固定，标签多起来时自己滚。
+- 左栏去卡片化：掉描边、`radius-xl → radius-md`、底色 `--bg-container → --bg-panel`
+  （一条导航轨，浅色 `#f5f7fa`、深色 `white 6%`），`tab-item` 的选中态仍是
+  「左侧 3px 主色竖条 + 8% 主色淡底」，留白跟着收（10/14 → 9/12）。
+- `.settings-panel` 的 `height:100%` 改 `min-height:100%`：放进滚动容器后，`height:100%`
+  会把内容顶出面板自身的盒子。
+
+| 未滚动 | 右侧滚到底（左栏纹丝不动） |
+|---|---|
+| ![未滚动](./settings-split-fixed.png) | ![滚到底](./settings-split-scrolled.png) |
+
+回归网：新增 `verify:settings-layout`（7 条，含 `--reverse`）。踩到的两个假绿写在脚本注释里：
+① 只断 `scrollHeight > clientHeight` 抓不到旧样子 —— `overflow:visible` 时 scrollHeight
+照样算溢出内容，必须连 `overflow-y` 一起判；② 「滚动后左栏 y 不变」在**根本没滚起来**时
+也恒绿，所以把 `scrollTop > 0` 写进同一条断言。反向注入旧样式后 L1~L5 五条同时转红。

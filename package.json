@@ -52,6 +52,8 @@
     "verify:agent-presets": "node scripts/verify-agent-presets.cjs",
     "verify:agent-presets:reverse": "node scripts/verify-agent-presets.cjs --reverse",
     "verify:preset-scopes": "node scripts/verify-preset-scopes.cjs",
+    "verify:settings-layout": "node scripts/verify-settings-layout.cjs",
+    "verify:settings-layout:reverse": "node scripts/verify-settings-layout.cjs --reverse",
     "verify:wb-dialogs": "node scripts/verify-workbench-dialogs.cjs",
     "verify:wb-dispatch": "node scripts/verify-workbench-dispatch-attach.cjs",
     "verify:wb-env-context": "node scripts/verify-workbench-env-context.mjs",
