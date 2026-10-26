@@ -1164,6 +1164,20 @@ export function registerConfigRoutes({
         }
         updates.agentDefaultPrompt = normalized
       }
+      // 联网搜索配置（全局）：{ enabled, provider, apiKeys: {provider: key}, proxy }。
+      // 结构坏（非普通对象）整体拒绝（400），与 normalizeWebSearch 语义一致；
+      // 单个字段坏由 normalizeWebSearch 内部各自回落，不整组拒绝。
+      // 回执里 updates.webSearch 是归一化后的最终值，前端以回执为准。
+      if (body.webSearch !== undefined) {
+        const normalized = configManager.normalizeWebSearch(body.webSearch)
+        if (normalized === null) {
+          return res.status(400).json({
+            success: false,
+            error: 'webSearch 非法: 需要 { enabled, provider, apiKeys, proxy } 对象'
+          })
+        }
+        updates.webSearch = normalized
+      }
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ success: false, error: '缺少可保存的参数' })
       }

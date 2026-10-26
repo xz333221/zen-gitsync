@@ -239,6 +239,53 @@ export function normalizeAgentDefaultPrompt(value) {
   return value.slice(0, AGENT_DEFAULT_PROMPT_MAX);
 }
 
+// ──────────────────────────────────────────────
+// 联网搜索（web_search / web_fetch 工具，全局配置，跨项目共享）
+// ──────────────────────────────────────────────
+
+/**
+ * 联网搜索可选的 provider 白名单。**这里是权威**；前端
+ * `utils/webSearchProviders.ts` 里另有一份（只做展示 & 申请入口）。
+ *   · firecrawl —— 无 key 也能用（按 IP 限流），注册免费 key 后每月 1,000 credits
+ *   · tavily    —— 必须有 key（免费 1,000 credits/月）
+ *   · exa       —— 必须有 key（免费 $10 credits/月）
+ */
+export const WEB_SEARCH_PROVIDERS = ['firecrawl', 'tavily', 'exa'];
+const WEB_SEARCH_DEFAULT_PROVIDER = 'firecrawl';
+const WEB_SEARCH_API_KEY_MAX = 300;
+const WEB_SEARCH_PROXY_MAX = 300;
+
+/**
+ * 规范化「联网搜索」配置（全局配置，跨项目共享）。
+ *
+ * 形状：{ enabled, provider, apiKeys: {[provider]: key}, proxy }
+ *
+ * 语义约定：
+ *   · undefined / null → null（没配过，调用方回落 defaultConfig = 默认开启 + firecrawl）
+ *   · 非普通对象（含数组）→ null（手改坏了，整组回落默认，与 normalizeAgent* 同一口径）
+ *   · **单个字段坏只回落该字段**，不整组拒绝 —— 一个 key 写错不该把"开关/代理"也重置
+ *   · apiKeys 只保留白名单 provider 的键；非字符串值 → 该键置空串
+ *   · proxy 空串是合法值（= 直连），照写；非字符串 → 空串
+ */
+export function normalizeWebSearch(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) return null;
+  const rawKeys = (value.apiKeys && typeof value.apiKeys === 'object' && !Array.isArray(value.apiKeys))
+    ? value.apiKeys : {};
+  const apiKeys = {};
+  for (const p of WEB_SEARCH_PROVIDERS) {
+    const v = rawKeys[p];
+    apiKeys[p] = typeof v === 'string' ? v.trim().slice(0, WEB_SEARCH_API_KEY_MAX) : '';
+  }
+  const providerRaw = typeof value.provider === 'string' ? value.provider.trim().toLowerCase() : '';
+  return {
+    enabled: typeof value.enabled === 'boolean' ? value.enabled : true,
+    provider: WEB_SEARCH_PROVIDERS.includes(providerRaw) ? providerRaw : WEB_SEARCH_DEFAULT_PROVIDER,
+    apiKeys,
+    proxy: typeof value.proxy === 'string' ? value.proxy.trim().slice(0, WEB_SEARCH_PROXY_MAX) : '',
+  };
+}
+
 /**
  * 三个提示通道（页面提示 / 浏览器通知 / 提示音）的最终取值。
  *
@@ -340,6 +387,17 @@ const defaultConfig = {
   // 见 workbench/chatPrompts.js）。空串 = 不注入。
   // 归一化见 normalizeAgentDefaultPrompt。
   agentDefaultPrompt: '',
+  // 联网搜索（web_search / web_fetch 工具）。全局配置，CLI `g ai` 与 Web 智能体共用。
+  // 默认开启：模型能联网查资料，默认走 firecrawl 的**无 key**接口（按 IP 限流）；
+  // 各 provider 的 key 留空即用各自的"免 key / 降级"形态（tavily / exa 没 key 会直接失败）。
+  // 代理留空 = 直连；填了就走 undici 的 ProxyAgent（如 http://127.0.0.1:7890）。
+  // 归一化见 normalizeWebSearch。
+  webSearch: {
+    enabled: true,
+    provider: 'firecrawl',
+    apiKeys: { firecrawl: '', tavily: '', exa: '' },
+    proxy: '',
+  },
   // 工作台任务执行器（claude | opencode | codex | codebuddy）。全局配置，跨项目共享。
   // 决定「执行任务 / 执行子任务 / 从此处开始 / 简单任务续聊」这条链路
   // 默认 spawn 哪个本地 CLI；执行入口可以按次覆盖（见 workbench 执行路由）。
@@ -692,6 +750,7 @@ async function loadConfig() {
         ?? defaultConfig.agentPresetPromptsByView,
       agentDefaultPrompt: normalizeAgentDefaultPrompt(raw.agentDefaultPrompt)
         ?? defaultConfig.agentDefaultPrompt,
+      webSearch: normalizeWebSearch(raw.webSearch) ?? defaultConfig.webSearch,
       ...resolveNotifySwitches(raw)
     };
   }
@@ -721,6 +780,8 @@ async function loadConfig() {
     // 同 agentPresetPrompts：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
     agentDefaultPrompt: normalizeAgentDefaultPrompt(raw?.agentDefaultPrompt)
       ?? defaultConfig.agentDefaultPrompt,
+    // 同 agentDefaultPrompt：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
+    webSearch: normalizeWebSearch(raw?.webSearch) ?? defaultConfig.webSearch,
     ...resolveNotifySwitches(raw)
   };
 }
@@ -774,7 +835,7 @@ async function saveConfig(config) {
   // 项目级是这一族键最容易踩的坑。解构出来本身不写回顶层（它已不再被任何地方读取）。
   const {
     theme, locale, models, ui, aiMaxToolIterations, aiMaxRequestTokens, taskExecutor,
-    agentPresetPrompts, agentPresetPromptsByView, agentDefaultPrompt,
+    agentPresetPrompts, agentPresetPromptsByView, agentDefaultPrompt, webSearch,
     notifyOnTaskDone: legacyNotifyOnTaskDone,
     notifyPageOnTaskDone, notifyBrowserOnTaskDone, notifySoundOnTaskDone,
     ...projectConfig
@@ -839,6 +900,12 @@ async function saveConfig(config) {
   const normalizedAgentPrompt = normalizeAgentDefaultPrompt(agentDefaultPrompt);
   if (normalizedAgentPrompt !== null) {
     raw.agentDefaultPrompt = normalizedAgentPrompt;
+  }
+  // 联网搜索同属全局设置：结构坏(非普通对象)不落盘,保留磁盘旧值;
+  // 全默认 / 空 key 是**合法值**,照写 —— 与上面各键同一套语义。
+  const normalizedWebSearch = normalizeWebSearch(webSearch);
+  if (normalizedWebSearch !== null) {
+    raw.webSearch = normalizedWebSearch;
   }
 
   // 写入当前项目配置（在 defaultConfig 基础上合并，但不清空顶层其它键）
@@ -1052,6 +1119,9 @@ export default {
   normalizeAgentPresetPromptsByView,
   // g ai 智能体默认提示词的规范化(同上,见 /api/config/save-ai-settings)
   normalizeAgentDefaultPrompt,
+  // 联网搜索的规范化/白名单(同上,见 /api/config/save-ai-settings;CLI 工具层也要用)
+  normalizeWebSearch,
+  WEB_SEARCH_PROVIDERS,
 };
 
 // 命名导出 — 用于测试与外部复用

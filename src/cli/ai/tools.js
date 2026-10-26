@@ -44,6 +44,10 @@ import { checkImageFile, imageToDataUrl, formatBytes, isImagePath, SUPPORTED_IMA
 // 本工具只负责登记/管理，真正的到点执行由 g ui 服务端的调度器完成。
 import { createTask, loadTasks, deleteTask, updateTask } from '../../utils/scheduleStore.js'
 import { nextFireAfter } from '../../utils/scheduleCron.js'
+// 联网搜索 / 网页抓取：provider 抽象在 webSearch.js，配置（全局键 webSearch）走 configManager。
+// 两者都读 config.json 顶层 —— CLI `g ai` 与 Web 智能体共用同一份，无需按端注入 ctx。
+import configManager from '../../config.js'
+import { runWebSearch, runWebFetch } from './webSearch.js'
 
 // ──────────────────────────────────────────────
 // 常量
@@ -106,6 +110,8 @@ const BINARY_EXTS = new Set([
 // 用白名单而不是黑名单:漏加一个只读工具只是慢,错加一个写工具会改错文件。
 export const PARALLEL_SAFE_TOOLS = new Set([
   'read_file', 'read_image', 'list_files', 'search_text', 'list_projects',
+  // 只读的联网工具：彼此无先后依赖，可以和本地只读工具一起并发
+  'web_search', 'web_fetch',
 ])
 
 /**
@@ -462,6 +468,49 @@ export const TOOL_DEFINITIONS = [
           },
         },
         required: ['action'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'web_search',
+      description: '联网搜索网页，返回每条结果的标题、URL 和摘要片段。'
+        + '需要看某个结果的**完整正文**时，再对它的 URL 调用 web_fetch —— 这一步由你自己判断要不要做，别一次性抓一大堆。'
+        + '适用于查最新资料、文档、版本号、公告等你不确定或可能已经过时的信息；纯本地文件/代码问题不要用它。',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: '搜索关键词，像人在搜索引擎里输入的那样。' },
+          max_results: { type: 'number', description: '返回条数，默认 5，最大 10。' },
+          provider: {
+            type: 'string',
+            enum: ['firecrawl', 'tavily', 'exa'],
+            description: '临时指定搜索引擎，不传就用设置里的默认（见 设置 → AI 模型配置 → 联网搜索）。',
+          },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'web_fetch',
+      description: '抓取一个网页的正文（转成 markdown）。用在 web_search 之后、需要深读某条结果时；也可直接抓用户给出的 URL。'
+        + '正文很长时会被截断，优先抓真正相关的那几页，不要滥抓。',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: '要抓取的网页地址（http / https）。' },
+          max_chars: { type: 'number', description: '正文最多返回多少字符，默认 20000，最大 50000。' },
+          provider: {
+            type: 'string',
+            enum: ['firecrawl', 'tavily', 'exa'],
+            description: '临时指定抓取用的 provider，不传就用设置里的默认。',
+          },
+        },
+        required: ['url'],
       },
     },
   },
@@ -1397,6 +1446,68 @@ async function toolScheduleTask(args, ctx) {
   }
 }
 
+// 联网搜索 / 网页抓取。两个工具读同一份配置（config.json 的全局键 webSearch）：
+//   · web_search —— 回摘要（标题/URL/片段），模型据此判断要不要深读某条；
+//   · web_fetch  —— 抓某个 URL 的正文（markdown），供模型在 web_search 之后按需调用。
+// 配置读取走 configManager.loadConfig()（CLI 与 GUI 共享同一份 config.json）；
+// 用户在设置里关掉后工具仍会注册，但返回一句"已关闭"的说明 —— 让模型知道这不是故障，
+// 也避免它反复重试。读取失败（配置损坏）时不阻断：按默认配置继续尝试。
+async function loadWebSearchSettings() {
+  try {
+    const cfg = await configManager.loadConfig()
+    return cfg?.webSearch || null
+  } catch {
+    return null
+  }
+}
+
+function formatWebSearchResults(query, provider, results) {
+  if (!results.length) {
+    return `联网搜索「${query}」没有返回结果（provider: ${provider}）。换个说法或换关键词再试一次。`
+  }
+  const lines = results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet || '（无摘要）'}`)
+  return `联网搜索「${query}」（provider: ${provider}，共 ${results.length} 条）：\n${lines.join('\n')}`
+    + '\n\n以上只是摘要；需要看某条的完整正文时，对它的 URL 调用 web_fetch。'
+}
+
+async function toolWebSearch(args) {
+  const query = String(args.query || '').trim()
+  if (!query) return '错误: web_search 需要非空的 query。'
+  const settings = await loadWebSearchSettings()
+  if (settings && settings.enabled === false) {
+    return '联网搜索已在设置里关闭（设置 → AI 模型配置 → 联网搜索）。请基于已知信息回答；'
+      + '如果确实需要联网，提醒用户先在那里开启。'
+  }
+  try {
+    const { provider, results } = await runWebSearch({
+      query,
+      maxResults: args.max_results,
+      provider: args.provider,
+      config: settings || undefined,
+    })
+    return formatWebSearchResults(query, provider, results)
+  } catch (err) {
+    return `错误: 联网搜索失败（${err?.message || String(err)}）。可稍后重试；`
+      + '若一直失败，检查设置里的 provider / API Key / 代理是否配置正确。'
+  }
+}
+
+async function toolWebFetch(args) {
+  const url = String(args.url || '').trim()
+  if (!/^https?:\/\//i.test(url)) return '错误: web_fetch 需要以 http:// 或 https:// 开头的 url。'
+  const settings = await loadWebSearchSettings()
+  if (settings && settings.enabled === false) {
+    return '联网搜索已在设置里关闭（设置 → AI 模型配置 → 联网搜索），无法抓取网页。'
+  }
+  try {
+    const out = await runWebFetch({ url, provider: args.provider, config: settings || undefined, maxChars: args.max_chars })
+    const head = `网页正文（provider: ${out.provider}）：${out.title}\n${out.url}\n\n`
+    return out.text ? head + out.text : head + '（没有取到正文 —— 可能是纯图片页、反爬拦截，或需要登录。）'
+  } catch (err) {
+    return `错误: 抓取网页失败（${err?.message || String(err)}）。可换一个来源，或稍后重试。`
+  }
+}
+
 // ──────────────────────────────────────────────
 // 工具分发
 // ──────────────────────────────────────────────
@@ -1415,6 +1526,8 @@ const TOOL_HANDLERS = {
   ask_user: toolAskUser,
   dispatch_task: toolDispatchTask,
   schedule_task: toolScheduleTask,
+  web_search: toolWebSearch,
+  web_fetch: toolWebFetch,
 }
 
 /**

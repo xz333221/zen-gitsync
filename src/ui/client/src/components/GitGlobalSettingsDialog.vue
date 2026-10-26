@@ -567,6 +567,88 @@
             </div>
           </div>
 
+          <!-- 联网搜索（web_search / web_fetch 工具，全局配置、跨项目共享、默认开启） -->
+          <div class="settings-section">
+            <div class="section-title model-section-title">
+              <span>{{ $t('@42BB9:联网搜索') }}</span>
+            </div>
+            <p class="preset-hint">
+              {{ $t('@42BB9:让 g ai 能联网查资料：web_search 先回摘要，需要时它自己用 web_fetch 抓正文。默认开启') }}
+            </p>
+
+            <div class="setting-row">
+              <label class="setting-label">{{ $t('@42BB9:启用联网搜索') }}</label>
+              <div class="project-toggle">
+                <el-switch
+                  v-model="configStore.webSearch.enabled"
+                  :disabled="savingWebSearch"
+                  @change="persistWebSearch"
+                />
+                <span class="setting-hint-block ai-iterations-hint">
+                  {{ $t('@42BB9:关闭后 g ai 不再联网搜索与抓取网页（工具仍在，但会提示已关闭）') }}
+                </span>
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <label class="setting-label">{{ $t('@42BB9:搜索引擎') }}</label>
+              <div class="project-toggle">
+                <el-select
+                  v-model="configStore.webSearch.provider"
+                  class="web-search-provider-select"
+                  :disabled="savingWebSearch"
+                  @change="persistWebSearch"
+                >
+                  <el-option v-for="p in webSearchProviders" :key="p.id" :label="p.label" :value="p.id" />
+                </el-select>
+                <span class="setting-hint-block ai-iterations-hint">
+                  {{ $t('@42BB9:默认用哪个引擎；模型调用时也能临时指定其它引擎') }}
+                </span>
+              </div>
+            </div>
+
+            <!-- 每个 provider 一行：Key 输入 + 一句话说明 + 「去申请 Key」外链 -->
+            <div v-for="p in webSearchProviders" :key="`key-${p.id}`" class="setting-row">
+              <label class="setting-label">
+                {{ p.label }} {{ $t('@42BB9:API Key') }}
+                <span v-if="p.keyless" class="web-search-keyless-tag">{{ $t('@42BB9:可选') }}</span>
+              </label>
+              <div class="project-toggle">
+                <el-input
+                  v-model="configStore.webSearch.apiKeys[p.id]"
+                  type="password"
+                  show-password
+                  class="web-search-key-input"
+                  :placeholder="p.keyless ? $t('@42BB9:可留空，用无 Key 模式') : $t('@42BB9:粘贴 API Key')"
+                  @change="persistWebSearch"
+                />
+                <span class="setting-hint-block ai-iterations-hint">
+                  <template v-if="p.id === 'firecrawl'">{{ $t('@42BB9:搜索 + 抓正文一体；无 Key 也能用（按 IP 限流），注册免费 Key 后每月 1,000 credits。') }}</template>
+                  <template v-else-if="p.id === 'tavily'">{{ $t('@42BB9:为 LLM 设计的搜索；必须有 Key，免费 1,000 credits/月。') }}</template>
+                  <template v-else-if="p.id === 'exa'">{{ $t('@42BB9:语义搜索；必须有 Key，注册后在 Dashboard 创建，免费 $10 credits/月。') }}</template>
+                  <a class="web-search-apply-link" :href="p.applyUrl" target="_blank" rel="noopener noreferrer">
+                    {{ $t('@42BB9:去申请 Key') }}
+                  </a>
+                </span>
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <label class="setting-label">{{ $t('@42BB9:代理地址') }}</label>
+              <div class="project-toggle">
+                <el-input
+                  v-model="configStore.webSearch.proxy"
+                  class="web-search-proxy-input"
+                  placeholder="http://127.0.0.1:7890"
+                  @change="persistWebSearch"
+                />
+                <span class="setting-hint-block ai-iterations-hint">
+                  {{ $t('@42BB9:留空 = 直连；需要代理才能访问搜索引擎时填这里，如 http://127.0.0.1:7890') }}
+                </span>
+              </div>
+            </div>
+          </div>
+
           <!-- 预设提示词（智能体视图欢迎页的快捷卡片，按板块分开配，全局配置、跨项目共享） -->
           <div class="settings-section">
             <div class="section-title model-section-title">
@@ -968,6 +1050,7 @@ import {
   reportIntervalLabelKey,
   reportIntervalLabelParams,
 } from '@/utils/progressReport'
+import { WEB_SEARCH_PROVIDERS } from '@/utils/webSearchProviders'
 
 const gitStore = useGitStore()
 const localeStore = useLocaleStore()
@@ -1078,6 +1161,28 @@ const notifyPermissionState = ref<NotifyPermission>('default')
 // 打开时读、改动即时 POST 回去 —— 与「AI 智能体运行时」几个输入框同一套交互。
 const tempReportIntervalMs = ref<number>(DEFAULT_REPORT_INTERVAL_MS)
 const savingReportInterval = ref(false)
+
+// 联网搜索（web_search / web_fetch 工具，全局配置、跨项目共享）。
+// 交互与「AI 智能体运行时」一致：改完即时保存，没有单独的"保存"按钮。
+// 开关/下拉在 change 时提交；Key / 代理输入框在 el-input 的 change（失焦或回车）时提交，
+// 避免每敲一个字符就写盘一次。绑定直接落在 configStore.webSearch 上（Pinia 的响应式 state）。
+const webSearchProviders = WEB_SEARCH_PROVIDERS
+const savingWebSearch = ref(false)
+
+async function persistWebSearch() {
+  if (savingWebSearch.value) return
+  savingWebSearch.value = true
+  try {
+    await configStore.saveWebSearchSettings({
+      enabled: configStore.webSearch.enabled,
+      provider: configStore.webSearch.provider,
+      apiKeys: { ...configStore.webSearch.apiKeys },
+      proxy: configStore.webSearch.proxy,
+    })
+  } finally {
+    savingWebSearch.value = false
+  }
+}
 
 // 编辑器设置
 const tempEditorAutoSave = ref(false)
@@ -2368,6 +2473,31 @@ async function openSystemConfigFile() {
 .setting-hint-block {
   font-size: var(--font-size-xs);
   color: var(--el-text-color-secondary);
+}
+/* 联网搜索分区。Key 是敏感凭据：输入框给足宽度、右侧显示"可选/去申请"提示。
+   标记与链接都不用"圆角 + 单 border"那种样式（用户明确不喜欢）。 */
+.web-search-provider-select {
+  width: 180px;
+}
+.web-search-key-input,
+.web-search-proxy-input {
+  width: 100%;
+  max-width: 420px;
+}
+.web-search-keyless-tag {
+  margin-left: 6px;
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+  color: var(--el-text-color-secondary);
+}
+.web-search-apply-link {
+  margin-left: 6px;
+  color: var(--el-color-primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.web-search-apply-link:hover {
+  text-decoration: underline;
 }
 .setting-slider {
   width: 100%;

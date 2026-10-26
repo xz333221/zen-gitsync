@@ -1142,6 +1142,23 @@ export default {
   '@42BB9:「{scope}」一条预设都没有 —— 想用回内置版本请点「恢复默认」，或先添加一条': '"{scope}" has no presets — click "Restore defaults" to use the built-in set, or add one first',
   '@42BB9:「{scope}」有预设的标题或内容为空': '"{scope}" has a preset with an empty label or prompt',
   '@42BB9:预设提示词已保存': 'Preset prompts saved',
+  // Web search (web_search / web_fetch tools)
+  '@42BB9:联网搜索': 'Web search',
+  '@42BB9:让 g ai 能联网查资料：web_search 先回摘要，需要时它自己用 web_fetch 抓正文。默认开启': 'Let g ai look things up online: web_search returns snippets first, then fetches a page\'s full text via web_fetch when needed. On by default',
+  '@42BB9:启用联网搜索': 'Enable web search',
+  '@42BB9:关闭后 g ai 不再联网搜索与抓取网页（工具仍在，但会提示已关闭）': 'When off, g ai stops searching the web and fetching pages (the tools remain but report that they are disabled)',
+  '@42BB9:搜索引擎': 'Search engine',
+  '@42BB9:默认用哪个引擎；模型调用时也能临时指定其它引擎': 'Which engine is used by default; the model can also pick another one per call',
+  '@42BB9:API Key': 'API Key',
+  '@42BB9:可选': 'Optional',
+  '@42BB9:可留空，用无 Key 模式': 'Can be left empty — keyless mode',
+  '@42BB9:粘贴 API Key': 'Paste API key',
+  '@42BB9:搜索 + 抓正文一体；无 Key 也能用（按 IP 限流），注册免费 Key 后每月 1,000 credits。': 'Search + page extraction in one; works without a key (rate-limited by IP); a free key gives 1,000 credits/month.',
+  '@42BB9:为 LLM 设计的搜索；必须有 Key，免费 1,000 credits/月。': 'Search built for LLMs; a key is required, 1,000 free credits/month.',
+  '@42BB9:语义搜索；必须有 Key，注册后在 Dashboard 创建，免费 $10 credits/月。': 'Semantic search; a key is required — create it in the dashboard, $10 free credits/month.',
+  '@42BB9:去申请 Key': 'Get a key',
+  '@42BB9:代理地址': 'Proxy URL',
+  '@42BB9:留空 = 直连；需要代理才能访问搜索引擎时填这里，如 http://127.0.0.1:7890': 'Empty = direct. Fill this in when a proxy is needed to reach the search engines, e.g. http://127.0.0.1:7890',
   // @42BB9: file end (追加: 记忆库面板 / 预设提示词)
   // @2AEBA: file path: components\GlobalLoading.vue
   '@2AEBA:加载中...': 'Loading...',

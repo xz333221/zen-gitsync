@@ -38,6 +38,23 @@ export interface ModelInfo {
   apiKey: string
 }
 
+// 联网搜索配置（全局配置，CLI `g ai` 与 Web 智能体共用）。
+// 形状必须与 src/config.js 的 normalizeWebSearch / defaultConfig.webSearch 一致。
+export interface WebSearchSettings {
+  enabled: boolean
+  provider: string
+  apiKeys: Record<string, string>
+  proxy: string
+}
+
+// 默认值必须与 src/config.js 的 defaultConfig.webSearch 逐字一致（读取配置前的首屏兜底）。
+export const DEFAULT_WEB_SEARCH: WebSearchSettings = {
+  enabled: true,
+  provider: 'firecrawl',
+  apiKeys: { firecrawl: '', tavily: '', exa: '' },
+  proxy: '',
+}
+
 // 节点输出引用类型
 export interface NodeOutputRef {
   nodeId: string      // 引用的节点 ID
@@ -244,6 +261,8 @@ export const useConfigStore = defineStore('config', () => {
   const notifyPageOnTaskDone = ref(true)
   const notifyBrowserOnTaskDone = ref(false)
   const notifySoundOnTaskDone = ref(true)
+  // 联网搜索（web_search / web_fetch 工具，全局配置）。默认值与 defaultConfig.webSearch 一致。
+  const webSearch = ref<WebSearchSettings>({ ...DEFAULT_WEB_SEARCH, apiKeys: { ...DEFAULT_WEB_SEARCH.apiKeys } })
 
   // ============================================================
   // UI 状态（持久化到 ~/.zen-gitsync/config.json 的顶层 ui 字段）
@@ -552,6 +571,22 @@ export const useConfigStore = defineStore('config', () => {
           maxUserChars: Math.floor(Number(configData.aiRequestBudget.maxUserChars)),
         }
       }
+      // 联网搜索配置：后端 loadConfig 已归一化（缺键会补默认），这里整体接收并做防御映射
+      if (configData.webSearch && typeof configData.webSearch === 'object') {
+        const ws = configData.webSearch as any
+        const keys = (ws.apiKeys && typeof ws.apiKeys === 'object') ? ws.apiKeys : {}
+        webSearch.value = {
+          enabled: typeof ws.enabled === 'boolean' ? ws.enabled : true,
+          provider: typeof ws.provider === 'string' ? ws.provider : 'firecrawl',
+          apiKeys: {
+            firecrawl: String(keys.firecrawl ?? ''),
+            tavily: String(keys.tavily ?? ''),
+            exa: String(keys.exa ?? ''),
+          },
+          proxy: typeof ws.proxy === 'string' ? ws.proxy : '',
+        }
+      }
+
       // 预设提示词（智能体视图欢迎页快捷卡片）：后端归一化保证每项 {id, label, prompt}
       // 都是非空字符串；这里仍做一遍防御性映射（与 startupItems 同一习惯）。
       // 空数组保持空数组 —— 语义是"用内置默认"，由 resolveAgentPresets 决定展示什么。
@@ -1673,6 +1708,43 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
+  // 保存联网搜索配置（全局）。前端始终传**完整对象**（enabled/provider/apiKeys/proxy），
+  // 后端归一化后把最终值放回回执，这里以回执为准（避免输入框显示与磁盘不一致）。
+  async function saveWebSearchSettings(next: WebSearchSettings): Promise<boolean> {
+    try {
+      const response = await fetch('/api/config/save-ai-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ webSearch: next })
+      })
+      const result = await response.json()
+      if (result.success) {
+        if (result.webSearch && typeof result.webSearch === 'object') {
+          const ws = result.webSearch as any
+          const keys = (ws.apiKeys && typeof ws.apiKeys === 'object') ? ws.apiKeys : next.apiKeys
+          webSearch.value = {
+            enabled: typeof ws.enabled === 'boolean' ? ws.enabled : next.enabled,
+            provider: typeof ws.provider === 'string' ? ws.provider : next.provider,
+            apiKeys: {
+              firecrawl: String(keys.firecrawl ?? ''),
+              tavily: String(keys.tavily ?? ''),
+              exa: String(keys.exa ?? ''),
+            },
+            proxy: typeof ws.proxy === 'string' ? ws.proxy : next.proxy,
+          }
+        } else {
+          webSearch.value = next
+        }
+        return true
+      }
+      ElMessage.error(`${$t('@D50BB:保存 AI 设置失败: ')}${result.error}`)
+      return false
+    } catch (error) {
+      ElMessage.error(`${$t('@D50BB:保存 AI 设置失败: ')}${(error as Error).message}`)
+      return false
+    }
+  }
+
   // 保存模型配置
   async function saveModels(updatedModels: ModelInfo[]): Promise<boolean> {
     try {
@@ -1750,6 +1822,7 @@ export const useConfigStore = defineStore('config', () => {
     agentPresetPrompts,
     agentPresetPromptsByView,
     agentDefaultPrompt,
+    webSearch,
     aiRequestBudget,
     taskExecutor,
     resolvedTaskExecutor,
@@ -1796,6 +1869,7 @@ export const useConfigStore = defineStore('config', () => {
     saveTemplate,
     saveModels,
     saveAiSettings,
+    saveWebSearchSettings,
     saveGeneralSettings,
     saveUiSettings,
     setAiDiffSummaryEnabled,
