@@ -231,6 +231,10 @@ async function saveDispatch() {
           >{{ savingDispatch ? $t('@AGENT:保存中…') : $t('@AGENT:保存') }}</button>
         </div>
       </section>
+
+      <!-- 宿主追加的设置块（派发设置）。放在**同一个滚动容器**里：再开一个
+           flex:1 的兄弟节点会在窄面板里各分一半高度、各滚各的。 -->
+      <slot />
     </div>
   </div>
 </template>

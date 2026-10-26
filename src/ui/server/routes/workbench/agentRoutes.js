@@ -34,7 +34,7 @@ import { createProjectListProvider } from './projectTool.js';
 import { createDispatcher } from './dispatchInstruction.js';
 import { createWorkspaceSnapshotter } from '../aiContext/wiring.js';
 // 用户固定提示词（g ai 默认提示词 + 派发提示词）的解析 —— 两条引擎链路共用同一份
-import { resolveChatPromptSection } from './chatPrompts.js';
+import { resolveChatPromptSection, buildDispatchPolicySection } from './chatPrompts.js';
 // 「同一会话同一时刻只允许一个生成中的轮次」的闸，与定时任务调度器共享
 // （见 sessionGate.js —— 拆出去是为了让调度器复用同一份判定口径）。
 import { isSessionBusy, acquireSession, releaseSession } from './sessionGate.js';
@@ -173,7 +173,11 @@ export async function runDispatchTask({ dispatch, payload, defaults }) {
       useDefaultPrompt: payload.useDefaultPrompt === undefined
         ? defaults.useDefaultPrompt
         : payload.useDefaultPrompt,
-      executor: payload.executor || defaults.executor,
+      // 优先级链启用时，模型自己传的 executor 一律让位 —— 那是"我挑一个"，
+      // 会把用户排好的成本顺序静默作废。具体执行器由前端按优先级算好后放进来。
+      executor: defaults.forceExecutor
+        ? defaults.executor
+        : (payload.executor || defaults.executor),
     });
 
     const project = result.target?.name || result.target?.path?.split(/[\\/]/).filter(Boolean).pop() || '';
@@ -617,6 +621,11 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
       }
       let model = null;
       let requestBudget = null;
+      // 派发相关的两个全局设置（ui 段）：这一轮要不要主动派、有没有优先级链。
+      // 缺省口径写在这里而不是 loadConfig 里：`raw.ui` 存在但缺这两个键时
+      // loadConfig **不会**补默认值（它只在整段 ui 缺失时回 defaultConfig.ui）。
+      let dispatchProactive = true;
+      let dispatchPriority = [];
       if (!useExternal) {
         try {
           if (!configManager) throw new Error('configManager 不可用');
@@ -626,6 +635,14 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
           // 请求预算：全局配置 aiMaxRequestTokens（缺省/越界由 resolveRequestBudget
           // 兜底夹取），与 CLI `g ai`、设置页保存回执共用同一份解析 —— 别在这里另算。
           requestBudget = resolveRequestBudget(rawConfig.aiMaxRequestTokens);
+          // 派发策略：只认布尔，脏值按"开"（这是默认值，见 config.js 的 defaultConfig.ui）
+          dispatchProactive = typeof rawConfig?.ui?.agentProactiveDispatch === 'boolean'
+            ? rawConfig.ui.agentProactiveDispatch
+            : true;
+          // 优先级链只用来判断"要不要锁死执行器"，解析在前端做（可用性只有前端知道）
+          dispatchPriority = Array.isArray(rawConfig?.ui?.dispatchExecutorPriority)
+            ? rawConfig.ui.dispatchExecutorPriority
+            : [];
         } catch (err) {
           send({ type: 'error', error: '读取 AI 配置失败: ' + err.message });
           finished = true;
@@ -680,25 +697,33 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
         title: isNew ? autoTitle([{ role: 'user', content: userMessage }]) : session.title
       });
 
-      // dispatch_task 的注入闸门：**只有主 Agent 控制台发起的对话**才有派发能力
-      // （前端在请求体里带 allowDispatch: true）。
+      // dispatch_task 的注入闸门：**只有右下角 g ai 悬浮面板（AgentView）发起的对话**
+      // 才有派发能力（前端在请求体里带 allowDispatch: true）。
       //
       // 为什么不无条件开放：派发是真有副作用的动作 —— 建任务 + 默认立刻起一个本地 CLI
-      // 进程。在「智能体」页或编辑器面板里聊天时，用户预期的是"回答我"，让模型突然
-      // 往外派活属于越权；这两个入口的行为保持改造前不变（工具表里有它，但调用会拿到
-      // 一句明确的 unavailable，见 tools.js 的 toolDispatchTask）。
+      // 进程。在编辑器面板里聊天时，用户预期的是"回答我"，让模型突然往外派活属于越权；
+      // 那个入口的行为保持改造前不变（工具表里有它，但调用会拿到一句明确的 unavailable，
+      // 见 tools.js 的 toolDispatchTask）。
       const dispatchTask = req.body?.allowDispatch === true
         ? (payload) => runDispatchTask({
           dispatch: dispatchInstruction,
           payload,
           // 控制台当前的选择：勾选框（要不要带预设提示词）+ 选中的执行器。
           // 用户界面上做过的选择不能因为"这活是 agent 派的"就失效。
+          // 但优先级链非空时执行器由链路说了算 —— 前端已按可用性算好，见 forceExecutor。
           defaults: {
             executor: typeof req.body?.dispatchExecutor === 'string' ? req.body.dispatchExecutor : '',
             useDefaultPrompt: req.body?.dispatchUseDefaultPrompt !== false,
+            forceExecutor: dispatchPriority.length > 0,
           },
         })
         : undefined;
+
+      // 派活策略段：只有真有派发能力时才注入。关掉主动派活时注入的是**反向**约束
+      // （工具还在工具表里，schema 本身就在邀请它派活 —— 少注入一段等于没约束）。
+      const dispatchPolicySection = dispatchTask
+        ? buildDispatchPolicySection({ proactive: dispatchProactive, locale })
+        : '';
 
       // 本轮用时记录要对齐到"第几条 user 消息"，这个序号必须在本轮消息入栈**之前**取：
       // 失败轮次会把刚塞进去的 user 消息弹掉，事后按消息数数出来的序号会指向上一条，
@@ -795,7 +820,9 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
           resume,
           // 用户固定提示词（上面已解析）。显式传 —— 不传的话 runAgentTurn 会自己再读一遍
           // 配置文件，同一轮里读两次同一份配置纯属浪费
-          promptSection
+          promptSection,
+          // 派活策略（只有真有 dispatch 能力时非空）。同样只进请求副本
+          dispatchPolicySection
         });
       }
 

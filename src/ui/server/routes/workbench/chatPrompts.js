@@ -71,6 +71,72 @@ export function buildChatPromptSection({ gaiPrompt = '', dispatchPrompt = '', lo
   return `${head}\n\n${parts.join('\n\n')}`;
 }
 
+/**
+ * 拼「派活」这一节的策略（主动 / 不主动 / 定时任务）。
+ *
+ * 为什么非主动时也要注入：`dispatch_task` 一直在工具表里，它的 schema 写的是
+ * "让别的 agent 替我干活"。只"少注入一段"等于没约束 —— 模型照样会照着 schema
+ * 派活。所以关闭时要**反向**给一条"不要主动派"，不然开关是假的。
+ *
+ * 为什么定时任务单独一版：那条链路本来就是无人值守（scheduler.js 直接调
+ * runAgentTurn），用户在任务里写什么就做什么；再给一份"主动派"的策略等于
+ * 让它在没人盯着的时候自己 spawn CLI，成本和风险都放大。
+ *
+ * 纯函数、不读配置：调用方（agentRoutes / scheduler）才知道这一轮是什么形态。
+ *
+ * @param {object} input
+ * @param {boolean} [input.proactive] 用户是否开了「让 g ai 主动派活」
+ * @param {boolean} [input.scheduled] 这一轮是不是定时任务发起的
+ * @param {string}  [input.locale]
+ * @returns {string} 空串 = 不注入
+ */
+export function buildDispatchPolicySection({ proactive = true, scheduled = false, locale = 'zh-CN' } = {}) {
+  const en = String(locale || '').startsWith('en');
+
+  if (scheduled) {
+    return en
+      ? '# Dispatching work (unattended run)\n'
+        + 'This turn was started by a scheduled task and nobody is watching. Only call `dispatch_task` when the task text explicitly asks for it; otherwise do the work yourself.'
+      : '# 派活（无人值守）\n'
+        + '这一轮是定时任务发起的，没人盯着。只有任务文本明确要求派发时才调用 `dispatch_task`，否则自己把事情做完。';
+  }
+
+  if (!proactive) {
+    return en
+      ? '# Dispatching work (on request only)\n'
+        + 'You can hand work to another executor with `dispatch_task`, but **do not do it on your own initiative**. '
+        + 'Only call it when the user explicitly asks to dispatch / hand it to an executor / let another agent do it. '
+        + 'In every other case finish the work yourself with your own tools.'
+      : '# 派活（只在用户要求时）\n'
+        + '你可以用 `dispatch_task` 把活交给别的执行器，但**不要主动这么做**。'
+        + '只有用户明确说"派发 / 派给别人 / 让某个执行器去做"时才调用；其它情况自己用工具做完。';
+  }
+
+  return en
+    ? '# Dispatching work (you are allowed to dispatch proactively)\n'
+      + 'The user allows you to dispatch work to another executor. **Dispatch it** instead of doing it yourself when:\n'
+      + '- the job means editing several files, running a build/test suite, or is otherwise long-running implementation work\n'
+      + '- it is unrelated cleanup / refactor / test-writing that would otherwise derail the conversation\n'
+      + 'Still do it yourself: answering questions, looking things up, reading files, small single-file edits, and anything that needs back-and-forth with the user.\n'
+      + 'Rules for dispatching:\n'
+      + '- one call = one task; never dispatch the same thing twice\n'
+      + '- `text` must be self-contained (the executor cannot see this conversation or your reasoning)\n'
+      + '- do not pass `executor` — the dispatch priority set in Settings decides it; if the user wants a different executor for one job, tell them to reorder that list (a passed `executor` is ignored)\n'
+      + '- pass `project_path` when the target is the current working directory (saves the server a fallback lookup)\n'
+      + '- after dispatching, say in one or two sentences who got it and where it landed, then carry on — do not redo the work yourself'
+    : '# 派活（用户允许你主动派发）\n'
+      + '用户已经允许你把活派给别的执行器。以下情况**直接派**，不要自己从头做：\n'
+      + '- 要连续改多个文件、跑构建/测试、或明显耗时的实施类工作\n'
+      + '- 与本轮对话无关的清理、重构、补测试 —— 顺手派出去，别打断对话\n'
+      + '仍然自己做的：回答问题、查资料、读文件、单文件小改、需要边做边和用户确认的事。\n'
+      + '派活的规矩：\n'
+      + '- 一次调用只派一件事；同一件事不要重复派\n'
+      + '- `text` 要写成自足的一轮请求（对方看不到这段对话，也读不到你的推理）\n'
+      + '- 不要传 `executor` —— 执行器由设置里的「派发优先级」决定；用户想临时换一个，让他去设置里调顺序（传了也会被忽略）\n'
+      + '- 目标就是当前工作目录时直接传 `project_path`，省掉服务端一次落点判断\n'
+      + '- 派完用一两句话说明派给了谁、落在哪个项目，然后继续回答用户或等结果，**不要**自己再做一遍';
+}
+
 /** 默认取数：config.json 的 agentDefaultPrompt（读不到 = 空） */
 async function defaultLoadAgentPrompt() {
   const cfg = await configManager.loadConfig();

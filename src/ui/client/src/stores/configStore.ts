@@ -18,7 +18,7 @@ import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { SupportLocale } from '@/locales'
 import { setLocale } from '@/locales'
-import { isTaskExecutorId, type TaskExecutorId } from '@/utils/taskExecutor'
+import { isTaskExecutorId, normalizeExecutorPriority, type TaskExecutorId } from '@/utils/taskExecutor'
 import type { AgentPresetPrompt, AgentPresetsByView } from '@/utils/agentPresets'
 import { AGENT_PRESET_VIEW_IDS } from '@/utils/agentPresets'
 import { useLocaleStore } from './localeStore'
@@ -331,6 +331,13 @@ export const useConfigStore = defineStore('config', () => {
      *  2026-09-30 从 localStorage 迁来：GUI 每次启动都换一个随机端口，origin 一变
      *  localStorage 就是另一个桶，"记住上次"从来没生效过（详见 src/config.js 同名字段）。 */
     lastTaskExecutor: TaskExecutorId | null
+    /** g ai 派活时的执行器优先级（有序，第一个"已安装"的被选中）。空数组 = 不启用，
+     *  派发沿用 lastTaskExecutor / 设置里的默认值。存 ui 段而不是顶层：
+     *  顶层未知键会被 config.js 的 saveConfig 随 `...projectConfig` 吞进项目级配置。 */
+    dispatchExecutorPriority: TaskExecutorId[]
+    /** 允许 g ai 主动派活（不等用户说"派发"，遇到要实施的活自己派出去）。
+     *  关闭时服务端注入的是**反向**约束 —— 工具一直在工具表里，少注入一段等于没约束。 */
+    agentProactiveDispatch: boolean
     /** 目录/文件选择弹窗(local-file-picker)打开时是否默认开启「全局」搜索。
      *  存的是上次用过的选择，打开弹窗时回传给 defaultGlobalSearch 就是"记住上次"。 */
     pickerGlobalSearch: boolean
@@ -365,6 +372,10 @@ export const useConfigStore = defineStore('config', () => {
     mindmapDir: '',
     headerToolsHidden: [],
     lastTaskExecutor: null,
+    dispatchExecutorPriority: [],
+    // 默认开：用户装这个功能就是为了"别什么事都让主 agent 干"。
+    // 想收回就一个开关 —— 关掉后服务端注入反向约束（只在明确要求时派）。
+    agentProactiveDispatch: true,
     pickerGlobalSearch: false,
     markdownTheme: DEFAULT_MARKDOWN_THEME,
     editorWorkspaceByProject: {},
@@ -845,6 +856,12 @@ export const useConfigStore = defineStore('config', () => {
           lastTaskExecutor: isTaskExecutorId(configData.ui.lastTaskExecutor)
             ? configData.ui.lastTaskExecutor
             : defaultUiSettings.lastTaskExecutor,
+          // 派发优先级：白名单 + 去重 + 保序（顺序就是用户的成本意图，排序会把它弄丢）
+          dispatchExecutorPriority: normalizeExecutorPriority(configData.ui.dispatchExecutorPriority),
+          // 只认布尔：手改配置写个字符串不该把"主动派活"变成真值
+          agentProactiveDispatch: typeof configData.ui.agentProactiveDispatch === 'boolean'
+            ? configData.ui.agentProactiveDispatch
+            : defaultUiSettings.agentProactiveDispatch,
           pickerGlobalSearch: typeof configData.ui.pickerGlobalSearch === 'boolean'
             ? configData.ui.pickerGlobalSearch
             : defaultUiSettings.pickerGlobalSearch,
@@ -979,6 +996,33 @@ export const useConfigStore = defineStore('config', () => {
     if (ui.value.lastTaskExecutor === id) return
     ui.value.lastTaskExecutor = id
     await saveUiSettings({ lastTaskExecutor: id }, { immediate: true })
+  }
+
+  /**
+   * 保存「派发设置」：执行器优先级 + 主动派活开关。
+   *
+   * 只走 save-ui-settings（按 key 浅合并），**不要**经过 saveConfig ——
+   * 后者是 `raw.ui = ui` 整段覆盖，别处一份旧的 ui 快照顺手保存就会把这里刚存的
+   * 优先级盖回去（那种失效不报错，只是设置某天自己变回去了）。
+   *
+   * 一次用户动作（点保存 / 拨开关），不是每帧都变，所以 immediate。
+   */
+  async function saveDispatchSettings(patch: {
+    dispatchExecutorPriority?: TaskExecutorId[]
+    agentProactiveDispatch?: boolean
+  }) {
+    const payload: Record<string, unknown> = {}
+    if (patch.dispatchExecutorPriority !== undefined) {
+      const list = normalizeExecutorPriority(patch.dispatchExecutorPriority)
+      payload.dispatchExecutorPriority = list
+      ui.value.dispatchExecutorPriority = list
+    }
+    if (typeof patch.agentProactiveDispatch === 'boolean') {
+      payload.agentProactiveDispatch = patch.agentProactiveDispatch
+      ui.value.agentProactiveDispatch = patch.agentProactiveDispatch
+    }
+    if (Object.keys(payload).length === 0) return
+    await saveUiSettings(payload, { immediate: true })
   }
 
   /**
@@ -1827,6 +1871,7 @@ export const useConfigStore = defineStore('config', () => {
     taskExecutor,
     resolvedTaskExecutor,
     setLastTaskExecutor,
+    saveDispatchSettings,
     notifyPageOnTaskDone,
     notifyBrowserOnTaskDone,
     notifySoundOnTaskDone,

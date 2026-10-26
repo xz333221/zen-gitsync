@@ -41,9 +41,11 @@ import { useConvListCollapse } from '@/composables/useConvListCollapse'
 import MarketplacePanel from '@/components/MarketplacePanel.vue'
 import SchedulePanel from '@/components/SchedulePanel.vue'
 import AgentPromptSettings from '@/components/AgentPromptSettings.vue'
+import DispatchSettings from '@/components/DispatchSettings.vue'
 import AgentEngineSelector from '@/components/AgentEngineSelector.vue'
 import TaskExecutorPicker from '@/components/TaskExecutorPicker.vue'
 import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection'
+import { taskExecutorName } from '@/utils/taskExecutor'
 import CopySessionButton from '@/components/CopySessionButton.vue'
 import ChatSilenceBadge from '@/components/ChatSilenceBadge.vue'
 
@@ -84,8 +86,13 @@ const props = defineProps<{
 
 const configStore = useConfigStore()
 const gitStore = useGitStore()
-// 派发执行器：与工作台指令栏 / 看板卡片共用同一份全局选择（ui.lastTaskExecutor）
-const { active: dispatchExecutor } = useTaskExecutorSelection()
+// 派发执行器：配了优先级就按链上第一个"已安装"的算（ui.dispatchExecutorPriority），
+// 否则沿用与工作台指令栏 / 看板卡片共用的那份全局选择（ui.lastTaskExecutor）。
+const { dispatchTarget, hasPriority, priority } = useTaskExecutorSelection()
+// 底栏只读态的 title：把整条链摊开，面板窄的时候不至于挤成一行
+const priorityChainTitle = computed(() =>
+  priority.value.map(id => taskExecutorName(id)).join(' → ')
+)
 
 // ── 面板宽度：够窄就把「会话列表」和「对话」折成两个页面 ──────────
 // 量的是这个视图容器自己的宽度（窄屏下拖动侧栏 / 分屏都会变；视口宽度反映不了）。
@@ -356,7 +363,8 @@ async function onSend(payload: { text: string; files: any[] }) {
       ? {}
       : {
           allowDispatch: true,
-          dispatchExecutor: dispatchExecutor.value,
+          // 具体 id 由前端算好（可用性只有前端有）；优先级生效时服务端会忽略模型自选的那个
+          dispatchExecutor: dispatchTarget.value,
           dispatchUseDefaultPrompt: true,
         }),
   }
@@ -730,8 +738,18 @@ defineExpose({
             </p>
             <template v-else>
               <span class="agent-dispatch-label">{{ $t('@WORKBENCH:派发执行器') }}</span>
-              <TaskExecutorPicker :title="$t('@WORKBENCH:它派出去的任务由这个执行器跑（与执行按钮的临时切换共用）')" />
-              <span class="agent-dispatch-hint">{{ $t('@WORKBENCH:任务会落到看板，跑完有完成提示') }}</span>
+              <TaskExecutorPicker
+                :readonly="hasPriority"
+                :value="dispatchTarget"
+                :title="hasPriority
+                  ? $t('@AGENT:按派发优先级挑选（{chain}）', { chain: priorityChainTitle })
+                  : $t('@WORKBENCH:它派出去的任务由这个执行器跑（与执行按钮的临时切换共用）')"
+              />
+              <span class="agent-dispatch-hint">
+                {{ hasPriority
+                  ? $t('@AGENT:按优先级挑，去「设置」里调整')
+                  : $t('@WORKBENCH:任务会落到看板，跑完有完成提示') }}
+              </span>
             </template>
           </div>
         </div>
@@ -746,7 +764,9 @@ defineExpose({
         <MarketplacePanel v-else-if="activeTab === 'skill' || activeTab === 'mcp'" :type="marketplaceType" />
 
         <!-- ── 设置（提示词设置）── -->
-        <AgentPromptSettings v-else />
+        <AgentPromptSettings v-else>
+          <DispatchSettings />
+        </AgentPromptSettings>
       </div>
     </main>
   </div>

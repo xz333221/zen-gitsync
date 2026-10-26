@@ -366,6 +366,10 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 //        **不传（undefined）= 自己现读**：这样定时任务那条链路（scheduler.js 直接调
 //        本函数）不必重复接一次线。显式传 '' = 本轮确定不带（调用方已经解析过）。
 //        只进请求副本，不落 session.messages —— 改设置立刻生效，历史会话不被腌进旧规则。
+//   - dispatchPolicySection: 「派活」策略段（主动派 / 只在要求时派 / 无人值守）。
+//        **不传 = 没有这一段** —— 刻意不让本函数自己读配置：定时任务与交互式对话
+//        要的是两套策略，由调用方决定（见 chatPrompts.buildDispatchPolicySection）。
+//        同样只进请求副本。
 //   - resume: true 时**不再压入 user 消息**，直接拿着会话现有的尾巴继续跑。
 //        用于"重试上一轮"：失败那轮留下的 user + 工具结果都还在，再发一遍 user
 //        会让模型看到两条同样的请求 + 已经跑完的工具结果。
@@ -378,7 +382,7 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 // 分流、摘要注进请求副本（agentParity.test.js 有守卫）。
 //
 // 返回: { aborted: boolean }
-export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, docNote = '', attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, registerProject, dispatchTask, getContextBlock, requestBudget = null, resume = false, streamFn = streamChatOnce, promptSection }) {
+export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, docNote = '', attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, registerProject, dispatchTask, getContextBlock, requestBudget = null, resume = false, streamFn = streamChatOnce, promptSection, dispatchPolicySection = '' }) {
   const ctx = { cwd, locale, onChild, askUser, listProjects, registerProject, dispatchTask };
 
   // 确保 session.messages 存在
@@ -478,7 +482,7 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
     const messages = prepareRequestMessages(session.messages, { locale, ...budget });
     // 请求级上下文：用户固定提示词 + 工作区状态快照 + 常用目录状态 + 当前打开的文档
     // + 本轮附件路径 + 扩展层摘要（只改副本，不落 session.messages，下一轮不重复累积）
-    injectRequestContext(messages, { cwd, openFilePath, docNote, attachments, locale, workspaceBlock, dirStatusBlock, promptSection: userPromptSection, extensionSection: extensionPromptSuffix(extensions, locale) });
+    injectRequestContext(messages, { cwd, openFilePath, docNote, attachments, locale, workspaceBlock, dirStatusBlock, promptSection: userPromptSection, dispatchPolicySection, extensionSection: extensionPromptSuffix(extensions, locale) });
 
     // 上下文占用：在**请求发出去之前**量一次，发给 UI 画圆环。
     // 为什么必须在发之前：provider 的真实 usage（input_tokens）要等响应回来才有，
@@ -718,7 +722,7 @@ function summarizeArgs(name, args) {
 // 附件为什么只给路径、不给内容：见 utils/agentAttachments.js 的头注释 —— 非图片附件
 // 由服务端落盘，模型自己用 read / grep 按需取，比把几百 KB 文本内联进消息省得多。
 // 快照块同理,只给摘要与目录路径,板块正文由模型按需读。
-export function injectRequestContext(messages, { cwd, openFilePath, docNote = '', attachments = [], locale, workspaceBlock = '', dirStatusBlock = '', promptSection = '', extensionSection = '' }) {
+export function injectRequestContext(messages, { cwd, openFilePath, docNote = '', attachments = [], locale, workspaceBlock = '', dirStatusBlock = '', promptSection = '', dispatchPolicySection = '', extensionSection = '' }) {
   if (!Array.isArray(messages)) return;
   const en = String(locale || '').startsWith('en');
 
@@ -777,14 +781,21 @@ export function injectRequestContext(messages, { cwd, openFilePath, docNote = ''
   //    且明说"这些外部工具已挂到你的工具列表里"，正好接住基础提示词里那句
   //    "可用工具只有上面列出的 N 个"（N=内置数）—— 两边不打架。
   const hasExtensionSection = typeof extensionSection === 'string' && extensionSection.trim();
+  // 派活策略段：**必须**进这个提前返回条件。否则一轮里若恰好没有工作区快照/文档/
+  // 附件/固定提示词/扩展，这一段会被静默丢掉 —— 不报错，只是开关不生效。
+  const hasDispatchPolicy = typeof dispatchPolicySection === 'string' && dispatchPolicySection.trim();
 
-  if (parts.length === 0 && !(typeof promptSection === 'string' && promptSection.trim()) && !hasExtensionSection) return;
+  if (parts.length === 0 && !(typeof promptSection === 'string' && promptSection.trim()) && !hasDispatchPolicy && !hasExtensionSection) return;
 
   // 用户固定提示词单独一节，且排在"当前上下文"**前面**：它是每轮都成立的规则，
   // 而当前上下文是这一刻的快照 —— 规则在前、现场在后，读起来才是"先约束后事实"。
   let note = '';
   if (typeof promptSection === 'string' && promptSection.trim()) {
     note += `\n\n# ${en ? 'Standing instructions' : '用户固定提示词'}\n${promptSection.trim()}`;
+  }
+  // 派活策略紧跟固定提示词：同属"规则"，但它是系统给的、不是用户写的，所以自带标题、不并进去
+  if (hasDispatchPolicy) {
+    note += `\n\n${dispatchPolicySection.trim()}`;
   }
   if (parts.length > 0) {
     note += `\n\n# ${en ? 'Current context' : '当前上下文'}\n${parts.join('\n\n')}`;

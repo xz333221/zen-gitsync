@@ -39,6 +39,7 @@
 import fsp from 'node:fs/promises';
 import { EventEmitter } from 'node:events';
 import { runAgentTurn } from './agentChat.js';
+import { buildDispatchPolicySection } from './chatPrompts.js';
 import { agentSessionStore } from './agentSessionStore.js';
 import { isSessionBusy, acquireSession, releaseSession } from './sessionGate.js';
 import { logger as defaultLogger, nowIso } from './shared.js';
@@ -227,6 +228,10 @@ export function createScheduler({
           dispatchTask,
           getContextBlock,
           requestBudget,
+          // 派活策略：**无人值守版**，不继承"主动派活"那个开关 —— 定时任务是
+          // 用户写什么就做什么，没有人在旁边看着，不该替它开"自己找活派"的口子。
+          // 也不参与派发优先级（服务端没有执行器可用性数据，见 agentRoutes 的注释）。
+          dispatchPolicySection: buildDispatchPolicySection({ scheduled: true, locale: task.locale || 'zh' }),
         });
 
         if (abortController.signal.aborted) {

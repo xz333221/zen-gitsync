@@ -3033,6 +3033,23 @@ export default {
   '@AGENT:保存中…': 'Saving…',
   '@AGENT:保存': 'Save',
   // @AGENT: file end (追加: 复制会话)
+  // @AGENT: 设置 Tab · 派发设置（DispatchSettings.vue）
+  '@AGENT:派发设置': 'Dispatch settings',
+  '@AGENT:g ai 可以把活派给本地 CLI 执行器去做 —— 它们的 token 通常比主 agent 便宜。': "g ai can hand work to local CLI executors — their tokens are usually cheaper than the main agent's.",
+  '@AGENT:让 g ai 主动派活': 'Let g ai dispatch work proactively',
+  '@AGENT:遇到要改多个文件、跑构建测试这类活，它直接派出去，不再自己从头做；问答与单文件小改仍自己做。': 'For multi-file edits or build/test runs it dispatches instead of doing the work from scratch; Q&A and small single-file edits it still does itself.',
+  '@AGENT:派活执行器优先级': 'Dispatch executor priority',
+  '@AGENT:当前会用：{name}': 'Will use: {name}',
+  '@AGENT:还没排优先级 —— 派活沿用下拉里选中的那个执行器。': 'No priority set yet — dispatched work uses the executor picked in the dropdown.',
+  '@AGENT:往前挪一位': 'Move up',
+  '@AGENT:往后挪一位': 'Move down',
+  '@AGENT:移出优先级': 'Remove from priority',
+  '@AGENT:添加执行器': 'Add executor',
+  '@AGENT:派活时从列表头开始，挑第一个本机已安装的执行器；一个都没装就沿用下拉里的选择。': 'Dispatched work walks the list top-down and picks the first executor installed on this machine; if none is installed it falls back to the dropdown selection.',
+  '@AGENT:按优先级': 'By priority',
+  '@AGENT:按派发优先级挑选（{chain}）': 'Picked by dispatch priority ({chain})',
+  '@AGENT:按优先级挑，去「设置」里调整': 'Picked by priority — change it in Settings',
+  // @AGENT: file end (追加: 派发设置)
   // @SCHED: file path: components/SchedulePanel.vue, utils/scheduleApi.ts
   '@SCHED:新建任务': 'New task',
   '@SCHED:编辑任务': 'Edit task',

@@ -34,7 +34,7 @@ process.env.HOME = SANDBOX
 delete process.env.HOMEDRIVE
 delete process.env.HOMEPATH
 
-const { buildChatPromptSection, resolveChatPromptSection } = await import('./chatPrompts.js')
+const { buildChatPromptSection, buildDispatchPolicySection, resolveChatPromptSection } = await import('./chatPrompts.js')
 
 // ── 拼装（纯函数）─────────────────────────────────────────
 
@@ -75,6 +75,39 @@ test('英文界面走英文标题（与系统提示词同一套 locale 判定）
 
 test('非字符串入参不炸（手改配置塞了数字 / 对象）', () => {
   assert.equal(buildChatPromptSection({ gaiPrompt: 42, dispatchPrompt: {} }), '')
+})
+
+// ── 派活策略段 ─────────────────────────────────────────────
+// 开关是"有没有这一段"的唯一依据，而工具表里的 schema 一直在邀请模型派活 ——
+// 所以关闭时必须是**反向**约束，不是"少一段"。
+
+test('主动派活：给出该派 / 不该派的边界，并明说不要传 executor', () => {
+  const out = buildDispatchPolicySection({ proactive: true })
+  assert.match(out, /允许你把活派给别的执行器/)
+  assert.match(out, /仍然自己做的/)
+  assert.match(out, /不要传 `executor`/)
+  assert.match(out, /一次调用只派一件事/)
+})
+
+test('关掉主动派活 → 反向约束（不是空串，否则等于没有任何约束）', () => {
+  const out = buildDispatchPolicySection({ proactive: false })
+  assert.notEqual(out, '')
+  assert.match(out, /不要主动这么做/)
+  assert.doesNotMatch(out, /允许你把活派给别的执行器/)
+})
+
+test('定时任务走无人值守版：只有任务文本明确要求才派', () => {
+  const out = buildDispatchPolicySection({ proactive: true, scheduled: true })
+  assert.match(out, /无人值守/)
+  assert.match(out, /没人盯着/)
+  // scheduled 压过 proactive：定时任务永远不吃"主动派"那套
+  assert.doesNotMatch(out, /允许你把活派给别的执行器/)
+})
+
+test('英文界面走英文标题（与系统提示词同一套 locale 判定）', () => {
+  assert.match(buildDispatchPolicySection({ proactive: true, locale: 'en-US' }), /Dispatching work/)
+  assert.match(buildDispatchPolicySection({ proactive: false, locale: 'en-US' }), /on request only/)
+  assert.match(buildDispatchPolicySection({ scheduled: true, locale: 'en-US' }), /unattended run/)
 })
 
 // ── 取数 ────────────────────────────────────────────────

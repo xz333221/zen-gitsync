@@ -367,11 +367,11 @@ test('每轮用时：turn_done 推给前端，并与落盘的 turnTimings 是同
 });
 
 // ── dispatch_task 的注入闸门（2026-09-28）────────────────────────────────
-// 主 Agent 控制台改用 g ai 派活之后，这一条守两件事：
+// 改由右下角悬浮面板里的 g ai 派活之后，这一条守两件事：
 //   ① allowDispatch 的对话里，dispatch_task 真的能建出任务，且工具结果说清了
 //      "落到哪个项目 / 有没有跑 / 凭什么这么落点" —— 这三句是模型不重复派发、
 //      不把"已建任务"说成"已经跑完"的唯一依据；
-//   ② 没开 allowDispatch 的入口（智能体页 / 编辑器面板 / CLI）拿到一句明确的
+//   ② 没开 allowDispatch 的入口（编辑器面板 / CLI）拿到一句明确的
 //      unavailable，而不是静默成功或让模型反复重试。
 // 派发会写 tasks.json 与 orchestrator.json（HOME 已指向沙箱），所以断言直接读沙箱。
 test('dispatch_task：开了 allowDispatch 才注入，且工具结果说清落点与是否执行', async () => {
@@ -379,6 +379,8 @@ test('dispatch_task：开了 allowDispatch 才注入，且工具结果说清落�
   const projDir = mkdtempSync(path.join(SANDBOX, 'proj-dispatch-'));
 
   let chatHandler;
+  // ui 段（派发策略的开关）—— ③ 会把它改成"关掉主动派活"
+  let rawUi = {};
   const app = {
     get() {},
     delete() {},
@@ -393,7 +395,9 @@ test('dispatch_task：开了 allowDispatch 才注入，且工具结果说清落�
     // resolveExecutor 走 catch 回落 claude（正是要测的那条兜底）
     configManager: {
       readRawConfigFile: async () => ({
-        models: [{ model: 'test', name: 'T', baseURL: 'https://example.invalid/v1', apiKey: 'k', isDefault: true }]
+        models: [{ model: 'test', name: 'T', baseURL: 'https://example.invalid/v1', apiKey: 'k', isDefault: true }],
+        // 派活策略的开关（ui 段）；③ 会把它改成"关掉主动派活"
+        ui: rawUi
       })
     },
     getCurrentProjectPath: () => activeCwd,
@@ -415,8 +419,12 @@ test('dispatch_task：开了 allowDispatch 才注入，且工具结果说清落�
   const text = t => scripted([{ choices: [{ delta: { content: t } }] }]);
 
   let queue = [];
+  const seenBodies = [];
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => queue.shift()();
+  globalThis.fetch = async (url, init) => {
+    try { seenBodies.push(JSON.parse(init.body)) } catch { /* 非 JSON 请求体不关心 */ }
+    return queue.shift()();
+  };
 
   const runChat = async (body) => {
     let output = '';
@@ -463,16 +471,37 @@ test('dispatch_task：开了 allowDispatch 才注入，且工具结果说清落�
     assert.equal(record.status, 'created', 'auto_run=false 时只建任务');
     assert.equal(record.targetSource, 'explicit');
 
+    // 派活策略段：开了 allowDispatch 且配置里没关 → 注入的是「主动派」那一版。
+    // 这条口径的失效方式是「不报错、只是模型不派」，所以必须钉在请求体上。
+    const sys1 = String((seenBodies[0]?.messages || []).find(m => m.role === 'system')?.content || '');
+    assert.match(sys1, /允许你把活派给别的执行器/);
+    assert.match(sys1, /不要传 `executor`/);
+
     // ② 同一个端点、不带 allowDispatch：工具仍在那张表里，但注入是关的 →
     //    必须回一句明确的 unavailable，且不得建出任何任务
     queue = [
       toolCall({ text: '这条不该被派出去', project_path: projDir }),
       text('我没法在这里派发。')
     ];
+    const bodyIndex2 = seenBodies.length;
     const events2 = await runChat({ userMessage: '派一条给别的 agent 试试' });
+    const body2 = seenBodies[bodyIndex2];
     const result2 = events2.find(e => e.type === 'tool_result' && e.name === 'dispatch_task');
-    assert.match(result2.result, /只在 g ui 的「主 Agent 控制台」/);
+    assert.match(result2.result, /只在 g ui 右下角的 g ai 悬浮面板/);
     assert.equal(readTasks().length, before + 1, '没开闸门的入口不该建任务');
+    const sys2 = String((body2?.messages || []).find(m => m.role === 'system')?.content || '');
+    assert.doesNotMatch(sys2, /允许你把活派给别的执行器/, '没有派发能力的入口不该收到派活策略');
+
+    // ③ 关掉主动派活 → 注入**反向**约束（工具还在工具表里，少注入一段等于没约束）
+    rawUi = { agentProactiveDispatch: false };
+    queue = [
+      text('这条我自己做。')
+    ];
+    const bodyIndex3 = seenBodies.length;
+    await runChat({ userMessage: '随便聊聊', allowDispatch: true });
+    const sys3 = String((seenBodies[bodyIndex3]?.messages || []).find(m => m.role === 'system')?.content || '');
+    assert.match(sys3, /不要主动这么做/);
+    assert.doesNotMatch(sys3, /允许你把活派给别的执行器/);
   } finally {
     globalThis.fetch = originalFetch;
   }

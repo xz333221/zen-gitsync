@@ -381,10 +381,10 @@ export const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'dispatch_task',
-      description: '把一条任务派发到本机某个项目，由本地 CLI 执行器（claude / opencode / codex）去跑。'
+      description: '把一条任务派发到本机某个项目，由本地 CLI 执行器（claude / opencode / codex / codebuddy / pi / codearts）去跑。'
         + '这是"让别的 agent 替我干活"的唯一入口：工作台里的一条任务 = 一次独立会话，派出去之后它在自己的进程里跑，'
         + '不占本次对话，也不阻塞你继续回答用户。'
-        + '只在 g ui 的多项目编排台（主 Agent 控制台）里可用；其它入口调用会拿到一句 unavailable，那时直接回答用户即可。'
+        + '只在 g ui 右下角的 g ai 悬浮面板里可用；其它入口调用会拿到一句 unavailable，那时直接回答用户即可。'
         + '落点：不传 project_path 时由服务端按指令内容判断（指令里点名的项目 > 语义判断 > 应用当前项目），'
         + '判断依据会如实记进指令流水；不确定有哪些项目时先用 list_projects 看清楚，不要猜目录名。'
         + '粒度：一次调用只建**一条**任务。要分成几件事就分几次调用 —— 每次调用都会真的建一个任务、'
@@ -404,8 +404,10 @@ export const TOOL_DEFINITIONS = [
           },
           executor: {
             type: 'string',
-            enum: ['claude', 'opencode', 'codex', 'codebuddy'],
-            description: '用哪个本地 CLI 执行这条任务。不传则用控制台当前选中的执行器，再退到配置里的全局默认。',
+            enum: ['claude', 'opencode', 'codex', 'codebuddy', 'pi', 'codearts'],
+            description: '用哪个本地 CLI 执行这条任务。**不要传** —— 不传就按用户配置的派发优先级'
+              + '（第一个本机已安装的）决定，再退到设置里的默认执行器。'
+              + '用户配了优先级时这里传什么都会被忽略（要换执行器请用户去设置里调顺序）。',
           },
           auto_run: {
             type: 'boolean',
@@ -1365,9 +1367,9 @@ async function toolDispatchTask(args, ctx) {
   const text = String(args.text || '').trim()
   if (!text) return '错误: dispatch_task 需要非空的 text —— 要派给那个 agent 的完整指令。'
   if (typeof ctx.dispatchTask !== 'function') {
-    return '错误: dispatch_task 只在 g ui 的「主 Agent 控制台」（工作台右栏）里可用，当前入口没有派发能力。'
+    return '错误: dispatch_task 只在 g ui 右下角的 g ai 悬浮面板（智能体视图）里可用，当前入口没有派发能力。'
       + '不要重试这个工具，也不要假装已经派出去：直接回答用户；'
-      + '如果用户确实想派活，告诉他到主 Agent 控制台里说这句话。'
+      + '如果用户确实想派活，告诉他到那个悬浮面板里说这句话。'
   }
 
   const payload = { text }

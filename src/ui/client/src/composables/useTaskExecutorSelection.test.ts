@@ -143,3 +143,46 @@ describe('useTaskExecutorSelection', () => {
     expect(selected.value).toBe('codex')
   })
 })
+
+// 派发优先级：g ai 派活时的执行器和「上次用过哪个」是两件事 —— 前者按成本顺序
+// 自动挑，后者是人手动选的。这里钉住 dispatchTarget 只读不写。
+describe('useTaskExecutorSelection 派发优先级', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  test('优先级非空 → 挑链上第一个已安装的（跳过未安装的）', async () => {
+    stubConfig({ ui: { lastTaskExecutor: 'claude', dispatchExecutorPriority: ['pi', 'codex', 'claude'] } })
+    const configStore = useConfigStore()
+    await configStore.loadConfig()
+    setInstalled({ claude: true, codex: true })
+
+    const { dispatchTarget, active, hasPriority } = useTaskExecutorSelection()
+    expect(hasPriority.value).toBe(true)
+    expect(dispatchTarget.value).toBe('codex')
+    // 人手动选的没被改写：界面上的下拉仍然显示 claude
+    expect(active.value).toBe('claude')
+    expect(configStore.ui.lastTaskExecutor).toBe('claude')
+  })
+
+  test('优先级里的都没装 → 回落 active（派得出去比派得便宜重要）', async () => {
+    stubConfig({ ui: { dispatchExecutorPriority: ['pi', 'codearts'] } })
+    const configStore = useConfigStore()
+    await configStore.loadConfig()
+    setInstalled({ claude: true })
+
+    const { dispatchTarget } = useTaskExecutorSelection()
+    expect(dispatchTarget.value).toBe('claude')
+  })
+
+  test('没配优先级 → 与改造前逐字一致（= active）', async () => {
+    stubConfig({ ui: { lastTaskExecutor: 'opencode' } })
+    const configStore = useConfigStore()
+    await configStore.loadConfig()
+    setInstalled({ claude: true, opencode: true })
+
+    const { dispatchTarget, active, hasPriority } = useTaskExecutorSelection()
+    expect(hasPriority.value).toBe(false)
+    expect(dispatchTarget.value).toBe(active.value)
+  })
+})

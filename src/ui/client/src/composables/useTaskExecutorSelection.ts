@@ -34,7 +34,7 @@
 import { computed } from 'vue'
 import { useConfigStore } from '@/stores/configStore'
 import { useToolsStore } from '@/stores/toolsStore'
-import { TASK_EXECUTOR_OPTIONS, isTaskExecutorId, type TaskExecutorId } from '@/utils/taskExecutor'
+import { TASK_EXECUTOR_OPTIONS, isTaskExecutorId, pickByPriority, type TaskExecutorId } from '@/utils/taskExecutor'
 
 export function useTaskExecutorSelection() {
   const configStore = useConfigStore()
@@ -90,6 +90,25 @@ export function useTaskExecutorSelection() {
   }
 
   /**
+   * 派发优先级链（设置里排好的顺序）。空数组 = 不启用，派发沿用 active。
+   *
+   * 与「上次用过哪个」是两件事：那个是**人**在界面上临时选的，这个是**g ai 派活**
+   * 时按成本排的默认顺序。两者都在 ui 段，但谁都不写回谁。
+   */
+  const priority = computed<TaskExecutorId[]>(() => configStore.ui.dispatchExecutorPriority ?? [])
+  const hasPriority = computed(() => priority.value.length > 0)
+
+  /**
+   * g ai 派活时真正传给服务端的执行器：
+   * 优先级非空 → 链上第一个已安装的；都不可用 / 没配优先级 → 沿用 active。
+   *
+   * 纯计算、不落盘：环境状态（某个执行器今早被卸载）不该改写用户的选择。
+   */
+  const dispatchTarget = computed<TaskExecutorId>(() =>
+    hasPriority.value ? pickByPriority(priority.value, availability.value, active.value) : active.value
+  )
+
+  /**
    * 下拉项右侧的模型名。空串 = 还没探测到 / 该 CLI 没配模型 —— 渲染时整块跳过，
    * 别显示成"未在配置中指定"（那是撒谎，事实只是还没问到，见 ExecutorModelState）。
    */
@@ -102,5 +121,16 @@ export function useTaskExecutorSelection() {
     return [executorModelText(id), toolsStore.executorModelDetail(id)].filter(Boolean).join(' · ')
   }
 
-  return { selected, active, availability, hasAnyExecutor, choose, executorModelText, executorModelTitle }
+  return {
+    selected,
+    active,
+    priority,
+    hasPriority,
+    dispatchTarget,
+    availability,
+    hasAnyExecutor,
+    choose,
+    executorModelText,
+    executorModelTitle,
+  }
 }

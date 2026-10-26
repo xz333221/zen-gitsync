@@ -149,6 +149,12 @@ const configState = vi.hoisted(() => ({
   // 真实 store 初始值就是空数组（ref<ModelInfo[]>([])），形状保持一致。
   models: [] as { name?: string; model?: string; isDefault?: boolean }[],
   agentPresetPrompts: [] as { id: string; label: string; prompt: string }[],
+  // 派发设置（底栏只读链条 / 派发开关都读它）。缺这一段会在渲染时炸。
+  ui: {
+    dispatchExecutorPriority: [] as string[],
+    agentProactiveDispatch: true,
+    lastTaskExecutor: null as string | null,
+  },
 }))
 
 vi.mock('@stores/configStore', () => ({

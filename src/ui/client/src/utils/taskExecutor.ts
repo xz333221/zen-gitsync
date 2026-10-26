@@ -89,3 +89,45 @@ export function isTaskExecutorId(value: unknown): value is TaskExecutorId {
 export function taskExecutorName(id?: string | null): string {
   return TASK_EXECUTOR_OPTIONS.find(o => o.id === id)?.name || TASK_EXECUTOR_OPTIONS[0].name
 }
+
+// ── 派发优先级（g ai 派出去的活按这个顺序挑执行器）────────────────────────────
+//
+// 为什么只有前端能算：执行器"装没装"的唯一数据源是 /api/check-tools（走
+// toolsStore）。服务端没有这份数据，硬要在服务端复刻一遍等于把 6 个
+// `--version` spawn 塞进派发热路径（单个 15s 超时，codearts 还不能靠 PATH 判断）。
+// 所以这里算好一个**具体的 id**，随请求体传给服务端；服务端只负责在优先级
+// 生效时忽略模型自己挑的那个（见 agentRoutes 的 forceExecutor）。
+
+/**
+ * 规范化优先级列表：白名单 + 去重 + 保序。
+ *
+ * 手改配置 / 旧包遗留都可能塞进脏值；去重但**不排序** —— 顺序就是用户的意图，
+ * 排一次序等于把"先便宜的再贵的"这条信息弄丢。
+ */
+export function normalizeExecutorPriority(value: unknown): TaskExecutorId[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<TaskExecutorId>()
+  for (const item of value) {
+    if (!isTaskExecutorId(item) || seen.has(item)) continue
+    seen.add(item)
+    if (seen.size >= TASK_EXECUTOR_OPTIONS.length) break
+  }
+  return [...seen]
+}
+
+/**
+ * 按优先级挑第一个**本机已安装**的执行器；一个都没装就回落 fallback。
+ *
+ * 未安装的跳过而不是报错：优先级是"尽量便宜"，不是"必须用它" —— 派不出去
+ * 比用贵一点的执行器糟得多。fallback 由调用方给（界面上当前 active 的那个）。
+ */
+export function pickByPriority(
+  priority: readonly TaskExecutorId[],
+  availability: Partial<Record<TaskExecutorId, boolean>>,
+  fallback: TaskExecutorId
+): TaskExecutorId {
+  for (const id of priority) {
+    if (availability[id]) return id
+  }
+  return fallback
+}

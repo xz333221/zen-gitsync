@@ -371,7 +371,7 @@ test('dispatch_task schema 要求 text，并声明三条可选口径', async () 
   const definition = TOOL_DEFINITIONS.find(tool => tool.function.name === 'dispatch_task')
   assert.ok(definition, '工具表里必须有 dispatch_task —— 主 Agent 控制台的派发就靠它')
   assert.deepEqual(definition.function.parameters.required, ['text'])
-  assert.deepEqual(definition.function.parameters.properties.executor.enum, ['claude', 'opencode', 'codex', 'codebuddy'])
+  assert.deepEqual(definition.function.parameters.properties.executor.enum, ['claude', 'opencode', 'codex', 'codebuddy', 'pi', 'codearts'])
   assert.ok(definition.function.parameters.properties.project_path)
   assert.ok(definition.function.parameters.properties.auto_run)
   assert.ok(definition.function.parameters.properties.use_default_prompt)
@@ -408,7 +408,7 @@ test('dispatch_task 把参数映射成派发 payload：省略 = 保持服务端�
 
 test('dispatch_task 在没有注入实现的入口给一句可照做的说明，并禁止模型假装已派', async () => {
   const result = await executeTool('dispatch_task', { text: '派出去' }, ctx)
-  assert.match(result, /只在 g ui 的「主 Agent 控制台」/)
+  assert.match(result, /只在 g ui 右下角的 g ai 悬浮面板/)
   assert.match(result, /不要重试/)
   assert.match(result, /不要假装/)
   assert.match(await executeTool('dispatch_task', {}, ctx), /需要非空的 text/)

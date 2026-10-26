@@ -44,6 +44,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // ── 桩 LLM：按剧本回 SSE。剧本是一条队列，每收到一次请求就弹一个 ──
 // 一轮对话要两次：先给工具调用，拿到工具结果后给正文。
 const llmScript = [];
+// 每次请求的 body —— 派活策略段只进请求副本、不落会话，只能在请求体上验
+const llmBodies = [];
 let llmCalls = 0;
 const sseChunk = payload => `data: ${JSON.stringify(payload)}\n\n`;
 
@@ -61,6 +63,9 @@ function scriptText(text) {
 
 const llmServer = createServer(async (req, res) => {
   llmCalls += 1;
+  let rawBody = '';
+  for await (const chunk of req) rawBody += chunk;
+  try { llmBodies.push(JSON.parse(rawBody)) } catch { llmBodies.push(null) }
   const make = llmScript.shift();
   await sleep(30);
   res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
@@ -198,6 +203,13 @@ try {
   check(events.some(e => e.type === 'content' && /已经派给本地执行器了/.test(e.delta || '')),
     '工具执行后模型应能继续产出正文');
 
+  // 派活策略段：默认开（夹具 config.json 里没写 ui.agentProactiveDispatch）。
+  // 它只进请求副本，所以只能从桩 LLM 收到的 body 里验。
+  const sysOf = body => String((body?.messages || []).find(m => m?.role === 'system')?.content || '');
+  check(/允许你把活派给别的执行器/.test(sysOf(llmBodies[0])),
+    '开了 allowDispatch 且配置没关 → 请求体里应带「主动派活」策略段');
+  check(/不要传 .executor./.test(sysOf(llmBodies[0])), '策略段应明说不要自己指定执行器');
+
   // 任务真的建在指定项目下，且正文就是指令本身
   const tasksFile = path.join(dataDir, 'tasks.json');
   const tasks = (await readJson(tasksFile, { tasks: [] })).tasks || [];
@@ -236,8 +248,10 @@ try {
 
   const events2 = await chat({ userMessage: '派一条给别的 agent 试试', engine: 'gai' });
   const result2 = events2.find(e => e.type === 'tool_result' && e.name === 'dispatch_task');
-  check(/只在 g ui 的「主 Agent 控制台」/.test(result2?.result || ''),
+  check(/只在 g ui 右下角的 g ai 悬浮面板/.test(result2?.result || ''),
     `未开闸门的入口应拿到明确的不可用说明，实际: ${result2?.result}`);
+  check(!/允许你把活派给别的执行器/.test(sysOf(llmBodies[llmBodies.length - 2])),
+    '没有派发能力的入口不应收到派活策略段');
   const afterTasks = ((await readJson(tasksFile, { tasks: [] })).tasks || []).length;
   check(afterTasks === tasks.length, '未开闸门的入口不该建出任务');
 

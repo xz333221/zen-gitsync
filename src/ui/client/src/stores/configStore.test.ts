@@ -216,3 +216,73 @@ describe('configStore 预设提示词（agentPresetPrompts）', () => {
     expect(store.agentPresetPromptsByView).toEqual({})
   })
 })
+
+// 派发优先级 + 主动派活开关：两个都存 ui 段（顶层未知键会被 saveConfig 吞进项目级）。
+// 这里钉住**加载期规范化**与**落盘 body** —— 少写一处就会出现"设置完刷新就没了"。
+describe('configStore 派发设置', () => {
+  function stubConfig(configData: Record<string, unknown>) {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/config/getConfig') {
+        return new Response(JSON.stringify({ currentDirectory: 'C:\repo-a', ...configData }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return new Response(JSON.stringify({ success: true }), { status: 200 })
+    }))
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  test('加载期：优先级白名单 + 去重 + 保序，主动派活只认布尔', async () => {
+    stubConfig({
+      ui: {
+        dispatchExecutorPriority: ['pi', 'nope', 'claude', 'pi'],
+        agentProactiveDispatch: 'yes',
+      },
+    })
+    const store = useConfigStore()
+    await store.loadConfig()
+
+    expect(store.ui.dispatchExecutorPriority).toEqual(['pi', 'claude'])
+    // 字符串不是布尔 —— 不能靠真值把开关打开（手改配置最容易写出这种）
+    expect(store.ui.agentProactiveDispatch).toBe(true)
+  })
+
+  test('加载期：显式 false 保住，缺省落默认（默认开）', async () => {
+    stubConfig({ ui: { agentProactiveDispatch: false } })
+    const store = useConfigStore()
+    await store.loadConfig()
+    expect(store.ui.agentProactiveDispatch).toBe(false)
+
+    setActivePinia(createPinia())
+    stubConfig({})
+    const store2 = useConfigStore()
+    await store2.loadConfig()
+    expect(store2.ui.agentProactiveDispatch).toBe(true)
+    expect(store2.ui.dispatchExecutorPriority).toEqual([])
+  })
+
+  test('saveDispatchSettings 走 save-ui-settings（不是 saveAll），body 只带这两项', async () => {
+    stubConfig({})
+    const store = useConfigStore()
+    await store.loadConfig()
+    vi.mocked(fetch).mockClear()
+
+    await store.saveDispatchSettings({
+      dispatchExecutorPriority: ['pi', 'claude'],
+      agentProactiveDispatch: false,
+    })
+
+    const call = vi.mocked(fetch).mock.calls.find(c => c[0] === '/api/config/save-ui-settings')
+    expect(call).toBeTruthy()
+    expect(JSON.parse(String(call![1]?.body))).toEqual({
+      dispatchExecutorPriority: ['pi', 'claude'],
+      agentProactiveDispatch: false,
+    })
+    expect(store.ui.dispatchExecutorPriority).toEqual(['pi', 'claude'])
+    expect(store.ui.agentProactiveDispatch).toBe(false)
+  })
+})
