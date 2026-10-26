@@ -2581,6 +2581,9 @@ export default {
   // ── Dispatch preset prompts (global / per project) ─────────────
   '@WORKBENCH:预设提示词': 'Preset prompt',
   '@WORKBENCH:预设提示词设置': 'Preset prompt settings',
+  // ── Image → text preprocessing on dispatch (2026-10-26: the codearts executor can't read images) ──
+  '@WORKBENCH:图片转文字': 'Image → text',
+  '@WORKBENCH:先用 AI 把图片描述成文字再派发（codearts 读不了图时必开）': 'Describe images as text with AI before dispatching (required for codearts, which cannot read images)',
   '@WORKBENCH:设置派发时自动附加的预设提示词（全局 / 各项目）': 'Set the preset prompt attached to every dispatch (global / per project)',
   '@WORKBENCH:未设置': 'not set',
   '@WORKBENCH:全局': 'global',

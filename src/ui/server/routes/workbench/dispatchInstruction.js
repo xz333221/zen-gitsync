@@ -101,6 +101,9 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
    * @param {boolean} [payload.autoRun]          默认 true；false = 只建任务不执行
    * @param {boolean} [payload.useDefaultPrompt] 默认 true；false = 本次不附加预设提示词
    * @param {string} [payload.executor]          claude | opencode | codex；缺省走配置默认
+   * @param {boolean} [payload.imageText]        本次派发是否把图片先转成文字描述。
+   *        不传 = 不记（执行时按执行器兜底：codearts 开、别家关，见 taskRunner 的
+   *        shouldDescribeImages）。显式传 true/false 会记在任务上，重跑沿用。
    * @param {Array} [payload.attachments]        暂存区附件记录 [{ id, ext, originalName }]
    * @returns {Promise<{task: object, instruction: object, ran: boolean, target: object}>}
    */
@@ -206,6 +209,12 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
     // 执行链路只认 simpleOverride 合并文本，这个字段纯展示、可缺省。
     if (dispatchPrompt.parts && (dispatchPrompt.parts.global || dispatchPrompt.parts.project)) {
       task.promptParts = dispatchPrompt.parts;
+    }
+    // 「图片先转文字」的选择记在任务上：重跑不该让用户再勾一次。
+    // 不传就不写字段（= 执行时按执行器兜底），而不是写成 false —— 那会把
+    // "这次没选" 说成 "这次明确不要"。
+    if (typeof payload.imageText === 'boolean') {
+      task.imageText = payload.imageText;
     }
     tasks.push(task);
     await writeJson(TASKS_FILE, { tasks });

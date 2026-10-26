@@ -743,6 +743,8 @@ async function onDispatch(payload: {
   text: string; autoRun: boolean; attachments: Attachment[]
   projectPath: string; useDefaultPrompt: boolean
   executor: TaskExecutorId
+  /** 本次派发是否把图片先转成文字描述（控制台按执行器给的默认值，可单次覆盖） */
+  imageText: boolean
 }) {
   const result = await dispatch({
     text: payload.text,
@@ -751,6 +753,7 @@ async function onDispatch(payload: {
     attachments: payload.attachments,
     useDefaultPrompt: payload.useDefaultPrompt,
     executor: payload.executor,
+    imageText: payload.imageText,
   })
   // 失败（超长 / 目录不存在 / 落点判不出 / 网络错误）时**什么都不清**：
   // 正文与附件都留在输入框里让用户改一改再发。2026-09-29 之前正文是在 send()

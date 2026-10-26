@@ -73,20 +73,25 @@ export async function extractPdfText(filePath) {
 
 /**
  * 构建附件信息块。
- * - 图片:列路径(Claude CLI 可直接读取)
+ * - 图片:列路径(Claude CLI 可直接读取);给了 describeImage 时额外内联一段文字描述
  * - PDF:预提取文本并内联,不列路径(绕过 Claude CLI 的 pdfParse bug)
  * - 其他:列路径
  *
  * @param {Array<{absolutePath?: string, ext?: string, mimeType?: string}>} attachments
  * @param {object} [opts]
  * @param {boolean} [opts.withImageData=false]  是否读取图片为 data URL(预览/拆分场景需要)
- * @returns {Promise<{ block: string, imageDataUrls: string[] }>}
+ * @param {(att: object) => Promise<string|null>} [opts.describeImage]
+ *        「图片 → 文字」的预处理函数（见 imageDescribe.js）。给看图能力缺失的执行器
+ *        （codearts）兜底：描述不出来就退回纯路径，不抛错、不阻断。
+ * @returns {Promise<{ block: string, imageDataUrls: string[], describedCount: number }>}
  */
 export async function buildAttachmentBlock(attachments, opts) {
   const withImages = opts?.withImageData ?? false;
+  const describeImage = typeof opts?.describeImage === 'function' ? opts.describeImage : null;
   const imageDataUrls = [];
+  let describedCount = 0;
   if (!attachments || attachments.length === 0) {
-    return { block: '', imageDataUrls };
+    return { block: '', imageDataUrls, describedCount };
   }
 
   const lines = [];
@@ -111,6 +116,15 @@ export async function buildAttachmentBlock(attachments, opts) {
     } else if (isImageExt(a.ext)) {
       // 图片:列路径,可选读 data URL
       lines.push(`  ${i + 1}. [${a.mimeType || 'image'}] ${a.absolutePath}`);
+      if (describeImage) {
+        // 先文字描述、后路径：模型读 prompt 是线性的，"这张图长什么样"必须紧跟在这张图
+        // 的身份之后，否则多图时描述会跟路径错位（路径在第 3 行、描述在第 9 行）。
+        const desc = await describeImage(a);
+        if (desc) {
+          describedCount++;
+          lines.push(`     <image_description>\n${desc}\n     </image_description>`);
+        }
+      }
       if (withImages) {
         try {
           const buf = fs.readFileSync(a.absolutePath);
@@ -125,7 +139,7 @@ export async function buildAttachmentBlock(attachments, opts) {
   }
 
   if (lines.length === 0) {
-    return { block: '', imageDataUrls };
+    return { block: '', imageDataUrls, describedCount };
   }
 
   const parts = [];
@@ -135,11 +149,14 @@ export async function buildAttachmentBlock(attachments, opts) {
   if (pdfFailedCount > 0) {
     parts.push(`${pdfFailedCount} 个 PDF 解析失败`);
   }
+  if (describedCount > 0) {
+    parts.push(`其中 ${describedCount} 张图片已转成文字描述`);
+  }
   const imgNote = withImages && imageDataUrls.length > 0
     ? `（其中 ${imageDataUrls.length} 张图片已随消息一并发送，请直接基于图片内容分析）`
     : '';
   const note = parts.length > 0 ? `（${parts.join('，')}）` : imgNote;
 
   const block = `\n\n## 任务附件${note}\n${lines.join('\n')}`;
-  return { block, imageDataUrls };
+  return { block, imageDataUrls, describedCount };
 }

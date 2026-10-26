@@ -55,6 +55,7 @@ import {
   interpolate,
 } from './shared.js';
 import { buildAttachmentBlock } from './pdfText.js';
+import { createImageDescriber, pickImageAttachments } from './imageDescribe.js';
 import { composePromptBody } from './promptParts.js';
 import { buildMemoryPointerBlock } from './memoryContext.js';
 import {
@@ -1729,6 +1730,28 @@ export function createCodexEventHandler(job, appendOutput, appendThinking, toolC
 }
 
 /**
+ * 这次执行要不要把图片先转成文字描述。
+ *
+ * 优先级：本次运行载体 > 任务上记的选择 > 按执行器兜底。
+ *   · 任务上的 `imageText` 是派发那一刻用户勾的（见 dispatchInstruction.js）——
+ *     同一条任务重跑时"当时怎么勾的"应当继续生效，不用每次再确认一遍；
+ *   · 没有记过（老任务 / g ai 用 dispatch_task 派的活）就按执行器兜底：
+ *     **codearts 默认开**，别家默认关 —— 只有它读不了图（2026-10-26 实测，
+ *     见 imageDescribe.js 头注释），别家能直接把图片塞进上下文，多一层文字转述
+ *     只会丢信息。
+ *
+ * @param {object} task
+ * @param {object} sub
+ * @param {string} executor 已归一化的执行器名
+ * @returns {boolean}
+ */
+export function shouldDescribeImages(task, sub, executor) {
+  if (sub && typeof sub.imageText === 'boolean') return sub.imageText;
+  if (task && typeof task.imageText === 'boolean') return task.imageText;
+  return executor === 'codearts';
+}
+
+/**
  * 执行一次任务。任务一次只跑一个进程，本函数是唯一的执行入口
  * （首次执行、手动重跑、续聊都走它）。
  *
@@ -1780,7 +1803,13 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
     allAttachments.push(a);
   }
   if (allAttachments.length > 0) {
-    const { block: attachmentBlock } = await buildAttachmentBlock(allAttachments);
+    // 「图片 → 文字」预处理：见 imageDescribe.js 头注释（codearts 读不了图）。
+    // 只有当这批附件里确实有图片时才去解析模型，纯文本派发不多读一次配置。
+    let describeImage;
+    if (shouldDescribeImages(task, sub, executor) && pickImageAttachments(allAttachments).length > 0) {
+      describeImage = await createImageDescriber();
+    }
+    const { block: attachmentBlock } = await buildAttachmentBlock(allAttachments, { describeImage });
     if (attachmentBlock) {
       prompt += `\n\n---\n本任务包含 ${allAttachments.length} 个附件（请按文件路径读取，不要让用户重新提供）：${attachmentBlock}\n---`;
     }

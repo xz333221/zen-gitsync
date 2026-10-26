@@ -78,6 +78,11 @@ export interface DispatchPayload {
   useDefaultPrompt?: boolean
   /** 本次派发建的任务用哪个本地 CLI 执行（claude | opencode | codex）。缺省走服务端配置默认 */
   executor?: TaskExecutorId
+  /**
+   * 本次派发是否把图片先转成文字描述（服务端用 config.json 的默认模型看图写描述）。
+   * 缺省不传 → 服务端按执行器兜底：codearts 开（它读不了图），别家关。
+   */
+  imageText?: boolean
 }
 
 export function useOrchestrator() {
@@ -297,6 +302,8 @@ export function useOrchestrator() {
           useDefaultPrompt: payload.useDefaultPrompt !== false,
           // 执行器缺省时服务端回落到配置默认；非法值也是同一个回落，不用前端兜底
           executor: payload.executor,
+          // 图片转文字：undefined 交给服务端按执行器兜底（codearts 开）；勾掉才是 false
+          imageText: payload.imageText,
           // 只给 id / ext / originalName：路径由服务端在暂存区里自己拼，
           // 前端拿不到、也指定不了 absolutePath。
           attachments: (payload.attachments || []).map(a => ({

@@ -124,6 +124,15 @@ const emit = defineEmits<{
     useDefaultPrompt: boolean
     /** 本次派发用的执行器（claude | opencode），覆盖设置里的默认值 */
     executor: TaskExecutorId
+    /**
+     * 本次派发是否把图片先转成文字描述。
+     *
+     * 为什么这是一个"每次派发"的勾选而不是全局设置：它取决于**这次由谁跑** ——
+     * codearts 读不了图（图片在请求体里被换成一行 "Cannot read image"），需要服务端
+     * 先用自己的多模态模型把截图描述成文本；claude 这类能直接看图，多一层转述只会丢信息。
+     * 默认值跟执行器走（见 imageTextOn），允许单次覆盖。
+     */
+    imageText: boolean
   }]
 }>()
 
@@ -171,6 +180,21 @@ const {
 
 const attachBusy = computed(() => isUploading('draft'))
 const attachDragging = ref(false)
+
+// ── 图片 → 文字 ─────────────────────────────────────────────────────────
+// 勾上后服务端会先用 config.json 里的默认模型把图片描述成文字、再拼进 prompt。
+// 默认值**跟执行器走**：codearts 读不了图（图片被它替换成一行 "Cannot read image"），
+// 所以选它时默认勾；别的执行器能直接看图，默认不勾。
+// 用户手动改过就以他的选择为准（imageTextChoice 一旦非 null 就不再跟随执行器）——
+// 否则换个执行器就把人刚勾的意图悄悄改掉，比不给这个开关还糟。
+const imageTextChoice = ref<boolean | null>(null)
+const imageTextAuto = computed(() => selectedExecutor.value === 'codearts')
+const imageTextOn = computed(() => imageTextChoice.value ?? imageTextAuto.value)
+/** 没有图片附件时这个开关没有意义，不占地方（也避开底部栏的宽度预算） */
+const hasImageAttachment = computed(() => draftAttachments.value.some(a => isImageAttachment(a)))
+function onImageTextChange(e: Event) {
+  imageTextChoice.value = (e.target as HTMLInputElement).checked
+}
 
 /**
  * 粘贴统一入口。
@@ -273,6 +297,7 @@ function send() {
     projectPath: props.selectedProject ? props.selectedProject.path : '',
     useDefaultPrompt: useDefaultPrompt.value,
     executor: selectedExecutor.value,
+    imageText: imageTextOn.value,
   })
   // ⚠️ 这里**不清空** draft。
   //
@@ -1059,6 +1084,19 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
           <!-- 2026-10-14 评审轮改名：旧文案「预设提示词（全局）」没说清这个勾选
                干什么（用户原话：语义不清）。它勾的是"这次派发带上预设提示词" -->
           <span>{{ $t('@WORKBENCH:附带预设提示词（{state}）', { state: promptStateLabel }) }}</span>
+        </label>
+        <!-- 图片 → 文字：只有挂了图片才出现（没图时这个勾选没有意义）。
+             放在「立即执行 / 预设提示词」之后、「任务执行器」之前 ——
+             顺序别动：verify-workbench-dispatch-attach 用 `.oc__autorn input` 的
+             第一个当「立即执行」，插到它前面会让那条探针勾错框。
+             默认勾选态跟执行器走，见 imageTextOn 注释 -->
+        <label
+          v-if="hasImageAttachment"
+          class="oc__autorn"
+          :title="$t('@WORKBENCH:先用 AI 把图片描述成文字再派发（codearts 读不了图时必开）')"
+        >
+          <input type="checkbox" :checked="imageTextOn" @change="onImageTextChange" />
+          <span>{{ $t('@WORKBENCH:图片转文字') }}</span>
         </label>
         <!-- 执行器标签：picker 本体只显示品牌名（「Claude Code」），
              不标明身份会被当成模型选择（2026-10-14 评审） -->

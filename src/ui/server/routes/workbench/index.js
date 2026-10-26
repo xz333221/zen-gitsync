@@ -1795,7 +1795,7 @@ export function registerWorkbenchRoutes({
 
   /**
    * 派发一条指令。
-   * body: { text, projectPath?, autoRun?, useDefaultPrompt?, executor?, attachments? }
+   * body: { text, projectPath?, autoRun?, useDefaultPrompt?, executor?, imageText?, attachments? }
    *   - projectPath 缺省 -> 交给 targetResolver 判断落到哪个项目（显式指定 > 指令里点名
    *     > 主 Agent 判断 > 应用当前项目）。用户不必先选项目，落点会如实记进指令流水
    *   - autoRun 默认 true；false = 只建任务不执行
@@ -1813,6 +1813,7 @@ export function registerWorkbenchRoutes({
       autoRun: req.body?.autoRun,
       useDefaultPrompt: req.body?.useDefaultPrompt,
       executor: req.body?.executor,
+      imageText: req.body?.imageText,
       attachments: req.body?.attachments,
     });
     res.json({ success: true, ...result });
