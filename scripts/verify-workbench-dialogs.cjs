@@ -112,6 +112,11 @@ async function main() {
   const page = await (await browser.newContext({ viewport: { width: 1600, height: 950 } })).newPage()
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()) })
   page.on('pageerror', (e) => pageErrors.push(String(e)))
+  // 左栏「默认收起」断言的基准是"全新用户"（wb.sidebarCollapsed.v1 不存在）。
+  // 用户自己手动展开过会往 localStorage 写 '0'，会让 B4 恒红 —— 每次导航前清掉这个键。
+  await page.addInitScript(() => {
+    try { localStorage.removeItem('wb.sidebarCollapsed.v1') } catch { /* ignore */ }
+  })
 
   try {
     await page.goto(BASE, { waitUntil: 'domcontentloaded' })
@@ -135,6 +140,27 @@ async function main() {
       const dlg = await waitDialog(page, d => d.hasEditor, 12000)
       check('B 点卡片 -> 编辑器弹窗直接打开', !!dlg, dlg ? `title="${dlg.title}"` : '未出现编辑器弹窗')
       check('B2 弹窗打开时看板仍在（无视图跳转）', await boardVisible(page))
+
+      // ── B3-B6 左侧任务列表栏：默认收起、开关可展开/再收起（2026-10-26）──
+      // 需求：这个全屏弹窗左侧的任务列表区域要可收起，且默认收起。
+      const toggle = page.locator('.wb-sidebar-toggle').first()
+      check('B3 编辑器细栏有「任务列表」收起开关', (await toggle.count()) > 0)
+      check('B4 左栏默认收起（打开弹窗时不占位、不渲染）',
+        (await page.locator('.wb-sidebar').count()) === 0,
+        `wb-sidebar=${await page.locator('.wb-sidebar').count()}`)
+      if (await toggle.count()) {
+        await toggle.click()
+        await sleep(400)
+        // 只断"节点存在"会恒绿：要量它真的占了宽（≥ 侧栏最小宽 200）
+        const wExp = await page.locator('.wb-sidebar').first()
+          .evaluate(el => Math.round(el.getBoundingClientRect().width)).catch(() => 0)
+        check('B5 点开关后左栏展开（真的占宽 ≥200px）',
+          (await page.locator('.wb-sidebar').count()) > 0 && wExp >= 200, `width=${wExp}`)
+        await toggle.click()
+        await sleep(400)
+        check('B6 再点开关左栏收起（节点消失）',
+          (await page.locator('.wb-sidebar').count()) === 0)
+      }
     }
 
     // ── C 返回看板 ────────────────────────────────────────────────────
@@ -163,7 +189,12 @@ async function main() {
     check('D2b 光标落在空的标题输入框里（直接打字即可）', !!dInfo)
 
     // 任务列表按创建时间升序，新任务排在这一组最后 —— 不自动滚过去的话，
-    // 用户建完只看到一堆老任务，会以为没建上
+    // 用户建完只看到一堆老任务，会以为没建上。
+    // 左栏现在默认收起：要验"新建的任务在左栏可见"，先把左栏展开再断言。
+    if ((await page.locator('.wb-sidebar').count()) === 0) {
+      await page.locator('.wb-sidebar-toggle').first().click()
+      await sleep(400)
+    }
     const inView = await page.evaluate(() => {
       const el = document.querySelector('.wb-task-item.active')
       if (!el) return null

@@ -153,6 +153,12 @@ async function main() {
       await page.waitForSelector('.acu-message-list', { timeout: 15000 }).catch(() => {})
       await sleep(1200)
 
+      // 左侧任务列表栏默认收起（2026-10-26 起）：H 段要按左列点任务，先展开
+      if ((await page.locator('.wb-sidebar').count()) === 0) {
+        await page.locator('.wb-sidebar-toggle').first().click()
+        await sleep(400)
+      }
+
       const btn = page.locator('.wb-logs-inline-btn--copy').first()
       check('A 顶部有「复制执行内容」按钮', await btn.count() > 0)
       if (await btn.count()) {

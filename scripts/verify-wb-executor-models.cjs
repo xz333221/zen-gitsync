@@ -535,6 +535,10 @@ async function main() {
     // ── D 工作台执行按钮（split button）的下拉与 title ──────────────────
     // 点看板卡片 → 开「任务执行」弹窗 → 左列选中任务 → 工具栏才出现执行按钮
     await page.locator('.kb-card[data-task-id="synth-em-task"]').first().click()
+    // 左侧任务列表栏默认收起（2026-10-26 起）：要按左列选任务前先展开它
+    if ((await page.locator('.wb-sidebar').count()) === 0) {
+      await page.locator('.wb-sidebar-toggle').first().click()
+    }
     await page.waitForSelector('.wb-sidebar', { timeout: 10000 })
     await page.locator('.wb-sidebar .wb-task-list').getByText('【合成】执行器模型展示').first().click()
     await page.waitForSelector('.wb-executor-split', { timeout: 10000 })

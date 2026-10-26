@@ -124,6 +124,12 @@ async function main() {
     check('P1 点卡片打开任务编辑器弹窗', opened, taskA.title.slice(0, 24))
     if (!opened) throw new Error('编辑器弹窗没出来')
 
+    // 左侧任务列表栏默认收起（2026-10-26 起）：P3 要按左列切任务，先展开
+    if ((await page.locator('.wb-sidebar').count()) === 0) {
+      await page.locator('.wb-sidebar-toggle').first().click()
+      await page.waitForSelector('.wb-sidebar', { timeout: 8000 }).catch(() => {})
+    }
+
     // 等收敛期（3s）+ 内容异步渲染落定
     await sleep(4000)
     const a = await readChat(page)

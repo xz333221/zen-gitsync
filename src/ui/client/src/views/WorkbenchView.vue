@@ -25,6 +25,8 @@ import {
   Document,
   Delete,
   CopyDocument,
+  Expand,
+  Fold,
   VideoPlay,
   Warning
 } from '@element-plus/icons-vue'
@@ -76,6 +78,24 @@ const sidebarWidth = ref((() => {
     return SIDEBAR_DEFAULT_W
   }
 })())
+
+// ── 左侧任务列表栏的收起态：默认收起，状态落地 localStorage ──────────────
+// 用户要求整栏可收起、且默认收起。收起时整栏（含分隔条）不渲染，右栏 flex:1 占满；
+// 展开时复用 sidebarWidth，所以上次拖过的宽度不会丢。
+// 「默认收起」= 从没设置过（key 不存在）时收起；用户手动展开后按他选的那份记忆。
+const SIDEBAR_COLLAPSED_KEY = 'wb.sidebarCollapsed.v1'
+const sidebarCollapsed = ref((() => {
+  try {
+    const raw = localStorage.getItem(SIDEBAR_COLLAPSED_KEY)
+    return raw === null ? true : raw === '1'
+  } catch {
+    return true
+  }
+})())
+function toggleSidebarCollapsed() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+  try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed.value ? '1' : '0') } catch { /* quota 不阻塞 UI */ }
+}
 
 function onSidebarSplitterMouseDown(e: MouseEvent) {
   e.preventDefault()
@@ -1200,6 +1220,25 @@ const selectedTaskQueue = computed(() =>
         <el-icon class="wb-back-btn__icon"><ArrowLeft /></el-icon>
         <span>{{ $t('@WORKBENCH:返回看板') }}</span>
       </button>
+      <!--
+        任务列表栏的收起开关：细栏里唯一能"展开/收起左栏"的入口 ——
+        收起后左栏整块消失，没有这枚按钮就再也点不开了。
+        默认收起（用户要求），展开态用主色高亮，一眼看出当前左栏开着。
+      -->
+      <button
+        type="button"
+        class="wb-sidebar-toggle"
+        :class="{ 'is-active': !sidebarCollapsed }"
+        :aria-pressed="!sidebarCollapsed"
+        :title="sidebarCollapsed ? $t('@WORKBENCH:展开任务列表') : $t('@WORKBENCH:收起任务列表')"
+        :aria-label="sidebarCollapsed ? $t('@WORKBENCH:展开任务列表') : $t('@WORKBENCH:收起任务列表')"
+        @click="toggleSidebarCollapsed"
+      >
+        <el-icon class="wb-sidebar-toggle__icon">
+          <component :is="sidebarCollapsed ? Expand : Fold" />
+        </el-icon>
+        <span>{{ $t('@WORKBENCH:任务列表') }}</span>
+      </button>
       <span class="wb-editor-bar__project" :title="currentProject.path">{{ currentProject.name }}</span>
       <!--
         任务状态徽标（见脚本里 barStatus 那段为什么要有它）：
@@ -1246,6 +1285,7 @@ const selectedTaskQueue = computed(() =>
     </div>
     <div class="workbench__editor-row">
     <WorkbenchSidebar
+      v-if="!sidebarCollapsed"
       :style="{ width: sidebarWidth + 'px' }"
       :tasks="tasks"
       :selected-task-id="selectedTaskId"
@@ -1260,6 +1300,7 @@ const selectedTaskQueue = computed(() =>
     />
     <div
       class="wb-splitter"
+      v-if="!sidebarCollapsed"
       role="separator"
       tabindex="0"
       aria-orientation="vertical"
@@ -1742,6 +1783,30 @@ const selectedTaskQueue = computed(() =>
 .wb-back-btn:hover { color: var(--color-primary); }
 .wb-back-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 .wb-back-btn__icon { font-size: var(--font-size-mid); }
+/* 左栏收起开关：与「返回看板」同款的无边框文字按钮（透明底 + hover 变色，
+   不叠"圆角 + 单线边框"）。收起态是默认（低饱和），展开态用主色点亮，
+   让它同时承担"左栏当前开着 / 关着"的状态指示。flex-shrink:0 + nowrap：
+   窄容器里它不能被压折行（细栏的让位优先级归右端的时间块，见 .wb-editor-bar__time）。 */
+.wb-sidebar-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 22px;
+  padding: 0 6px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color var(--transition-fast) var(--ease-custom);
+}
+.wb-sidebar-toggle:hover { color: var(--color-primary); }
+.wb-sidebar-toggle:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
+.wb-sidebar-toggle.is-active { color: var(--color-primary); }
+.wb-sidebar-toggle__icon { font-size: var(--font-size-mid); }
 .wb-editor-bar__project {
   font-size: var(--font-size-sm);
   font-weight: 500;
