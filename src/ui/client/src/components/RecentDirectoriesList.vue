@@ -790,8 +790,10 @@ defineExpose({
 .dir-list--split {
   display: grid;
   /* 右列宽度就是 AI 栏的宽度,与调用方(DirectorySelector 的 label 行)对齐:
-     那边按同一个 clamp 算"左栏有多宽" */
-  grid-template-columns: minmax(0, 1fr) clamp(360px, 38%, 560px);
+     那边按同一个 clamp 算"左栏有多宽"。
+     2026-10-27 收窄:原 clamp(360px,38%,560px) 占掉近四成,用户反馈"右边这块占空间
+     太大";AI 栏只是一段解读 + 一排 chip,不需要那么宽 —— 收窄后宽度让给卡片列。 */
+  grid-template-columns: minmax(0, 1fr) clamp(240px, 24%, 360px);
   /* 搜索行按内容高,卡片行吃掉剩下的;minmax(0,1fr) 的 0 下限保证长列表能内部滚动 */
   grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
@@ -834,10 +836,8 @@ defineExpose({
     "head   summary"
     "search summary"
     "items  summary";
-  /* 首屏「最近项目」面板的 AI 栏比全屏弹窗那一档（clamp(360px,38%,560px)）窄一档：
-     这块是常驻在右侧列里的"随手一瞥"，不需要占掉近四成宽度 —— 收窄后把宽度让给
-     卡片列（同一屏能多放一张卡），AI 解读照旧能读。用户反馈"这块不需要这么大区域"。 */
-  grid-template-columns: minmax(0, 1fr) clamp(240px, 24%, 360px);
+  /* 列宽（AI 栏窄档）两边共用上面 .dir-list--split 那一份 —— 首屏面板与全屏弹窗
+     现在同宽，不再单独覆盖。 */
 }
 .dir-list--panel.dir-list--split > .dir-list__head {
   grid-area: head;

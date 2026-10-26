@@ -1945,12 +1945,12 @@ function onBrowserSelect(path: string) {
    2) 这个宽度只取**左栏**(卡片网格)那么宽 —— label 行在 split 布局的外面,
       而按钮要跟卡片网格的右边界对齐,不是跟整个弹窗(那会跑到右侧 AI 解读栏上方)。
       ⚠️ 下面的 clamp / gap 必须与 RecentDirectoriesList.vue 的 .dir-list--split 保持一致
-      (.dir-list__summary 的 clamp(360px, 38%, 560px) + .dir-list--split 的
+      (那边右列的 clamp(240px, 24%, 360px) + .dir-list--split 的
       column gap var(--spacing-xl)) —— 那边改了这儿要跟着改,否则按钮会跟卡片错位。
    .label-count 用 margin-left 而不是靠 gap 顶开,所以这里也不能改成
    justify-content: flex-end —— 那会把"图标 + 常用目录"整组一起推到右边。 */
 .directory-content :deep(.form-item--dirs .el-form-item__label) {
-  width: calc(100% - clamp(360px, 38%, 560px) - var(--spacing-xl));
+  width: calc(100% - clamp(240px, 24%, 360px) - var(--spacing-xl));
 }
 .form-label--dirs .form-label__refresh {
   margin-left: auto;
