@@ -2341,7 +2341,6 @@ export default {
   '@WORKBENCH:已保存策略': 'Retention saved',
   '@WORKBENCH:搜索标题 / 任务': 'Search title / task',
   '@WORKBENCH:全部状态': 'All statuses',
-  '@WORKBENCH:全部任务': 'All tasks',
   '@WORKBENCH:重置': 'Reset',
   '@WORKBENCH:刷新': 'Refresh',
   '@WORKBENCH:批量删除': 'Batch delete',
@@ -2474,13 +2473,9 @@ export default {
   '@WORKBENCH:未检测到本地 claude / opencode,无法执行任务': 'No local claude / opencode detected — tasks cannot run',
   '@WORKBENCH:未检测到本地可用的 CLI 执行器，无法执行任务': 'No local CLI executor detected — tasks cannot run',
   '@WORKBENCH:查看安装指引': 'View install guide',
-  // @WORKBENCH: file path: views/components/WorkbenchBoard.vue, WorkbenchProjectPanel.vue, WorkbenchAgentPanel.vue, WorkbenchKanban.vue, OrchestratorConsole.vue, WorkbenchDefaultPromptDialog.vue, composables/useWorkbenchProjects.ts, composables/useOrchestrator.ts, utils/relativeTime.ts (追加: 多项目编排台)
-  '@WORKBENCH:多项目编排台': 'Multi-project orchestrator',
+  // @WORKBENCH: file path: views/components/WorkbenchBoard.vue, WorkbenchProjectPanel.vue, WorkbenchAgentPanel.vue, WorkbenchKanban.vue, OrchestratorConsole.vue, WorkbenchDefaultPromptDialog.vue, composables/useWorkbenchProjects.ts, composables/useOrchestrator.ts, utils/relativeTime.ts
   '@WORKBENCH:项目': 'Projects',
-  '@WORKBENCH:活跃执行': 'Active runs',
   '@WORKBENCH:今日完成': 'Done today',
-  '@WORKBENCH:全部任务': 'All tasks',
-  '@WORKBENCH:看板上全部任务（含已从项目列表移除的项目）': 'Every task on the board, including projects removed from the list',
   '@WORKBENCH:只统计项目列表里这些项目名下的任务': 'Counts only tasks belonging to the projects in this list',
   '@WORKBENCH:全部项目': 'All projects',
   '@WORKBENCH:共 {n} 个项目的任务': 'Tasks across {n} projects',

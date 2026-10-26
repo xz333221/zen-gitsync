@@ -56,6 +56,12 @@ const props = defineProps<{
   projects: ProjectSummary[]
   selectedKey: string
   loading: boolean
+  /**
+   * 标题行最左要不要挂「收起左栏」按钮。
+   * 2026-10-27 从看板顶栏搬过来（用户：顶栏那一块没用，开合按钮放到项目列表前边）——
+   * 只在宿主能真的收起这一栏时才显示，收起后的开合入口由宿主另画。
+   */
+  collapsible?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -63,6 +69,8 @@ const emit = defineEmits<{
   select: [project: ProjectSummary | null]
   /** 请求把这一行从工作台清单里移除（目录已不存在那行的删除按钮） */
   remove: [project: ProjectSummary]
+  /** 点标题行那枚「收起左栏」按钮（是否可用由 collapsible 决定） */
+  collapse: []
 }>()
 
 /** 有活跃执行的排前面，再按最后活跃时间倒序，最后是路径名——保证"正在动的"永远在第一屏 */
@@ -248,6 +256,24 @@ async function confirmRemove(p: ProjectSummary) {
 <template>
   <section class="proj">
     <header class="proj__head">
+      <!-- 收起左栏（2026-10-27 从看板顶栏搬来）：放在标题最前，和「项目列表」同一行。
+           无边框图标按钮 —— 这一行右侧的漏斗/搜索是框式控件，两个不同职能不该同形。
+           收起后这枚随面板一起消失，宿主在看板标题行补一枚展开按钮（.board__fold-btn）。 -->
+      <button
+        v-if="collapsible"
+        type="button"
+        class="proj__fold-btn board__fold-btn"
+        :title="$t('@WORKBENCH:收起项目列表')"
+        :aria-label="$t('@WORKBENCH:收起项目列表')"
+        aria-expanded="true"
+        @click="emit('collapse')"
+      >
+        <!-- chevrons-left（Tabler icons，MIT）：展开态那枚（看板标题行）是反方向 -->
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M11 7l-5 5l5 5" />
+          <path d="M17 7l-5 5l5 5" />
+        </svg>
+      </button>
       <h3 class="proj__title">{{ $t('@WORKBENCH:项目列表') }}</h3>
       <!-- 过滤入口（2026-10-16 用户要求）：漏斗图标 + 点击展开下拉，
            原来的「只看有任务 / 隐藏非 Git」两个开关从卡片下方那行搬进下拉 ——
@@ -308,7 +334,7 @@ async function confirmRemove(p: ProjectSummary) {
 
       <!-- 搜索（2026-10-16 从下面的筛选条搬到这里）：默认只露一枚放大镜，
            点开输入框才展开。原标题右侧那枚常驻项目数（.proj__count）去掉 ——
-           同一个数字顶栏、左栏「全部项目」行各还有一份；筛选中的匹配数
+           同一个数字左栏「全部项目」行还有一份；筛选中的匹配数
            不跟着常驻，改成展开态下输入框右边一枚小字（.proj__search-meta）。 -->
       <div v-if="projects.length > 0" class="proj__search" :class="{ 'is-open': searchOpen }">
         <input
@@ -384,7 +410,7 @@ async function confirmRemove(p: ProjectSummary) {
           </div>
 
           <!-- 第二行只在真有内容时说。原来这里写「{n} 个项目」，而同一个 28 就在上面
-               那枚 proj-item__num chip 里、面板标题和顶栏也各写了一遍 —— 一屏四个 28。
+               那枚 proj-item__num chip 里、面板标题也写了一遍 —— 一屏四个 28。
                真正只有这一行能说的是"有几个在跑"。 -->
           <div v-if="totals.running > 0" class="proj-item__row2">
             <span class="proj-item__running-text">
@@ -393,7 +419,7 @@ async function confirmRemove(p: ProjectSummary) {
           </div>
 
           <!-- 只留数字不给进度条（用户 2026-10-13：数字有用，彩条占地方）。
-               title 交代口径：这里只加列表里这些项目的任务，与顶栏「全部任务」不等
+               title 交代口径：这里只加列表里这些项目的任务，与看板「全部项目」的总数不等
                （实测差 10 条：9 条属于一个已从列表移除的项目 + 1 条属于容器目录）。 -->
           <div
             v-if="totals.total > 0"
@@ -616,6 +642,32 @@ async function confirmRemove(p: ProjectSummary) {
   text-overflow: ellipsis;
 }
 
+/* 收起左栏（标题行最左）：无边框图标按钮，26px 命中区与看板那枚同名按钮同尺寸。
+   hover 才显底色 —— 常驻的底色会把它读成"这一行的一个开关"，而它是一次性动作。 */
+.proj__fold-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  margin-left: -6px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-meta);
+  flex-shrink: 0;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast) var(--ease-custom),
+    background var(--transition-fast) var(--ease-custom);
+}
+.proj__fold-btn:hover {
+  color: var(--color-primary);
+  background: var(--bg-subtle-hover);
+}
+.proj__fold-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
+
 /* ── 过滤入口（标题行，搜索左边）───────────────────────────────── */
 /* 与 .proj__search 同一套框式语言：同高 24px、同边框 / 底色令牌，
    两者并排视觉上是一对；漏斗 14px 居中。 */
@@ -727,7 +779,7 @@ async function confirmRemove(p: ProjectSummary) {
 }
 .proj__search-input::placeholder { color: var(--text-meta); }
 /* 筛选中的匹配数：原来它在标题右侧常驻（.proj__count，已去掉）。
-   现在只在展开态露个"2/4"—— 顶栏和「全部项目」行已经有项目总数，
+   现在只在展开态露个"2/4"—— 「全部项目」行已经有项目总数，
    常驻一份是重复；而"筛出了几条"只在筛选那一刻有人看。 */
 .proj__search-meta {
   font-size: var(--font-size-xs);

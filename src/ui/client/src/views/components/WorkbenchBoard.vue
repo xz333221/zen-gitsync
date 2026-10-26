@@ -31,12 +31,12 @@
   · 刷新：5s 轮询 + 切回标签页立刻取一次，手动那一下几乎永远点不到"新"数据；
   · 新建开发任务：看板「待处理」列末尾常驻一个「新建任务」，右栏调度台也能直接派发，
     顶栏这个只是第三个入口，还把标题栏右侧占得满满的。
+  2026-10-27 连顶栏本身（标题 + 四项统计）也整块移除了，见模板里的说明。
 -->
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Fold, Expand } from '@element-plus/icons-vue'
 import type { Attachment, BoardTask, ProjectSummary } from '@/types/workbench'
 import { canonicalProjectPath } from '@/utils/path'
 import { taskPercentIndex } from '@/utils/progressReport'
@@ -813,49 +813,10 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
 
 <template>
   <div class="board" :style="boardStyle">
-    <header class="board__top">
-      <!-- 左栏的开合。宽屏=收起/展开常驻那一栏；窄屏=抽屉 -->
-      <button
-        type="button"
-        class="board__icon-btn board__fold-btn"
-        :class="{ 'is-on': !leftHidden }"
-        :title="leftHidden ? $t('@WORKBENCH:展开项目列表') : $t('@WORKBENCH:收起项目列表')"
-        :aria-label="leftHidden ? $t('@WORKBENCH:展开项目列表') : $t('@WORKBENCH:收起项目列表')"
-        :aria-expanded="!leftHidden"
-        @click="toggleLeft"
-      >
-        <el-icon v-if="!leftHidden"><Fold /></el-icon>
-        <el-icon v-else><Expand /></el-icon>
-      </button>
-
-      <div class="board__brand">
-        <div class="board__brand-text">
-          <h1 class="board__title">{{ $t('@WORKBENCH:多项目编排台') }}</h1>
-        </div>
-      </div>
-
-      <div class="board__stats">
-        <span class="board__stat">
-          <span class="board__stat-label">{{ $t('@WORKBENCH:项目') }}</span>
-          <!-- is-zero：2026-10-14 评审轮。四项统计同权重视觉上抢不出主次，
-               0 是"此刻没有"的信号，该退到跟标签同一档，让非零值成为主角 -->
-          <strong class="board__stat-value" :class="{ 'is-zero': headerStats.projects === 0 }">{{ headerStats.projects }}</strong>
-        </span>
-        <span class="board__stat" :title="$t('@WORKBENCH:看板上全部任务（含已从项目列表移除的项目）')">
-          <span class="board__stat-label">{{ $t('@WORKBENCH:全部任务') }}</span>
-          <strong class="board__stat-value" :class="{ 'is-zero': headerStats.tasks === 0 }">{{ headerStats.tasks }}</strong>
-        </span>
-        <span class="board__stat">
-          <span class="board__stat-label">{{ $t('@WORKBENCH:活跃执行') }}</span>
-          <strong class="board__stat-value" :class="{ 'is-live': headerStats.running > 0, 'is-zero': headerStats.running === 0 }">{{ headerStats.running }}</strong>
-        </span>
-        <span class="board__stat">
-          <span class="board__stat-label">{{ $t('@WORKBENCH:今日完成') }}</span>
-          <strong class="board__stat-value" :class="{ 'is-zero': headerStats.todayDone === 0 }">{{ headerStats.todayDone }}</strong>
-        </span>
-      </div>
-    </header>
-
+    <!-- 顶栏（标题「多项目编排台」+ 项目/任务/活跃/今日四项统计）2026-10-27 整块移除：
+         用户反馈「上边这块没啥用，省得占地方」。左栏开合按钮随之搬进项目列表标题行
+         （WorkbenchProjectPanel 的 .proj__fold-btn），收起态那枚落在看板标题行左侧
+         （下面的 .board__fold-btn），保证任何状态下都能把左栏点回来。 -->
     <div ref="colsRef" class="board__cols" :class="{ 'is-resizing': dragging !== null }">
       <!-- 抽屉打开时的点击捕获层：点空白处收起。
            只在窄屏 + 打开时才 display:block（见媒体查询），宽屏下是个不占位的空 div。
@@ -877,8 +838,10 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
           :projects="projects"
           :selected-key="selectedKey"
           :loading="loading"
+          :collapsible="!leftHidden"
           @select="onSelectProject"
           @remove="onRemoveProject"
+          @collapse="toggleLeft"
         />
       </aside>
 
@@ -895,6 +858,23 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
 
       <main class="board__main">
         <div class="board__main-head">
+          <!-- 左栏收起后这里是**唯一**的开合入口（顶栏已整块移除）：宽屏把常驻栏拉回来，
+               窄屏把抽屉浮出来。展开态时这枚不渲染，入口在左栏标题行（.proj__fold-btn）。 -->
+          <button
+            v-if="leftHidden"
+            type="button"
+            class="board__icon-btn board__fold-btn"
+            :title="$t('@WORKBENCH:展开项目列表')"
+            :aria-label="$t('@WORKBENCH:展开项目列表')"
+            :aria-expanded="false"
+            @click="toggleLeft"
+          >
+            <!-- chevrons-right（Tabler icons，MIT）：与左栏那枚 chevrons-left 成对 -->
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M7 7l5 5l-5 5" />
+              <path d="M13 7l5 5l-5 5" />
+            </svg>
+          </button>
           <!-- 项目图标槽：和左栏项目行、顶栏目录胶囊同一个形态契约 ——
                有 favicon 画 <img>，加载失败 / 没有就退回字形（folder / layout-grid，
                均已 Tabler 化）；「全部项目」没有单一项目可画，退回宫格字形。 -->
@@ -1102,63 +1082,12 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   --wb-right-w: 360px;
 }
 
-/* ── 顶栏 ───────────────────────────────────────────── */
-.board__top {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 12px;
-  height: 52px;
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--border-color-light);
-  background: var(--bg-panel);
-  background-image: var(--gradient-accent-soft);
-}
-.board__brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.board__brand-text { min-width: 0; }
-.board__title {
-  margin: 0;
-  /* 2026-10-05：原来和正文同一个 14px，比旁边那四个统计数字（--font-size-mid）只大 1px ——
-     整屏从上到下没有一个元素比正文大两档（修复清单 E2 记的就是这条）。
-     抬到 --font-size-lg 让"这是哪一页"重新有层级；再往上（20px）会把这一行顶高、
-     和右侧统计抢注意力，而这个头部只是标题栏，不是 hero。 */
-  font-size: var(--font-size-lg);
-  font-weight: 600;
-  letter-spacing: var(--letter-spacing-heading);
-  color: var(--text-primary);
-  line-height: 1.3;
-}
-
-.board__stats {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-left: 4px;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-.board__stat {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  font-size: var(--font-size-xs);
-  color: var(--text-meta);
-}
-.board__stat-value {
-  font-size: var(--font-size-mid);
-  font-weight: 500;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-}
-.board__stat-value.is-live { color: var(--color-warning-dark); }
-/* 零值退场（2026-10-14 评审轮）：降到 meta 档，跟标签同一灰度。
-   不是藏起来 —— 数字还在，只是不再跟非零值抢视觉重量 */
-.board__stat-value.is-zero { color: var(--text-meta); }
+/*
+  顶栏（.board__top / .board__brand / .board__title / .board__stats / .board__stat）
+  2026-10-27 整块删除：标题与四项统计用户判定为「没啥用、占地方」，那块 52px 高度
+  让给看板。统计里唯一还在用的 todayDone 仍由 headerStats 递给右栏控制台
+  （见 OrchestratorConsole 的 today-done prop），所以 computed 保留。
+*/
 
 /* 图标按钮只变颜色，不加底色/边框 */
 .board__icon-btn {
@@ -1182,9 +1111,10 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
 /* 点击捕获层默认不占位，只在窄屏 + 抽屉打开时 display:block（规则在下面的媒体查询里）。 */
 .board__scrim { display: none; }
 
-/* 左栏开合按钮（.board__fold-btn）没有自有样式，靠 .board__icon-btn 兜底 ——
-   宽屏窄屏它都在，差别只在点下去收的是常驻那一栏还是浮层抽屉（见 toggleLeft）。
-   这个类名同时是验证脚本定位它的锚点，不要删。 */
+/* 左栏开合按钮（.board__fold-btn）没有自有样式，靠 .board__icon-btn 兜底。
+   2026-10-27 起它只出现在**收起态**（看板标题行最左），展开态的同类按钮在左栏
+   标题行（WorkbenchProjectPanel 的 .proj__fold-btn）—— 两处同名类名，
+   任何时刻只渲染一枚，验证脚本靠 .board__fold-btn 定位，不要删。 */
 
 /* ── 三栏 ───────────────────────────────────────────── */
 .board__cols {
@@ -1489,19 +1419,6 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   .board__main {
     flex: 0 0 auto;
     min-height: 72vh;
-  }
-  /* 顶栏放不下一行：统计项落到第二行，而不是把标题挤没 */
-  .board__top {
-    height: auto;
-    flex-wrap: wrap;
-    padding: 8px 12px;
-    gap: 6px 12px;
-  }
-  .board__stats {
-    order: 3;
-    flex-basis: 100%;
-    margin-left: 0;
-    gap: 12px;
   }
 }
 </style>
