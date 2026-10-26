@@ -251,6 +251,9 @@ export function normalizeAgentDefaultPrompt(value) {
  *   · exa       —— 必须有 key（免费 $10 credits/月）
  */
 export const WEB_SEARCH_PROVIDERS = ['firecrawl', 'tavily', 'exa'];
+// 聚合模式标识（与 src/cli/ai/webSearch.js 的 WEB_SEARCH_AGGREGATE_ID 一致）。
+// 作为「默认搜索引擎」的合法取值 = 每次搜索都并发多家、合并去重。
+export const WEB_SEARCH_AGGREGATE_ID = 'all';
 const WEB_SEARCH_DEFAULT_PROVIDER = 'firecrawl';
 const WEB_SEARCH_API_KEY_MAX = 300;
 const WEB_SEARCH_PROXY_MAX = 300;
@@ -278,9 +281,11 @@ export function normalizeWebSearch(value) {
     apiKeys[p] = typeof v === 'string' ? v.trim().slice(0, WEB_SEARCH_API_KEY_MAX) : '';
   }
   const providerRaw = typeof value.provider === 'string' ? value.provider.trim().toLowerCase() : '';
+  // 'all' = 聚合模式，也是合法的默认值（见 src/cli/ai/webSearch.js 的 resolveMode）
+  const providerOk = WEB_SEARCH_PROVIDERS.includes(providerRaw) || providerRaw === WEB_SEARCH_AGGREGATE_ID;
   return {
     enabled: typeof value.enabled === 'boolean' ? value.enabled : true,
-    provider: WEB_SEARCH_PROVIDERS.includes(providerRaw) ? providerRaw : WEB_SEARCH_DEFAULT_PROVIDER,
+    provider: providerOk ? providerRaw : WEB_SEARCH_DEFAULT_PROVIDER,
     apiKeys,
     proxy: typeof value.proxy === 'string' ? value.proxy.trim().slice(0, WEB_SEARCH_PROXY_MAX) : '',
   };

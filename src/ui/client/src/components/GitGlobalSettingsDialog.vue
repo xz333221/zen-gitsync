@@ -600,9 +600,10 @@
                   @change="persistWebSearch"
                 >
                   <el-option v-for="p in webSearchProviders" :key="p.id" :label="p.label" :value="p.id" />
+                  <el-option :label="$t('@42BB9:全部（聚合）')" value="all" />
                 </el-select>
                 <span class="setting-hint-block ai-iterations-hint">
-                  {{ $t('@42BB9:默认用哪个引擎；模型调用时也能临时指定其它引擎') }}
+                  {{ $t('@42BB9:默认用哪个引擎；模型也能按需临时指定。选「全部（聚合）」则每次并发多家、合并去重（更全，但各扣一份额度）') }}
                 </span>
               </div>
             </div>

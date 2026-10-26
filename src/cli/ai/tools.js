@@ -477,7 +477,11 @@ export const TOOL_DEFINITIONS = [
       name: 'web_search',
       description: '联网搜索网页，返回每条结果的标题、URL 和摘要片段。'
         + '需要看某个结果的**完整正文**时，再对它的 URL 调用 web_fetch —— 这一步由你自己判断要不要做，别一次性抓一大堆。'
-        + '适用于查最新资料、文档、版本号、公告等你不确定或可能已经过时的信息；纯本地文件/代码问题不要用它。',
+        + '适用于查最新资料、文档、版本号、公告等你不确定或可能已经过时的信息；纯本地文件/代码问题不要用它。'
+        + 'provider 传 "all" 会启用**聚合搜索**：同时调用多个搜索引擎、合并去重，覆盖更全（每条结果会标明来源）。'
+        + '判断准则：需要广覆盖、多来源交叉验证、做对比或现状综述这类"要大量调研才答得好"的问题 → 用 "all"；'
+        + '一般的事实查证、找某个具体页面或文档 → 用默认单引擎即可（更快，且不额外消耗你配置的其它引擎额度）。'
+        + '聚合会同时扣多家的额度，别对简单问题滥用。',
       parameters: {
         type: 'object',
         properties: {
@@ -485,8 +489,9 @@ export const TOOL_DEFINITIONS = [
           max_results: { type: 'number', description: '返回条数，默认 5，最大 10。' },
           provider: {
             type: 'string',
-            enum: ['firecrawl', 'tavily', 'exa'],
-            description: '临时指定搜索引擎，不传就用设置里的默认（见 设置 → AI 模型配置 → 联网搜索）。',
+            enum: ['firecrawl', 'tavily', 'exa', 'all'],
+            description: '临时指定搜索引擎；"all" = 聚合（并发多引擎合并）。不传就用设置里的默认'
+              + '（见 设置 → AI 模型配置 → 联网搜索）。',
           },
         },
         required: ['query'],
@@ -1461,13 +1466,20 @@ async function loadWebSearchSettings() {
   }
 }
 
-function formatWebSearchResults(query, provider, results) {
+function formatWebSearchResults(query, provider, results, errors) {
+  const isAggregate = provider === 'all'
   if (!results.length) {
-    return `联网搜索「${query}」没有返回结果（provider: ${provider}）。换个说法或换关键词再试一次。`
+    const why = errors && errors.length ? `（引擎失败：${errors.join('；')}）` : ''
+    return `联网搜索「${query}」没有返回结果（${isAggregate ? '聚合' : provider}）${why}。换个说法或换关键词再试一次。`
   }
-  const lines = results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet || '（无摘要）'}`)
-  return `联网搜索「${query}」（provider: ${provider}，共 ${results.length} 条）：\n${lines.join('\n')}`
-    + '\n\n以上只是摘要；需要看某条的完整正文时，对它的 URL 调用 web_fetch。'
+  const label = isAggregate ? '聚合（多引擎合并）' : provider
+  const lines = results.map((r, i) => {
+    const src = r.source ? `〔${r.source}〕` : ''
+    return `${i + 1}. ${src}${r.title}\n   ${r.url}\n   ${r.snippet || '（无摘要）'}`
+  })
+  const warn = errors && errors.length ? `\n（注意：有引擎失败，未纳入 —— ${errors.join('；')}）` : ''
+  return `联网搜索「${query}」（${label}，共 ${results.length} 条）：\n${lines.join('\n')}`
+    + `${warn}\n\n以上只是摘要；需要看某条的完整正文时，对它的 URL 调用 web_fetch。`
 }
 
 async function toolWebSearch(args) {
@@ -1479,13 +1491,13 @@ async function toolWebSearch(args) {
       + '如果确实需要联网，提醒用户先在那里开启。'
   }
   try {
-    const { provider, results } = await runWebSearch({
+    const { provider, results, errors } = await runWebSearch({
       query,
       maxResults: args.max_results,
       provider: args.provider,
       config: settings || undefined,
     })
-    return formatWebSearchResults(query, provider, results)
+    return formatWebSearchResults(query, provider, results, errors)
   } catch (err) {
     return `错误: 联网搜索失败（${err?.message || String(err)}）。可稍后重试；`
       + '若一直失败，检查设置里的 provider / API Key / 代理是否配置正确。'

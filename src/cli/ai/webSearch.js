@@ -40,6 +40,10 @@ const MAX_FETCH_CHARS = 50000
 // provider 白名单 —— 与 src/config.js 的 WEB_SEARCH_PROVIDERS 必须一致。
 export const WEB_SEARCH_PROVIDERS = ['firecrawl', 'tavily', 'exa']
 
+// 聚合模式标识：provider 传 'all'（或设置里的默认引擎选它）时**并发打多家、合并去重**。
+// 它不是 provider 白名单成员（不参与 API Key 那几行），所以单独列出来。
+export const WEB_SEARCH_AGGREGATE_ID = 'all'
+
 function str(v) {
   return typeof v === 'string' ? v : (v === undefined || v === null ? '' : String(v))
 }
@@ -217,30 +221,108 @@ const PROVIDERS = {
 }
 
 /**
- * 选 provider：显式传入的（工具参数）优先，其次配置里的，最后兜底 firecrawl。
- * 不在白名单里的值一律忽略 —— 免得模型瞎传一个不存在的名字把请求打到未知端点。
+ * 决定这次搜索用哪种模式：
+ *   · 显式传 'all'       → 聚合模式（并发多引擎）
+ *   · 显式传具体 provider → 就用它（覆盖配置里的默认）
+ *   · 都没传            → 看配置默认：是 'all' 就聚合，否则用该 provider，最后兜底 firecrawl
+ * 白名单外的名字一律忽略 —— 免得模型瞎传一个不存在的名字把请求打到未知端点。
  */
-function pickProvider(explicit, configProvider) {
+function resolveMode(explicit, configProvider) {
   const a = str(explicit).trim().toLowerCase()
-  if (WEB_SEARCH_PROVIDERS.includes(a)) return a
+  if (a === WEB_SEARCH_AGGREGATE_ID) return { aggregate: true }
+  if (WEB_SEARCH_PROVIDERS.includes(a)) return { aggregate: false, provider: a }
   const b = str(configProvider).trim().toLowerCase()
-  if (WEB_SEARCH_PROVIDERS.includes(b)) return b
-  return 'firecrawl'
+  if (b === WEB_SEARCH_AGGREGATE_ID) return { aggregate: true }
+  if (WEB_SEARCH_PROVIDERS.includes(b)) return { aggregate: false, provider: b }
+  return { aggregate: false, provider: 'firecrawl' }
+}
+
+// 该 provider 这次是否"可用"：firecrawl 免 key 总可用；tavily / exa 必须有 key。
+// 聚合时提前滤掉没 key 的，省一次注定失败的网络往返。
+function providerAvailable(id, apiKeys) {
+  if (id === 'firecrawl') return true
+  return Boolean(str(apiKeys[id]).trim())
+}
+
+// 仅用于**去重**的 URL 归一化：去 hash、去末尾斜杠、host 小写。
+// 刻意不剥查询参数 —— 有些站点靠 query 区分内容，剥了会误合并。
+function urlKey(url) {
+  try {
+    const u = new URL(url)
+    u.hash = ''
+    let key = `${u.protocol}//${u.host}${u.pathname}`
+    if (key.endsWith('/')) key = key.slice(0, -1)
+    return key.toLowerCase()
+  } catch {
+    return str(url).toLowerCase()
+  }
+}
+
+// 交错取样：各引擎的结果按轮次轮流取，保证来源均衡（不让第一家占满名额），
+// 同时按 URL 去重。limit 是最终条数上限。
+function interleaveResults(groups, limit) {
+  const out = []
+  const seen = new Set()
+  const maxLen = groups.reduce((m, g) => Math.max(m, g.length), 0)
+  for (let idx = 0; idx < maxLen && out.length < limit; idx++) {
+    for (const g of groups) {
+      const item = g[idx]
+      if (!item) continue
+      const k = urlKey(item.url)
+      if (seen.has(k)) continue
+      seen.add(k)
+      out.push(item)
+      if (out.length >= limit) break
+    }
+  }
+  return out
+}
+
+// 聚合：并发打所有可用 provider（Promise.allSettled，个别失败不拖垮整次），
+// 合并去重后交错取样。返回 { provider: 'all', results(每条带 source), sources, errors }。
+async function runAggregateSearch({ query, maxResults, config }) {
+  const cfg = config || {}
+  const apiKeys = (cfg.apiKeys && typeof cfg.apiKeys === 'object') ? cfg.apiKeys : {}
+  const ids = WEB_SEARCH_PROVIDERS.filter((id) => providerAvailable(id, apiKeys))
+  const http = await makeHttp(cfg.proxy)
+  const limit = clampResults(maxResults)
+  const settled = await Promise.allSettled(
+    ids.map((id) => PROVIDERS[id].search({ query, maxResults: limit, apiKey: str(apiKeys[id]), http }))
+  )
+  const groups = []
+  const errors = []
+  settled.forEach((res, i) => {
+    if (res.status === 'fulfilled') {
+      groups.push(res.value.map((r) => ({ ...r, source: ids[i] })))
+    } else {
+      errors.push(`${ids[i]}: ${res.reason?.message || String(res.reason)}`)
+    }
+  })
+  const results = interleaveResults(groups, limit)
+  if (!results.length && errors.length) {
+    throw new Error(`所有引擎都失败了（${errors.join('；')}）`)
+  }
+  return { provider: WEB_SEARCH_AGGREGATE_ID, results, sources: ids, errors }
 }
 
 /**
  * 执行一次联网搜索，返回 { provider, results }。
+ * provider 为 'all'（或配置里选它）时走聚合：每条结果的 source 字段标明来自哪个引擎。
  * @param {{ query: string, maxResults?: number, provider?: string,
  *   config?: { provider?: string, apiKeys?: Record<string,string>, proxy?: string } }} opts
  */
 export async function runWebSearch({ query, maxResults, provider, config } = {}) {
   const cfg = config || {}
-  const chosen = pickProvider(provider, cfg.provider)
+  const q = str(query).trim()
+  const mode = resolveMode(provider, cfg.provider)
+  if (mode.aggregate) {
+    return runAggregateSearch({ query: q, maxResults, config: cfg })
+  }
   const apiKeys = (cfg.apiKeys && typeof cfg.apiKeys === 'object') ? cfg.apiKeys : {}
   const http = await makeHttp(cfg.proxy)
   const limit = clampResults(maxResults)
-  const results = await PROVIDERS[chosen].search({ query: str(query).trim(), maxResults: limit, apiKey: str(apiKeys[chosen]), http })
-  return { provider: chosen, results }
+  const results = await PROVIDERS[mode.provider].search({ query: q, maxResults: limit, apiKey: str(apiKeys[mode.provider]), http })
+  return { provider: mode.provider, results: results.map((r) => ({ ...r, source: mode.provider })) }
 }
 
 /**
@@ -249,7 +331,9 @@ export async function runWebSearch({ query, maxResults, provider, config } = {})
  */
 export async function runWebFetch({ url, provider, config, maxChars } = {}) {
   const cfg = config || {}
-  const chosen = pickProvider(provider, cfg.provider)
+  const mode = resolveMode(provider, cfg.provider)
+  // 抓正文只能用单个 provider；参数/配置给的是聚合时退回 firecrawl（抓正文能力最强且免 key）
+  const chosen = mode.aggregate ? 'firecrawl' : mode.provider
   const apiKeys = (cfg.apiKeys && typeof cfg.apiKeys === 'object') ? cfg.apiKeys : {}
   const http = await makeHttp(cfg.proxy)
   const out = await PROVIDERS[chosen].fetch({ url: str(url).trim(), apiKey: str(apiKeys[chosen]), http })
@@ -257,4 +341,4 @@ export async function runWebFetch({ url, provider, config, maxChars } = {}) {
   return { provider: chosen, title: out.title || str(url), url: out.url || str(url), text: str(out.text).slice(0, limit) }
 }
 
-export default { WEB_SEARCH_PROVIDERS, runWebSearch, runWebFetch }
+export default { WEB_SEARCH_PROVIDERS, WEB_SEARCH_AGGREGATE_ID, runWebSearch, runWebFetch }

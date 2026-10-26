@@ -108,8 +108,9 @@ check('空对象 → 默认（开启 + firecrawl + 三个空 key + 空代理）'
     proxy: '',
   })
 })
-check('非白名单 provider → 回落 firecrawl', () => {
+check('非白名单 provider → 回落 firecrawl；但 "all"（聚合）是合法值', () => {
   assert.equal(normalizeWebSearch({ provider: 'gpt-search' }).provider, 'firecrawl')
+  assert.equal(normalizeWebSearch({ provider: 'all' }).provider, 'all')
 })
 check('apiKeys 只保留白名单 provider 的键', () => {
   const out = normalizeWebSearch({ apiKeys: { tavily: 't-1', evil: 'x', exa: 123 } })
@@ -146,7 +147,7 @@ await checkAsync('firecrawl：请求打到 /v2/search，结果裁成 {title,url,
   assert.equal(out.provider, 'firecrawl')
   assert.equal(calls[0]?.url, 'https://api.firecrawl.dev/v2/search')
   assert.equal(out.results.length, 1)
-  assert.deepEqual(out.results[0], { title: 'T', url: 'https://example.com/a', snippet: 'D' })
+  assert.deepEqual(out.results[0], { title: 'T', url: 'https://example.com/a', snippet: 'D', source: 'firecrawl' })
 })
 await checkAsync('tavily：缺 key 直接报错（不打网络）', async () => {
   let threw = ''
@@ -159,6 +160,65 @@ await checkAsync('tavily：缺 key 直接报错（不打网络）', async () => 
   assert.match(threw, /Tavily/, `期望"未配置 Tavily API Key"，实际: ${threw}`)
   assert.equal(calls.length, before, '缺 key 时不应发请求')
 })
+// ── C2. 聚合模式（provider = all）：并发多引擎 + URL 去重 + 交错取样 + source ──
+console.log('C2. 聚合模式（provider=all）')
+let failTavily = false
+const aggCalls = []
+globalThis.fetch = async (url) => {
+  const u = String(url)
+  aggCalls.push(u)
+  const resp = (body) => ({ ok: true, status: 200, async text() { return JSON.stringify(body) } })
+  if (u.includes('firecrawl.dev')) {
+    return resp({ data: { web: [
+      { title: 'F1', url: 'https://a.com/1', description: 'f1' },
+      { title: 'F2', url: 'https://shared.com/x', description: 'f2' },
+    ] } })
+  }
+  if (u.includes('tavily.com')) {
+    if (failTavily) return { ok: false, status: 401, async text() { return '{"error":"nope"}' } }
+    return resp({ results: [
+      { title: 'T1', url: 'https://shared.com/x/', content: 't1' },
+      { title: 'T2', url: 'https://b.com/2', content: 't2' },
+    ] })
+  }
+  if (u.includes('exa.ai')) {
+    return resp({ results: [{ title: 'E1', url: 'https://c.com/3', text: 'e1' }] })
+  }
+  return resp({})
+}
+const threeKeys = { firecrawl: 'f', tavily: 't', exa: 'e' }
+
+await checkAsync('all：并发三家、合并去重、每条标注 source', async () => {
+  aggCalls.length = 0
+  failTavily = false
+  const out = await runWebSearch({ query: 'q', maxResults: 5, provider: 'all', config: { provider: 'all', apiKeys: threeKeys } })
+  assert.equal(out.provider, 'all')
+  assert.equal(aggCalls.filter((u) => u.includes('firecrawl.dev')).length, 1, 'firecrawl 应被调用一次')
+  assert.equal(aggCalls.filter((u) => u.includes('tavily.com')).length, 1, 'tavily 应被调用一次')
+  assert.equal(aggCalls.filter((u) => u.includes('exa.ai')).length, 1, 'exa 应被调用一次')
+  // F2 与 T1 归一化后同页（尾斜杠差异），去重应只留一条
+  assert.equal(out.results.length, 4, `期望去重后 4 条，实际 ${out.results.length}`)
+  assert.equal(new Set(out.results.map((r) => r.url.replace(/\/$/, ''))).size, out.results.length, '存在重复 URL')
+  assert.deepEqual([...new Set(out.results.map((r) => r.source))].sort(), ['exa', 'firecrawl', 'tavily'])
+  assert.equal(out.results[0].source, 'firecrawl', '交错取样首条应来自 firecrawl')
+})
+
+await checkAsync('all：没配 key 的引擎被跳过（不白跑）', async () => {
+  aggCalls.length = 0
+  const out = await runWebSearch({ query: 'q', provider: 'all', config: { provider: 'all', apiKeys: { firecrawl: 'f' } } })
+  assert.equal(aggCalls.filter((u) => u.includes('tavily.com')).length, 0, 'tavily 无 key 不应被调用')
+  assert.equal(aggCalls.filter((u) => u.includes('exa.ai')).length, 0, 'exa 无 key 不应被调用')
+  assert.ok(out.results.every((r) => r.source === 'firecrawl'))
+})
+
+await checkAsync('all：个别引擎失败不拖垮整次，errors 记录失败项', async () => {
+  aggCalls.length = 0
+  failTavily = true
+  const out = await runWebSearch({ query: 'q', provider: 'all', config: { provider: 'all', apiKeys: threeKeys } })
+  assert.ok(out.results.length > 0, '仍应返回其它引擎的结果')
+  assert.ok(out.errors.some((e) => e.includes('tavily')), `errors 应含 tavily：${JSON.stringify(out.errors)}`)
+})
+
 globalThis.fetch = realFetch
 
 console.log('D. 前端设置面板契约')
@@ -182,6 +242,16 @@ check('provider 元数据含三家申请入口', () => {
   assert.match(providersFile, /https:\/\/www\.firecrawl\.dev\//, '缺 Firecrawl 申请入口')
   assert.match(providersFile, /https:\/\/app\.tavily\.com\//, '缺 Tavily 申请入口')
   assert.match(providersFile, /https:\/\/exa\.ai\//, '缺 Exa 申请入口')
+})
+check('web_search 工具允许 provider=all（模型可自选聚合）', () => {
+  const def = TOOL_DEFINITIONS.find((d) => d?.function?.name === 'web_search')
+  const enumVals = def?.function?.parameters?.properties?.provider?.enum || []
+  assert.ok(enumVals.includes('all'), `provider enum 应含 all：${JSON.stringify(enumVals)}`)
+  assert.match(def.function.description, /聚合/, 'description 应提到聚合模式')
+})
+check('搜索引擎下拉含「全部（聚合）」选项', () => {
+  assert.match(dialog, /value="all"/, '缺 all 选项')
+  assert.match(dialog, /@42BB9:全部（聚合）/, '缺聚合选项文案')
 })
 
 if (reverse) {
