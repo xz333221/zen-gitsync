@@ -834,6 +834,10 @@ defineExpose({
     "head   summary"
     "search summary"
     "items  summary";
+  /* 首屏「最近项目」面板的 AI 栏比全屏弹窗那一档（clamp(360px,38%,560px)）窄一档：
+     这块是常驻在右侧列里的"随手一瞥"，不需要占掉近四成宽度 —— 收窄后把宽度让给
+     卡片列（同一屏能多放一张卡），AI 解读照旧能读。用户反馈"这块不需要这么大区域"。 */
+  grid-template-columns: minmax(0, 1fr) clamp(240px, 24%, 360px);
 }
 .dir-list--panel.dir-list--split > .dir-list__head {
   grid-area: head;
