@@ -761,7 +761,8 @@ defineExpose({
   max-height: none;
 }
 .dir-list--bare .dir-list__items {
-  flex: 1 1 auto;
+  /* 同 panel:放得下就收住,说明块紧跟最后一行;放不下才收缩内部滚动 */
+  flex: 0 1 auto;
   min-height: 0;
   max-height: none;
   overflow-y: auto;
@@ -879,7 +880,9 @@ defineExpose({
   margin: calc(-1 * var(--spacing-xs));
 }
 .dir-list--panel .dir-list__items {
-  flex: 1;
+  /* 0 1 auto(而不是 1):卡片放得下时按内容高收住,别把「AI 状态解读」顶到面板最底下 ——
+     列表短的时候中间会空出一大块,说明块看着像"飘在底部"。放不下时才收缩、内部滚动。 */
+  flex: 0 1 auto;
   min-height: 0;
   overflow-y: auto;
 }
