@@ -371,7 +371,9 @@ onBeforeUnmount(() => {
   max-height: calc(100vh - 140px);
   background: var(--bg-container);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-hover);
+  /* 浮层阴影：三层叠加（近处 crisp + 中距 + 远处 ambient），
+     暗色由 --shadow-float 覆盖成更厚的黑 + 极淡高光边，不靠 border 分界 */
+  box-shadow: var(--shadow-float);
   overflow: hidden;
 
   /* 最大化：近满屏，但**让出左侧活动栏**（48px + 边距）—— 否则最大化态会盖住

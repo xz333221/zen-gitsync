@@ -258,6 +258,12 @@ html[data-theme="dark"] {
   --shadow-md: var(--shadow-dark-lg);
   --shadow-lg: var(--shadow-dark-lg);
   --shadow-xl: 0 12px 32px rgba(0, 0, 0, 0.4);
+  /* 浮层阴影：暗色下纯黑阴影对比弱，加厚 + 极淡的 1px 高光边代替 border */
+  --shadow-float:
+    0 2px 6px rgba(0, 0, 0, 0.45),
+    0 12px 28px -6px rgba(0, 0, 0, 0.55),
+    0 32px 64px -16px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
 
   /* Dialog */
   --dialog-border-color: var(--dialog-border-color-dark);
