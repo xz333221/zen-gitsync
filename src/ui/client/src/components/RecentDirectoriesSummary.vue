@@ -16,17 +16,17 @@
 <script setup lang="ts">
 // 「最近项目 / 常用目录」列表底下那段说明。
 //
-// 三种形态共用一块位置:
+// 两种形态共用一块位置(都在卡片列表**下方**、整块宽度):
 //   没配 AI 模型 → 一段**静态说明**:这批目录是什么、徽标里的数字什么意思。
 //   配了 AI 模型 → 同一块位置换成模型写的**状态解读**:哪些项目该 pull、哪些有
 //                  未推送的提交、哪些只是工作区脏了(见后端
-//                  routes/recentDirectoriesAiSummary.js 的 prompt 契约)。
-//   左栏右栏分栏时(变体 split,来自列表的 layout='split')→ 解读底下再接一排追问
-//                  **chips**:读完那段话想问"先处理哪个"点一下就行 —— 打开右下角
-//                  g ai 悬浮 dock 并把问题带着这批目录状态发进去(AI 对话入口已整合
-//                  为 dock,见 utils/agentDockBus.ts)。
-//                  切换工作目录全屏弹窗与最近项目面板都走这条路(列表 layout='split'
-//                  → 这里 variant='split')。stack 形态不给 —— 那块位置的高度全给了列表。
+//                  routes/recentDirectoriesAiSummary.js 的 prompt 契约),
+//                  解读底下再接一排追问 **chips**:读完那段话想问"先处理哪个"点一下就行
+//                  —— 打开右下角 g ai 悬浮 dock 并把问题带着这批目录状态发进去
+//                  (AI 对话入口已整合为 dock,见 utils/agentDockBus.ts)。
+// 位置说明:这两块内容原本挂在右侧竖栏里(卡片在左、解读在右)。但解读通常只有几行,
+// 右栏底下几百像素全空 —— 用户反馈"右边现在空,下边空了这么多",于是改回整宽放在
+// 列表下方,横向空间全给卡片。
 // 两处调用方(App 里的最近项目面板 / 切换工作目录弹窗的常用目录)都用这一个组件,
 // 差别只有 variant 的疏密,与列表组件 RecentDirectoriesList 同一套路。
 //
@@ -78,8 +78,8 @@ const props = withDefaults(defineProps<{
    * false 时只显示静态说明,不发请求。
    */
   ready?: boolean;
-  /** panel:最近项目面板(与卡片同一列) | bare:弹窗内嵌(更紧凑) | split:全屏弹窗右栏(AI 独占一列) */
-  variant?: "panel" | "bare" | "split";
+  /** panel:最近项目面板(与卡片同一列) | bare:弹窗内嵌(更紧凑) */
+  variant?: "panel" | "bare";
 }>(), {
   ready: false,
   variant: "panel",
@@ -346,10 +346,10 @@ const bodyText = computed(() => {
 // 悬浮 dock 后改成四个问题 chip：点一下带着这批目录的 Git 状态和解读原文打开
 // dock 并发问 —— engine / dirStatus / dirSummary 与旧追问区完全同口径
 // （见 AgentView 的 defineExpose askQuestion）。
-// 显示条件与旧追问区一致：分栏形态 + 有模型 + 有目录（stack 形态的高度预算
-// 全给目录列表，不塞；没配模型就没有 g ai 可问）。
+// 显示条件：有模型 + 有目录（没配模型就没有 g ai 可问）。两种形态都给 ——
+// 解读整宽铺在列表下方，一排 chip 只占一行，不再像竖栏那样吃紧。
 const showChips = computed(() =>
-  (props.variant === "bare" || props.variant === "split") && hasModel.value && props.items.length > 0
+  hasModel.value && props.items.length > 0
 );
 
 /**
@@ -445,13 +445,14 @@ function askDock(q: { prompt: string }) {
 </template>
 
 <style scoped>
-/* 说明块:列表下方一块"抬头可见、不抢焦点"的浅色条 ——
-   靠浅色底与四周同宽的细边和上面的卡片区分开,不用左侧色条抢注意力。 */
+/* 说明块:卡片列表**下方**一条"抬头可见、不抢焦点"的浅色块,整宽铺开。
+   只用底色分层、不画边框 —— 用户口径是"不喜欢圆角 + 单 border 的样式"。
+   位置来由:这块曾经被放到右侧当独立竖栏(卡片在左、解读在右),但解读只有几行、
+   整列高度底下全空,用户反馈"右边现在空,下边空了这么多",于是改回列表下方。 */
 .dir-summary {
   flex-shrink: 0;
   margin-top: var(--spacing-base);
   padding: var(--spacing-base) var(--spacing-md);
-  border: 1px solid var(--border-color-light);
   border-radius: var(--radius-lg);
   background: var(--bg-subtle);
   /* 与列表根一致:截断 Element Plus 表单控件的行高继承(见 RecentDirectoriesList) */
@@ -461,44 +462,11 @@ function askDock(q: { prompt: string }) {
 }
 /* 有 AI 解读时换成品牌色系:同一块地方,内容从"说明"升级成"解读" */
 .dir-summary.is-ai {
-  border-color: var(--tint-primary-22);
   background: var(--tint-primary-06);
 }
 .dir-summary--bare {
   margin-top: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-base);
-}
-/* split:全屏"切换工作目录"弹窗 / 最近项目面板的右栏。整块撑满右栏:标题与解读文字
-   钉在顶部,追问 chips 跟在解读文字底下。min-height:0 是必需的 —— 否则内部内容会把
-   父级顶穿。
-   ⚠️ 这里**不要**盒子:右栏是跨满整列高度的(实测 282×1096),底色只有 6% 品牌色、
-   与页面几乎同色,于是 border 那 1px 成了唯一看得见的东西 —— 一条从列表顶拉到最底的
-   长竖线,用户反馈"这弄个竖条在这儿不好看"。右栏本身就是独立一列,标题 + 正文 + chips
-   已经能立住;去掉 border / 圆角 / 底色(也符合"不要圆角加单 border"的口径),
-   内容照旧钉在顶部、长文本照旧自己滚。 */
-.dir-summary--split {
-  margin-top: 0;
-  min-height: 0;
-  /* 无底色后 padding 只会让正文比左栏标题低一截,清掉换成对齐列顶 */
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-.dir-summary.dir-summary--split,
-.dir-summary.dir-summary--split.is-ai {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-}
-.dir-summary--split .dir-summary__head,
-.dir-summary--split .dir-summary__error {
-  flex-shrink: 0;
-}
-/* 解读文字很长时自己滚,不抢对话区的高度(45% 是"够读一段、又给对话留出大半"的折中) */
-.dir-summary--split .dir-summary__text {
-  flex-shrink: 0;
-  max-height: 45%;
-  overflow-y: auto;
 }
 .dir-summary__head {
   display: flex;

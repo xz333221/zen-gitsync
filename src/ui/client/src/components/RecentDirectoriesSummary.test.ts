@@ -271,15 +271,15 @@ describe('RecentDirectoriesSummary.vue', () => {
     wrapper.unmount()
   })
 
-  test('RDS-07: 只有弹窗(bare)里才出追问 chips;主面板与没配模型都不出;点击带着状态+解读发问', async () => {
+  test('RDS-07: 面板与弹窗都出追问 chips;没配模型不出;点击带着状态+解读发问', async () => {
     configStore.models = [MODEL]
     const items = [item('D:\\chat\\a', gitState({ behind: 1 }))]
 
-    // 主面板:那一列的高度预算全给列表,不摆 chips
+    // 主面板:解读整宽铺在列表下方,一排 chip 只占一行 —— 不再像竖栏那样省掉
     const panel = mountSummary({ items, ready: true })
     await vi.advanceTimersByTimeAsync(500)
     await flushAll()
-    expect(panel.find('.dir-summary__chips').exists()).toBe(false)
+    expect(panel.findAll('.dir-summary__chip')).toHaveLength(4)
     panel.unmount()
 
     // 弹窗:解读底下出一排 chips(四条建议问题)

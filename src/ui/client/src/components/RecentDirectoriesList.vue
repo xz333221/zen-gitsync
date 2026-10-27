@@ -111,13 +111,6 @@ const props = withDefaults(defineProps<{
   mode?: "open" | "pick";
   /** panel:带外框/标题/搜索的空态面板 | bare:裸列表,用于弹窗内嵌 */
   variant?: "panel" | "bare";
-  /**
-   * stack:卡片在上、底下的说明块在下(默认)
-   * split:卡片在左、AI 解读 + 追问区在右(切换工作目录全屏弹窗 / 最近项目面板)
-   * 只在宽容器里用,窄栏会挤成两团:bare 形态翻成横向 flex,panel 形态改用 grid
-   * 把标题行与搜索框钉在左列顶部(见组件内 .dir-list--panel.dir-list--split)。
-   */
-  layout?: "stack" | "split";
   /** missing:只允许移除已失效目录(避免误删还能打开的有效项目) | always:任意条目都可移除 */
   removable?: "missing" | "always";
   /** 挂载时自动拉取;弹窗场景传 false,由父组件在打开时调 reload() */
@@ -142,7 +135,6 @@ const props = withDefaults(defineProps<{
 }>(), {
   mode: "open",
   variant: "panel",
-  layout: "stack",
   removable: "missing",
   autoLoad: true,
   refreshOnMount: false,
@@ -150,10 +142,6 @@ const props = withDefaults(defineProps<{
 });
 
 const emit = defineEmits<{ select: [path: string]; loaded: [count: number] }>();
-
-/** 左右分栏(卡片 | AI 栏):bare 形态根节点翻成横向 flex,panel 形态改用 grid
- *  把标题行 / 搜索框留在左列(见样式里的 .dir-list--panel.dir-list--split) */
-const isSplit = computed(() => props.layout === "split");
 
 const directories = ref<Array<{ path: string; exists: boolean; iconUrl?: string | null }>>([]);
 const isLoading = ref(false);
@@ -554,7 +542,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="dir-list" :class="[`dir-list--${variant}`, { 'dir-list--split': isSplit }]">
+  <div class="dir-list" :class="`dir-list--${variant}`">
     <!-- 外壳:仅 panel 形态自带标题行;bare 形态的标题行在调用方(弹窗表单 label)那边 -->
     <template v-if="variant === 'panel'">
       <div class="dir-list__head">
@@ -579,8 +567,8 @@ defineExpose({
     </template>
 
     <!-- 搜索框:两种形态都有。panel 形态排在标题行下方(自带外壳的那个);
-         bare 形态(切换工作目录弹窗)的标题行在调用方那边,列表自身就只剩这一个入口,
-         split 布局里它是左栏的第一行,AI 解读栏不受它影响(见下面 allItems/items 的分工)。 -->
+         bare 形态(切换工作目录弹窗)的标题行在调用方那边,列表自身就只剩这一个入口
+         (见下面 allItems/items 的分工)。 -->
     <div class="dir-list__search">
       <el-icon class="dir-list__search-icon" aria-hidden="true"><Search /></el-icon>
       <input
@@ -726,7 +714,7 @@ defineExpose({
       class="dir-list__summary"
       :items="allItems"
       :ready="summaryReady"
-      :variant="isSplit ? 'split' : variant"
+      :variant="variant"
     />
   </div>
 </template>
@@ -760,127 +748,23 @@ defineExpose({
 }
 /* bare:弹窗内嵌,无外框;自身参与父级 flex 高度链,吃掉剩余高度后内部滚动,
    避免弹窗被长列表撑高、把输入框/按钮挤出视口。
-   max-height 是"父级不是高度链"时的兜底,防止列表无限长。
-   上限取两者的较小值:视口比例 74vh,以及"弹窗真正给得出的高度"。
-   后者 = 弹窗自身的 max-height(calc(100% - 24px))减去 chrome —— 实测
-   列表上方 189px(页脚之外的头部 / 路径输入框 / 两个 label)+ 下方 82px(页脚 / 内边距)= 271px,
-   实测手段是 tmp 脚本在 1600x900 与 1024x700 两个视口下量 .el-dialog__body 的 scrollHeight
-   与 clientHeight 相等(即弹窗自身没有滚动)。少了这层约束,长列表会顶破弹窗 body,
-   变成"列表内滚 + 弹窗 body 滚"的二级滚动条。 */
+   高度**完全交给父级链**(弹窗是 type="flex",一路 min-height:0 到这里),
+   不再用 max-height: 74vh 截一刀 —— 那一刀是按 900 高的窗口量的,在 1280 高的窗口下
+   会让列表块提前结束、底下留出 ~130px 空白(用户反馈"下边空了这么多")。
+   父级确实是高度链时不需要兜底:实测 .el-dialog__body 的 scrollHeight == clientHeight,
+   弹窗自身不出现第二根滚动条。 */
 .dir-list--bare {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
-  max-height: min(74vh, calc(100vh - 300px));
+  max-height: none;
 }
 .dir-list--bare .dir-list__items {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;
   overflow-y: auto;
-}
-/* split:卡片在左、AI 栏在右。两个消费方:
-   - bare(全屏"切换工作目录"弹窗):左栏 = 搜索框 + 卡片两行,右栏是 AI 解读 + 追问区。
-   - panel(最近项目面板):比 bare 多一行标题,所以行数从 2 加到 3(见下面那条更具体的规则)。
-   两行两列的 grid 而不是 flex:搜索框与卡片是左栏里的**上下两层**,
-   用 flex row 会把它顶成第三列(挤在卡片右侧)。
-   max-height 在这里必须放开 —— bare 那条 74vh 是为"卡片在上"的旧布局设的,
-   改 grid 之后高度由父容器高度链决定,而不是再截一道。 */
-.dir-list--split {
-  display: grid;
-  /* 右列宽度就是 AI 栏的宽度,与调用方(DirectorySelector 的 label 行)对齐:
-     那边按同一个 clamp 算"左栏有多宽"。
-     2026-10-27 收窄:原 clamp(360px,38%,560px) 占掉近四成,用户反馈"右边这块占空间
-     太大";AI 栏只是一段解读 + 一排 chip,不需要那么宽 —— 收窄后宽度让给卡片列。 */
-  grid-template-columns: minmax(0, 1fr) clamp(240px, 24%, 360px);
-  /* 搜索行按内容高,卡片行吃掉剩下的;minmax(0,1fr) 的 0 下限保证长列表能内部滚动 */
-  grid-template-rows: auto minmax(0, 1fr);
-  grid-template-areas:
-    "search summary"
-    "items  summary";
-  align-items: stretch;
-  /* 行间距沿用 panel 原有的 gap;列间距放宽,卡片列与 AI 栏分开 */
-  gap: var(--spacing-base) var(--spacing-xl);
-  max-height: none;
-}
-/* 搜索框是左栏第一行:间距交给 grid gap,清掉元素自带的 margin-top,
-   否则行距会叠成两倍(panel 形态同理,见下面那条) */
-.dir-list--split > .dir-list__search {
-  grid-area: search;
-  margin-top: 0;
-}
-.dir-list--split > .dir-list__items,
-.dir-list--split > .dir-list__empty {
-  grid-area: items;
-  /* grid 行已给出确定高度,回落成普通块级滚动容器(panel 的 flex:1 / bare 的 flex:1 1 auto
-     在 grid 下都不生效) */
-  min-width: 0;
-  min-height: 0;
-  max-height: none;
-}
-.dir-list--split > .dir-list__summary {
-  grid-area: summary;
-  /* 宽度由 grid 列决定,不再叠加 clamp;跨满两行才是"整列高度" */
-  width: auto;
-  min-width: 0;
-}
-
-/* panel + split:标题行 / 搜索框只属于左列,AI 栏跨满整列高度。
-   panel 的 DOM 顺序是 标题 → 搜索 → 卡片 → 说明,比 bare 多一行标题,
-   所以这里只覆盖行数 / 区域名(列宽与 gap 沿用上面那份)。
-   specificity(0,2,0)盖过单类 .dir-list--split 与 .dir-list--panel。 */
-.dir-list--panel.dir-list--split {
-  grid-template-rows: auto auto minmax(0, 1fr);
-  grid-template-areas:
-    "head   summary"
-    "search summary"
-    "items  summary";
-  /* 列宽（AI 栏窄档）两边共用上面 .dir-list--split 那一份 —— 首屏面板与全屏弹窗
-     现在同宽，不再单独覆盖。 */
-}
-.dir-list--panel.dir-list--split > .dir-list__head {
-  grid-area: head;
-  /* 间距交给 grid gap,清掉元素自带的 margin,否则行距会叠成两倍 */
-  margin-bottom: 0;
-}
-
-/* 小屏（≤1120px）：最近项目面板从「卡片 | AI 栏」并排改成上下堆叠。
-   面板宽度是主网格右列（0.75fr）：视口 1100 时只剩 ~760px，扣掉 AI 栏 360 + 列间距,
-   卡片列只有 ~370；再窄就出现 178px 宽的卡片（项目名只剩 "obsid…"、路径全截断）。
-   堆叠后两栏各自拿满整个面板宽度。
-   高度策略：面板改成「按内容长、至少占满」，卡片区封顶 42vh 自己滚，AI 栏按内容铺开
-   （追问区在 split 下是 fill/flex:1，放进 auto 高度会塌成 0，所以换回组件自带的固定高度），
-   整块由外层 .commit-form-panel--empty 滚动 —— 挤在一屏里只会把卡片区压成一行高。 */
-@media (max-width: 1120px) {
-  .dir-list--panel.dir-list--split {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto auto auto;
-    grid-template-areas:
-      "head"
-      "search"
-      "items"
-      "summary";
-    height: auto;
-    min-height: 100%;
-  }
-
-  .dir-list--panel.dir-list--split > .dir-list__items {
-    max-height: 36vh;
-  }
-
-  /* 解读文字在 split 下是 max-height:45%（相对右栏整列高度算的）。堆叠后父级高度
-     变成"由内容决定"，这个百分比会退化成循环依赖 —— 实测被压到 ~38px，
-     整段话只剩两行还被裁掉。堆叠态里取消封顶，让行高回到 auto。 */
-  .dir-list--panel.dir-list--split > .dir-list__summary :deep(.dir-summary__text) {
-    max-height: none;
-    overflow-y: visible;
-  }
-
-  .dir-list--panel.dir-list--split > .dir-list__summary :deep(.dir-chat) {
-    flex: 0 0 auto;
-    height: min(320px, 36vh);
-  }
 }
 .dir-list__head {
   display: flex;

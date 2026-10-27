@@ -1306,9 +1306,10 @@ function onBrowserSelect(path: string) {
     :tool="selectedInstallTool"
   />
 
-  <!-- 切换目录对话框:全屏。左栏是路径输入 + 常用目录卡片,右栏是 AI 状态解读 + 追问区
-       —— RecentDirectoriesList 的 layout="split" 把根节点翻成"搜索 + 卡片 | AI 栏"的 grid,
-       说明块自然落到右栏。
+  <!-- 切换目录对话框:全屏。路径输入 + 常用目录卡片占满整宽,AI 状态解读 + 追问区
+       挂在卡片列表下方(与首屏「最近项目」面板同一套版式)。曾经做过"卡片在左 / AI 栏
+       在右"的 grid,但 AI 那段话只有几行、右栏底下整片空着,用户反馈"结构不太好";
+       列表本身横向就是要宽的,索性整宽给卡片。
        type="flex" 让 body 撑满剩余高度;高度链一路 min-height:0 到列表/对话区内部滚动,
        路径输入框与底部按钮始终钉在原地。 -->
   <CommonDialog
@@ -1347,11 +1348,9 @@ function onBrowserSelect(path: string) {
              mode="pick"   → 普通点击把路径回填到上面的输入框,Ctrl/Cmd+点击在新标签页打开
              variant="bare" → 不渲染面板外壳(标题由本表单项 label 提供;搜索框仍由列表自带,
                               就是卡片区上方那一条 —— 三十来个目录都长一个样,没筛选只能肉眼看)
-             layout="split" → 全屏形态下卡片在左、AI 解读+追问区在右(见组件内注释)
-             min-card-width→ 全屏后左栏很宽,卡片网格的默认 380px 下限会排成三列、每列又
-                             变回 ~410px 的窄卡(路径照样截断)。这里把下限提到
-                             min(470px, 46%),窗口再宽也保持两列宽卡;窗口变窄时
-                             46% 那一档接手,仍与原来一样排两列而不是掉成一列。
+             min-card-width→ 整宽后卡片网格的默认 380px 下限会排成三列、每列 ~410px 的窄卡
+                             (路径照样截断)。这里把下限提到 min(470px, 46%),窗口再宽也
+                             保持两列宽卡;窗口变窄时 46% 那一档接手,仍排两列而不是掉成一列。
              .form-item--dirs 让这一项吃掉弹窗剩余高度,由列表内部滚动 -->
         <el-form-item class="form-item--dirs">
           <template #label>
@@ -1380,7 +1379,6 @@ function onBrowserSelect(path: string) {
             class="recent-dirs-list"
             mode="pick"
             variant="bare"
-            layout="split"
             removable="always"
             min-card-width="min(470px, 46%)"
             :remove-label="$t('@67CE7:从常用目录中移除')"
@@ -1939,18 +1937,13 @@ function onBrowserSelect(path: string) {
   color: var(--text-meta);
 }
 /* 常用目录这一行是"标题 + 总数 + 「刷新全部」":与最近项目面板的标题行同一版式
-   (标题靠左、动作靠右)。两件事要凑齐按钮才落在对的位置:
-   1) label 行本身在 Element Plus 下只按内容宽度收缩,得先给它一个明确宽度,
-      行内的 margin-left:auto 才有剩余空间可推;
-   2) 这个宽度只取**左栏**(卡片网格)那么宽 —— label 行在 split 布局的外面,
-      而按钮要跟卡片网格的右边界对齐,不是跟整个弹窗(那会跑到右侧 AI 解读栏上方)。
-      ⚠️ 下面的 clamp / gap 必须与 RecentDirectoriesList.vue 的 .dir-list--split 保持一致
-      (那边右列的 clamp(240px, 24%, 360px) + .dir-list--split 的
-      column gap var(--spacing-xl)) —— 那边改了这儿要跟着改,否则按钮会跟卡片错位。
+   (标题靠左、动作靠右)。label 行本身在 Element Plus 下只按内容宽度收缩,
+   得先给它一个明确宽度,行内的 margin-left:auto 才有剩余空间可推 ——
+   AI 解读栏回到卡片下方之后,这一行就是整宽了,按钮跟着卡片网格的右边界走。
    .label-count 用 margin-left 而不是靠 gap 顶开,所以这里也不能改成
    justify-content: flex-end —— 那会把"图标 + 常用目录"整组一起推到右边。 */
 .directory-content :deep(.form-item--dirs .el-form-item__label) {
-  width: calc(100% - clamp(240px, 24%, 360px) - var(--spacing-xl));
+  width: 100%;
 }
 .form-label--dirs .form-label__refresh {
   margin-left: auto;

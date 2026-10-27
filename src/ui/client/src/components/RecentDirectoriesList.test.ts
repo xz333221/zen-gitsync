@@ -463,7 +463,6 @@ describe('RecentDirectoriesList.vue 搜索过滤', () => {
     setupFetch({ dirs })
     const w = mountList({
       variant: 'bare',
-      layout: 'split',
       searchPlaceholder: '搜索常用目录...',
     })
     await flushAll()
@@ -488,7 +487,7 @@ describe('RecentDirectoriesList.vue 搜索过滤', () => {
 
   test('RCL-32: 关键词只筛卡片,清空后恢复,AI 解读栏始终拿全量', async () => {
     setupFetch({ dirs })
-    const w = mountList({ variant: 'bare', layout: 'split' })
+    const w = mountList({ variant: 'bare' })
     await flushAll()
 
     const input = w.find('input.dir-list__search-input')
