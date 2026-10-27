@@ -468,13 +468,27 @@ function askDock(q: { prompt: string }) {
   margin-top: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-base);
 }
-/* split:全屏"切换工作目录"弹窗的右栏。整块撑满右栏:标题与解读文字钉在顶部,
-   追问 chips 跟在解读文字底下。min-height:0 是必需的 —— 否则内部内容会把父级顶穿。 */
+/* split:全屏"切换工作目录"弹窗 / 最近项目面板的右栏。整块撑满右栏:标题与解读文字
+   钉在顶部,追问 chips 跟在解读文字底下。min-height:0 是必需的 —— 否则内部内容会把
+   父级顶穿。
+   ⚠️ 这里**不要**盒子:右栏是跨满整列高度的(实测 282×1096),底色只有 6% 品牌色、
+   与页面几乎同色,于是 border 那 1px 成了唯一看得见的东西 —— 一条从列表顶拉到最底的
+   长竖线,用户反馈"这弄个竖条在这儿不好看"。右栏本身就是独立一列,标题 + 正文 + chips
+   已经能立住;去掉 border / 圆角 / 底色(也符合"不要圆角加单 border"的口径),
+   内容照旧钉在顶部、长文本照旧自己滚。 */
 .dir-summary--split {
   margin-top: 0;
   min-height: 0;
+  /* 无底色后 padding 只会让正文比左栏标题低一截,清掉换成对齐列顶 */
+  padding: 0;
   display: flex;
   flex-direction: column;
+}
+.dir-summary.dir-summary--split,
+.dir-summary.dir-summary--split.is-ai {
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 .dir-summary--split .dir-summary__head,
 .dir-summary--split .dir-summary__error {
