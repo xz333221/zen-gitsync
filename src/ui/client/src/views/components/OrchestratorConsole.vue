@@ -1613,25 +1613,22 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
 }
 .oc__history-sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* 空态与看板列的空态用同一套语言（虚线框 + 淡底 + --text-meta + xs）。
-   原来这里是**裸文字**，另外两处（看板列空态、待处理列的「新建任务」）都是虚线框 ——
-   同一个"这里没有东西"在一屏里两种长相，用户每次都要重新判断"是坏了还是真没有"
-   （修复清单 E1 记的就是这条）。`.oc-empty` 的文案与 title 被
+/* 空态（2026-10-30 Hallmark 清理）：三处"这里没有东西"统一成**裸文字 + 留白**。
+   虚线框留给真正的动作（看板待处理列的「新建任务」、拖放区）—— 空态是状态不是入口，
+   套上虚线框会让整块看着可点。`.oc-empty` 的文案与 title 被
    verify-wb-progress-report.cjs 逐字断言，所以这里只动外观、一个字都没改。 */
 .oc-empty {
   max-width: 260px;
   margin: 0 auto;
-  padding: 18px 10px;
+  padding: 22px 10px;
   text-align: center;
   font-size: var(--font-size-xs);
+  line-height: 1.6;
   color: var(--text-meta);
   list-style: none;
-  border: 1px dashed var(--border-color-light);
-  border-radius: var(--radius-lg);
-  background: var(--bg-subtle);
 }
 /* 空态里的「回看历史报告」（2026-10-14）：小号文字按钮，
-   不另做底色 —— 整块已经是虚线空态框，再套一枚胶囊会多一层容器 */
+   不另做底色 —— 空态本身已经没有壳，再套一枚胶囊会多一层容器 */
 .oc-empty__action {
   display: block;
   margin: 8px auto 0;

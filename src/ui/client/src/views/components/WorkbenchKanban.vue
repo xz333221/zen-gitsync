@@ -1776,6 +1776,11 @@ function coverTitle(img: BoardImage): string {
 .kb-card__retry:hover { background: var(--role-error-surface); }
 .kb-card__retry:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
+/* 空列只说"这列没有卡片"：一行灰字，不套框、不铺底。
+   虚线框留给真正是"动作/放置目标"的那一枚（.kb-col__add-btn），
+   两者长得像会让人以为空列也能点。
+   不强行竖直居中：列表是普通块流（卡片靠 margin 排），把 li 撑满要改列表的
+   display，代价比收益大 —— 一行提示贴近列头本来也是看板惯常的读法。 */
 .kb-col__empty {
   padding: 18px 8px;
   margin: 0 2px;
@@ -1783,9 +1788,6 @@ function coverTitle(img: BoardImage): string {
   font-size: var(--font-size-xs);
   color: var(--text-meta);
   list-style: none;
-  border: 1px dashed var(--border-color-light);
-  border-radius: var(--radius-lg);
-  background: var(--bg-subtle);
 }
 
 /* ── 「新建任务」幽灵项（常驻待处理列末尾） ─────────────

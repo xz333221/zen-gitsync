@@ -97,8 +97,7 @@ const ordered = computed(() => {
   gap: 8px;
   margin: 24px 4px;
   padding: 28px 16px;
-  border: 1px dashed var(--border-card);
-  border-radius: var(--radius-lg);
+  /* 空态 / 加载态都不套框：虚线圈在这个视图里已经被「添加项目」那枚动作占了 */
   text-align: center;
 }
 .pm-list__state-title {

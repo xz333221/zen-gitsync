@@ -5,6 +5,7 @@ import { Plus, Close, DocumentAdd, Folder, ArrowDown, ArrowRight, CopyDocument }
 import type { Task } from '@/types/workbench'
 import { useWorkbenchProjectGroups } from '@/composables/useWorkbenchProjectGroups'
 import { canonicalProjectPath } from '@/utils/path'
+import EmptyState from '@/components/EmptyState.vue'
 
 type DragPosition = 'before' | 'after' | null
 
@@ -290,17 +291,21 @@ function onWindowMouseUp(_e: MouseEvent) {
             </li>
           </ul>
         </li>
-        <li v-if="tasks.length === 0" class="wb-empty wb-empty--rich">
-          <div class="wb-empty__art" aria-hidden="true">
-            <el-icon><DocumentAdd /></el-icon>
-          </div>
-          <div class="wb-empty__title">{{ $t('@WORKBENCH:暂无任务') }}</div>
-          <div class="wb-empty__hint">{{ $t('@WORKBENCH:点击上方按钮新建') }}</div>
-          <div class="wb-empty__cta">
+        <!-- 空态走全应用同一套 EmptyState（原来是一张"渐变底 + 虚线圈 + 圆角图标砖"的卡，
+             同一句"暂无任务"在侧栏 / 看板 / 控制台长成三个样子；见 empty-state 组件头注释） -->
+        <li v-if="tasks.length === 0" class="wb-empty">
+          <EmptyState
+            size="inline"
+            :title="$t('@WORKBENCH:暂无任务')"
+            :hint="$t('@WORKBENCH:点击上方按钮新建')"
+          >
+            <template #icon>
+              <el-icon><DocumentAdd /></el-icon>
+            </template>
             <el-button type="primary" size="small" :icon="Plus" :loading="creatingTask" @click="emit('create-task')">
               {{ $t('@WORKBENCH:新建任务') }}
             </el-button>
-          </div>
+          </EmptyState>
         </li>
       </ul>
     </section>
@@ -553,24 +558,21 @@ function onWindowMouseUp(_e: MouseEvent) {
 .wb-task-item__del:hover { background: color-mix(in srgb, var(--color-danger) 14%, transparent); color: var(--color-danger-dark); }
 .wb-task-item__del:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-outline-offset); opacity: 1; }
 .wb-task-item__del, .wb-sub-item__del { font-size: var(--font-size-mid); }
-.wb-empty { padding: 24px 14px 20px; text-align: center; color: var(--text-meta); display: flex; flex-direction: column; align-items: center; gap: 8px; border-radius: var(--radius-md); background: linear-gradient(135deg, var(--bg-subtle) 0%, color-mix(in srgb, var(--tint-primary-06) 50%, transparent) 100%); border: 1px dashed var(--border-color-light); position: relative; overflow: hidden; }
-.wb-empty::before {
-  content: '';
-  position: absolute;
-  top: -25px;
-  right: -25px;
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--color-primary) 5%, transparent) 0%, transparent 70%);
-  pointer-events: none;
+/* 空态只留留白，不再套卡片壳（2026-10-30 Hallmark 清理）：
+   原来是 135° 渐变底 + 右上角径向光斑 + 虚线圈 + 圆角图标砖 + 彩色投影，
+   五层装饰说的却只是"这列没有任务"，和用户「不要圆角 + 单 border 的卡片」的口径正相反。
+   现在交给共享的 EmptyState（图标 28px/35% + 标题 + 一句提示 + 一个动作）。 */
+.wb-empty {
+  list-style: none;
+  padding: 28px 8px 22px;
 }
-.wb-empty--compact { padding: 10px 12px; flex-direction: row; justify-content: center; gap: 0; background: var(--bg-subtle); border-style: solid; }
-.wb-empty--compact::before { display: none; }
-.wb-empty__art { width: 52px; height: 52px; border-radius: var(--radius-xl); display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--tint-primary-12) 0%, var(--tint-primary-08) 100%); color: var(--color-primary); font-size: var(--font-size-2xl); margin-bottom: 4px; box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 10%, transparent); position: relative; z-index: 1; }
-.wb-empty__title { font-size: var(--font-size-base); font-weight: 600; letter-spacing: var(--letter-spacing-heading, -0.25px); color: var(--text-secondary); line-height: 1.45; position: relative; z-index: 1; }
-.wb-empty--rich .wb-empty__hint { font-size: var(--font-size-sm); line-height: 1.6; color: var(--text-meta); max-width: 280px; position: relative; z-index: 1; }
-.wb-empty__cta { display: flex; align-items: center; gap: 14px; margin-top: 8px; flex-wrap: wrap; justify-content: center; position: relative; z-index: 1; }
+.wb-empty :deep(.empty-state__actions) {
+  margin-top: var(--spacing-base);
+}
+.wb-empty :deep(.btn),
+.wb-empty :deep(.el-button) {
+  box-shadow: none;
+}
 /* .wb-pill 的唯一定义已收进 styles/workbench.scss（全局），这里不再 scoped 重定义 */
 /* 分组头：作为 section header，比组内任务标题(.wb-task-item__title 12px/500/secondary)
    字号更大、字重更重,承担"这是什么项目"的语义。

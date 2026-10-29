@@ -437,8 +437,7 @@ defineExpose({ reload })
   align-items: center;
   justify-content: center;
   padding: 60px 20px;
-  border: 1px dashed var(--border-color);
-  border-radius: var(--radius-md, 6px);
+  /* 空态不套框（同看板列 / 控制台空态，2026-10-30） */
 }
 .mem-panel__empty-art { font-size: 36px; opacity: 0.5; margin-bottom: 8px; }
 .mem-panel__empty-title { font-size: var(--font-size-base); color: var(--text-secondary); }

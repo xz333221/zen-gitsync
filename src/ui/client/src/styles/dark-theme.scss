@@ -203,14 +203,14 @@ html[data-theme="dark"] {
         --surface-elevated：卡片自己就是 #202636，列身若比卡片还亮，
         卡片就成了列里的暗窟窿，层次整个反过来。 */
   --role-pending-ink: #b6c0cf;
-  --role-pending-surface: color-mix(in srgb, var(--role-pending-hue) 12%, transparent);
+  --role-pending-surface: color-mix(in srgb, var(--role-pending-hue) 6%, transparent);
   --role-pending-edge: color-mix(in srgb, var(--role-pending-hue) 42%, transparent);
   --role-pending-wash: color-mix(in srgb, var(--role-pending-hue) 20%, transparent);
   --role-active-ink: var(--color-warning-dark);
-  --role-active-surface: color-mix(in srgb, var(--role-active-hue) 9%, transparent);
+  --role-active-surface: color-mix(in srgb, var(--role-active-hue) 5%, transparent);
   --role-active-wash: color-mix(in srgb, var(--role-active-hue) 16%, transparent);
   --role-done-ink: var(--color-success-dark);
-  --role-done-surface: color-mix(in srgb, var(--role-done-hue) 9%, transparent);
+  --role-done-surface: color-mix(in srgb, var(--role-done-hue) 5%, transparent);
   --role-done-wash: color-mix(in srgb, var(--role-done-hue) 16%, transparent);
   --role-error-ink: var(--color-danger-dark);
   --role-error-surface: color-mix(in srgb, var(--role-error-hue) 9%, transparent);

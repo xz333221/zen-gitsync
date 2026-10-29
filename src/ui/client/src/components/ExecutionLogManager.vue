@@ -491,8 +491,8 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   padding: 60px 20px;
-  border: 1px dashed var(--border-color);
-  border-radius: var(--radius-md, 6px);
+  /* 空态是状态、不是容器（2026-10-30 与看板 / 控制台统一）：
+     原先是虚线圈 + 圆角，和旁边真正的卡片抢同一套视觉语言。 */
   color: var(--text-meta);
   text-align: center;
 }
