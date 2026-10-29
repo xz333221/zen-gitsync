@@ -376,12 +376,20 @@ onBeforeUnmount(() => {
   box-shadow: var(--shadow-float);
   overflow: hidden;
 
-  /* 最大化：近满屏，但**让出左侧活动栏**（48px + 边距）—— 否则最大化态会盖住
-     视图切换按钮，用户想切视图得先还原；旧智能体 tab 也是从活动栏右侧铺开的。
-     宽度 ≥680 时 AgentView 自动进宽屏两栏（会话列表 + 对话并排） */
+  /* 最大化：铺满整个窗口（含活动栏与顶栏），四边不留缝、不留圆角。
+     2026-10-29 用户要求「全屏就做成整个的全屏」—— 原先是 calc(100vw - 72px)
+     的"近满屏"，右侧留 dock 边距、左侧让出 48px 活动栏，看起来仍是一块浮窗。
+     用 fixed + inset:0 脱离 dock 的右/下锚点，宽度由视口决定（还原按钮仍在右上角）。
+     宽度远大于 680，AgentView 自动进宽屏两栏（会话列表 + 对话并排） */
   &.is-maximized {
-    width: calc(100vw - 72px);
-    height: calc(100vh - 120px);
+    position: fixed;
+    inset: 0;
+    width: auto;
+    height: auto;
+    max-width: none;
+    max-height: none;
+    border-radius: 0;
+    box-shadow: none;
   }
 
   &:focus {
