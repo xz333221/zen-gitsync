@@ -32,7 +32,7 @@ import 'zen-ai-chat-ui/style.css'
 import { useConfigStore } from '@/stores/configStore'
 import { useGitStore } from '@/stores/gitStore'
 import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
-import { buildConversationItems, agentConversationLabels, agentQuestionLabels, agentQueueLabels, AGENT_ASSISTANT_NAME, AGENT_ASSISTANT_AVATAR, MESSAGE_RAIL_CONFIG, MESSAGE_META_CONFIG } from '@/utils/agentConversations'
+import { buildConversationItems, agentConversationLabels, agentQuestionLabels, agentQueueLabels, agentFileChangeLabels, AGENT_ASSISTANT_NAME, AGENT_ASSISTANT_AVATAR, MESSAGE_RAIL_CONFIG, MESSAGE_META_CONFIG } from '@/utils/agentConversations'
 import { resolveAgentPresets } from '@/utils/agentPresets'
 import { subscribeScheduleEvents } from '@/utils/scheduleApi'
 import { agentEngineName, type AgentEngineId } from '@/utils/agentEngine'
@@ -382,6 +382,7 @@ async function onSelectPreset(q: any) {
 
 // ── 提问面板文案（面板 UI 在 zen-ai-chat-ui 里，这里只负责翻译；与文件空间面板共用映射） ──
 const questionLabels = agentQuestionLabels()
+const fileChangeLabels = agentFileChangeLabels()
 
 // ── ChatContainer ref ────────────────────────────────────
 const chatContainerRef = ref<InstanceType<typeof ChatContainer> | null>(null)
@@ -686,6 +687,7 @@ defineExpose({
                 :question="questionPanel"
                 :question-submitting="answeringQuestion"
                 :question-labels="questionLabels"
+                :file-changes-labels="fileChangeLabels"
                 :plan-config="{ labels: { title: $t('@AGENT:计划'), raw: $t('@AGENT:原始参数') } }"
                 :message-rail-config="MESSAGE_RAIL_CONFIG"
                 :message-meta-config="MESSAGE_META_CONFIG"

@@ -153,6 +153,26 @@ export function agentQuestionLabels() {
 }
 
 /**
+ * 文件改动清单文案（走 app 的 i18n）。
+ *
+ * 库从工具调用参数里解析出「这一轮改了哪些文件」，在 assistant 气泡里列成
+ * 可展开 diff 的清单。库的默认文案是中文，非中文界面要在这里覆盖 ——
+ * 与上面两份一样，一处定义、四个对话入口共用。
+ */
+export function agentFileChangeLabels() {
+  return {
+    title: $t('@AGENT:文件改动'),
+    files: $t('@AGENT:个文件'),
+    added: $t('@AGENT:新增行'),
+    removed: $t('@AGENT:删除行'),
+    expand: $t('@AGENT:查看改动'),
+    collapse: $t('@AGENT:收起改动'),
+    writeHint: $t('@AGENT:整体写入'),
+    empty: $t('@AGENT:无可预览的差异'),
+  }
+}
+
+/**
  * 排队条带文案（走 app 的 i18n）。
  *
  * 与上面两份同一套路：四个 g ai 入口（智能体页 / 主 Agent 控制台 / 文件空间面板 /

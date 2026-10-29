@@ -132,6 +132,7 @@
           :question="questionPanel"
           :question-submitting="answeringQuestion"
           :question-labels="questionLabels"
+          :file-changes-labels="fileChangeLabels"
           :plan-config="{ labels: { title: $t('@AGENT:计划'), raw: $t('@AGENT:原始参数') } }"
           :message-rail-config="MESSAGE_RAIL_CONFIG"
           :message-meta-config="MESSAGE_META_CONFIG"
@@ -229,6 +230,7 @@ import {
   agentConversationLabels,
   agentQuestionLabels,
   agentQueueLabels,
+  agentFileChangeLabels,
   AGENT_ASSISTANT_NAME,
   AGENT_ASSISTANT_AVATAR,
   MESSAGE_RAIL_CONFIG,
@@ -330,6 +332,7 @@ function onEngineSelect(id: AgentEngineId) {
 const conversationItems = computed(() => buildConversationItems(sessions.value, isSessionGenerating))
 const conversationLabels = agentConversationLabels()
 const questionLabels = agentQuestionLabels()
+const fileChangeLabels = agentFileChangeLabels()
 // 排队条带文案（与智能体页 / 主 Agent 控制台共用同一份映射）
 const queueLabels = agentQueueLabels()
 

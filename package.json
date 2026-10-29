@@ -49,6 +49,8 @@
     "verify:agent-prompt-settings:reverse": "node scripts/verify-agent-prompt-settings.cjs --reverse",
     "verify:agent-input-facts": "node scripts/verify-agent-input-facts.cjs",
     "verify:agent-input-facts:reverse": "node scripts/verify-agent-input-facts.cjs --reverse",
+    "verify:agent-file-changes": "node scripts/verify-agent-file-changes.cjs",
+    "verify:agent-file-changes:reverse": "node scripts/verify-agent-file-changes.cjs --reverse",
     "verify:agent-presets": "node scripts/verify-agent-presets.cjs",
     "verify:agent-presets:reverse": "node scripts/verify-agent-presets.cjs --reverse",
     "verify:preset-scopes": "node scripts/verify-preset-scopes.cjs",

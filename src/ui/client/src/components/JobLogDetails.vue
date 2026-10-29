@@ -89,6 +89,7 @@
           :theme="configStore.theme"
           :tool-calls-config="{ group: true, collapseThreshold: 2 }"
           :plan-config="{ labels: { title: $t('@AGENT:计划'), raw: $t('@AGENT:原始参数') } }"
+          :file-changes-labels="fileChangeLabels"
           :show-input="false"
         />
       </div>
@@ -142,6 +143,7 @@ import { buildJobReasoningTiming } from '@/utils/jobReasoningTiming'
 import { userFacingPrompt } from '@/utils/jobUserPrompt'
 import { resolveLocalImages } from '@/utils/localImageSrc'
 import { $t } from '@/lang/static'
+import { agentFileChangeLabels } from '@/utils/agentConversations'
 import CommonDialog from '@/components/CommonDialog.vue'
 import type { Job, JobStatus } from '@/types/workbench'
 import { useConfigStore } from '@/stores/configStore'
@@ -260,6 +262,7 @@ const finishedStatusLabel = computed(() => {
 // 助手名跟随 job 实际用的执行器（job.agent，老 job 无此字段视为 claude）。
 // 产品名,中英文一致,无需走 i18n
 const assistantLabel = computed(() => taskExecutorName(props.job?.agent))
+const fileChangeLabels = agentFileChangeLabels()
 // 头像与名字同源,一并跟随执行器
 const assistantAvatar = computed(() => avatarForExecutor(props.job?.agent))
 

@@ -35,7 +35,7 @@ import { ChatInput, ChatContainer } from 'zen-ai-chat-ui'
 import type { ChatMessage } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { avatarForExecutor } from '@/utils/agentAvatar'
-import { MESSAGE_RAIL_CONFIG } from '@/utils/agentConversations'
+import { MESSAGE_RAIL_CONFIG, agentFileChangeLabels } from '@/utils/agentConversations'
 import { useConfigStore } from '@/stores/configStore'
 import { useToolsStore } from '@/stores/toolsStore'
 const configStore = useConfigStore()
@@ -685,6 +685,8 @@ const CHAT_PIN_WINDOW_MS = 3000
 const CHAT_PIN_USER_EVENTS = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const
 
 const chatRef = ref<InstanceType<typeof ChatContainer> | null>(null)
+// 文件改动清单文案（与智能体页同一份，见 utils/agentConversations）
+const fileChangeLabels = agentFileChangeLabels()
 const chatWrapRef = ref<HTMLElement | null>(null)
 let chatPinRO: ResizeObserver | null = null
 let chatPinTimer: ReturnType<typeof setTimeout> | null = null
@@ -1627,6 +1629,7 @@ const selectedTaskQueue = computed(() =>
                       :theme="configStore.theme"
                       :tool-calls-config="{ group: true, collapseThreshold: 2 }"
                       :plan-config="{ labels: { title: $t('@AGENT:计划'), raw: $t('@AGENT:原始参数') } }"
+                      :file-changes-labels="fileChangeLabels"
                       :message-rail-config="MESSAGE_RAIL_CONFIG"
                       :show-input="false"
                       @retry="onChatRetry"
