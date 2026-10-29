@@ -62,6 +62,8 @@ export const PROVIDERS = [
   { id: 'opencode',   label: 'OpenCode Go',         url: 'https://opencode.ai/zen/go/v1' },
   { id: 'commandcode', label: 'Command Code',       url: 'https://api.commandcode.ai/provider/v1' },
   { id: 'agnes',      label: 'Agnes AI',            url: 'https://apihub.agnes-ai.com/v1' },
+  // OpenDesign AMR:数据面在 amr-link 子域(主域名是 SPA,/v1 只会回 HTML)
+  { id: 'opendesign', label: 'OpenDesign (AMR)',    url: 'https://amr-link.open-design.ai/v1' },
   // 火山方舟订阅套餐:同域名不同数据面路径(/api/plan/v3 与 /api/coding/v3),填错直接 404
   { id: 'ark-agent-plan',  label: '火山方舟 Agent Plan',  url: 'https://ark.cn-beijing.volces.com/api/plan/v3' },
   { id: 'ark-coding-plan', label: '火山方舟 Coding Plan', url: 'https://ark.cn-beijing.volces.com/api/coding/v3' },
@@ -133,6 +135,15 @@ export const BUILTIN_MODELS = {
   ],
   'https://apihub.agnes-ai.com/v1': [
     'agnes-2.5-pro-alpha', 'agnes-2.0-flash', 'agnes-image-2.0', 'agnes-video-v2.0',
+  ],
+  // OpenDesign AMR — 数据面域名 amr-link.open-design.ai,OpenAI 兼容单协议(/models 需鉴权)。
+  // 更新: 2026-10-29,用真实 Key 拉 /models 得到,与 ai-model-form 同步。
+  'https://amr-link.open-design.ai/v1': [
+    'deepseek-v4.1-flash', 'deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp',
+    'claude-haiku-5.5', 'gpt-6-luna',
+    'glm-5.3-flash', 'glm-5.3-flashx',
+    'kimi-k2.7-code', 'minimax-m3.1-flash',
+    'mimo-v2.6-pro', 'mimo-v2.6-flash', 'hy4-preview',
   ],
   'http://localhost:11434/v1': [
     'qwen2.5', 'llama3.1', 'mistral', 'deepseek-r1:7b', 'qwen3', 'llama4',

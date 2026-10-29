@@ -702,8 +702,10 @@ test('collectModelInput: 套餐端点不拉 /models,直接用内置清单', asyn
       }
       return { ok: true, status: 200, json: async () => ({}) }
     }
-    // 选 Coding Plan(21) → 确认 baseURL → apiKey → 选内置清单第 1 个 → displayName
-    const rl = createMockRl(['21', '', 'ark-test-key', '1', ''])
+    // 选 Coding Plan → 确认 baseURL → apiKey → 选内置清单第 1 个 → displayName
+    // 下标按名单实际情况算,别写死数字(前面新增预设会把位置挤走)
+    const codingPlanIndex = String(PROVIDERS.findIndex(p => p.url === ARK_CODING_PLAN_URL) + 1)
+    const rl = createMockRl([codingPlanIndex, '', 'ark-test-key', '1', ''])
     const result = await collectModelInput({
       locale: 'zh-CN',
       rl,

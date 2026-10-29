@@ -23,6 +23,8 @@ describe('providerIconName', () => {
     expect(providerIconName('https://api.deepseek.com/v1')).toBe('deepseek-color')
     expect(providerIconName('https://api.minimaxi.com/v1')).toBe('minimax-color')
     expect(providerIconName('http://localhost:11434/v1')).toBe('ollama')
+    // OpenDesign 的数据面在 amr-link 子域，主域名 open-design.ai 是 SPA（不该被认成服务商）
+    expect(providerIconName('https://amr-link.open-design.ai/v1')).toBe('opendesign')
   })
 
   test('同一域名下的不同路径都认（火山两套套餐）', () => {
@@ -55,6 +57,17 @@ describe('providerLogoUrl', () => {
   test('图标名为空返回空串', () => {
     expect(providerLogoUrl('', 'dark')).toBe('')
     expect(providerLogoUrl(undefined, 'dark')).toBe('')
+  })
+
+  test('图标包里没有的品牌走内联 SVG，且 fill 跟主题翻转', () => {
+    // OpenDesign：CDN 上 dark|light/opendesign.png 都是 404，只能内联
+    const dark = providerLogoUrl('opendesign', 'dark')
+    const light = providerLogoUrl('opendesign', 'light')
+    expect(dark.startsWith('data:image/svg+xml,')).toBe(true)
+    expect(light.startsWith('data:image/svg+xml,')).toBe(true)
+    // 深色主题用浅色字形、浅色主题用深色字形，否则图标会融进背景
+    expect(decodeURIComponent(dark)).toContain('#E8E6E1')
+    expect(decodeURIComponent(light)).toContain('#26251E')
   })
 })
 
