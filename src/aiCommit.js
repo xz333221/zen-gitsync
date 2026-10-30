@@ -20,6 +20,7 @@ import ora from 'ora';
 import config from './config.js';
 import { execGitCommand } from './utils/index.js';
 import { buildAiChatRequest } from './utils/aiEndpoint.js';
+import { buildModelFallbackChain, modelLabel, runWithModelFallback } from './utils/aiModelFallback.js';
 
 // ──────────────────────────────────────────────
 // 跳过的产物/资源/lock 文件(与 GUI config.js SKIP_FILE_PATTERNS 一致)
@@ -222,11 +223,11 @@ function prepareDiffForPrompt(diffText, fileList) {
 // 返回 Conventional Commits 格式的字符串,如 "feat(auth): 添加登录按钮"
 // ──────────────────────────────────────────────
 export async function generateAiCommitMessage({ locale = 'zh-CN' } = {}) {
-  // 1. 读取配置,获取默认模型
+  // 1. 读取配置：默认模型打头 + 其余已配置模型（默认模型没额度时换下一个继续生成）
   const cfg = await config.loadConfig();
   const models = Array.isArray(cfg.models) ? cfg.models : [];
-  const defaultModel = models.find(m => m.isDefault) || models[0];
-  if (!defaultModel) {
+  const chain = buildModelFallbackChain(models);
+  if (chain.length === 0) {
     throw new Error('未配置 AI 模型，请先在 GUI 通用设置中添加模型（运行 g ui 打开设置）');
   }
 
@@ -274,70 +275,76 @@ ${diffText || '(no staged content, please infer from the file list)'}`;
 
   const prompt = locale.startsWith('en') ? promptEn : promptZh;
 
-  // 4. 调用 LLM
+  // 4. 调用 LLM：先试默认模型，失败（额度用完 / 限流 / 5xx / 返回不了 JSON）就换下一个
   spinner.start('AI 正在生成提交信息...');
   const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }));
-  const { url, headers } = buildAiChatRequest({
-    baseURL: defaultModel.baseURL,
-    model: defaultModel.model,
-    apiKey: defaultModel.apiKey
-  });
-  const body = JSON.stringify({
-    model: defaultModel.model,
-    messages: [{ role: 'user', content: prompt }],
-    max_tokens: 1024,
-    temperature: 0.3,
-    stream: false
-  });
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 60000);
-  let response;
-  try {
-    response = await fetch(url, { method: 'POST', headers, body, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
+  /** 单次尝试：发请求 + 解析 JSON。失败一律 throw，交给 runWithModelFallback 决定换不换模型 */
+  const attempt = async (model) => {
+    const { url, headers } = buildAiChatRequest({
+      baseURL: model.baseURL,
+      model: model.model,
+      apiKey: model.apiKey
+    });
+    const body = JSON.stringify({
+      model: model.model,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 1024,
+      temperature: 0.3,
+      stream: false
+    });
 
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const msg = data?.error?.message || data?.message || `HTTP ${response.status}`;
-    spinner.fail(`AI 请求失败: ${msg}`);
-    throw new Error(`AI 请求失败: ${msg}`);
-  }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60000);
+    let response;
+    try {
+      response = await fetch(url, { method: 'POST', headers, body, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
 
-  const content = data?.choices?.[0]?.message?.content || '';
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const msg = data?.error?.message || data?.message || `HTTP ${response.status}`;
+      throw new Error(`AI 请求失败: ${msg}`);
+    }
 
-  // 5. 解析 JSON 响应(与 GUI 一致的容错逻辑)
-  const codeBlockMatch = content.match(/```(?:json)?\s*(\{[^`]*?\})\s*```/);
-  const jsonMatch = codeBlockMatch
-    ? [codeBlockMatch[1]]
-    : [...content.matchAll(/\{[^{}]*\}/g)].at(-1);
+    const content = data?.choices?.[0]?.message?.content || '';
 
-  if (!jsonMatch) {
-    spinner.fail('AI 未返回有效的 JSON');
-    throw new Error('AI 未返回有效的 JSON');
-  }
+    // 5. 解析 JSON 响应(与 GUI 一致的容错逻辑)
+    const codeBlockMatch = content.match(/```(?:json)?\s*(\{[^`]*?\})\s*```/);
+    const jsonMatch = codeBlockMatch
+      ? [codeBlockMatch[1]]
+      : [...content.matchAll(/\{[^{}]*\}/g)].at(-1);
 
-  let parsed;
-  try {
-    parsed = JSON.parse(jsonMatch[0]);
-  } catch {
-    // JSON.parse 失败时用正则兜底提取字段
-    const typeM = jsonMatch[0].match(/"type"\s*:\s*"([^"]+)"/);
-    const scopeM = jsonMatch[0].match(/"scope"\s*:\s*"([^"]*)"/);
-    const descM = jsonMatch[0].match(/"description"\s*:\s*"([^"]+)"/);
-    if (typeM || descM) {
-      parsed = {
+    if (!jsonMatch) {
+      throw new Error('AI 未返回有效的 JSON');
+    }
+
+    try {
+      return JSON.parse(jsonMatch[0]);
+    } catch {
+      // JSON.parse 失败时用正则兜底提取字段
+      const typeM = jsonMatch[0].match(/"type"\s*:\s*"([^"]+)"/);
+      const scopeM = jsonMatch[0].match(/"scope"\s*:\s*"([^"]*)"/);
+      const descM = jsonMatch[0].match(/"description"\s*:\s*"([^"]+)"/);
+      if (!typeM && !descM) {
+        throw new Error('AI 返回的 JSON 解析失败');
+      }
+      return {
         type: (typeM?.[1] || 'feat').trim(),
         scope: (scopeM?.[1] || '').trim(),
         description: (descM?.[1] || '').trim()
       };
-    } else {
-      spinner.fail('AI 返回的 JSON 解析失败');
-      throw new Error('AI 返回的 JSON 解析失败');
     }
-  }
+  };
+
+  const { result: parsed } = await runWithModelFallback(chain, attempt, {
+    onFallback: ({ from, to, error }) => {
+      spinner.warn(`模型 ${modelLabel(from)} 调用失败（${error?.message || error}），改用 ${modelLabel(to)}`);
+      spinner.start('AI 正在生成提交信息...');
+    }
+  });
 
   // 6. 构建 Conventional Commits 消息
   const type = String(parsed.type || 'feat').trim();

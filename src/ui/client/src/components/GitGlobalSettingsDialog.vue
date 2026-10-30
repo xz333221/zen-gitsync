@@ -512,6 +512,11 @@
               </div>
             </div>
 
+            <!-- 默认模型失效（额度用完 / 限流）时不会再整块不可用，这里把兜底口径说清楚 -->
+            <p class="setting-hint-block model-fallback-hint">
+              {{ $t('@42BB9:默认模型调用失败时，会自动依次尝试其余已配置模型（最多 3 个）') }}
+            </p>
+
             <!-- 新增 / 编辑表单：使用 ai-model-form 组件 -->
             <div v-if="editingModelId !== undefined" class="ai-model-form-wrapper">
               <AddModelForm
@@ -2485,6 +2490,10 @@ async function openSystemConfigFile() {
 .setting-hint-block {
   font-size: var(--font-size-xs);
   color: var(--el-text-color-secondary);
+}
+.model-fallback-hint {
+  margin: 10px 0 0;
+  line-height: 1.5;
 }
 /* 联网搜索分区。Key 是敏感凭据：输入框给足宽度、右侧显示"可选/去申请"提示。
    标记与链接都不用"圆角 + 单 border"那种样式（用户明确不喜欢）。 */

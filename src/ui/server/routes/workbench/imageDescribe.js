@@ -44,6 +44,7 @@ import path from 'node:path';
 import { logger, readJson, CONFIG_FILE } from './shared.js';
 import { isImageExt } from './attachmentUtils.js';
 import { callLlmStream } from './llmClient.js';
+import { buildModelFallbackChain, modelLabel, runWithModelFallback } from '../../../../utils/aiModelFallback.js';
 
 /** 单张图片大小上限：超过就不送去描述（base64 之后还要再涨 1/3） */
 export const MAX_DESCRIBE_IMAGE_BYTES = 6 * 1024 * 1024;
@@ -84,6 +85,22 @@ export async function resolveDescribeModel() {
   }
 }
 
+/**
+ * 图片描述用的候选模型链：默认模型打头，其余已配置模型兜底（默认模型没额度时
+ * 还能用别的模型把图转成文字）。
+ *
+ * @returns {Promise<Array<object>>}
+ */
+export async function resolveDescribeModelChain() {
+  try {
+    const raw = await readJson(CONFIG_FILE, {});
+    return buildModelFallbackChain(Array.isArray(raw?.models) ? raw.models : []);
+  } catch (err) {
+    logger.warn('[imageDescribe] 读取 AI 配置失败，跳过图片转文字:', err?.message || err);
+    return [];
+  }
+}
+
 /** 附件里的图片（按 isImageExt 判，与附件白名单同一份口径） */
 export function pickImageAttachments(attachments) {
   if (!Array.isArray(attachments)) return [];
@@ -94,7 +111,7 @@ export function pickImageAttachments(attachments) {
  * 描述一张图片。
  *
  * @param {string} filePath 本机绝对路径
- * @param {object} model    config.json 里的模型条目
+ * @param {object|object[]} model config.json 里的模型条目（数组 = 候选链，前一个失败换下一个）
  * @param {object} [opts]
  * @param {string} [opts.fileName] 给模型的文件名提示（不含目录，别泄漏本地路径）
  * @returns {Promise<string|null>} 描述文本；失败/超限/空回答一律 null
@@ -121,19 +138,34 @@ export async function describeImage(filePath, model, opts = {}) {
 
   let text = '';
   try {
-    const { content, aborted } = await callLlmStream(
-      model,
-      `这张图片的文件名是 ${name}，请按系统提示把它转成文字描述。`,
-      (delta) => { if (delta?.content) text += delta.content; },
-      {
-        images: [dataUrl],
-        systemPrompt: SYSTEM_PROMPT,
-        maxTokens: MAX_DESCRIBE_CHARS * 2,
-        timeoutMs: DESCRIBE_TIMEOUT_MS,
+    const chain = Array.isArray(model) ? model : [model];
+    // 已经吐过文字就不能换模型（会把两段描述拼在一起）；一张图重试几次都失败就
+    // 由外层 anyFailed 熔断，不继续烧额度
+    const { result: streamResult } = await runWithModelFallback(
+      chain,
+      (candidate) => {
+        text = '';
+        return callLlmStream(
+          candidate,
+          `这张图片的文件名是 ${name}，请按系统提示把它转成文字描述。`,
+          (delta) => { if (delta?.content) text += delta.content; },
+          {
+            images: [dataUrl],
+            systemPrompt: SYSTEM_PROMPT,
+            maxTokens: MAX_DESCRIBE_CHARS * 2,
+            timeoutMs: DESCRIBE_TIMEOUT_MS,
+          },
+        );
       },
+      {
+        isFatal: () => text.length > 0,
+        onFallback: ({ from, to, error }) => logger.warn(
+          `[imageDescribe] 模型 ${modelLabel(from)} 描述图片失败(${error?.message || error}),改用 ${modelLabel(to)}`
+        ),
+      }
     );
-    if (aborted) return null;
-    const out = String(content || text || '').trim();
+    if (streamResult?.aborted) return null;
+    const out = String(streamResult?.content || text || '').trim();
     if (!out) return null;
     return out.length > MAX_DESCRIBE_CHARS
       ? out.slice(0, MAX_DESCRIBE_CHARS) + '…'
@@ -161,7 +193,9 @@ export async function describeImage(filePath, model, opts = {}) {
  */
 export async function createImageDescriber(opts = {}) {
   const maxImages = Number.isFinite(opts.maxImages) ? opts.maxImages : MAX_DESCRIBE_IMAGES;
-  const model = opts.model || await resolveDescribeModel();
+  const chain = opts.model
+    ? (Array.isArray(opts.model) ? opts.model : [opts.model])
+    : await resolveDescribeModelChain();
   const runDescribe = typeof opts.describe === 'function' ? opts.describe : describeImage;
   const cache = new Map();
   let done = 0;
@@ -169,15 +203,17 @@ export async function createImageDescriber(opts = {}) {
 
   return async function describe(att) {
     const filePath = att && att.absolutePath;
-    if (!filePath || !model) return null;
+    if (!filePath || chain.length === 0) return null;
     if (cache.has(filePath)) return cache.get(filePath);
     if (done >= maxImages || anyFailed) return null;
     done++;
-    const text = await runDescribe(filePath, model, { fileName: att.originalName || '' });
+    const text = await runDescribe(filePath, chain.length === 1 ? chain[0] : chain, {
+      fileName: att.originalName || '',
+    });
     if (!text) anyFailed = true;
     cache.set(filePath, text);
     return text;
   };
 }
 
-export default { describeImage, createImageDescriber, resolveDescribeModel, pickImageAttachments };
+export default { describeImage, createImageDescriber, resolveDescribeModel, resolveDescribeModelChain, pickImageAttachments };

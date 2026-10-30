@@ -22,6 +22,7 @@ import { CONFIG_FILE } from '../../../paths.js';
 // AI 请求的地址/请求头统一走这里：OpenCode 网关要求自报 User-Agent 并带
 // x-opencode-session，否则直接 4xx（见 src/utils/aiEndpoint.js 顶部说明）
 import { buildAiChatRequest } from '../../../utils/aiEndpoint.js';
+import { buildModelFallbackChain, modelLabel, runWithModelFallback } from '../../../utils/aiModelFallback.js';
 // 请求预算的解析公式住在 cli/ai/context.js —— 前端拿"解析后的三参数"做超长输入
 // 预警时，服务端下发同一份解析结果，不在前端重算（口径只有一处）。
 import { resolveRequestBudget } from '../../../cli/ai/context.js';
@@ -1256,8 +1257,10 @@ export function registerConfigRoutes({
       const rawConfig = await configManager.readRawConfigFile()
       const userLocale = reqLocale || rawConfig.locale || 'zh-CN'
       const models = Array.isArray(rawConfig.models) ? rawConfig.models : []
-      const defaultModel = models.find(m => m.isDefault) || models[0]
-      if (!defaultModel) {
+      // 候选链 = 默认模型打头 + 其余已配置模型：默认模型额度用完 / 限流时自动换下一个，
+      // 而不是让「AI 生成提交信息」直接报错（这几个功能是最常按的按钮）
+      const chain = buildModelFallbackChain(models)
+      if (chain.length === 0) {
         return res.json({ success: false, error: '未配置 AI 模型，请先在通用设置中添加模型', code: 'NO_MODEL' })
       }
 
@@ -1304,68 +1307,85 @@ ${diffText || '(no staged content, please infer from the file list)'}`
       // AI prompt 默认不打印,只有 DEBUG=1 / DEBUG=logger 时才落地(防 Token 泄露)
       logger.debug('[generate-commit] locale:', userLocale, '| prompt length:', prompt.length)
       logger.debug('[generate-commit] prompt:\n' + prompt)
-      const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }))
-      const { url, headers } = buildAiChatRequest({
-        baseURL: defaultModel.baseURL,
-        model: defaultModel.model,
-        apiKey: defaultModel.apiKey,
-      })
-      const body = JSON.stringify({
-        model: defaultModel.model,
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 1024,
-        temperature: 0.3,
-        stream: false
-      })
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), 60000)
-      let response
-      try {
-        response = await fetch(url, { method: 'POST', headers, body, signal: controller.signal })
-      } finally {
-        clearTimeout(timer)
-      }
-      const data = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        const msg = data?.error?.message || data?.message || `HTTP ${response.status}`
-        return res.json({ success: false, error: msg, code: 'HTTP_ERR' })
-      }
-      const content = data?.choices?.[0]?.message?.content || ''
-      // 响应内容只走 debug(默认关闭),前 600 字截断防 token 泄露
-      logger.debug('[generate-commit] raw content length:', content.length, JSON.stringify(content).slice(0, 600))
+      // 单次尝试：换模型重试的每一步都走这里。失败一律 throw —— 由 runWithModelFallback
+      // 决定换下一个模型还是收手（错误码靠 err.code 带出去，保持原有 NO_JSON / PARSE_FAILED 口径）
+      const attemptCommit = async (candidate) => {
+        const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }))
+        const { url, headers } = buildAiChatRequest({
+          baseURL: candidate.baseURL,
+          model: candidate.model,
+          apiKey: candidate.apiKey,
+        })
+        const body = JSON.stringify({
+          model: candidate.model,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 1024,
+          temperature: 0.3,
+          stream: false
+        })
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), 60000)
+        let response
+        try {
+          response = await fetch(url, { method: 'POST', headers, body, signal: controller.signal })
+        } finally {
+          clearTimeout(timer)
+        }
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          const msg = data?.error?.message || data?.message || `HTTP ${response.status}`
+          const err = new Error(msg)
+          err.code = 'HTTP_ERR'
+          throw err
+        }
+        const content = data?.choices?.[0]?.message?.content || ''
+        // 响应内容只走 debug(默认关闭),前 600 字截断防 token 泄露
+        logger.debug('[generate-commit] raw content length:', content.length, JSON.stringify(content).slice(0, 600))
 
-      const codeBlockMatch = content.match(/```(?:json)?\s*(\{[^`]*?\})\s*```/)
-      const jsonMatch = codeBlockMatch
-        ? [codeBlockMatch[1]]
-        : [...content.matchAll(/\{[^{}]*\}/g)].at(-1)
+        const codeBlockMatch = content.match(/```(?:json)?\s*(\{[^`]*?\})\s*```/)
+        const jsonMatch = codeBlockMatch
+          ? [codeBlockMatch[1]]
+          : [...content.matchAll(/\{[^{}]*\}/g)].at(-1)
 
-      if (!jsonMatch) {
-        logger.error('[generate-commit] no JSON found, full content:', content)
-        return res.json({ success: false, error: 'model returned no valid JSON', code: 'NO_JSON' })
-      }
-      let parsed
-      try {
-        parsed = JSON.parse(jsonMatch[0])
-      } catch {
-        const typeM = jsonMatch[0].match(/"type"\s*:\s*"([^"]+)"/)
-        const scopeM = jsonMatch[0].match(/"scope"\s*:\s*"([^"]*)"/)
-        const descM = jsonMatch[0].match(/"description"\s*:\s*"([^"]+)"/)
-        if (typeM || descM) {
-          return res.json({
-            success: true,
+        if (!jsonMatch) {
+          logger.error('[generate-commit] no JSON found, full content:', content)
+          const err = new Error('model returned no valid JSON')
+          err.code = 'NO_JSON'
+          throw err
+        }
+        let parsed
+        try {
+          parsed = JSON.parse(jsonMatch[0])
+        } catch {
+          // JSON.parse 失败时用正则兜底提取字段（与 CLI 口径一致）
+          const typeM = jsonMatch[0].match(/"type"\s*:\s*"([^"]+)"/)
+          const scopeM = jsonMatch[0].match(/"scope"\s*:\s*"([^"]*)"/)
+          const descM = jsonMatch[0].match(/"description"\s*:\s*"([^"]+)"/)
+          if (!typeM && !descM) {
+            const err = new Error('JSON parse failed')
+            err.code = 'PARSE_FAILED'
+            throw err
+          }
+          parsed = {
             type: (typeM?.[1] || 'feat').trim(),
             scope: (scopeM?.[1] || '').trim(),
             description: (descM?.[1] || '').trim()
-          })
+          }
         }
-        return res.json({ success: false, error: 'JSON parse failed', code: 'PARSE_FAILED' })
+        return {
+          type: String(parsed.type || 'feat').trim(),
+          scope: String(parsed.scope || '').trim(),
+          description: String(parsed.description || '').trim()
+        }
       }
-      res.json({
-        success: true,
-        type: String(parsed.type || 'feat').trim(),
-        scope: String(parsed.scope || '').trim(),
-        description: String(parsed.description || '').trim()
+
+      // 默认模型失败(额度用完 / 限流 / 5xx / 返回不了 JSON)就换下一个已配置模型
+      const { result: commit } = await runWithModelFallback(chain, attemptCommit, {
+        onFallback: ({ from, to, error }) => logger.warn(
+          `[generate-commit] 模型 ${modelLabel(from)} 调用失败(${error?.message || error}),改用 ${modelLabel(to)}`
+        )
       })
+      res.json({ success: true, ...commit })
     } catch (error) {
       const isTimeout = error.name === 'AbortError'
       const msg = isTimeout ? 'AI 请求超时（60s），请重试或检查模型响应速度' : error.message

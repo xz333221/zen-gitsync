@@ -43,6 +43,7 @@ import { callLlmJson } from './workbench/llmClient.js';
 import { stripThinkingBlocks } from './workbench/jsonParse.js';
 import { buildProjectEntries, canonicalProjectPath } from './workbench/projectRegistry.js';
 import { TASKS_FILE, readJson } from './workbench/shared.js';
+import { buildModelFallbackChain, modelLabel, runWithModelFallback } from '../../../utils/aiModelFallback.js';
 import logger from '../utils/logger.js';
 
 /** 扫描深度与 npm 面板保持一致,否则模型会推荐面板里根本点不到的包 */
@@ -544,16 +545,17 @@ export function registerProjectStartupAiRoutes({ app, configManager, getCurrentP
       return res.status(400).json({ success: false, code: 'NO_PROJECT', error: '无法确定当前项目目录' });
     }
 
-    // 取默认模型(isDefault 优先,否则第一个),与提交信息生成 / 目录解读同一口径
-    let model;
+    // 候选链 = 默认模型打头 + 其余已配置模型。默认模型额度用完 / 被限流时换下一个，
+    // 而不是让整个「AI 启动建议」面板直接不可用
+    let chain;
     try {
       const rawConfig = await configManager.readRawConfigFile();
       const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
-      model = models.find(m => m.isDefault) || models[0];
+      chain = buildModelFallbackChain(models);
     } catch (err) {
       return res.status(500).json({ success: false, code: 'CONFIG_ERR', error: '读取 AI 配置失败: ' + err.message });
     }
-    if (!model) {
+    if (chain.length === 0) {
       return res.status(200).json({ success: false, code: 'NO_MODEL', error: '未配置 AI 模型' });
     }
 
@@ -569,18 +571,26 @@ export function registerProjectStartupAiRoutes({ app, configManager, getCurrentP
 
       const zh = !locale.startsWith('en');
       const prompt = buildStartupPrompt(facts, locale);
-      const raw = await callLlmJson(model, prompt, {
-        timeoutMs: 120000,
-        maxTokens: 2000,
-        systemPrompt: zh ? SYSTEM_PROMPT_ZH : SYSTEM_PROMPT_EN,
-      });
+      const { result: raw, model: usedModel } = await runWithModelFallback(
+        chain,
+        (candidate) => callLlmJson(candidate, prompt, {
+          timeoutMs: 120000,
+          maxTokens: 2000,
+          systemPrompt: zh ? SYSTEM_PROMPT_ZH : SYSTEM_PROMPT_EN,
+        }),
+        {
+          onFallback: ({ from, to, error }) => logger.warn(
+            `[project-startup] 模型 ${modelLabel(from)} 调用失败(${error?.message || error}),改用 ${modelLabel(to)}`
+          ),
+        }
+      );
 
       const suggestions = validateSuggestions(raw?.suggestions, facts, projectRoot, locale);
-      logger.info(`[project-startup] ${suggestions.length} 条建议(扫描 ${facts.dirs.length} 个目录,模型 ${model.model})`);
+      logger.info(`[project-startup] ${suggestions.length} 条建议(扫描 ${facts.dirs.length} 个目录,模型 ${usedModel.model})`);
       res.json({
         success: true,
         suggestions,
-        model: model.model,
+        model: usedModel.model,
         analyzedAt: Date.now(),
         scannedDirs: facts.dirs.length,
       });

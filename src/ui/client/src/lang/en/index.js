@@ -999,6 +999,7 @@ export default {
   '@42BB9:AI 模型配置': 'AI Model Configuration',
   '@42BB9:管理 AI 模型的 API 端点、凭据与默认模型': 'Manage AI model API endpoints, credentials, and the default model',
   '@42BB9:已配置模型': 'Configured Models',
+  '@42BB9:默认模型调用失败时，会自动依次尝试其余已配置模型（最多 3 个）': 'If the default model fails, the other configured models are tried automatically (up to 3).',
   '@42BB9:暂未配置模型': 'No models configured',
   '@42BB9:智能体运行时': 'Agent Runtime',
   '@42BB9:单轮最大工具调用次数': 'Max tool calls per turn',

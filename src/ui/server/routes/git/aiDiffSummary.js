@@ -38,7 +38,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import express from 'express';
 import { callLlmStream } from '../workbench/llmClient.js';
+import { buildModelFallbackChain, modelLabel, runWithModelFallback } from '../../../../utils/aiModelFallback.js';
 import { ensureWithinCwd } from '../../utils/pathGuard.js';
+import logger from '../../utils/logger.js';
 import { createThinkFilter } from '../../../../cli/ai/streamFilter.js';
 import { AI_DIFF_SUMMARIES_DIR } from '../../../../paths.js';
 
@@ -365,22 +367,24 @@ export function registerAiDiffSummaryRoutes({
         return res.end();
       }
 
-      // 取默认模型
-      let model;
+      // 候选链 = 默认模型打头 + 其余已配置模型；默认模型额度用完 / 限流时自动换下一个
+      let chain;
       try {
         const rawConfig = await configManager.readRawConfigFile();
         const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
-        model = models.find(m => m.isDefault) || models[0];
+        chain = buildModelFallbackChain(models);
       } catch (err) {
         send({ type: 'error', error: '读取 AI 配置失败: ' + err.message, code: 'CONFIG_ERR' });
         finished = true;
         return res.end();
       }
-      if (!model) {
+      if (chain.length === 0) {
         send({ type: 'error', error: '未配置 AI 模型', code: 'NO_MODEL' });
         finished = true;
         return res.end();
       }
+      // 缓存键只认「默认模型」：换到备用模型只是兜底，不该让同一份 diff 再缓存一条
+      const model = chain[0];
 
       const cwd = getCwd();
       let cacheKey = '';
@@ -437,14 +441,25 @@ export function registerAiDiffSummaryRoutes({
         summaryText += content;
         send({ type: 'delta', content });
       });
-      const { aborted } = await callLlmStreamImpl(
-        model,
-        prompt,
-        (delta) => {
-          if (delta.content) contentStream.feed(delta.content);
-        },
-        { maxTokens: 1500, systemPrompt, signal: abortController.signal }
+      // 已经推过内容就不能换模型（会重复输出半截总结）
+      const { result: streamResult } = await runWithModelFallback(
+        chain,
+        (candidate) => callLlmStreamImpl(
+          candidate,
+          prompt,
+          (delta) => {
+            if (delta.content) contentStream.feed(delta.content);
+          },
+          { maxTokens: 1500, systemPrompt, signal: abortController.signal }
+        ),
+        {
+          isFatal: () => summaryText.length > 0,
+          onFallback: ({ from, to, error }) => logger.warn(
+            `[ai-diff-summary] 模型 ${modelLabel(from)} 调用失败(${error?.message || error}),改用 ${modelLabel(to)}`
+          ),
+        }
       );
+      const aborted = Boolean(streamResult?.aborted);
 
       if (aborted) {
         finished = true;

@@ -37,6 +37,7 @@ import express from 'express';
 import { callLlmStream } from './workbench/llmClient.js';
 import { createThinkFilter } from '../../../cli/ai/streamFilter.js';
 import { normalizeDirKey } from '../utils/directoryGitState.js';
+import { buildModelFallbackChain, modelLabel, runWithModelFallback } from '../../../utils/aiModelFallback.js';
 import logger from '../utils/logger.js';
 
 /** 一次最多解读多少个目录,与 /api/recent_directories/git-state 的上限保持一致 */
@@ -276,18 +277,18 @@ export function registerRecentDirectoriesSummaryRoutes({ app, configManager }) {
         return res.end();
       }
 
-      // 取默认模型(isDefault 优先,否则第一个),与提交信息生成同一口径
-      let model;
+      // 候选链 = 默认模型打头,其余已配置模型跟上(默认模型额度用完也不会整块不可用)
+      let chain;
       try {
         const rawConfig = await configManager.readRawConfigFile();
         const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
-        model = models.find(m => m.isDefault) || models[0];
+        chain = buildModelFallbackChain(models);
       } catch (err) {
         send({ type: 'error', error: '读取 AI 配置失败: ' + err.message, code: 'CONFIG_ERR' });
         finished = true;
         return res.end();
       }
-      if (!model) {
+      if (chain.length === 0) {
         send({ type: 'error', error: '未配置 AI 模型', code: 'NO_MODEL' });
         finished = true;
         return res.end();
@@ -302,18 +303,30 @@ export function registerRecentDirectoriesSummaryRoutes({ app, configManager }) {
         send({ type: 'delta', content });
       });
 
-      const { aborted } = await callLlmStream(
-        model,
-        prompt,
-        (delta) => {
-          if (delta.content) contentStream.feed(delta.content);
-        },
+      // 已经往 SSE 里推过内容就不能换模型（会重复输出半截说明），只有「一个字都还没吐」
+      // 时才允许重试下一个
+      const { result } = await runWithModelFallback(
+        chain,
+        (candidate) => callLlmStream(
+          candidate,
+          prompt,
+          (delta) => {
+            if (delta.content) contentStream.feed(delta.content);
+          },
+          {
+            maxTokens: MAX_SUMMARY_TOKENS,
+            systemPrompt: zh ? SYSTEM_PROMPT_ZH : SYSTEM_PROMPT_EN,
+            signal: abortController.signal,
+          }
+        ),
         {
-          maxTokens: MAX_SUMMARY_TOKENS,
-          systemPrompt: zh ? SYSTEM_PROMPT_ZH : SYSTEM_PROMPT_EN,
-          signal: abortController.signal,
+          isFatal: () => summaryText.length > 0,
+          onFallback: ({ from, to, error }) => logger.warn(
+            `[recent_directories/summary] 模型 ${modelLabel(from)} 调用失败(${error?.message || error}),改用 ${modelLabel(to)}`
+          ),
         }
       );
+      const aborted = Boolean(result?.aborted);
 
       if (aborted) {
         // 前端主动断开(关弹窗/切目录):不是错误,也不必补一条 error 事件
