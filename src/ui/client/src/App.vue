@@ -355,11 +355,10 @@ const dockContextFile = computed(() => {
   return null
 })
 
-/** dock 的补充上下文说明：只有思维导图视图需要（编辑器那条靠 openFilePath 就够）。
- *  不带「输出 ```mindmap 块」的约定 —— 那段只有导图页自己的面板能消费。 */
+/** dock 的补充上下文说明：只有思维导图视图需要（编辑器那条靠 openFilePath 就够）。 */
 const dockContextNote = computed(() => {
   if (activeView.value !== 'mindmap') return undefined
-  return buildMindmapAiNote(mindmapStore.current?.path, localeStore.currentLocale, { withConvention: false })
+  return buildMindmapAiNote(mindmapStore.current?.path, localeStore.currentLocale)
 })
 
 // Git 视图内的三个 Tab:

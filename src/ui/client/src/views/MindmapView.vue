@@ -14,7 +14,7 @@
   ~ limitations under the License.
   -->
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -25,13 +25,11 @@ import { FilePickerModal as FilePicker } from 'local-file-picker/client'
 import { MindMap, markdownToMindMap, type MindMapNode } from 'flow-mindmap'
 import 'flow-mindmap/style.css'
 import { useMindmapStore, isUnderDir } from '@/stores/mindmapStore'
-import { buildMindmapAiNote } from '@/utils/mindmapAiNote'
 import { useConfigStore } from '@/stores/configStore'
 import { useLocaleStore } from '@/stores/localeStore'
 import { openPathInFileManager } from '@/composables/useDirectoryOpenActions'
 import { storeToRefs } from 'pinia'
 import EmptyState from '@/components/EmptyState.vue'
-import EditorAgentPanel from '@/components/EditorAgentPanel.vue'
 
 const store = useMindmapStore()
 const configStore = useConfigStore()
@@ -402,11 +400,6 @@ async function handleExportMarkdown() {
 
 // 快捷键 Ctrl+S 保存
 function onKeydown(e: KeyboardEvent) {
-  // 全屏对话盖住了画布，得留一条键盘退路（与文件空间同一条约定）
-  if (e.key === 'Escape' && aiFullscreen.value) {
-    aiFullscreen.value = false
-    return
-  }
   if ((e.ctrlKey || e.metaKey) && e.key === 's') {
     e.preventDefault()
     if (store.current && store.dirty) {
@@ -422,8 +415,6 @@ watch(
   () => store.current?.path,
   () => {
     mmKey.value++
-    // 换了一张导图 → 上一张的 AI 草稿作废（否则一键应用会盖上另一张图）
-    draft.value = null
   }
 )
 
@@ -448,225 +439,6 @@ const mmData = computed(() => {
   }
 })
 
-// ── 右侧 g ai 面板 ──────────────────────────────────────────────
-// 与文件空间（EditorView）同一套形态：右侧一列、分隔条在面板左边缘、可全屏、
-// 关闭后 v-show 保状态（进行中的流不因为切了一下就断）。复用 EditorAgentPanel，
-// 不另写一份对话面板 —— 会话列表 / 输入框 / 排队 / 引擎切换都在那个组件里。
-const showAi = ref(false)
-// 首次打开后常驻：v-show 保状态
-const aiOpened = ref(false)
-const aiFullscreen = ref(false)
-// 0 = 还没拖过，与画布平分；拖过就是面板的**实际像素宽**
-const aiWidth = ref(0)
-
-const aiStyle = computed(() => {
-  if (aiWidth.value <= 0) return {}
-  // 全屏时不能再带 max-width：内联的 calc(100% - 320px) 会把 inset:0 的面板砍窄一截
-  if (aiFullscreen.value) return { flex: `0 0 ${aiWidth.value}px` }
-  return { flex: `0 0 ${aiWidth.value}px`, maxWidth: 'calc(100% - 320px)' }
-})
-
-function toggleAi() {
-  showAi.value = !showAi.value
-  aiOpened.value = true
-}
-
-function closeAi() {
-  showAi.value = false
-}
-
-/**
- * 画布宽度变了（开 / 关 g ai 面板、拖分隔条、进出全屏）之后，让导图重新居中。
- *
- * 不这么做的后果是"导图被推出可视区"：flow-mindmap 的视口是在自己的 canvas 坐标里
- * 钉住的，面板一开画布少了一半宽，根节点还停在原坐标上 —— 实测 1600 视口下画布
- * 1312→652、根节点右缘 1020 > 画布右缘 940，用户看到的就是半张图截在边上。
- * `resetView()` 用的正是**当前**容器宽高重新摆位，所以宽度变化后调它就行。
- * 放 rAF 里：等这一帧的 flex 布局落定再量，不然量到的还是旧宽度。
- */
-let recenterRaf = 0
-function recenterMindmap() {
-  if (recenterRaf) cancelAnimationFrame(recenterRaf)
-  recenterRaf = requestAnimationFrame(() => {
-    recenterRaf = 0
-    mmRef.value?.resetView()
-  })
-}
-
-// 面板开关 / 进出全屏都会改画布宽度
-watch([showAi, aiFullscreen], () => nextTick(recenterMindmap))
-
-// 面板一关就退出全屏 —— 否则下次打开对话会莫名其妙地整屏铺开（与 EditorView 同一处置）
-watch(showAi, (open) => {
-  if (!open) aiFullscreen.value = false
-})
-
-/** 当前导图文件名（输入框里那张「当前文档」卡片用） */
-const currentFileName = computed(() => {
-  const p = store.current?.path || ''
-  const parts = p.split(/[\\/]/)
-  return parts[parts.length - 1] || ''
-})
-
-/**
- * 上下文说明（视图 + 当前文件 + mindmap 输出约定）抽到 utils/mindmapAiNote，
- * 右下角 dock 在同一视图里也用它（不带输出约定，见那个文件头）。
- */
-const aiContextNote = computed(() =>
-  buildMindmapAiNote(store.current?.path, currentLocale.value, { withConvention: true }),
-)
-
-// ── 分隔条拖拽（面板在分隔条右侧，向左拖 = 变宽）─────────────────
-const AI_MIN_WIDTH = 300
-const CANVAS_MIN_WIDTH = 320
-let isAiResizing = false
-let aiResizeStartX = 0
-let aiResizeStartW = 0
-let aiResizeMaxW = 0
-
-function startAiResize(e: MouseEvent) {
-  const handle = e.currentTarget as HTMLElement
-  const body = handle.parentElement
-  if (!body) return
-  const bodyRect = body.getBoundingClientRect()
-  const handleRect = handle.getBoundingClientRect()
-  isAiResizing = true
-  aiResizeStartX = e.clientX
-  aiResizeStartW = bodyRect.right - handleRect.right
-  aiResizeMaxW = Math.max(AI_MIN_WIDTH, bodyRect.width - CANVAS_MIN_WIDTH)
-  document.addEventListener('mousemove', onAiResize)
-  document.addEventListener('mouseup', stopAiResize)
-  document.body.style.cursor = 'col-resize'
-  document.body.style.userSelect = 'none'
-  e.preventDefault()
-}
-
-function onAiResize(e: MouseEvent) {
-  if (!isAiResizing) return
-  const delta = aiResizeStartX - e.clientX
-  aiWidth.value = Math.round(
-    Math.max(AI_MIN_WIDTH, Math.min(aiResizeMaxW, aiResizeStartW + delta))
-  )
-}
-
-function stopAiResize() {
-  const wasResizing = isAiResizing
-  isAiResizing = false
-  document.removeEventListener('mousemove', onAiResize)
-  document.removeEventListener('mouseup', stopAiResize)
-  document.body.style.cursor = ''
-  document.body.style.userSelect = ''
-  // 拖完才重新居中：拖的过程中每帧都 resetView 会把导图来回甩
-  if (wasResizing) recenterMindmap()
-}
-
-// ── AI 导图草稿：从回答里抠 ```mindmap 块 ────────────────────────
-// 面板只在"一轮跑完"时把最后一条回答交过来（见 EditorAgentPanel 的 assistant-done），
-// 这里只认格式，不关心它是怎么生成的。
-interface MindmapDraft {
-  md: string
-  title: string
-  nodes: number
-}
-
-const draft = ref<MindmapDraft | null>(null)
-
-function extractMindmapDraft(text: string): MindmapDraft | null {
-  // 取**最后一个**块：改了几轮的话，最后那份才是定稿
-  const re = /```[ \t]*(?:mindmap|mm)[ \t]*\r?\n([\s\S]*?)```/gi
-  let body: string | null = null
-  let m: RegExpExecArray | null
-  while ((m = re.exec(String(text || ''))) !== null) body = m[1]
-  const md = (body || '').trim()
-  if (!md) return null
-  const heads = md.match(/^#{1,6}[ \t]+\S.*$/gm) || []
-  if (heads.length === 0) return null
-  const title = (heads[0] || '').replace(/^#{1,6}[ \t]+/, '').trim()
-  return { md, title, nodes: heads.length }
-}
-
-function onAssistantDone({ text }: { text: string }) {
-  const found = extractMindmapDraft(text)
-  if (found) draft.value = found
-}
-
-function dismissDraft() {
-  draft.value = null
-}
-
-/** 草稿 → 导图 JSON（id 由 markdownToMindMap 生成，模型不碰结构） */
-function draftToContent(d: MindmapDraft, title: string): string {
-  return JSON.stringify(markdownToMindMap(d.md, title), null, 2)
-}
-
-// 应用前先把待落盘的数据算出来：这一步纯计算，坏了也不会把当前导图弄丢
-async function applyDraftToCurrent() {
-  const d = draft.value
-  if (!d || !store.current) return
-  try {
-    await ElMessageBox.confirm(
-      $t('@MINDMAP:覆盖当前导图确认', { title: store.current.title }),
-      $t('@MINDMAP:应用导图草稿'),
-      {
-        confirmButtonText: $t('@MINDMAP:覆盖'),
-        cancelButtonText: $t('@MINDMAP:取消'),
-        type: 'warning'
-      }
-    )
-  } catch {
-    return
-  }
-  try {
-    cancelAutosave()
-    await store.saveCurrent(draftToContent(d, d.title))
-    // 落盘的是草稿的根，文件标题（工具栏那个）也跟着换 —— 它读的是 current.title，
-    // 不改的话保存后还挂着旧根节点的文字，看着像没生效
-    if (store.current) store.current.title = d.title
-    // 诱导图重挂载：flow-mindmap 的 data 是浅 watcher，换了内容不换实例会留着旧树
-    mmKey.value++
-    draft.value = null
-    ElMessage.success($t('@MINDMAP:已应用到当前导图'))
-  } catch (e: any) {
-    ElMessage.error(e?.message || $t('@MINDMAP:应用草稿失败'))
-  }
-}
-
-async function applyDraftAsNew() {
-  const d = draft.value
-  if (!d) return
-  const targetDir = pickTargetDir()
-  if (!targetDir) return
-  let name = ''
-  try {
-    const res = await ElMessageBox.prompt(
-      $t('@MINDMAP:输入文件名提示'),
-      $t('@MINDMAP:新建思维导图'),
-      {
-        confirmButtonText: $t('@MINDMAP:新建'),
-        cancelButtonText: $t('@MINDMAP:取消'),
-        inputValue: d.title,
-        inputValidator: (v: string) => {
-          if (!v || !v.trim()) return $t('@MINDMAP:名称不能为空')
-          if (/[\\/:*?"<>|]/.test(v)) return $t('@MINDMAP:名称含非法字符')
-          return true
-        }
-      }
-    )
-    name = res.value.trim()
-  } catch {
-    return
-  }
-  try {
-    await store.createFile(name, true, targetDir)
-    await store.saveCurrent(draftToContent(d, name))
-    mmKey.value++
-    draft.value = null
-    ElMessage.success($t('@MINDMAP:已新建导图'))
-  } catch (e: any) {
-    ElMessage.error(e?.message || $t('@MINDMAP:应用草稿失败'))
-  }
-}
-
 // 生命周期
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
@@ -679,7 +451,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
   document.removeEventListener('click', closeCtxMenu)
   cancelAutosave()
-  stopAiResize()
 })
 
 // 格式化
@@ -773,24 +544,6 @@ function formatSize(bytes: number): string {
             </svg>
           </template>
           {{ $t('@MINDMAP:复制MD') }}
-        </el-button>
-        <el-button
-          size="small"
-          class="mm-ai-btn"
-          :class="{ 'is-on': showAi }"
-          :title="showAi ? $t('@MINDMAP:关闭 g ai 对话') : $t('@MINDMAP:打开 g ai 对话')"
-          @click="toggleAi"
-        >
-          <!-- message-chatbot.svg（Tabler icons，MIT）：与文件空间那颗开关同款图标 -->
-          <template #icon>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-              <path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-5l-5 3v-3h-2a3 3 0 0 1-3-3v-8a3 3 0 0 1 3-3h12" />
-              <path d="M9.5 9h.01" />
-              <path d="M14.5 9h.01" />
-              <path d="M9.5 13a3.5 3.5 0 0 0 5 0" />
-            </svg>
-          </template>
-          {{ $t('@MINDMAP:g ai 对话') }}
         </el-button>
         <el-button
           size="small"
@@ -925,38 +678,9 @@ function formatSize(bytes: number): string {
         </div>
       </div>
 
-      <!-- 右侧：画布 + g ai 面板（与文件空间同一套：分隔条贴在面板左边缘，向左拖变宽） -->
+      <!-- 右侧：导图画布 -->
       <div class="mm-editor">
         <div class="mm-stage">
-          <!-- AI 导图草稿条：模型在回答里给了 ```mindmap 大纲才有。
-               平铺一条通栏，不用「圆角 + 单边框」的卡片 —— 它是画布上的一条横幅，不是浮块。 -->
-          <div v-if="draft" class="mm-draft">
-            <span class="mm-draft-tag">{{ $t('@MINDMAP:AI 导图草稿') }}</span>
-            <span class="mm-draft-title" :title="draft.title">{{ draft.title }}</span>
-            <span class="mm-draft-meta">{{ $t('@MINDMAP:个节点', { n: draft.nodes }) }}</span>
-            <span class="mm-draft-spacer" />
-            <button
-              v-if="store.current"
-              class="mm-draft-btn mm-draft-btn--primary"
-              @click="applyDraftToCurrent"
-            >{{ $t('@MINDMAP:应用到当前导图') }}</button>
-            <button
-              class="mm-draft-btn"
-              :disabled="store.dirs.length === 0"
-              @click="applyDraftAsNew"
-            >{{ $t('@MINDMAP:另存为新导图') }}</button>
-            <button
-              class="mm-draft-close"
-              :title="$t('@MINDMAP:关闭草稿')"
-              :aria-label="$t('@MINDMAP:关闭草稿')"
-              @click="dismissDraft"
-            >
-              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
-          </div>
-
           <div class="mm-canvas">
             <EmptyState
               v-if="!store.current"
@@ -990,29 +714,6 @@ function formatSize(bytes: number): string {
             />
           </div>
         </div>
-
-        <!-- 分隔条：全屏时这一列整个让给面板 -->
-        <div
-          v-if="showAi && !aiFullscreen"
-          class="mm-resizer"
-          @mousedown="startAiResize"
-        />
-
-        <!-- g ai 对话：v-if 懒挂载 + v-show 保状态（切走再切回来，进行中的流还在） -->
-        <EditorAgentPanel
-          v-if="aiOpened"
-          v-show="showAi"
-          class="mm-ai-panel"
-          :active="showAi"
-          :active-file-path="store.current?.path || ''"
-          :active-file-name="currentFileName"
-          :context-note="aiContextNote"
-          :fullscreen="aiFullscreen && showAi"
-          :style="aiStyle"
-          @close="closeAi"
-          @toggle-fullscreen="aiFullscreen = !aiFullscreen"
-          @assistant-done="onAssistantDone"
-        />
       </div>
     </div>
 
@@ -1391,7 +1092,7 @@ html:not(.dark) .mm-file-actions :deep(.el-button--danger) {
   background: var(--bg-container);
 }
 
-/* 画布那一栏：上面是草稿条（有草稿时），下面铺满导图 */
+/* 画布那一栏：铺满导图 */
 .mm-stage {
   flex: 1;
   min-width: 0;
@@ -1416,154 +1117,6 @@ html:not(.dark) .mm-file-actions :deep(.el-button--danger) {
 .mm-editor-empty {
   position: absolute;
   inset: 0;
-}
-
-/* g ai 面板：默认与画布平分（组件自己的 flex-grow:1 / basis:0），拖过之后走内联像素宽 */
-.mm-ai-panel {
-  flex-shrink: 0;
-}
-
-/* 分隔条：贴在面板**左边缘**，向左拖 = 面板变宽。
-   宽 7px 好点中，视觉上只有正中间 1px 那条线（与文件空间同一条）。 */
-.mm-resizer {
-  width: 7px;
-  flex-shrink: 0;
-  cursor: col-resize;
-  position: relative;
-  background: transparent;
-  z-index: 2;
-
-  &::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 50%;
-    width: 1px;
-    transform: translateX(-50%);
-    background: var(--border-color);
-    transition: background var(--transition-fast), width var(--transition-fast);
-  }
-
-  &:hover {
-    background: var(--tint-primary-06);
-
-    &::after {
-      width: 2px;
-      background: var(--color-primary);
-    }
-  }
-}
-
-/* ── AI 导图草稿条 ────────────────────────────────────────────── */
-/* 通栏一条、不带圆角与外框：它压着画布上沿，是横幅不是浮卡（用户明确不要
-   「圆角 + 单层 border」那种卡）。底色取 AI 语义色，和对话面板一眼同源。 */
-.mm-draft {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  min-height: 34px;
-  padding: 5px 8px 5px 12px;
-  background: var(--role-ai-surface);
-  border-bottom: 1px solid var(--role-ai-edge);
-  font-size: var(--font-size-sm);
-}
-
-.mm-draft-tag {
-  flex-shrink: 0;
-  padding: 1px 6px;
-  border-radius: var(--radius-xs);
-  background: var(--role-ai-wash);
-  color: var(--role-ai-ink);
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.mm-draft-title {
-  min-width: 0;
-  max-width: 40%;
-  color: var(--text-primary);
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.mm-draft-meta {
-  flex-shrink: 0;
-  color: var(--text-meta);
-  font-size: var(--font-size-xs);
-}
-
-.mm-draft-spacer {
-  flex: 1;
-  min-width: 8px;
-}
-
-.mm-draft-btn {
-  flex-shrink: 0;
-  padding: 3px 10px;
-  border: none;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: var(--transition-ui-fast);
-
-  &:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-  }
-
-  &:disabled {
-    color: var(--text-meta);
-    cursor: not-allowed;
-    background: transparent;
-  }
-}
-
-.mm-draft-btn--primary {
-  color: var(--role-ai-ink);
-  font-weight: 600;
-
-  &:hover {
-    background: var(--role-ai-wash);
-    color: var(--role-ai-ink);
-  }
-}
-
-.mm-draft-close {
-  flex-shrink: 0;
-  /* 24px：与 g ai 面板头部那排图标按钮同档（verify:ui-consistency 的尺寸棘轮
-     就是盯"同屏又冒出一个新尺寸"，别为这一颗小叉单开一个 22px） */
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--text-meta);
-  cursor: pointer;
-  transition: var(--transition-ui-fast);
-
-  &:hover {
-    background: var(--bg-hover);
-    color: var(--text-secondary);
-  }
-}
-
-/* g ai 开关的按下态：语义色淡底（不用主色实心，免得和「保存」抢注意力） */
-.mm-toolbar-right :deep(.mm-ai-btn.is-on) {
-  background: var(--role-ai-surface);
-  border-color: var(--role-ai-edge);
-  color: var(--role-ai-ink);
 }
 
 /* ── 目录右键菜单 ─────────────────────────────────────────────── */
