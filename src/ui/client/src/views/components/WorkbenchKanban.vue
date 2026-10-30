@@ -1061,15 +1061,18 @@ function coverTitle(img: BoardImage): string {
   --col-edge: var(--role-pending-edge);
   --col-glow: var(--role-pending-glow);
   /* 列头那条带子：从 hue 直接兑基底，**不是**叠在列身上 ——
-     叠的话列头会比列身更暗，读起来像一块阴影而不是一条标识。 */
-  --col-band: color-mix(in srgb, var(--col-hue) 26%, var(--surface-elevated));
+     叠的话列头会比列身更暗，读起来像一块阴影而不是一条标识。
+     2026-10-30 从 26% 收到 16%：卡面恢复圆角 + 阴影之后，列头再铺一条浓带，
+     一屏里就有"三块彩色矩形 + 一堆白纸卡"两种强材质互相打架。标识该由色点、
+     列名、计数三样承担，色带只是氛围。 */
+  --col-band: color-mix(in srgb, var(--col-hue) 16%, var(--surface-elevated));
   display: flex;
   flex-direction: column;
   min-height: 0;
   min-width: 0;
   /* **常驻**裁切，不能只写在 is-collapsed 上：展开的那 300ms 里 class 已经摘掉了，
      而轨道才刚长到几十像素 —— 不裁的话列头那 12px 内边距会直接糊到隔壁列上。
-     （列内的卡片本来就有 12px 内边距，静息/抬升阴影都在这个范围里，裁不到。） */
+     （列内的卡片本来就有 14px 内边距，静息/抬升阴影都在这个范围里，裁不到。） */
   overflow: hidden;
   border-left: 1px solid var(--border-color);
   background: var(--col-surface);
@@ -1201,28 +1204,41 @@ function coverTitle(img: BoardImage): string {
    * 交集写出来跟单层一模一样（第一版就踩了这个，改完 11 条断言全绿、截图却没变）。
    * 两个数字都是从真实 DOM 量出来的（scripts/verify-wb-card-fade-band.cjs 守着几何，
    * 同脚本还直接数像素，守住"上面几行的字真的还在"）：
-   *   · 19px：倒数第二行的行盒下沿 = 末行行高 16.5，更深一点的墨迹（中英混排的下伸部）
+   *   · 21px：倒数第二行的行盒下沿 = 末行行高 16.5，更深一点的墨迹（中英混排的下伸部）
    *     实测在 18.3px —— 过渡带从它**下面**开始，那行就一像素都不受影响。
-   *   · 14px：末行墨迹上沿实测 15.5px，按钮盒顶实测 12px —— 终点在墨迹上沿之下，
+   *     （2026-10-30 卡片内边距 12→14，这四档整体 +2：墨迹到卡底的距离全跟着涨 2px。）
+   *   · 16px：末行墨迹上沿实测 15.5px，按钮盒顶实测 12px —— 终点在墨迹上沿之下，
    *     整组按钮连同它的内边距都落在全透明区里，不会露出半截字形。
    * 元素比条带还矮时（单行引文 / 单行标题）两个 stop 都会被 clamp，等价于整行渐隐 ——
    * 那本来就是想要的结果。
    */
-  --kb-mask-outside-band: linear-gradient(to bottom, #000 calc(100% - 19px), transparent calc(100% - 14px));
-  padding: 12px;
-  margin-bottom: 8px;
-  /* 2026-10-17 用户："我不喜欢圆角加单 border 的样式"（圈的就是这张进行中的卡）。
-     卡面改成**平铺**：不画 1px 描边、不给常驻圆角、不挂静息阴影，hover 也不抬升 ——
-     边界交给列身的角色淡底（.kb-col 的 --col-surface），和项目列表 .proj-item 同一套语言。
-     描边/圆角/阴影留任何一项，它还是"一张浮在白底上的卡片"，改不干净。 */
+  --kb-mask-outside-band: linear-gradient(to bottom, #000 calc(100% - 21px), transparent calc(100% - 16px));
+  padding: 14px;
+  margin-bottom: 12px;
+  /* 卡面材质：纸卡（圆角 + 静息浅阴影 + 悬浮抬升），**仍然不画 1px 描边**。
+     2026-10-17 用户否掉的是"圆角 + 单 border"那一套（card 靠一圈线分隔）；
+     2026-10-30 用户拿 Hallmark Coral 的任务看板做对照，要的是"桌面上的纸卡":
+     分界由阴影和纸面本身的明度差承担，不是由线承担。所以：
+       圆角 ✓ / 阴影 ✓ / 1px 描边 ✗ —— 这三者的取舍是这次改动的全部。
+     阴影用 --shadow-card-rest，抬升用 --shadow-card-lift（两套主题各有一份）。 */
   border: 0;
-  border-radius: 0;
+  border-radius: 10px;
   background: var(--surface-elevated);
+  /* 静息阴影比 --shadow-card-rest 再深一点：卡片现在落在**带角色淡底的列**上，
+     通用卡片阴影（5% 透明度的冷蓝）在这种有底色的表面上几乎看不见，
+     “纸卡”的边界就没了。数值只比令牌重一档，仍然远低于悬浮档。 */
+  box-shadow: 0 1px 2px rgba(30, 58, 95, 0.07), 0 2px 10px -4px rgba(30, 58, 95, 0.10);
   cursor: pointer;
-  transition: background var(--transition-fast) var(--ease-custom);
+  transition:
+    background var(--transition-fast) var(--ease-custom),
+    box-shadow var(--transition-fast) var(--ease-custom),
+    transform var(--transition-fast) var(--ease-custom);
 }
 .kb-card:hover {
-  background: var(--bg-subtle-hover);
+  /* 悬停只做"抬起来"：纸面颜色不变（换了底色就成"另一种卡"了），
+     由阴影加深 + 1px 位移表达可点。 */
+  box-shadow: var(--shadow-card-lift);
+  transform: translateY(-1px);
 }
 /* 卡片状态与列状态是同一套角色 —— "进行中"的卡和"进行中"的列必然同色，
    而不是靠两处各写一遍数值凑巧一致。
@@ -1253,7 +1269,7 @@ function coverTitle(img: BoardImage): string {
 }
 
 /* ── 封面：附件里第一张图（模板那段讲了为什么在最顶、为什么只画一张） ──────
-   出血到卡片边缘：负外边距抵消 .kb-card 的 12px 内边距。它是这张卡的封面，
+   出血到卡片边缘：负外边距抵消 .kb-card 的 14px 内边距。它是这张卡的封面，
    不是卡里嵌的一个盒子（嵌进去就成 cards-inside-cards 了）。
    圆角只削上面两个、且比卡片自己的 --radius-lg 小 1px —— 卡片那圈 1px 边框
    会把内部圆角衬出来，不跟着收就会在角上露出一线底色。
@@ -1262,17 +1278,16 @@ function coverTitle(img: BoardImage): string {
 .kb-card__cover {
   position: relative;
   display: block;
-  width: calc(100% + 24px);
+  width: calc(100% + 28px);
   height: 72px;
-  margin: -12px -12px 10px;
+  margin: -14px -14px 10px;
   padding: 0;
   border: none;
-  /* 2026-10-17：卡片改成平铺（无圆角），封面跟着归零 —— 留着上圆角会在卡片顶上
-     切掉一块白角，比不裁还难看。 */
-  border-radius: 0;
+  /* 封面出血到卡片边缘，所以上两个角必须跟卡片自己那颗圆角对齐（2026-10-30 卡面恢复圆角）。 */
+  border-radius: 10px 10px 0 0;
   overflow: hidden;
   /* 2026-10-05：底色原来也是 --bg-subtle（白底上叠 2% 黑）。封面是**出血**到卡片
-     边缘的 —— 上面那条负外边距抵消了 .kb-card 的 12px 内边距 —— 而卡片底是
+     边缘的 —— 上面那条负外边距抵消了 .kb-card 的 14px 内边距 —— 而卡片底是
      --wb-card-bg = --bg-container，两者并不同源。图片按 object-fit: cover 铺满，
      但加载中、或 onCoverError 撤块前后那一瞬，这一圈比卡片略暗的灰会露出来，
      在纯白卡上像一条没对齐的接缝。改成与卡片严格同底。 */
@@ -1380,7 +1395,9 @@ function coverTitle(img: BoardImage): string {
   flex: 1 1 0;
   min-width: 0;
   font-size: var(--font-size-base);
-  font-weight: 500;
+  /* 600 而不是 500：卡面恢复纸卡材质后，标题是这张卡唯一的"标题层"，
+     500 和下面的引文（--text-secondary）几乎同重，扫一列时落不到点上。 */
+  font-weight: 600;
   line-height: 1.5;
   color: var(--text-primary);
   /* 一行到底、超出打省略号（完整标题在原生提示里，见模板的 :title）。

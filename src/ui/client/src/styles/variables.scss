@@ -877,9 +877,9 @@
   --role-error-bar:   color-mix(in srgb, var(--role-error-hue) 70%, var(--role-error-ink));
   --role-ai-bar:      color-mix(in srgb, var(--role-ai-hue) 70%, var(--role-ai-ink));
 
-  --role-pending-surface: color-mix(in srgb, var(--role-pending-hue) 9%, var(--surface-elevated));
-  --role-active-surface:  color-mix(in srgb, var(--role-active-hue) 9%, var(--surface-elevated));
-  --role-done-surface:    color-mix(in srgb, var(--role-done-hue) 9%, var(--surface-elevated));
+  --role-pending-surface: color-mix(in srgb, var(--role-pending-hue) 5%, var(--surface-elevated));
+  --role-active-surface:  color-mix(in srgb, var(--role-active-hue) 5%, var(--surface-elevated));
+  --role-done-surface:    color-mix(in srgb, var(--role-done-hue) 5%, var(--surface-elevated));
   --role-error-surface:   color-mix(in srgb, var(--role-error-hue) 9%, var(--surface-elevated));
   --role-ai-surface:      color-mix(in srgb, var(--role-ai-hue) 9%, var(--surface-elevated));
 
