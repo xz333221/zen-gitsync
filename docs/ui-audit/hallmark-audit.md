@@ -135,6 +135,21 @@ node ~/.codebuddy/skills/hallmark/scripts/sloplint.mjs src/ui/client/src --scope
 ![新：纸卡（浅色）](./hallmark-shots/card-after-light.png)
 ![新：纸卡（深色）](./hallmark-shots/card-after-dark.png)
 
+### 追加：卡片上的左侧竖条一起撤掉
+
+纸卡落地之后，`inset 3px 0 0` 那三条状态竖条（进行中 / 出错 / 点开过）就成了卡面上
+唯一的"线"，而且在 10px 圆角上会被切出直角楔子。用户圈着"点开过的那张"卡上的主色条说
+「这卡片不要左边框」，三条一起撤：
+
+- 进行中 → 进行中列的色带 + 列身 + 卡片自己的活动行 / 进度条（竖条本来就是冗余的）
+- 出错 → 卡面那层淡红底（底色不是描边，跨列识别靠它，保留）
+- 点开过 → 只剩 `aria-current`，卡面不再有任何标记
+
+契约写进 `verify:wb-card-opened` 的 B4 / D3（inset 阴影与 border-left 两个来源都要是 0），
+R4 做反向验证。
+
+![撤掉左侧竖条后（深色）](./hallmark-shots/card-no-left-border-dark.png)
+
 ## 五、没做、但值得排期的
 
 1. **活动栏 / 顶栏的 `#fff` `#000`**：换成 `--color-white` / `--color-black`

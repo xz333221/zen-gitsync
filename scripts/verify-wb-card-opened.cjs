@@ -15,15 +15,18 @@
  * 验收契约（改这块时别破坏）：
  *   A 点开之前 hover 照旧：操作组浮出（opacity 1）+ 正文渐隐（mask 是 gradient）+ 卡片抬升
  *   B 点开（走 open-task）之后：那张卡片带 .is-opened / aria-current，别的卡片没有
+ *     （2026-10-30 追加 B4：卡面**不许再有左侧竖条** —— 用户圈着那条 3px 主色条说
+ *      "这卡片不要左边框"；inset 阴影与 border-left 两个来源都要是 0）
  *   C 点开之后 hover 它：**三件照旧**（操作组浮出 / 正文渐隐 / 卡片抬升）——
  *     2026-10-05 用户报的"hover 没显示"就是这条；而且鼠标点出来的焦点不算数：
  *     关掉编辑器、鼠标挪开，操作组必须收回去（09-30 那条诉求的根）
- *   D 没点开过的卡片一致（标记不该改变任何交互）
+ *   D 没点开过的卡片一致（标记不该改变任何交互）；D3 一并守「进行中的卡也没有竖条」
  *   E 键盘仍然可达：真的按 Tab 走进去，操作组照旧浮出（触发侧是 :focus-visible，不能只测鼠标）
  *   F 标记只跟着**最后点开的那条**
  *   G 页面无 console / page 错误
  *   R 反证（--reverse）：把 2026-09-30 那版「点开过的卡不响应 hover」注回去，
  *     C1 / C3 / C4 必须翻红 —— 那三条量的是**触发侧**，注回旧规则还绿就说明量错了对象。
+ *     R4：再把 2026-10-17 那版 inset 竖条注回去，B4 / D3 的判据必须翻红。
  *
  * ⚠️ E 组不能用 `locator.focus()` 代替按键：脚本 focus 算不算 `:focus-visible` 取决于
  *   上一个交互是不是键盘（实测同一脚本里两次结论能相反），拿它当探针等于测 Chromium 的心情。
@@ -134,6 +137,10 @@ function readCard(page, id) {
       replyMask: maskOf(reply),
       liveMask: maskOf(liveLast),
       transform: getComputedStyle(el).transform,
+      // 2026-10-30：卡面不许再有任何"左边框"（inset 竖条 / border-left）。两个来源都读，
+      // 只读 box-shadow 的话，将来有人把它写回 border-left 这条断言照样绿。
+      insetShadow: /inset/.test(getComputedStyle(el).boxShadow),
+      borderLeft: parseFloat(getComputedStyle(el).borderLeftWidth) || 0,
       box: { x: r.x + r.width / 2, y: r.y + r.height / 2 },
     }
   }, id)
@@ -215,6 +222,12 @@ async function main() {
     check('B1 点开的卡片带 .is-opened', openedA.opened)
     check('B2 同时对读屏声明 aria-current', openedA.ariaCurrent === 'true', String(openedA.ariaCurrent))
     check('B3 没点开的卡片没有这个标记（不是整板生效）', !otherB.opened)
+    // 2026-10-30 用户："这卡片不要左边框"（圈的是点开过那张卡上的 3px 主色条）。
+    // 标记改成只剩 aria-current，卡面不许再有 inset 竖条 / border-left —— 连进行中、出错
+    // 那两条同款一起撤（见 WorkbenchKanban 里 .is-running / .has-error 那段）。
+    check('B4 点开的卡没有左侧竖条（inset 阴影与 border-left 都为 0）',
+      !openedA.insetShadow && openedA.borderLeft === 0,
+      `inset=${openedA.insetShadow} border-left=${openedA.borderLeft}px`)
 
     // ── C 点开之后 hover 它：操作组 / 遮罩 / 抬升三件照旧 ─────────────
     // 2026-10-05 改的契约。上一版这里是"三件一起撤"（is-opened 取消 hover）——
@@ -273,6 +286,9 @@ async function main() {
     check('D1 没点开过的卡片 hover 仍浮出操作组', other.actionsOpacity === '1', `opacity=${other.actionsOpacity}`)
     check('D2 它的活动区也照旧渐隐（另一处遮罩规则同样只对 hover 生效）',
       /gradient/.test(other.liveMask || ''), String(other.liveMask).slice(0, 40))
+    check('D3 进行中的卡同样没有左侧竖条（.is-running 那 3px 也不再画）',
+      !other.insetShadow && other.borderLeft === 0,
+      `inset=${other.insetShadow} border-left=${other.borderLeft}px`)
 
     // ── E 键盘仍然可达 ──────────────────────────────────────────────
     // 触发侧从 :focus-within 收窄成 :focus-visible 之后，这里**必须真的按 Tab**：
@@ -311,6 +327,16 @@ async function main() {
     const backA = await readCard(page, 'syn-a')
     check('F2 先前那张恢复 hover 操作（只有一条处于"点开过"）',
       backA.actionsOpacity === '1', `opacity=${backA.actionsOpacity}`)
+
+    if (REVERSE) {
+      // 反向验证「卡上没有左边框」这条契约：把 2026-10-17 那版 inset 竖条注回去，
+      // B4 / D3 的判据必须翻红。放在 F 之后注入 —— 放前面会让 D3（进行中的卡）跟着红，
+      // 分不清"判据是真的"还是"注入污染了别的组"。
+      await page.addStyleTag({ content: '.kb-card { box-shadow: inset 3px 0 0 var(--role-active-edge) !important; }' })
+      const lined = await readCard(page, 'syn-b')
+      check('R4 反证：注回 inset 竖条后卡片又出现左边框（B4 / D3 的判据是真的）',
+        lined.insetShadow === true, `inset=${lined.insetShadow}`)
+    }
 
     check('G1 页面无 console / page 错误', consoleErrors.length === 0 && pageErrors.length === 0,
       [...consoleErrors, ...pageErrors].slice(0, 3).join(' | '))
