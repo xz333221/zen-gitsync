@@ -4,6 +4,7 @@ import { computed, reactive, watch } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
 import type { Task, Job } from '@/types/workbench'
 import type { TaskExecutorId } from '@/utils/taskExecutor'
+import { userFacingPrompt } from '@/utils/jobUserPrompt'
 import type { SelectedFile } from 'zen-ai-chat-ui'
 
 /** 排队中的一条续聊（任务还在跑，等这一轮结束再发） */
@@ -70,11 +71,15 @@ export function useWorkbenchExecution(
     }
   }
 
-  /** 续接一轮对话。返回是否真的发出去了（排队那边靠它决定要不要出队） */
-  async function continueChat(t: Task, message: string): Promise<boolean> {
-    const latest = jobs.value
-      .filter(j => j.taskId === t.id)
-      .slice(-1)[0]
+  /**
+   * 续接一轮对话。返回是否真的发出去了（排队那边靠它决定要不要出队）
+   *
+   * `parent` 不给时用这个任务最新的一轮 —— 正常续聊就是这个口径。
+   * 重试（retryRound）要显式指定：它删掉失败那轮之后，上一轮可能不是数组末尾那条。
+   */
+  async function continueChat(t: Task, message: string, parent?: Job): Promise<boolean> {
+    const latest = parent
+      ?? jobs.value.filter(j => j.taskId === t.id).slice(-1)[0]
     if (!latest) {
       ElMessage.error($t('@WORKBENCH:没有可续接的会话'))
       return false
@@ -94,6 +99,39 @@ export function useWorkbenchExecution(
     }
     ElMessage.error(res.error || $t('@WORKBENCH:续接失败'))
     return false
+  }
+
+  /**
+   * 重试失败的那一轮（任务对话流错误气泡上的「重试」）。
+   *
+   * 与 `runTask` 的「整条任务重跑」不是一回事：那一轮失败不该让前面已经跑完的轮次
+   * 一起消失（`runTask` 第一件事就是 clearJobsByTask）。这里的做法是
+   * **把失败这轮的记录删掉，再用同一句用户消息从上一轮续接一次** —— 服务端按
+   * mergedJobs 里的最大轮次号 +1 重新发号，所以删完接着续，编号还是原来那个 `__rN`。
+   *
+   * 用户那句话从 `job.prompt` 里取（`userFacingPrompt` 剥掉环境块/记忆块/附件清单/
+   * 「续接 #N」），与气泡上显示的是同一份文本 —— 别另存字段，老 job 没有它。
+   */
+  async function retryRound(t: Task, failed: Job, prev: Job): Promise<boolean> {
+    // 先判再删：反过来会白删掉这条失败记录，用户连失败原因都看不到
+    if (!prev.claudeSessionId) {
+      ElMessage.error($t('@WORKBENCH:上一轮没有会话标识,无法重试这一轮,请重新发送'))
+      return false
+    }
+    const message = userFacingPrompt(failed.prompt)
+    if (!message) {
+      ElMessage.error($t('@WORKBENCH:这一轮没有可重发的消息'))
+      return false
+    }
+    const res = await fetch(`/api/workbench/jobs/${encodeURIComponent(failed.id)}`, { method: 'DELETE' })
+      .then(r => r.json())
+      .catch(err => ({ success: false, error: err?.message || String(err) }))
+    if (!res?.success) {
+      ElMessage.error(res?.error || $t('@WORKBENCH:重试失败,请稍后再试'))
+      return false
+    }
+    jobs.value = jobs.value.filter(j => j.id !== failed.id)
+    return await continueChat(t, message, prev)
   }
 
   // ── 排队续聊 ──────────────────────────────────────────────────────────
@@ -280,7 +318,7 @@ export function useWorkbenchExecution(
 
   return {
     runTask, continueChat, onContinueSendFromChat,
-    onReExecuteJob, cancelJob,
+    onReExecuteJob, retryRound, cancelJob,
     clearExecutionForSelectedTask,
     // 排队续聊
     isTaskRunning, queuedChatsOf, removeQueuedChat, flushNextQueued

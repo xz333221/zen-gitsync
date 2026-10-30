@@ -601,16 +601,32 @@ const { simpleConversationMessages, simpleAllJobsFor, simpleJobFor, simpleJobSta
 /**
  * 对话流里那颗「重试」（组件库错误气泡按钮 → `retry` 事件）。
  *
- * 这里的"上一轮"是一条 job，不是 g ai 那种服务端会话：每轮都是独立起一个 CLI 进程，
- * 所以重试 = **把这条 job 重跑一遍** —— 与执行日志里的「重新执行」是同一个动作，
- * 直接复用执行层那份 onReExecuteJob，不另写一份重跑逻辑。
+ * 口径 = **只重发失败的那一轮**，不是把整条任务重跑一遍：
+ *   · 续接轮（`__simple__rN`）失败 → 删掉这轮记录，用同一句用户消息从上一轮再续一次
+ *     （`retryRound`）。前面跑完的轮次原样留着 —— 它们已经把活干了一半，
+ *     重跑任务会把它们连同对话流一起清掉（`runTask` 的 clearJobsByTask）。
+ *   · 首轮就失败 → 没有可续接的上一轮，重跑任务 == 重发这一轮，直接复用执行层那份
+ *     onReExecuteJob（此时也没有别的轮次会被清掉）。
  *
  * 消息 id 是 `${job.id}-a`（见 useWorkbenchSimpleConversation），据此找回 job。
  */
 function onChatRetry(message?: ChatMessage) {
+  const t = selectedTask.value
+  if (!t) return false
+  const rounds = simpleAllJobsFor(t)
+  if (!rounds.length) return false
   const jobId = String(message?.id || '').replace(/-a$/, '')
-  const job = jobs.value.find(j => j.id === jobId)
-  return job ? onReExecuteJob(job) : false
+  // 库里有不带参数就 emit('retry') 的入口：那一律按"最后一轮"理解（错误气泡本身也只挂在最后一轮）
+  const idx = jobId ? rounds.findIndex(r => r.id === jobId) : rounds.length - 1
+  if (idx < 0) return false
+  // 新的一轮永远追加在队尾：重试中间那轮会让对话流分叉成两条并行的线，
+  // 而且后面那些轮次吃的是旧历史，谁也说不清哪条才是真的。
+  if (idx !== rounds.length - 1) {
+    ElMessage.warning($t('@WORKBENCH:只能重试最后一轮'))
+    return false
+  }
+  const job = rounds[idx]
+  return idx === 0 ? onReExecuteJob(job) : retryRound(t, job, rounds[idx - 1])
 }
 
 // ── 一键复制「任务执行内容」──────────────────────────────────────────────────
@@ -1122,8 +1138,8 @@ const {
 const {
   runTask, onContinueSendFromChat,
   cancelJob, clearExecutionForSelectedTask,
-  // 任务对话流上那颗「重试」（见 onChatRetry）—— 与执行日志里的「重新执行」是同一个动作
-  onReExecuteJob,
+  // 任务对话流上那颗「重试」（见 onChatRetry）—— 只重发失败那一轮，不清空前面的轮次
+  onReExecuteJob, retryRound,
   // 重命名：本文件里已有一个按 Task 判定的 isTaskRunning（见下方 640 行附近），
   // 那边改成委托给这一份，全仓只留一个"这条任务在不在跑"的口径
   isTaskRunning: isTaskRunningById,

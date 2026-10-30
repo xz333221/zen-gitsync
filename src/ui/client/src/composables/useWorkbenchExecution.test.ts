@@ -82,19 +82,30 @@ let continueBodies: any[] = []
 /** 打开后 /continue 会挂住不返回，用来把「一笔在途请求」这个瞬间钉住 */
 let holdContinue = false
 let releaseContinue: (() => void) | null = null
+/** 本轮跑过的请求（方法 + URL），用来验「删失败那轮 → 再从上一轮续」这个顺序 */
+let httpCalls: { url: string; method: string }[] = []
+/** DELETE /jobs/:id 的返回，默认成功 */
+let deleteJobResult: any = { success: true, removed: 1 }
 
 beforeEach(() => {
   continueBodies = []
   holdContinue = false
   releaseContinue = null
+  httpCalls = []
+  deleteJobResult = { success: true, removed: 1 }
   vi.mocked(ElMessage.error).mockClear()
   vi.mocked(ElMessage.success).mockClear()
+  vi.mocked(ElMessage.warning).mockClear()
   vi.stubGlobal('fetch', vi.fn(async (url: any, init?: any) => {
     const u = String(url)
+    httpCalls.push({ url: u, method: String(init?.method || 'GET').toUpperCase() })
     if (u.includes('/continue')) {
       continueBodies.push(JSON.parse(init.body))
       if (holdContinue) await new Promise<void>(res => { releaseContinue = res })
       return { json: async () => ({ success: true, message: '已加入续接队列' }) }
+    }
+    if (String(init?.method || '').toUpperCase() === 'DELETE' && u.includes('/api/workbench/jobs/')) {
+      return { json: async () => deleteJobResult }
     }
     return { json: async () => ({ success: true }) }
   }))
@@ -270,5 +281,60 @@ describe('排队续聊', () => {
     await settle()
 
     expect(api.queuedChatsOf('t1').map(q => q.text)).toEqual(['会失败'])
+  })
+})
+
+// 对话流错误气泡上的「重试」：只重发失败那一轮，不是把整条任务重跑一遍。
+// 整条重跑（runTask）会先 clearJobsByTask —— 用户点「重试」把前面跑完的几轮对话
+// 一起清掉，是这次要修掉的那个 bug。
+describe('重试失败的那一轮', () => {
+  const prevJob = makeJob({
+    id: 'j1', status: 'done', claudeSessionId: 'sess-1'
+  })
+  const failedJob = makeJob({
+    id: 'j2',
+    subId: 't1__simple__r1',
+    status: 'error',
+    error: '500 the model provider is temporarily unavailable',
+    // 真实 prompt 的形状：[环境块] --- 用户那句话 + 「续接 #1」
+    prompt: '[运行环境 · zen-gitsync]\n某个项目\n\n---\n\n开始今天的签到\n\n续接 #1'
+  })
+
+  test('续接轮失败 → 删掉这轮记录，用原句从上一轮续接', async () => {
+    const { jobs, api } = setup([prevJob, failedJob])
+
+    expect(await api.retryRound(makeTask(), failedJob, prevJob)).toBe(true)
+
+    // 顺序有讲究：先删再从上一轮续 —— 反过来的话服务端按最大轮次 +1 发号，会跳号
+    expect(httpCalls.map(c => `${c.method} ${c.url.replace(/^.*\/api/, '/api')}`)).toEqual([
+      'DELETE /api/workbench/jobs/j2',
+      'POST /api/workbench/jobs/j1/continue'
+    ])
+    // 重发的是用户那句话本身（环境块 / 续接标记都已经剥掉），不是整段 prompt
+    expect(continueBodies).toHaveLength(1)
+    expect(continueBodies[0].userMessage).toBe('开始今天的签到')
+    // 上一轮还在，失败那轮消失 —— 对话流里不留一条已经重发过的错误气泡
+    expect(jobs.value.map(j => j.id)).toEqual(['j1'])
+  })
+
+  test('上一轮没有会话标识 → 先判再删：记录不删、续接不发', async () => {
+    const noSession = makeJob({ id: 'j1', status: 'done', claudeSessionId: null })
+    const { jobs, api } = setup([noSession, failedJob])
+
+    expect(await api.retryRound(makeTask(), failedJob, noSession)).toBe(false)
+
+    expect(httpCalls).toHaveLength(0)
+    expect(jobs.value.map(j => j.id)).toEqual(['j1', 'j2'])
+    expect(ElMessage.error).toHaveBeenCalled()
+  })
+
+  test('删除失败 → 不续接，失败记录留在原地', async () => {
+    deleteJobResult = { success: false, error: 'job 不存在' }
+    const { jobs, api } = setup([prevJob, failedJob])
+
+    expect(await api.retryRound(makeTask(), failedJob, prevJob)).toBe(false)
+
+    expect(continueBodies).toHaveLength(0)
+    expect(jobs.value.map(j => j.id)).toEqual(['j1', 'j2'])
   })
 })

@@ -2415,6 +2415,11 @@ export default {
   '@WORKBENCH:已加入续接队列': 'Queued for continuation',
   '@WORKBENCH:续接失败': 'Continuation failed',
   '@WORKBENCH:没有可续接的会话': 'No conversation to continue',
+  // Retry a single failed turn (not a full task re-run)
+  '@WORKBENCH:只能重试最后一轮': 'Only the last turn can be retried',
+  '@WORKBENCH:上一轮没有会话标识,无法重试这一轮,请重新发送': 'The previous turn has no session id, so this turn cannot be retried — please send it again',
+  '@WORKBENCH:这一轮没有可重发的消息': 'This turn has no message to resend',
+  '@WORKBENCH:重试失败,请稍后再试': 'Retry failed, please try again later',
   '@WORKBENCH:输入后续问题继续对话…(Ctrl+Enter 发送)': 'Type a follow-up to continue… (Ctrl+Enter to send)',
   '@WORKBENCH:执行中，发送后会排队，等这一轮跑完自动接上…': 'Running — your message will be queued and sent once this turn finishes…',
   '@WORKBENCH:等这一轮跑完自动发送': 'Sent automatically when this turn finishes',
