@@ -207,7 +207,7 @@
     "index.js"
   ],
   "bin": {
-    "g": "./src/gitCommit.js"
+    "g": "src/gitCommit.js"
   },
   "repository": {
     "type": "git",
