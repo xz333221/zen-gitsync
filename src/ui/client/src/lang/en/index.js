@@ -1979,6 +1979,7 @@ export default {
   '@A1833:获取文件列表失败: ': 'Failed to retrieve file list:',
   '@A1833:获取提交详情失败: ': 'Failed to obtain commit details:',
   '@A1833:获取差异失败: ': 'Failed to obtain differences:',
+  '@A1833:获取文件内容失败: ': 'Failed to obtain file content:',
   '@A1833:打开文件失败: ': 'Failed to open file:',
   '@A1833:用VSCode打开文件失败: ': 'Failed to open file using VSCode:',
   '@A1833:确定要撤销提交 ': 'Confirm to withdraw commit',
@@ -2009,6 +2010,8 @@ export default {
   '@A1833:退出全屏': 'Exit Fullscreen',
   '@A1833:全屏显示': 'Fullscreen',
   '@A1833:刷新日志': 'Refresh Log',
+  '@A1833:隐藏分支图': 'Hide branch graph',
+  '@A1833:显示分支图': 'Show branch graph',
   // @A1833: file end
   // @PSTART: file path: components\ProjectStartupButton.vue, components\ProjectStartupDialog.vue
   '@PSTART:项目启动项': 'Project Startup Items',
@@ -2121,6 +2124,7 @@ export default {
   '@ACTBAR:个未提交文件': 'uncommitted files',
   '@ACTBAR:个未保存文件': 'unsaved files',
   '@ACTBAR:个任务正在执行': 'running tasks',
+  '@ACTBAR:有任务正在执行': 'Tasks are running',
   // Ahead/behind badge on the Git icon (ActivityBar.vue)
   '@ACTBAR:领先 {count} 个提交': '{count} commits ahead',
   '@ACTBAR:落后 {count} 个提交': '{count} commits behind',

@@ -570,7 +570,7 @@ async function requestCloseAll() {
   opacity: var(--disabled-opacity);
 }
 
-:global(.instance-switcher-popper .instance-close-all.is-loading :deep(svg)) {
+:global(.instance-switcher-popper .instance-close-all.is-loading svg) {
   animation: rotating 1s linear infinite;
 }
 

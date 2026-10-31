@@ -18,7 +18,7 @@ import { $t } from '@/lang/static'
 import CommonDialog from "@components/CommonDialog.vue";
 import { FilePickerModal as FilePicker } from 'local-file-picker/client';
 import { ElMessage, ElMessageBox, ElPopover } from "element-plus";
-import { Folder, Clock } from "@element-plus/icons-vue";
+import { Folder, Clock, Warning } from "@element-plus/icons-vue";
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
