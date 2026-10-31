@@ -1161,6 +1161,7 @@ export default {
   '@42BB9:搜索 + 抓正文一体；无 Key 也能用（按 IP 限流），注册免费 Key 后每月 1,000 credits。': '搜索 + 抓正文一体；无 Key 也能用（按 IP 限流），注册免费 Key 后每月 1,000 credits。',
   '@42BB9:为 LLM 设计的搜索；必须有 Key，免费 1,000 credits/月。': '为 LLM 设计的搜索；必须有 Key，免费 1,000 credits/月。',
   '@42BB9:语义搜索；必须有 Key，注册后在 Dashboard 创建，免费 $10 credits/月。': '语义搜索；必须有 Key，注册后在 Dashboard 创建，免费 $10 credits/月。',
+  '@42BB9:SearXNG 只支持搜索；抓正文会自动回退到 Firecrawl': 'SearXNG 只支持搜索；抓正文会自动回退到 Firecrawl',
   '@42BB9:去申请 Key': '去申请 Key',
   '@42BB9:代理地址': '代理地址',
   '@42BB9:留空 = 直连；需要代理才能访问搜索引擎时填这里，如 http://127.0.0.1:7890': '留空 = 直连；需要代理才能访问搜索引擎时填这里，如 http://127.0.0.1:7890',

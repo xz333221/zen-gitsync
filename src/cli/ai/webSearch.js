@@ -31,6 +31,8 @@
 import { enableSystemCAs } from './systemCa.js'
 
 const DEFAULT_TIMEOUT_MS = 20000
+// 聚合模式最多等 10 秒：一家慢引擎不该拖住另外两家。
+const DEFAULT_AGGREGATE_TIMEOUT_MS = 10000
 const DEFAULT_MAX_RESULTS = 5
 const MAX_RESULTS_LIMIT = 10
 const MAX_SNIPPET_CHARS = 500
@@ -38,7 +40,7 @@ const DEFAULT_FETCH_CHARS = 20000
 const MAX_FETCH_CHARS = 50000
 
 // provider 白名单 —— 与 src/config.js 的 WEB_SEARCH_PROVIDERS 必须一致。
-export const WEB_SEARCH_PROVIDERS = ['firecrawl', 'tavily', 'exa']
+export const WEB_SEARCH_PROVIDERS = ['firecrawl', 'tavily', 'exa', 'searxng']
 
 // 聚合模式标识：provider 传 'all'（或设置里的默认引擎选它）时**并发打多家、合并去重**。
 // 它不是 provider 白名单成员（不参与 API Key 那几行），所以单独列出来。
@@ -57,6 +59,25 @@ function clampResults(n) {
   const num = Number(n)
   const base = Number.isFinite(num) && num > 0 ? Math.floor(num) : DEFAULT_MAX_RESULTS
   return Math.max(1, Math.min(MAX_RESULTS_LIMIT, base))
+}
+
+// 各家 relevance 字段名不一样，统一转成 number；没有就返回 null。
+function numericScore(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null
+  if (typeof v === 'string' && v.trim()) {
+    const n = Number(v)
+    return Number.isFinite(n) ? n : null
+  }
+  return null
+}
+
+function sortByScore(list) {
+  return list.slice().sort((a, b) => {
+    const as = typeof a.score === 'number' ? a.score : -Infinity
+    const bs = typeof b.score === 'number' ? b.score : -Infinity
+    if (as === bs) return 0
+    return bs - as
+  })
 }
 
 // CA 补齐（幂等、只做一次）。Node < 24 或异常静默跳过，不影响主流程。
@@ -86,7 +107,7 @@ async function loadUndici() {
  * 直连走全局 fetch；配了代理则换用 undici 的 fetch + ProxyAgent（同源自洽）。
  * 每次调用都新建 AbortController 超时，异常一律翻译成人话再抛。
  */
-async function makeHttp(proxy) {
+async function makeHttp(proxy, defaultTimeoutMs = DEFAULT_TIMEOUT_MS) {
   const proxyUrl = str(proxy).trim()
   let fetchFn = fetch
   let dispatcher
@@ -103,7 +124,7 @@ async function makeHttp(proxy) {
     }
   }
 
-  return async function http(url, { method = 'GET', headers = {}, body, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+  return async function http(url, { method = 'GET', headers = {}, body, timeoutMs = defaultTimeoutMs } = {}) {
     ensureCa()
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -136,15 +157,22 @@ async function makeHttp(proxy) {
 
 function normalizeResults(list) {
   const out = []
+  const seen = new Set()
   for (const it of Array.isArray(list) ? list : []) {
     if (!it || typeof it !== 'object') continue
     const url = str(it.url || it.link).trim()
     if (!/^https?:\/\//i.test(url)) continue
-    out.push({
+    const key = urlKey(url)
+    if (seen.has(key)) continue
+    seen.add(key)
+    const item = {
       title: clip(str(it.title), 200) || url,
       url,
       snippet: clip(str(it.description ?? it.snippet ?? it.content ?? it.text ?? it.summary)),
-    })
+    }
+    const score = numericScore(it.score ?? it.relevance ?? it.relevance_score ?? it.relevanceScore)
+    if (score !== null) item.score = score
+    out.push(item)
     if (out.length >= MAX_RESULTS_LIMIT) break
   }
   return out
@@ -218,6 +246,23 @@ const PROVIDERS = {
       return { title: clip(str(item?.title), 200), url, text: str(item?.text) }
     },
   },
+  searxng: {
+    // 自建 SearXNG：不需要 API Key，但需要实例地址（例如 http://127.0.0.1:8899/）。
+    async search({ query, maxResults, baseUrl, http }) {
+      const base = str(baseUrl).trim().replace(/\/+$/, '').replace(/\/search$/i, '')
+      if (!base) throw new Error('未配置 SearXNG 地址（设置 → AI 模型配置 → 联网搜索）')
+      const url = new URL(base + '/search')
+      url.searchParams.set('q', query)
+      url.searchParams.set('format', 'json')
+      url.searchParams.set('pageno', '1')
+      url.searchParams.set('safesearch', '0')
+      const data = await http(url.toString(), { method: 'GET' })
+      return normalizeResults(data?.results).slice(0, maxResults)
+    },
+    async fetch() {
+      throw new Error('SearXNG 只提供搜索，不支持抓取网页正文；请改用 Firecrawl / Tavily / Exa。')
+    },
+  },
 }
 
 /**
@@ -237,11 +282,30 @@ function resolveMode(explicit, configProvider) {
   return { aggregate: false, provider: 'firecrawl' }
 }
 
-// 该 provider 这次是否"可用"：firecrawl 免 key 总可用；tavily / exa 必须有 key。
-// 聚合时提前滤掉没 key 的，省一次注定失败的网络往返。
-function providerAvailable(id, apiKeys) {
+// 该 provider 这次是否"可用"：firecrawl 免 key 总可用；tavily / exa 必须有 key；
+// searxng 不需要 key，但必须配置实例地址。
+function providerAvailable(id, apiKeys, baseUrls) {
   if (id === 'firecrawl') return true
+  if (id === 'searxng') return Boolean(str(baseUrls?.searxng).trim())
   return Boolean(str(apiKeys[id]).trim())
+}
+
+// SearXNG 是元搜索，只有 search，没有抓正文能力。
+function providerSupports(id, capability) {
+  return !(capability === 'fetch' && id === 'searxng')
+}
+
+// 单 provider 模式下的降级：选中的 provider 不可用时，回退到第一个可用 provider。
+// firecrawl 免 key，所以正常情况下总能回退；返回 fallbackFrom 供上层提示用户。
+function pickAvailableProvider(preferred, apiKeys, baseUrls, capability = 'search') {
+  if (providerAvailable(preferred, apiKeys, baseUrls) && providerSupports(preferred, capability)) {
+    return { provider: preferred, fallbackFrom: null }
+  }
+  const fallback = WEB_SEARCH_PROVIDERS.find((id) => (
+    providerAvailable(id, apiKeys, baseUrls) && providerSupports(id, capability)
+  ))
+  if (!fallback) throw new Error(`没有可用的联网搜索 provider（${preferred} 不可用）`)
+  return { provider: fallback, fallbackFrom: preferred }
 }
 
 // 仅用于**去重**的 URL 归一化：去 hash、去末尾斜杠、host 小写。
@@ -250,11 +314,12 @@ function urlKey(url) {
   try {
     const u = new URL(url)
     u.hash = ''
-    let key = `${u.protocol}//${u.host}${u.pathname}`
+    // 只规范化协议和 host；pathname 可能区分大小写，不能一起转小写。
+    let key = `${u.protocol.toLowerCase()}//${u.host.toLowerCase()}${u.pathname}`
     if (key.endsWith('/')) key = key.slice(0, -1)
-    return key.toLowerCase()
+    return key
   } catch {
-    return str(url).toLowerCase()
+    return str(url).trim()
   }
 }
 
@@ -283,17 +348,24 @@ function interleaveResults(groups, limit) {
 async function runAggregateSearch({ query, maxResults, config }) {
   const cfg = config || {}
   const apiKeys = (cfg.apiKeys && typeof cfg.apiKeys === 'object') ? cfg.apiKeys : {}
-  const ids = WEB_SEARCH_PROVIDERS.filter((id) => providerAvailable(id, apiKeys))
-  const http = await makeHttp(cfg.proxy)
+  const baseUrls = (cfg.baseUrls && typeof cfg.baseUrls === 'object') ? cfg.baseUrls : {}
+  const ids = WEB_SEARCH_PROVIDERS.filter((id) => providerAvailable(id, apiKeys, baseUrls))
+  const http = await makeHttp(cfg.proxy, DEFAULT_AGGREGATE_TIMEOUT_MS)
   const limit = clampResults(maxResults)
   const settled = await Promise.allSettled(
-    ids.map((id) => PROVIDERS[id].search({ query, maxResults: limit, apiKey: str(apiKeys[id]), http }))
+    ids.map((id) => PROVIDERS[id].search({
+      query,
+      maxResults: limit,
+      apiKey: str(apiKeys[id]),
+      baseUrl: str(baseUrls[id]),
+      http,
+    }))
   )
   const groups = []
   const errors = []
   settled.forEach((res, i) => {
     if (res.status === 'fulfilled') {
-      groups.push(res.value.map((r) => ({ ...r, source: ids[i] })))
+      groups.push(sortByScore(res.value.map((r) => ({ ...r, source: ids[i] }))))
     } else {
       errors.push(`${ids[i]}: ${res.reason?.message || String(res.reason)}`)
     }
@@ -309,7 +381,8 @@ async function runAggregateSearch({ query, maxResults, config }) {
  * 执行一次联网搜索，返回 { provider, results }。
  * provider 为 'all'（或配置里选它）时走聚合：每条结果的 source 字段标明来自哪个引擎。
  * @param {{ query: string, maxResults?: number, provider?: string,
- *   config?: { provider?: string, apiKeys?: Record<string,string>, proxy?: string } }} opts
+ *   config?: { provider?: string, apiKeys?: Record<string,string>,
+ *     baseUrls?: Record<string,string>, proxy?: string } }} opts
  */
 export async function runWebSearch({ query, maxResults, provider, config } = {}) {
   const cfg = config || {}
@@ -319,10 +392,18 @@ export async function runWebSearch({ query, maxResults, provider, config } = {})
     return runAggregateSearch({ query: q, maxResults, config: cfg })
   }
   const apiKeys = (cfg.apiKeys && typeof cfg.apiKeys === 'object') ? cfg.apiKeys : {}
+  const baseUrls = (cfg.baseUrls && typeof cfg.baseUrls === 'object') ? cfg.baseUrls : {}
+  const { provider: chosen, fallbackFrom } = pickAvailableProvider(mode.provider, apiKeys, baseUrls, 'search')
   const http = await makeHttp(cfg.proxy)
   const limit = clampResults(maxResults)
-  const results = await PROVIDERS[mode.provider].search({ query: q, maxResults: limit, apiKey: str(apiKeys[mode.provider]), http })
-  return { provider: mode.provider, results: results.map((r) => ({ ...r, source: mode.provider })) }
+  const results = sortByScore(await PROVIDERS[chosen].search({
+    query: q,
+    maxResults: limit,
+    apiKey: str(apiKeys[chosen]),
+    baseUrl: str(baseUrls[chosen]),
+    http,
+  }))
+  return { provider: chosen, results: results.map((r) => ({ ...r, source: chosen })), fallbackFrom }
 }
 
 /**
@@ -332,13 +413,19 @@ export async function runWebSearch({ query, maxResults, provider, config } = {})
 export async function runWebFetch({ url, provider, config, maxChars } = {}) {
   const cfg = config || {}
   const mode = resolveMode(provider, cfg.provider)
-  // 抓正文只能用单个 provider；参数/配置给的是聚合时退回 firecrawl（抓正文能力最强且免 key）
-  const chosen = mode.aggregate ? 'firecrawl' : mode.provider
+  // 抓正文只能用单个 provider；聚合模式或 SearXNG 都退回支持 fetch 的 provider。
   const apiKeys = (cfg.apiKeys && typeof cfg.apiKeys === 'object') ? cfg.apiKeys : {}
+  const baseUrls = (cfg.baseUrls && typeof cfg.baseUrls === 'object') ? cfg.baseUrls : {}
+  const { provider: chosen, fallbackFrom } = pickAvailableProvider(
+    mode.aggregate ? 'firecrawl' : mode.provider,
+    apiKeys,
+    baseUrls,
+    'fetch'
+  )
   const http = await makeHttp(cfg.proxy)
   const out = await PROVIDERS[chosen].fetch({ url: str(url).trim(), apiKey: str(apiKeys[chosen]), http })
   const limit = Math.max(1000, Math.min(MAX_FETCH_CHARS, Number(maxChars) || DEFAULT_FETCH_CHARS))
-  return { provider: chosen, title: out.title || str(url), url: out.url || str(url), text: str(out.text).slice(0, limit) }
+  return { provider: chosen, title: out.title || str(url), url: out.url || str(url), text: str(out.text).slice(0, limit), fallbackFrom }
 }
 
 export default { WEB_SEARCH_PROVIDERS, WEB_SEARCH_AGGREGATE_ID, runWebSearch, runWebFetch }

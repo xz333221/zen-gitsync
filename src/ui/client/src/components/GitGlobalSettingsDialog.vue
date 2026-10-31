@@ -613,29 +613,45 @@
               </div>
             </div>
 
-            <!-- 每个 provider 一行：Key 输入 + 一句话说明 + 「去申请 Key」外链 -->
+            <!-- 每个 provider 一行：Key 输入 / 实例地址 + 一句话说明 -->
             <div v-for="p in webSearchProviders" :key="`key-${p.id}`" class="setting-row">
               <label class="setting-label">
-                {{ p.label }} {{ $t('@42BB9:API Key') }}
-                <span v-if="p.keyless" class="web-search-keyless-tag">{{ $t('@42BB9:可选') }}</span>
+                <template v-if="p.needsBaseUrl">{{ p.label }} {{ $t('@42BB9:接口地址') }}</template>
+                <template v-else>
+                  {{ p.label }} {{ $t('@42BB9:API Key') }}
+                  <span v-if="p.keyless" class="web-search-keyless-tag">{{ $t('@42BB9:可选') }}</span>
+                </template>
               </label>
               <div class="project-toggle">
-                <el-input
-                  v-model="configStore.webSearch.apiKeys[p.id]"
-                  type="password"
-                  show-password
-                  class="web-search-key-input"
-                  :placeholder="p.keyless ? $t('@42BB9:可留空，用无 Key 模式') : $t('@42BB9:粘贴 API Key')"
-                  @change="persistWebSearch"
-                />
-                <span class="setting-hint-block ai-iterations-hint">
-                  <template v-if="p.id === 'firecrawl'">{{ $t('@42BB9:搜索 + 抓正文一体；无 Key 也能用（按 IP 限流），注册免费 Key 后每月 1,000 credits。') }}</template>
-                  <template v-else-if="p.id === 'tavily'">{{ $t('@42BB9:为 LLM 设计的搜索；必须有 Key，免费 1,000 credits/月。') }}</template>
-                  <template v-else-if="p.id === 'exa'">{{ $t('@42BB9:语义搜索；必须有 Key，注册后在 Dashboard 创建，免费 $10 credits/月。') }}</template>
-                  <a class="web-search-apply-link" :href="p.applyUrl" target="_blank" rel="noopener noreferrer">
-                    {{ $t('@42BB9:去申请 Key') }}
-                  </a>
-                </span>
+                <template v-if="p.needsBaseUrl">
+                  <el-input
+                    v-model="configStore.webSearch.baseUrls[p.id]"
+                    class="web-search-key-input"
+                    :placeholder="p.baseUrlPlaceholder || 'http://127.0.0.1:8899/'"
+                    @change="persistWebSearch"
+                  />
+                  <span class="setting-hint-block ai-iterations-hint">
+                    {{ $t('@42BB9:SearXNG 只支持搜索；抓正文会自动回退到 Firecrawl') }}
+                  </span>
+                </template>
+                <template v-else>
+                  <el-input
+                    v-model="configStore.webSearch.apiKeys[p.id]"
+                    type="password"
+                    show-password
+                    class="web-search-key-input"
+                    :placeholder="p.keyless ? $t('@42BB9:可留空，用无 Key 模式') : $t('@42BB9:粘贴 API Key')"
+                    @change="persistWebSearch"
+                  />
+                  <span class="setting-hint-block ai-iterations-hint">
+                    <template v-if="p.id === 'firecrawl'">{{ $t('@42BB9:搜索 + 抓正文一体；无 Key 也能用（按 IP 限流），注册免费 Key 后每月 1,000 credits。') }}</template>
+                    <template v-else-if="p.id === 'tavily'">{{ $t('@42BB9:为 LLM 设计的搜索；必须有 Key，免费 1,000 credits/月。') }}</template>
+                    <template v-else-if="p.id === 'exa'">{{ $t('@42BB9:语义搜索；必须有 Key，注册后在 Dashboard 创建，免费 $10 credits/月。') }}</template>
+                    <a class="web-search-apply-link" :href="p.applyUrl" target="_blank" rel="noopener noreferrer">
+                      {{ $t('@42BB9:去申请 Key') }}
+                    </a>
+                  </span>
+                </template>
               </div>
             </div>
 
@@ -1183,6 +1199,7 @@ async function persistWebSearch() {
       enabled: configStore.webSearch.enabled,
       provider: configStore.webSearch.provider,
       apiKeys: { ...configStore.webSearch.apiKeys },
+      baseUrls: { ...configStore.webSearch.baseUrls },
       proxy: configStore.webSearch.proxy,
     })
   } finally {

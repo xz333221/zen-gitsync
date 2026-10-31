@@ -1158,6 +1158,7 @@ export default {
   '@42BB9:搜索 + 抓正文一体；无 Key 也能用（按 IP 限流），注册免费 Key 后每月 1,000 credits。': 'Search + page extraction in one; works without a key (rate-limited by IP); a free key gives 1,000 credits/month.',
   '@42BB9:为 LLM 设计的搜索；必须有 Key，免费 1,000 credits/月。': 'Search built for LLMs; a key is required, 1,000 free credits/month.',
   '@42BB9:语义搜索；必须有 Key，注册后在 Dashboard 创建，免费 $10 credits/月。': 'Semantic search; a key is required — create it in the dashboard, $10 free credits/month.',
+  '@42BB9:SearXNG 只支持搜索；抓正文会自动回退到 Firecrawl': 'SearXNG only supports search; page extraction falls back to Firecrawl',
   '@42BB9:去申请 Key': 'Get a key',
   '@42BB9:代理地址': 'Proxy URL',
   '@42BB9:留空 = 直连；需要代理才能访问搜索引擎时填这里，如 http://127.0.0.1:7890': 'Empty = direct. Fill this in when a proxy is needed to reach the search engines, e.g. http://127.0.0.1:7890',

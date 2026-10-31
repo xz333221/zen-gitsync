@@ -249,25 +249,28 @@ export function normalizeAgentDefaultPrompt(value) {
  *   · firecrawl —— 无 key 也能用（按 IP 限流），注册免费 key 后每月 1,000 credits
  *   · tavily    —— 必须有 key（免费 1,000 credits/月）
  *   · exa       —— 必须有 key（免费 $10 credits/月）
+ *   · searxng   —— 自建实例，不需要 key；必须在 baseUrls.searxng 填实例地址
  */
-export const WEB_SEARCH_PROVIDERS = ['firecrawl', 'tavily', 'exa'];
+export const WEB_SEARCH_PROVIDERS = ['firecrawl', 'tavily', 'exa', 'searxng'];
 // 聚合模式标识（与 src/cli/ai/webSearch.js 的 WEB_SEARCH_AGGREGATE_ID 一致）。
 // 作为「默认搜索引擎」的合法取值 = 每次搜索都并发多家、合并去重。
 export const WEB_SEARCH_AGGREGATE_ID = 'all';
 const WEB_SEARCH_DEFAULT_PROVIDER = 'firecrawl';
 const WEB_SEARCH_API_KEY_MAX = 300;
+const WEB_SEARCH_BASE_URL_MAX = 300;
 const WEB_SEARCH_PROXY_MAX = 300;
 
 /**
  * 规范化「联网搜索」配置（全局配置，跨项目共享）。
  *
- * 形状：{ enabled, provider, apiKeys: {[provider]: key}, proxy }
+ * 形状：{ enabled, provider, apiKeys: {[provider]: key},
+ *         baseUrls: {[provider]: url}, proxy }
  *
  * 语义约定：
  *   · undefined / null → null（没配过，调用方回落 defaultConfig = 默认开启 + firecrawl）
  *   · 非普通对象（含数组）→ null（手改坏了，整组回落默认，与 normalizeAgent* 同一口径）
  *   · **单个字段坏只回落该字段**，不整组拒绝 —— 一个 key 写错不该把"开关/代理"也重置
- *   · apiKeys 只保留白名单 provider 的键；非字符串值 → 该键置空串
+ *   · apiKeys / baseUrls 只保留白名单 provider 的键；非字符串值 → 该键置空串
  *   · proxy 空串是合法值（= 直连），照写；非字符串 → 空串
  */
 export function normalizeWebSearch(value) {
@@ -276,9 +279,14 @@ export function normalizeWebSearch(value) {
   const rawKeys = (value.apiKeys && typeof value.apiKeys === 'object' && !Array.isArray(value.apiKeys))
     ? value.apiKeys : {};
   const apiKeys = {};
+  const rawBaseUrls = (value.baseUrls && typeof value.baseUrls === 'object' && !Array.isArray(value.baseUrls))
+    ? value.baseUrls : {};
+  const baseUrls = {};
   for (const p of WEB_SEARCH_PROVIDERS) {
     const v = rawKeys[p];
     apiKeys[p] = typeof v === 'string' ? v.trim().slice(0, WEB_SEARCH_API_KEY_MAX) : '';
+    const u = rawBaseUrls[p];
+    baseUrls[p] = typeof u === 'string' ? u.trim().slice(0, WEB_SEARCH_BASE_URL_MAX) : '';
   }
   const providerRaw = typeof value.provider === 'string' ? value.provider.trim().toLowerCase() : '';
   // 'all' = 聚合模式，也是合法的默认值（见 src/cli/ai/webSearch.js 的 resolveMode）
@@ -287,6 +295,7 @@ export function normalizeWebSearch(value) {
     enabled: typeof value.enabled === 'boolean' ? value.enabled : true,
     provider: providerOk ? providerRaw : WEB_SEARCH_DEFAULT_PROVIDER,
     apiKeys,
+    baseUrls,
     proxy: typeof value.proxy === 'string' ? value.proxy.trim().slice(0, WEB_SEARCH_PROXY_MAX) : '',
   };
 }
@@ -400,7 +409,8 @@ const defaultConfig = {
   webSearch: {
     enabled: true,
     provider: 'firecrawl',
-    apiKeys: { firecrawl: '', tavily: '', exa: '' },
+    apiKeys: { firecrawl: '', tavily: '', exa: '', searxng: '' },
+    baseUrls: { firecrawl: '', tavily: '', exa: '', searxng: '' },
     proxy: '',
   },
   // 工作台任务执行器（claude | opencode | codex | codebuddy）。全局配置，跨项目共享。

@@ -42,7 +42,7 @@ const wsMod = await importFromRoot('src/cli/ai/webSearch.js')
 
 const { TOOL_DEFINITIONS, executeTool, PARALLEL_SAFE_TOOLS } = toolsMod
 const { normalizeWebSearch, WEB_SEARCH_PROVIDERS } = configMod
-const { runWebSearch, WEB_SEARCH_PROVIDERS: WS_PROVIDERS } = wsMod
+const { runWebSearch, runWebFetch, WEB_SEARCH_PROVIDERS: WS_PROVIDERS } = wsMod
 
 let passed = 0
 const failures = []
@@ -99,12 +99,13 @@ check('undefined / null → null（调用方回落默认）', () => {
   assert.equal(normalizeWebSearch(undefined), null)
   assert.equal(normalizeWebSearch(null), null)
 })
-check('空对象 → 默认（开启 + firecrawl + 三个空 key + 空代理）', () => {
+check('空对象 → 默认（开启 + firecrawl + 四个空 key / 空地址 + 空代理）', () => {
   const out = normalizeWebSearch({})
   assert.deepEqual(out, {
     enabled: true,
     provider: 'firecrawl',
-    apiKeys: { firecrawl: '', tavily: '', exa: '' },
+    apiKeys: { firecrawl: '', tavily: '', exa: '', searxng: '' },
+    baseUrls: { firecrawl: '', tavily: '', exa: '', searxng: '' },
     proxy: '',
   })
 })
@@ -114,10 +115,17 @@ check('非白名单 provider → 回落 firecrawl；但 "all"（聚合）是合�
 })
 check('apiKeys 只保留白名单 provider 的键', () => {
   const out = normalizeWebSearch({ apiKeys: { tavily: 't-1', evil: 'x', exa: 123 } })
-  assert.deepEqual(Object.keys(out.apiKeys).sort(), ['exa', 'firecrawl', 'tavily'])
+  assert.deepEqual(Object.keys(out.apiKeys).sort(), ['exa', 'firecrawl', 'searxng', 'tavily'])
   assert.equal(out.apiKeys.tavily, 't-1')
   assert.equal(out.apiKeys.exa, '', '非字符串 key 应置空串')
   assert.equal(out.apiKeys.evil, undefined, '白名单外的键应被丢弃')
+})
+check('baseUrls 只保留白名单 provider 的键', () => {
+  const out = normalizeWebSearch({ baseUrls: { searxng: 'http://127.0.0.1:8899/', evil: 'x', exa: 123 } })
+  assert.deepEqual(Object.keys(out.baseUrls).sort(), ['exa', 'firecrawl', 'searxng', 'tavily'])
+  assert.equal(out.baseUrls.searxng, 'http://127.0.0.1:8899/')
+  assert.equal(out.baseUrls.exa, '', '非字符串地址应置空串')
+  assert.equal(out.baseUrls.evil, undefined, '白名单外的键应被丢弃')
 })
 check('非普通对象（数组 / 字符串）→ null', () => {
   assert.equal(normalizeWebSearch([]), null)
@@ -149,17 +157,64 @@ await checkAsync('firecrawl：请求打到 /v2/search，结果裁成 {title,url,
   assert.equal(out.results.length, 1)
   assert.deepEqual(out.results[0], { title: 'T', url: 'https://example.com/a', snippet: 'D', source: 'firecrawl' })
 })
-await checkAsync('tavily：缺 key 直接报错（不打网络）', async () => {
-  let threw = ''
+await checkAsync('tavily：缺 key 时回退到 firecrawl，并标记 fallbackFrom', async () => {
   const before = calls.length
-  try {
-    await runWebSearch({ query: 'hello', provider: 'tavily', config: { apiKeys: {} } })
-  } catch (err) {
-    threw = err.message
-  }
-  assert.match(threw, /Tavily/, `期望"未配置 Tavily API Key"，实际: ${threw}`)
-  assert.equal(calls.length, before, '缺 key 时不应发请求')
+  const out = await runWebSearch({ query: 'hello', provider: 'tavily', config: { apiKeys: {} } })
+  assert.equal(out.provider, 'firecrawl', `期望回退 firecrawl，实际: ${out.provider}`)
+  assert.equal(out.fallbackFrom, 'tavily', `期望 fallbackFrom=tavily，实际: ${out.fallbackFrom}`)
+  assert.equal(out.results.length, 1)
+  assert.equal(calls.length, before + 1, '应只调用 firecrawl 一次')
 })
+globalThis.fetch = async (url) => {
+  const u = String(url)
+  const resp = (body) => ({ ok: true, status: 200, async text() { return JSON.stringify(body) } })
+  if (u.includes('127.0.0.1:8899/search')) {
+    return resp({ results: [{ title: 'S', url: 'https://example.com/s', content: 'C', score: 0.7 }] })
+  }
+  if (u.includes('/v2/scrape')) {
+    return resp({ data: { markdown: 'BODY', metadata: { title: 'T' } } })
+  }
+  return resp({})
+}
+await checkAsync('searxng：走 /search?format=json 并归一化', async () => {
+  const out = await runWebSearch({
+    query: 'hello',
+    provider: 'searxng',
+    config: { provider: 'searxng', apiKeys: {}, baseUrls: { searxng: 'http://127.0.0.1:8899/' } },
+  })
+  assert.equal(out.provider, 'searxng')
+  assert.equal(out.results.length, 1)
+  assert.equal(out.results[0].url, 'https://example.com/s')
+})
+await checkAsync('web_fetch：searxng 回退 firecrawl', async () => {
+  const out = await runWebFetch({
+    url: 'https://example.com/a',
+    provider: 'searxng',
+    config: { baseUrls: { searxng: 'http://127.0.0.1:8899/' } },
+  })
+  assert.equal(out.provider, 'firecrawl')
+  assert.equal(out.fallbackFrom, 'searxng')
+  assert.equal(out.text, 'BODY')
+})
+
+globalThis.fetch = async () => ({
+  ok: true,
+  status: 200,
+  async text() {
+    return JSON.stringify({ data: { web: [
+      { title: 'upper', url: 'https://example.com/A', description: 'a', score: 0.9 },
+      { title: 'lower', url: 'https://example.com/a', description: 'b', score: 0.2 },
+      { title: 'dup', url: 'https://example.com/a/', description: 'c', score: 0.5 },
+    ] } })
+  },
+})
+await checkAsync('结果去重保留 path 大小写，并按 score 排序', async () => {
+  const out = await runWebSearch({ query: 'q', config: { provider: 'firecrawl', apiKeys: {} } })
+  assert.equal(out.results.length, 2, `期望 /A 与 /a 保留两条，实际 ${out.results.length}`)
+  assert.equal(out.results[0].title, 'upper')
+  assert.equal(out.results[1].title, 'lower')
+})
+
 // ── C2. 聚合模式（provider = all）：并发多引擎 + URL 去重 + 交错取样 + source ──
 console.log('C2. 聚合模式（provider=all）')
 let failTavily = false
@@ -219,6 +274,21 @@ await checkAsync('all：个别引擎失败不拖垮整次，errors 记录失败�
   assert.ok(out.errors.some((e) => e.includes('tavily')), `errors 应含 tavily：${JSON.stringify(out.errors)}`)
 })
 
+globalThis.fetch = async (url) => {
+  const u = String(url)
+  const resp = (body) => ({ ok: true, status: 200, async text() { return JSON.stringify(body) } })
+  if (u.includes('/v2/scrape')) {
+    return resp({ data: { markdown: 'BODY', metadata: { title: 'Title' } } })
+  }
+  return resp({})
+}
+await checkAsync('web_fetch：tavily 缺 key 回退到 firecrawl', async () => {
+  const out = await runWebFetch({ url: 'https://example.com/a', provider: 'tavily', config: { apiKeys: {} } })
+  assert.equal(out.provider, 'firecrawl', `期望回退 firecrawl，实际: ${out.provider}`)
+  assert.equal(out.fallbackFrom, 'tavily', `期望 fallbackFrom=tavily，实际: ${out.fallbackFrom}`)
+  assert.equal(out.text, 'BODY')
+})
+
 globalThis.fetch = realFetch
 
 console.log('D. 前端设置面板契约')
@@ -238,15 +308,21 @@ check('每个 provider 都有 Key 输入 + 「去申请 Key」外链', () => {
   assert.match(dialog, /@42BB9:去申请 Key/, '缺「去申请 Key」文案')
   assert.match(dialog, /:href="p\.applyUrl"/, '外链未绑到 applyUrl')
 })
-check('provider 元数据含三家申请入口', () => {
+check('provider 元数据含四家入口', () => {
   assert.match(providersFile, /https:\/\/www\.firecrawl\.dev\//, '缺 Firecrawl 申请入口')
   assert.match(providersFile, /https:\/\/app\.tavily\.com\//, '缺 Tavily 申请入口')
   assert.match(providersFile, /https:\/\/exa\.ai\//, '缺 Exa 申请入口')
+  assert.match(providersFile, /https:\/\/docs\.searxng\.org\//, '缺 SearXNG 文档入口')
 })
-check('web_search 工具允许 provider=all（模型可自选聚合）', () => {
+check('SearXNG 在设置面板有实例地址输入', () => {
+  assert.match(dialog, /webSearch\.baseUrls\[p\.id\]/, '缺 baseUrls 输入')
+  assert.match(dialog, /needsBaseUrl/, '缺 needsBaseUrl 分支')
+})
+check('web_search 工具允许 provider=all / searxng', () => {
   const def = TOOL_DEFINITIONS.find((d) => d?.function?.name === 'web_search')
   const enumVals = def?.function?.parameters?.properties?.provider?.enum || []
   assert.ok(enumVals.includes('all'), `provider enum 应含 all：${JSON.stringify(enumVals)}`)
+  assert.ok(enumVals.includes('searxng'), `provider enum 应含 searxng：${JSON.stringify(enumVals)}`)
   assert.match(def.function.description, /聚合/, 'description 应提到聚合模式')
 })
 check('搜索引擎下拉含「全部（聚合）」选项', () => {

@@ -44,6 +44,7 @@ export interface WebSearchSettings {
   enabled: boolean
   provider: string
   apiKeys: Record<string, string>
+  baseUrls: Record<string, string>
   proxy: string
 }
 
@@ -51,7 +52,8 @@ export interface WebSearchSettings {
 export const DEFAULT_WEB_SEARCH: WebSearchSettings = {
   enabled: true,
   provider: 'firecrawl',
-  apiKeys: { firecrawl: '', tavily: '', exa: '' },
+  apiKeys: { firecrawl: '', tavily: '', exa: '', searxng: '' },
+  baseUrls: { firecrawl: '', tavily: '', exa: '', searxng: '' },
   proxy: '',
 }
 
@@ -586,6 +588,7 @@ export const useConfigStore = defineStore('config', () => {
       if (configData.webSearch && typeof configData.webSearch === 'object') {
         const ws = configData.webSearch as any
         const keys = (ws.apiKeys && typeof ws.apiKeys === 'object') ? ws.apiKeys : {}
+        const baseUrls = (ws.baseUrls && typeof ws.baseUrls === 'object') ? ws.baseUrls : {}
         webSearch.value = {
           enabled: typeof ws.enabled === 'boolean' ? ws.enabled : true,
           provider: typeof ws.provider === 'string' ? ws.provider : 'firecrawl',
@@ -593,6 +596,13 @@ export const useConfigStore = defineStore('config', () => {
             firecrawl: String(keys.firecrawl ?? ''),
             tavily: String(keys.tavily ?? ''),
             exa: String(keys.exa ?? ''),
+            searxng: String(keys.searxng ?? ''),
+          },
+          baseUrls: {
+            firecrawl: String(baseUrls.firecrawl ?? ''),
+            tavily: String(baseUrls.tavily ?? ''),
+            exa: String(baseUrls.exa ?? ''),
+            searxng: String(baseUrls.searxng ?? ''),
           },
           proxy: typeof ws.proxy === 'string' ? ws.proxy : '',
         }
@@ -1752,7 +1762,7 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
-  // 保存联网搜索配置（全局）。前端始终传**完整对象**（enabled/provider/apiKeys/proxy），
+  // 保存联网搜索配置（全局）。前端始终传**完整对象**（enabled/provider/apiKeys/baseUrls/proxy），
   // 后端归一化后把最终值放回回执，这里以回执为准（避免输入框显示与磁盘不一致）。
   async function saveWebSearchSettings(next: WebSearchSettings): Promise<boolean> {
     try {
@@ -1766,6 +1776,7 @@ export const useConfigStore = defineStore('config', () => {
         if (result.webSearch && typeof result.webSearch === 'object') {
           const ws = result.webSearch as any
           const keys = (ws.apiKeys && typeof ws.apiKeys === 'object') ? ws.apiKeys : next.apiKeys
+          const baseUrls = (ws.baseUrls && typeof ws.baseUrls === 'object') ? ws.baseUrls : next.baseUrls
           webSearch.value = {
             enabled: typeof ws.enabled === 'boolean' ? ws.enabled : next.enabled,
             provider: typeof ws.provider === 'string' ? ws.provider : next.provider,
@@ -1773,6 +1784,13 @@ export const useConfigStore = defineStore('config', () => {
               firecrawl: String(keys.firecrawl ?? ''),
               tavily: String(keys.tavily ?? ''),
               exa: String(keys.exa ?? ''),
+              searxng: String(keys.searxng ?? ''),
+            },
+            baseUrls: {
+              firecrawl: String(baseUrls.firecrawl ?? ''),
+              tavily: String(baseUrls.tavily ?? ''),
+              exa: String(baseUrls.exa ?? ''),
+              searxng: String(baseUrls.searxng ?? ''),
             },
             proxy: typeof ws.proxy === 'string' ? ws.proxy : next.proxy,
           }
