@@ -80,6 +80,7 @@ import { ALL_AI_CONTEXT_SECTIONS, refreshAiContext, refreshAiContextForView } fr
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import { useTaskNotifier } from '@/composables/useTaskNotifier'
 import { useServerLifecycle } from '@/composables/useServerLifecycle'
+import { useAppRole } from '@/composables/useAppRole'
 import { providerLogoUrlForBaseURL, type ProviderTheme } from '@/utils/providerLogo'
 import { buildMindmapAiNote } from '@/utils/mindmapAiNote'
 
@@ -338,6 +339,18 @@ function handleBranchChanged() {
 
 // 活动视图切换
 const activeView = ref<'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'projects' | 'monitor' | 'mindmap'>('git')
+
+// 运行角色：hub（跨机器常驻节点）只挂公共 4 个板块。
+// 服务端在 hub 下不注册 exec / terminal / process 三条执行面路由，所以这里必须
+// 把 3 个项目级 tab 收起来 + 把默认视图挪到工作台 —— 否则一开机就停在 git 视图，
+// 而那个视图的数据全靠不存在的接口。
+const { role: appRole } = useAppRole()
+watch(appRole, (r) => {
+  if (r !== 'hub') return
+  if (['git', 'console', 'editor', 'source-map'].includes(activeView.value)) {
+    activeView.value = 'workbench'
+  }
+}, { immediate: true })
 
 // 右下角 g ai dock 的「当前文件」上下文：只在编辑器视图激活时带上
 // （EditorView 把激活文件同步进 editorTabsStore，见那边的 watch）
@@ -897,7 +910,7 @@ function stopVResize() {
 
     <div v-else class="app-body">
       <!-- VS Code 风格活动栏 -->
-      <ActivityBar v-model:activeView="activeView" />
+      <ActivityBar v-model:activeView="activeView" :role="appRole" />
 
       <!-- Git 视图:2 列布局 — 左 GitStatus | 右(上 commit-form / 下 log-list)
            右侧上下之间没有分隔条:上按内容自适应,下占满剩余(见 .grid-layout)。

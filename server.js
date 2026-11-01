@@ -20,6 +20,18 @@ import { perfMark, perfNow } from './src/ui/server/utils/perfMark.js'
 
 const noOpen = process.argv.slice(2).includes('--no-open')
 
+// `node server.js --role=hub --port=5598`：开发期起一个 hub（只挂公共板块）。
+// 与 `g ui --role=hub` 同一套参数口径，方便不装全局包也能验。
+const readFlag = (name) => {
+  const withEq = process.argv.find((a) => a.startsWith(`--${name}=`))
+  if (withEq) return withEq.slice(name.length + 3).trim()
+  const idx = process.argv.indexOf(`--${name}`)
+  return idx >= 0 ? String(process.argv[idx + 1] || '').trim() : ''
+}
+const roleFlag = readFlag('role').toLowerCase() === 'hub' ? 'hub' : 'project'
+const portFlagRaw = Number(readFlag('port'))
+const portFlag = Number.isInteger(portFlagRaw) && portFlagRaw > 0 && portFlagRaw < 65536 ? portFlagRaw : undefined
+
 // 耗时锚点:此打点之后,后续各 perfMark 的 (+delta) 列才是"该段花了多少"。
 // perfMark 门控在 ZEN_PERF=1(dev:server 已设),生产 `g ui` 不输出。
 perfMark('server.js 入口 (perfMark 加载完)')
@@ -31,5 +43,5 @@ const { default: startUIServer } = await import('./src/ui/server/index.js')
 perfMark(`import index.js ESM 图加载 (${(perfNow() - tImport).toFixed(0)}ms)`)
 
 const tStart = perfNow()
-await startUIServer(noOpen, true)
+await startUIServer(noOpen, true, { role: roleFlag, port: portFlag })
 perfMark(`startUIServer() 返回 (${(perfNow() - tStart).toFixed(0)}ms, 注: 服务器为异步 listen,真正就绪看 listening 打点)`)

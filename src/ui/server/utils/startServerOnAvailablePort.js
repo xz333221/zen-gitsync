@@ -252,6 +252,12 @@ export async function startServerOnAvailablePort({
     }
   }
 
+  // 固定端口模式（maxTries=1）：把"被谁占 / 为什么不让绑"说清楚，别让用户去猜
+  if (maxTries <= 1) {
+    logger.error(`固定端口 ${startPort} 不可用（${lastErrorCode || '未知原因'}）。固定端口模式不会顺延。`);
+    logger.error('处理办法：换一个 --port，或先关掉占用该端口的进程（netstat -ano | findstr :' + startPort + '）。');
+    process.exit(1);
+  }
   logger.error(`无法找到可用端口 (尝试范围: ${startPort}-${maxPort - 1})`);
   if (process.platform === 'win32' && getExcludedPortRanges().length) {
     logger.error(

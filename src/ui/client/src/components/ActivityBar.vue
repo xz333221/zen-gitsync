@@ -24,7 +24,15 @@ import { useTerminalSessionsStore } from '@stores/terminalSessions'
 
 const props = defineProps<{
   activeView: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'projects' | 'monitor' | 'mindmap'
+  /**
+   * 运行角色。hub = 跨机器的常驻节点，只挂公共板块（工作台/项目管理/系统监控/思维导图）——
+   * 服务端在 hub 下**根本没有** git / exec / terminal / fs 这些路由，按钮留着只会点出 404。
+   */
+  role?: 'project' | 'hub'
 }>()
+
+/** 项目级 tab 是否显示（git / 控制台 / 文件空间）。hub 角色下全部隐藏。 */
+const showProjectTabs = computed(() => props.role !== 'hub')
 
 const emit = defineEmits<{
   'update:activeView': [view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'projects' | 'monitor' | 'mindmap']
@@ -115,6 +123,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   <div class="activity-bar">
     <!-- Git 页面 -->
     <el-tooltip
+      v-if="showProjectTabs"
       :content="gitButtonLabel"
       placement="right"
       :show-after="300"
@@ -149,6 +158,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
 
     <!-- 控制台页面:自定义命令 + 命令控制台(从 Git 视图拆出) -->
     <el-tooltip
+      v-if="showProjectTabs"
       :content="terminalSessionsStore.hasActive ? `${$t('@ACTBAR:控制台')} · ${terminalSessionsStore.count} ${$t('@ACTBAR:个终端会话')}` : $t('@ACTBAR:控制台')"
       placement="right"
       :show-after="300"
@@ -177,6 +187,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
 
     <!-- 编辑器页面 -->
     <el-tooltip
+      v-if="showProjectTabs"
       :content="editorTabsStore.hasDirty ? `${$t('@ACTBAR:编辑器')} · ${editorTabsStore.dirtyCount} ${$t('@ACTBAR:个未保存文件')}` : $t('@ACTBAR:编辑器')"
       placement="right"
       :show-after="300"

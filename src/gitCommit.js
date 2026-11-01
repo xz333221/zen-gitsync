@@ -276,7 +276,23 @@ async function main() {
     }
 
     const startUIServer = await loadStartUIServer();
-    await startUIServer(false, false); // 传入noOpen=false, savePort=false
+
+    // `g ui --role=hub --port=5598`：跨机器的常驻节点。
+    //   hub     —— 只挂公共板块（工作台/项目管理/系统监控/思维导图），项目级路由一律不注册
+    //   project —— 默认，7 个板块都在（保持原行为）
+    // 端口在 hub 下是**钉死**的（被占直接失败，不顺延）：它会长期被别的进程按固定
+    // 地址访问，悄悄换端口比启动失败更难排查。
+    const readFlag = (name) => {
+      const withEq = process.argv.find((a) => a.startsWith(`--${name}=`));
+      if (withEq) return withEq.slice(name.length + 3).trim();
+      const idx = process.argv.indexOf(`--${name}`);
+      return idx >= 0 ? String(process.argv[idx + 1] || '').trim() : '';
+    };
+    const uiRole = readFlag('role').toLowerCase() === 'hub' ? 'hub' : 'project';
+    const uiPortRaw = Number(readFlag('port'));
+    const uiPort = Number.isInteger(uiPortRaw) && uiPortRaw > 0 && uiPortRaw < 65536 ? uiPortRaw : undefined;
+
+    await startUIServer(false, false, { role: uiRole, port: uiPort }); // 传入noOpen=false, savePort=false
     return;
   }
 

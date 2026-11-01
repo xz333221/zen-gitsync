@@ -149,3 +149,26 @@ describe('ActivityBar Git 领先/落后徽标', () => {
     expect(gitBtn(w).attributes('aria-label')).toContain('@ACTBAR:落后 {count} 个提交')
   })
 })
+
+// hub 角色（`g ui --role=hub`）只挂公共板块：服务端在 hub 下不注册 exec / terminal /
+// process 三条执行面路由，按钮留着只会点出 404，所以必须一起收起来。
+describe('ActivityBar 按运行角色收窄 tab', () => {
+  const btn = (w: VueWrapper<any>, key: string) => w.find(`button[aria-label*="@ACTBAR:${key}"]`)
+
+  it('默认（project）7 个 tab 都在', () => {
+    const w = mountWithSetup(ActivityBar, { props: { activeView: 'git' } })
+    for (const key of ['Git', '控制台', '编辑器', '工作台', '项目管理', '系统监控', '思维导图']) {
+      expect(btn(w, key).exists(), `${key} 应该存在`).toBe(true)
+    }
+  })
+
+  it('hub 只留公共 4 个，项目级 3 个隐藏', () => {
+    const w = mountWithSetup(ActivityBar, { props: { activeView: 'workbench', role: 'hub' } })
+    for (const key of ['Git', '控制台', '编辑器']) {
+      expect(btn(w, key).exists(), `${key} 不该出现在 hub 里`).toBe(false)
+    }
+    for (const key of ['工作台', '项目管理', '系统监控', '思维导图']) {
+      expect(btn(w, key).exists(), `${key} 应该保留`).toBe(true)
+    }
+  })
+})

@@ -218,7 +218,32 @@ let recentPushStatus = {
 };
 
 const showConsole = true;
-async function startUIServer(noOpen = false, savePort = false) {
+async function startUIServer(noOpen = false, savePort = false, options = {}) {
+  // 运行角色：project（默认，7 个板块都在）| hub（跨机器的常驻节点，只挂公共板块）。
+  //
+  // 为什么 hub 要单独一个角色而不是"再开一个窗口"：项目级路由（exec / terminal /
+  // fs / git）**隐式吃 process.cwd()**，同一个进程只可能服务一个项目；而公共板块
+  // （工作台 / 项目管理 / 系统监控 / 思维导图）的数据都是整机级的。把两者分开，
+  // hub 就能长驻一个固定端口，项目窗口随用随开。
+  const role = options.role === 'hub' ? 'hub' : 'project';
+  const isHub = role === 'hub';
+  const fixedPort = Number.isInteger(options.port) && options.port > 0 ? options.port : null;
+
+  /**
+   * 包装注册函数：hub 角色下跳过。
+   *
+   * 只用在**执行面**那三条（run 命令 / 开终端 / 杀进程）上 —— 它们才是"以
+   * process.cwd() 为靶子的动作"，而 hub 没有"当前项目"这个概念。
+   *
+   * 为什么其余项目级路由照旧注册：整个前端是按"单进程单 cwd"写的，顶栏目录胶囊、
+   * 配置分片、分支状态都靠 /api/current_directory + /api/status 这类**读**接口
+   * bootstrap；hub 里把它们掐掉只会换来一堆 404，却挡不住任何真正的风险
+   * （主服务本来就只听 127.0.0.1）。
+   */
+  const projectOnly = (register) => (...args) => {
+    if (isHub) return;
+    register(...args);
+  };
   // 数据目录布局迁移:把散在主目录的历史文件收进 ~/.zen-gitsync/(见 src/paths.js)。
   // 必须早于任何数据读写 —— 尤其是下面的实例注册表(它要读 instances/ 目录)。
   // 幂等 + 永不抛错,失败只是"这轮没搬成",下次启动重试。
@@ -330,7 +355,10 @@ async function startUIServer(noOpen = false, savePort = false) {
   app.use(express.static(path.join(__dirname, '../public')));
   perfMark('中间件 + 静态目录挂载完成,开始注册路由')
 
-  registerExecRoutes({
+  // 项目级路由统一在调用点套 projectOnly()：hub 角色下一个都不注册 ——
+  // 它们全部以 process.cwd() 为隐含上下文（命令在哪跑、文件在哪改、git 读谁），
+  // 与其在 handler 里到处判角色，不如让这些端点根本不存在（攻击面也一并消失）。
+  projectOnly(registerExecRoutes)({
     app,
     execGitCommand,
     addCommandToHistory,
@@ -344,14 +372,14 @@ async function startUIServer(noOpen = false, savePort = false) {
     app
   });
 
-  registerTerminalRoutes({
+  projectOnly(registerTerminalRoutes)({
     app,
     getCurrentProjectPath: () => currentProjectPath,
     nextTerminalSessionId: () => terminalSessionIdCounter++,
     terminalSessions
   });
 
-  registerProcessRoutes({
+  projectOnly(registerProcessRoutes)({
     app,
     runningProcesses,
   });
@@ -476,7 +504,8 @@ async function startUIServer(noOpen = false, savePort = false) {
   });
 
   // local-file-picker 中间件，提供 /api/fs/* 文件浏览路由
-  app.use('/api', createFilePickerMiddleware());
+  // local-file-picker 中间件，提供 /api/fs/* 文件浏览路由（文件空间板块，hub 不挂）
+  if (!isHub) app.use('/api', createFilePickerMiddleware());
 
   // ai-model-form 中间件：提供 /api/ai-model/* 路由（模型列表/测试/暂存保存）
   app.use('/api', createAiModelMiddleware());
@@ -488,6 +517,14 @@ async function startUIServer(noOpen = false, savePort = false) {
     app,
     registry: instanceRegistry,
     getCurrentInstanceId: () => process.pid
+  });
+
+  // 运行角色 + 版本：前端据此决定挂哪几个板块（hub 只挂公共的 4 个）。
+  //
+  // 为什么新开一个端点而不是塞进 /api/config：config 是**用户配置**，角色是**这次的
+  // 启动参数**，两者生命周期不同；而且 config 会被设置面板整体回写，混进去容易误存。
+  app.get('/api/app-role', (req, res) => {
+    res.json({ success: true, role, version: PKG_VERSION });
   });
 
   // 健康探针：前端在「疑似服务端已退出」的确认窗口内轮询(带 pid，用于识别热重启)
@@ -656,8 +693,15 @@ async function startUIServer(noOpen = false, savePort = false) {
   // 启动服务器
   // 端口策略：默认从 [4000, 6000) 随机挑起点，再顺序扫描 EADDRINUSE；
   // 可通过 PORT 环境变量强制使用固定端口（向后兼容 + 便于书签/调试）
-  const portStrategy = resolveStartPort();
-  if (portStrategy.source === 'env') {
+  //
+  // hub 用 --port 显式钉死一个端口（maxTries=1）：它要长期被别的进程/脚本按固定
+  // 地址访问，悄悄顺延等于把地址改掉，比启动失败更难查。
+  const portStrategy = fixedPort
+    ? { startPort: fixedPort, source: 'fixed', min: fixedPort, max: fixedPort + 1 }
+    : resolveStartPort();
+  if (portStrategy.source === 'fixed') {
+    console.log(chalk.cyan(`[端口] hub 固定端口 ${portStrategy.startPort}（被占用则直接失败，不顺延）`));
+  } else if (portStrategy.source === 'env') {
     console.log(chalk.cyan(`[端口] 使用环境变量 PORT=${portStrategy.startPort}`));
   } else {
     console.log(chalk.cyan(`[端口] 随机起点 ${portStrategy.startPort}（范围 ${portStrategy.min}-${portStrategy.max}，遇到占用会顺延）`));
@@ -740,7 +784,7 @@ async function startUIServer(noOpen = false, savePort = false) {
     isGitRepo,
     savePortToFile,
     fsSync,
-    maxTries: 100,
+    maxTries: fixedPort ? 1 : 100,
     callbackExecutedRef
   }).catch((e) => {
     logger.error('启动服务器失败:', e);
