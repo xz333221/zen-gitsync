@@ -34,7 +34,9 @@ import { promises as fs } from 'node:fs';
 import { PEERS_FILE } from '../paths.js';
 import { atomicWriteText } from '../fsAtomic.js';
 
-export const PEER_DEFAULT_PORT = 5599;
+// 5600：5599 留给 hub 的固定端口（见 ui/server/utils/ensureHub.js 的 HUB_DEFAULT_PORT）。
+// 两个都是长驻服务，撞在一起会让「开 peer」和「开 hub」变成互斥。
+export const PEER_DEFAULT_PORT = 5600;
 
 /** peers.json 的默认形状（读不到 / 坏文件时的兜底）。 */
 function emptyState() {

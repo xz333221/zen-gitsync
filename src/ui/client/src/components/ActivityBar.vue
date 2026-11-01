@@ -25,14 +25,20 @@ import { useTerminalSessionsStore } from '@stores/terminalSessions'
 const props = defineProps<{
   activeView: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'projects' | 'monitor' | 'mindmap'
   /**
-   * 运行角色。hub = 跨机器的常驻节点，只挂公共板块（工作台/项目管理/系统监控/思维导图）——
-   * 服务端在 hub 下**根本没有** git / exec / terminal / fs 这些路由，按钮留着只会点出 404。
+   * 运行角色：
+   *   project —— 项目窗口，只有 Git / 控制台 / 文件空间（公共 4 个板块在 hub 进程里）
+   *   hub     —— 常驻节点，只有工作台 / 项目管理 / 系统监控 / 思维导图
+   *   full    —— 旧行为，7 个都在（`g ui --role=full`）
+   * 不传时按 project 处理：默认值必须和"日常开一个项目窗口"一致。
    */
-  role?: 'project' | 'hub'
+  role?: 'project' | 'hub' | 'full'
 }>()
 
-/** 项目级 tab 是否显示（git / 控制台 / 文件空间）。hub 角色下全部隐藏。 */
+/** 项目级 tab 是否显示（git / 控制台 / 文件空间）。 */
 const showProjectTabs = computed(() => props.role !== 'hub')
+
+/** 公共 tab 是否显示（工作台 / 项目管理 / 系统监控 / 思维导图）。缺省按 project 算。 */
+const showPublicTabs = computed(() => (props.role ?? 'project') !== 'project')
 
 const emit = defineEmits<{
   'update:activeView': [view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'projects' | 'monitor' | 'mindmap']
@@ -231,7 +237,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
     </el-tooltip>
 
     <!-- 工作台 -->
-    <el-tooltip :content="$t('@ACTBAR:工作台')" placement="right" :show-after="300">
+    <el-tooltip v-if="showPublicTabs" :content="$t('@ACTBAR:工作台')" placement="right" :show-after="300">
       <button
         class="activity-btn"
         :class="{ active: props.activeView === 'workbench' }"
@@ -260,7 +266,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
          与「工作台」分开是刻意的：工作台管任务（选中项目 = 过滤看板），
          这里管项目本身，两种语义混在一个面板里会让"点一下"的含义变得不确定。
          不加角标：48px 活动栏已经挂满了（见 lessons/activity-bar-badges）。 -->
-    <el-tooltip :content="$t('@ACTBAR:项目管理')" placement="right" :show-after="300">
+    <el-tooltip v-if="showPublicTabs" :content="$t('@ACTBAR:项目管理')" placement="right" :show-after="300">
       <button
         class="activity-btn"
         :class="{ active: props.activeView === 'projects' }"
@@ -280,7 +286,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
     </el-tooltip>
 
     <!-- 系统监控 -->
-    <el-tooltip :content="$t('@ACTBAR:系统监控')" placement="right" :show-after="300">
+    <el-tooltip v-if="showPublicTabs" :content="$t('@ACTBAR:系统监控')" placement="right" :show-after="300">
       <button
         class="activity-btn"
         :class="{ active: props.activeView === 'monitor' }"
@@ -296,7 +302,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
     </el-tooltip>
 
     <!-- 思维导图 -->
-    <el-tooltip :content="$t('@ACTBAR:思维导图')" placement="right" :show-after="300">
+    <el-tooltip v-if="showPublicTabs" :content="$t('@ACTBAR:思维导图')" placement="right" :show-after="300">
       <button
         class="activity-btn"
         :class="{ active: props.activeView === 'mindmap' }"

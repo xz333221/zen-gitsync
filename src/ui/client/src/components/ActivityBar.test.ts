@@ -40,12 +40,12 @@ describe('ActivityBar 工作台活跃执行徽标', () => {
   }
 
   it('没有活跃执行时不显示徽标', () => {
-    const w = mountWithSetup(ActivityBar, { props: { activeView: 'workbench' } })
+    const w = mountWithSetup(ActivityBar, { props: { activeView: 'workbench', role: 'full' } })
     expect(w.find('.wb-running-badge').exists()).toBe(false)
   })
 
   it('store 有数时出现，落在工作台按钮内，归零后消失', async () => {
-    const w = mountWithSetup(ActivityBar, { props: { activeView: 'git' } })
+    const w = mountWithSetup(ActivityBar, { props: { activeView: 'git', role: 'full' } })
     const store = useWorkbenchStatusStore()
 
     store.setRunning(3)
@@ -60,7 +60,7 @@ describe('ActivityBar 工作台活跃执行徽标', () => {
   })
 
   it('超过 99 显示 99+', async () => {
-    const w = mountWithSetup(ActivityBar, { props: { activeView: 'git' } })
+    const w = mountWithSetup(ActivityBar, { props: { activeView: 'git', role: 'full' } })
     useWorkbenchStatusStore().setRunning(120)
     await nextTick()
     expect(w.find('.wb-running-badge').text()).toBe('99+')
@@ -76,7 +76,7 @@ describe('ActivityBar 工作台活跃执行徽标', () => {
 describe('ActivityBar Git 领先/落后徽标', () => {
   /** 挂一个 Git 仓库场景下的活动栏（gitStore 与组件共用同一个 pinia 实例） */
   function mountBar() {
-    const w = mountWithSetup(ActivityBar, { props: { activeView: 'git' } })
+    const w = mountWithSetup(ActivityBar, { props: { activeView: 'git', role: 'full' } })
     const gitStore = useGitStore()
     gitStore.isGitRepo = true
     return { w, gitStore }
@@ -127,7 +127,7 @@ describe('ActivityBar Git 领先/落后徽标', () => {
   })
 
   it('不是 Git 仓库时不显示（store 里的脏值不算数）', async () => {
-    const w = mountWithSetup(ActivityBar, { props: { activeView: 'git' } })
+    const w = mountWithSetup(ActivityBar, { props: { activeView: 'git', role: 'full' } })
     const gitStore = useGitStore()
     gitStore.branchAhead = 3
     gitStore.isGitRepo = false
@@ -150,25 +150,31 @@ describe('ActivityBar Git 领先/落后徽标', () => {
   })
 })
 
-// hub 角色（`g ui --role=hub`）只挂公共板块：服务端在 hub 下不注册 exec / terminal /
-// process 三条执行面路由，按钮留着只会点出 404，所以必须一起收起来。
+// 运行角色决定挂哪几个 tab：
+//   project（默认）—— 项目窗口，只有 Git / 控制台 / 文件空间
+//   hub            —— 常驻节点，只有公共 4 个板块
+//   full           —— 旧行为，7 个都在
 describe('ActivityBar 按运行角色收窄 tab', () => {
   const btn = (w: VueWrapper<any>, key: string) => w.find(`button[aria-label*="@ACTBAR:${key}"]`)
+  const PROJECT_TABS = ['Git', '控制台', '编辑器']
+  const PUBLIC_TABS = ['工作台', '项目管理', '系统监控', '思维导图']
 
-  it('默认（project）7 个 tab 都在', () => {
+  it('默认（project）只留项目级 3 个', () => {
     const w = mountWithSetup(ActivityBar, { props: { activeView: 'git' } })
-    for (const key of ['Git', '控制台', '编辑器', '工作台', '项目管理', '系统监控', '思维导图']) {
-      expect(btn(w, key).exists(), `${key} 应该存在`).toBe(true)
-    }
+    for (const key of PROJECT_TABS) expect(btn(w, key).exists(), `${key} 应该存在`).toBe(true)
+    for (const key of PUBLIC_TABS) expect(btn(w, key).exists(), `${key} 不该在项目窗口里`).toBe(false)
   })
 
   it('hub 只留公共 4 个，项目级 3 个隐藏', () => {
     const w = mountWithSetup(ActivityBar, { props: { activeView: 'workbench', role: 'hub' } })
-    for (const key of ['Git', '控制台', '编辑器']) {
-      expect(btn(w, key).exists(), `${key} 不该出现在 hub 里`).toBe(false)
-    }
-    for (const key of ['工作台', '项目管理', '系统监控', '思维导图']) {
-      expect(btn(w, key).exists(), `${key} 应该保留`).toBe(true)
+    for (const key of PROJECT_TABS) expect(btn(w, key).exists(), `${key} 不该出现在 hub 里`).toBe(false)
+    for (const key of PUBLIC_TABS) expect(btn(w, key).exists(), `${key} 应该保留`).toBe(true)
+  })
+
+  it('full 保留旧行为，7 个都在', () => {
+    const w = mountWithSetup(ActivityBar, { props: { activeView: 'git', role: 'full' } })
+    for (const key of [...PROJECT_TABS, ...PUBLIC_TABS]) {
+      expect(btn(w, key).exists(), `${key} 应该存在`).toBe(true)
     }
   })
 })

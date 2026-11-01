@@ -40,12 +40,12 @@ import { fetchPeerInfo, askPeer } from '../peer/client.js';
 const USAGE = `
 用法:
   g peer                          查看本机节点身份与已登记的对端
-  g peer on [--name 昵称] [--port 5599] [--host 0.0.0.0]
+  g peer on [--name 昵称] [--port 5600] [--host 0.0.0.0]
                                   开启本机的 peer 端口(重启 g ui 后生效)
   g peer off                      关闭本机的 peer 端口
   g peer add <昵称> <地址> --token <令牌>
                                   登记一台对端,例如:
-                                  g peer add 服务器 http://192.168.1.20:5599 --token <令牌>
+                                  g peer add 服务器 http://192.168.1.20:5600 --token <令牌>
   g peer rm <昵称|id>             移除一台对端
   g peer ask <昵称|id> <问题>     向对端提一个问题(端到端自检)
   g peer help                     显示本帮助

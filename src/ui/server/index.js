@@ -74,6 +74,7 @@ import { startServerOnAvailablePort } from './utils/startServerOnAvailablePort.j
 import { resolveStartPort } from './utils/randomStartPort.js';
 import { perfMark } from './utils/perfMark.js';
 import { normalizeProjectPath } from './utils/pathGuard.js';
+import { ensureHubRunning, HUB_DEFAULT_PORT } from './utils/ensureHub.js';
 import { createFilePickerMiddleware } from 'local-file-picker';
 import { createAiModelMiddleware } from 'ai-model-form';
 
@@ -219,13 +220,15 @@ let recentPushStatus = {
 
 const showConsole = true;
 async function startUIServer(noOpen = false, savePort = false, options = {}) {
-  // 运行角色：project（默认，7 个板块都在）| hub（跨机器的常驻节点，只挂公共板块）。
+  // 运行角色：
+  //   project（默认）—— 项目窗口，只挂 Git / 控制台 / 文件空间 三个板块
+  //   hub           —— 跨机器的常驻节点，只挂工作台 / 项目管理 / 系统监控 / 思维导图
+  //   full          —— 旧行为（7 个板块都在），留一个逃生口，免得谁被这次拆分卡住
   //
-  // 为什么 hub 要单独一个角色而不是"再开一个窗口"：项目级路由（exec / terminal /
-  // fs / git）**隐式吃 process.cwd()**，同一个进程只可能服务一个项目；而公共板块
-  // （工作台 / 项目管理 / 系统监控 / 思维导图）的数据都是整机级的。把两者分开，
-  // hub 就能长驻一个固定端口，项目窗口随用随开。
-  const role = options.role === 'hub' ? 'hub' : 'project';
+  // 为什么项目级和公共级要分进程：项目级路由（exec / terminal / fs / git）**隐式吃
+  // process.cwd()**，同一个进程只可能服务一个项目；而公共板块的数据都是整机级的。
+  // 分开之后 hub 能长驻一个固定端口，项目窗口随用随开。
+  const role = options.role === 'hub' ? 'hub' : (options.role === 'full' ? 'full' : 'project');
   const isHub = role === 'hub';
   const fixedPort = Number.isInteger(options.port) && options.port > 0 ? options.port : null;
 
@@ -772,6 +775,19 @@ async function startUIServer(noOpen = false, savePort = false, options = {}) {
       console.warn(chalk.yellow(`[peer] 启动异常: ${e?.message || e}`));
     });
 
+    // 项目窗口顺手保证 hub 在跑：公共 4 个板块只在 hub 进程里，没有它这套拆分
+    // 就等于"每次都得先记得手动开 hub"。已有活着的 hub 就复用，不重复拉进程。
+    // 失败只警告 —— hub 起不来不该连累当前这个项目窗口。
+    if (role === 'project') {
+      ensureHubRunning({ port: HUB_DEFAULT_PORT })
+        .then((r) => {
+          console.log(chalk.gray(`[hub] ${r.reused ? `复用已在运行的 hub (pid ${r.pid})` : '已拉起后台 hub'} → http://127.0.0.1:${r.port}`));
+        })
+        .catch((e) => {
+          console.warn(chalk.yellow(`[hub] 自动启动失败（不影响当前窗口）: ${e?.message || e}`));
+        });
+    }
+
     // 预热「工作区状态快照」（g ai 的上下文）—— 这就是"g ui 刚启动"那个时机。
     //
     // 三个刻意的选择:
@@ -818,7 +834,8 @@ async function startUIServer(noOpen = false, savePort = false, options = {}) {
         port: currentPort,
         projectPath: currentProjectPath,
         projectName,
-        hostname: os.hostname()
+        hostname: os.hostname(),
+        role
       });
       console.log(chalk.green(`[instanceRegistry] 已注册 pid=${process.pid} port=${currentPort} name=${projectName}`));
     } catch (e) {
@@ -834,7 +851,8 @@ async function startUIServer(noOpen = false, savePort = false, options = {}) {
         port: currentPort,
         projectPath: currentProjectPath,
         projectName,
-        hostname: os.hostname()
+        hostname: os.hostname(),
+        role
       })
         .catch((e) => console.warn(chalk.yellow(`[instanceRegistry] 心跳失败: ${e?.message || e}`)));
     }, 5000);

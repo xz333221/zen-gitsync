@@ -288,11 +288,17 @@ async function main() {
       const idx = process.argv.indexOf(`--${name}`);
       return idx >= 0 ? String(process.argv[idx + 1] || '').trim() : '';
     };
-    const uiRole = readFlag('role').toLowerCase() === 'hub' ? 'hub' : 'project';
+    const uiRole = readFlag('role').toLowerCase();
     const uiPortRaw = Number(readFlag('port'));
     const uiPort = Number.isInteger(uiPortRaw) && uiPortRaw > 0 && uiPortRaw < 65536 ? uiPortRaw : undefined;
+    // 自动拉起的 hub 带 --no-open：它是后台常驻进程，弹浏览器等于每次开项目窗口
+    // 都多蹦一个标签页。
+    const uiNoOpen = process.argv.includes('--no-open');
 
-    await startUIServer(false, false, { role: uiRole, port: uiPort }); // 传入noOpen=false, savePort=false
+    await startUIServer(uiNoOpen, false, {
+      role: uiRole === 'hub' ? 'hub' : (uiRole === 'full' ? 'full' : 'project'),
+      port: uiPort
+    }); // savePort=false
     return;
   }
 

@@ -9,7 +9,7 @@
 
 import { ref } from 'vue'
 
-export type AppRole = 'project' | 'hub'
+export type AppRole = 'project' | 'hub' | 'full'
 
 const role = ref<AppRole>('project')
 let requested = false
@@ -24,10 +24,10 @@ export function useAppRole() {
     fetch('/api/app-role')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data?.role === 'hub') role.value = 'hub'
+        if (data?.role === 'hub' || data?.role === 'full') role.value = data.role
       })
       .catch(() => {
-        // 老版本服务端没有这个端点 / 网络抖动：按 project 处理，功能不低于今天
+        // 老版本服务端没有这个端点 / 网络抖动：按 project 处理
       })
   }
   return { role }
