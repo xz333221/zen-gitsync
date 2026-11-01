@@ -24,6 +24,7 @@
 
 import {
   listPeers,
+  readState,
   findPeer,
   getSessionId,
   setSessionId,
@@ -111,19 +112,32 @@ export async function askPeer(peer, self, question, { timeoutMs = ASK_TIMEOUT_MS
  * 为什么把探活放在这里而不是常驻心跳：对端可能十天半个月不开机，常驻心跳只会
  * 白烧请求；工具调用是低频的，届时有几台就探几台（并发，2s 级超时）。
  *
+ * ⚠️ **必须用 readState() 的完整条目，不能用 listPeers()**：后者是**脱敏视图**
+ * （只给 id/name/url/hasToken，按设计不含令牌明文，见 store.listPeers 的测试）。
+ * 拿它去探活，请求头里的 `Authorization: Bearer ` 是空的 → 对端一律回 401 →
+ * 每一台都被判成离线。2026-11-01 用户就是这么撞上的：设置面板点「测试」显示在线，
+ * 同一条对端在 g ai 里问「你和谁连着」却报离线（AI 走的正是这个函数）。
+ * 脱敏是**对外输出**的规矩，不是内部读数据的方式 —— 这里返回值里仍然只给
+ * online / label，令牌一个字节都不出去。
+ *
+ * 顺带把失败原因放进 `error`：只报"离线"会让用户去查网络，而真实原因常常是
+ * 令牌不匹配（对端重生成过令牌）或地址写错，两者该被区分开。
+ *
  * @param {{probe?:boolean}} [opts]
- * @returns {Promise<Array<{id:string,name:string,url:string,online:boolean,label?:string}>>}
+ * @returns {Promise<Array<{id:string,name:string,url:string,online:boolean,label?:string,error?:string}>>}
  */
 export async function listPeerStatus({ probe = true } = {}) {
-  const peers = await listPeers();
+  const { peers } = await readState();
   if (!peers.length) return [];
   return Promise.all(peers.map(async (p) => {
-    if (!probe) return { ...p, online: false };
+    if (!probe) {
+      return { id: p.id, name: p.name, url: p.url, hasToken: !!p.token, online: false };
+    }
     try {
       const info = await fetchPeerInfo(p, { timeoutMs: 2000 });
       return { id: info.id || p.id, name: info.name || p.name, url: p.url, online: true, label: info.version || '' };
-    } catch {
-      return { ...p, online: false };
+    } catch (err) {
+      return { id: p.id, name: p.name, url: p.url, online: false, error: String(err?.message || err) };
     }
   }));
 }

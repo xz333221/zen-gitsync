@@ -1290,8 +1290,13 @@ async function toolAskPeer(args, ctx) {
       return '还没有登记任何对端。步骤：① 在对端机器上开 `g peer on`（会打印地址与令牌）；'
         + '② 回到这台机器执行 `g peer add <昵称> <地址> --token <令牌>`。'
     }
+    // 离线要带原因：只写"[离线]"的话模型只能转述"连不上"，用户还得自己猜是
+    // 没开机、防火墙、还是令牌过期。client.listPeerStatus 已经把 error 带出来了。
     return ['已登记的对端（在线状态为本次实时探测）：']
-      .concat(peers.map((p, i) => `${i + 1}. ${p.name}${p.online ? '  [在线]' : '  [离线]'}  ${p.url}  id=${p.id || '未知'}`))
+      .concat(peers.map((p, i) => {
+        const stateText = p.online ? '[在线]' : `[离线${p.error ? `：${p.error}` : ''}]`
+        return `${i + 1}. ${p.name}  ${stateText}  ${p.url}  id=${p.id || '未知'}`
+      }))
       .join('\n')
   }
 

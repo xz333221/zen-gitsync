@@ -30,6 +30,7 @@ const SCAN_DIRS = [
   join(ROOT, 'src', 'cli'),
   join(ROOT, 'src', 'memory'),
   join(ROOT, 'src', 'mcp'),
+  join(ROOT, 'src', 'peer'),
   join(ROOT, 'src', 'ui', 'server'),
 ]
 const PATTERNS = /\.(test|spec)\.(mjs|js|ts)$/
