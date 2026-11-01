@@ -44,6 +44,20 @@ import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * reg.exe 的 spawn 选项：**必须** windowsHide。
+ *
+ * g ui 的后端进程通常自己没有控制台窗口（快捷方式 / VBS / 计划任务拉起），
+ * 这时 Node 给天然是控制台程序的 reg.exe **新建一个控制台** —— 用户看到的就是
+ * "闪一下黑窗"。而设置弹窗每次打开都会 GET 一次状态、并发查**两个**落点，
+ * 于是表现成"每次点开设置闪两个 CMD，然后自己消失"（2026-11-01 用户报障）。
+ *
+ * 漏 options 时 execFile 的 windowsHide 默认是 false，本文件是全仓唯一
+ * 调 reg.exe 的地方（其余子进程调用，如 execGitCommand / fileOpen，早已带上这项），
+ * 所以这就是那两下闪窗的全部来源。
+ */
+const REG_EXEC_OPTS = Object.freeze({ windowsHide: true });
+
 /** 菜单项注册表键名（两个落点共用），改它就是"换一个菜单项" */
 export const MENU_KEY_NAME = 'ZenGitSync';
 
@@ -101,10 +115,10 @@ export async function installExplorerContextMenu({
   const menuLabel = sanitizeMenuLabel(label);
   const command = buildMenuCommand({ nodePath, entryPath });
   for (const key of MENU_REGISTRY_ROOTS) {
-    await execFileFn('reg.exe', ['add', key, '/ve', '/t', 'REG_SZ', '/d', menuLabel, '/f']);
+    await execFileFn('reg.exe', ['add', key, '/ve', '/t', 'REG_SZ', '/d', menuLabel, '/f'], REG_EXEC_OPTS);
     // 图标借 node.exe 的（注册表菜单项只认 exe/dll/ico 资源，本包没有 .ico）
-    await execFileFn('reg.exe', ['add', key, '/v', 'Icon', '/t', 'REG_SZ', '/d', nodePath, '/f']);
-    await execFileFn('reg.exe', ['add', `${key}\\command`, '/ve', '/t', 'REG_SZ', '/d', command, '/f']);
+    await execFileFn('reg.exe', ['add', key, '/v', 'Icon', '/t', 'REG_SZ', '/d', nodePath, '/f'], REG_EXEC_OPTS);
+    await execFileFn('reg.exe', ['add', `${key}\\command`, '/ve', '/t', 'REG_SZ', '/d', command, '/f'], REG_EXEC_OPTS);
   }
   return { label: menuLabel, command };
 }
@@ -119,7 +133,7 @@ export async function uninstallExplorerContextMenu({ execFileFn = execFileAsync 
   const errors = [];
   for (const key of MENU_REGISTRY_ROOTS) {
     try {
-      await execFileFn('reg.exe', ['delete', key, '/f']);
+      await execFileFn('reg.exe', ['delete', key, '/f'], REG_EXEC_OPTS);
     } catch (error) {
       if (!isMissingRegistryKeyError(error)) errors.push(error);
     }
@@ -149,7 +163,7 @@ export async function getExplorerContextMenuStatus({ execFileFn = execFileAsync 
   const keys = {};
   await Promise.all(MENU_REGISTRY_ROOTS.map(async (key) => {
     try {
-      await execFileFn('reg.exe', ['query', key, '/ve']);
+      await execFileFn('reg.exe', ['query', key, '/ve'], REG_EXEC_OPTS);
       keys[key] = true;
     } catch {
       keys[key] = false;

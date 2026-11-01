@@ -26,17 +26,44 @@ import {
   uninstallExplorerContextMenu,
 } from './explorerContextMenu.js'
 
-/** 记录所有 reg.exe 调用并返回空输出的假实现 */
+/** 记录所有 reg.exe 调用（含 spawn 选项）并返回空输出的假实现 */
 function createFakeReg({ fail = () => false } = {}) {
   const calls = []
-  const execFileFn = async (file, args) => {
-    calls.push({ file, args })
+  const execFileFn = async (file, args, opts) => {
+    calls.push({ file, args, opts })
     const error = fail(args)
     if (error) throw error
     return { stdout: '', stderr: '' }
   }
   return { calls, execFileFn }
 }
+
+/**
+ * 闪窗回归：每次打开设置弹窗都会 GET 一次状态、并发查两个注册表键。
+ * reg.exe 是控制台程序，execFile 漏了 windowsHide 就会各新建一个控制台窗口 ——
+ * 用户看到的是"闪两个 CMD 然后自己消失"。所以每一条调用都必须带上它。
+ */
+test('reg.exe 调用一律带 windowsHide（否则每次打开设置闪黑窗）', async () => {
+  const install = createFakeReg()
+  await installExplorerContextMenu({ label: '用 g UI 打开', execFileFn: install.execFileFn })
+  assert.ok(install.calls.length > 0)
+  for (const call of install.calls) {
+    assert.equal(call.opts?.windowsHide, true, `install 的 ${call.args[0]} 没带 windowsHide`)
+  }
+
+  const status = createFakeReg()
+  await getExplorerContextMenuStatus({ execFileFn: status.execFileFn })
+  assert.equal(status.calls.length, MENU_REGISTRY_ROOTS.length)
+  for (const call of status.calls) {
+    assert.equal(call.opts?.windowsHide, true, 'status 的 query 没带 windowsHide')
+  }
+
+  const uninstall = createFakeReg()
+  await uninstallExplorerContextMenu({ execFileFn: uninstall.execFileFn })
+  for (const call of uninstall.calls) {
+    assert.equal(call.opts?.windowsHide, true, 'uninstall 的 delete 没带 windowsHide')
+  }
+})
 
 /** 从假调用记录里取出某个 reg 子命令的目标键 */
 function targetsOf(calls, subcommand) {
