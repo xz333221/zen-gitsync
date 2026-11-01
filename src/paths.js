@@ -61,6 +61,12 @@ export const LEGACY_INSTANCES_DIR = path.join(os.homedir(), '.zen-gitsync-instan
 // 这里只登记路径,不参与搬迁。
 export const LEGACY_INSTANCES_FILE = path.join(os.homedir(), '.zen-gitsync-instances.json');
 
+// ── 跨机器 peer（g ai 与 g ai 对话）────────────────────────────
+// 身份(昵称/头像/token/固定端口) + 对端清单 + 每个对端续聊用的会话 id。
+// 与 config.json 分开存:它只跟"这台机器"有关,不属于任何项目,也不该跟着
+// 项目配置一起被同步/备份。
+export const PEERS_FILE = path.join(DATA_DIR, 'peers.json');
+
 // ── CLI 贴图 ─────────────────────────────────────────────────
 export const AI_IMAGES_DIR = path.join(DATA_DIR, 'ai-images');
 // 旧的是 ~/.git-commit-tool/ai-images(父目录名与主配置不同,少了个 .json)

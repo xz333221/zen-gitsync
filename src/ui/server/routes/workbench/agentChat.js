@@ -382,8 +382,8 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 // 分流、摘要注进请求副本（agentParity.test.js 有守卫）。
 //
 // 返回: { aborted: boolean }
-export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, docNote = '', attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, registerProject, dispatchTask, getContextBlock, requestBudget = null, resume = false, streamFn = streamChatOnce, promptSection, dispatchPolicySection = '' }) {
-  const ctx = { cwd, locale, onChild, askUser, listProjects, registerProject, dispatchTask };
+export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, docNote = '', attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, registerProject, dispatchTask, askPeer, listPeers, getContextBlock, requestBudget = null, resume = false, streamFn = streamChatOnce, promptSection, dispatchPolicySection = '' }) {
+  const ctx = { cwd, locale, onChild, askUser, listProjects, registerProject, dispatchTask, askPeer, listPeers };
 
   // 确保 session.messages 存在
   if (!Array.isArray(session.messages)) session.messages = [];

@@ -312,6 +312,17 @@ async function main() {
     return;
   }
 
+  // 跨机器通信(g peer):让这台机器上的 g ai 与另一台机器的 g ai 互相提问。
+  //
+  // 配置写进 <DATA_DIR>/peers.json(不跟项目走),端口是**独立**的一个固定端口 ——
+  // 主服务没有认证层,绝不能把整张 /api 暴露到局域网,细节见 src/peer/server.js。
+  // 同样只认 argv[2],避免 `g -m peer` 被判成子命令。
+  if (process.argv[2] === 'peer') {
+    const { runPeerCli } = await import('./cli/peer.js');
+    await runPeerCli(process.argv.slice(3));
+    return;
+  }
+
   // 检查是否是添加脚本命令
   if (process.argv.includes('addScript')) {
     await addScriptToPackageJson();

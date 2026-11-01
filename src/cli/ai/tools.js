@@ -295,6 +295,31 @@ export const TOOL_DEFINITIONS = [
   {
     type: 'function',
     function: {
+      name: 'ask_peer',
+      description: '向**另一台电脑**上的 g ai 提问，并把它的回答原样拿回来（跨机器通信）。'
+        + '不传 question 时只列出已登记的对端与在线状态，用来先看清"能问谁"。'
+        + '什么时候用：用户问的是"另一台机器上的事"（那台服务器上有哪些项目、某个部署做完没有、你那边分支推到哪儿了），'
+        + '或者要让对端机器去查它自己的目录/任务/日志 —— 这些用本机的 list_files / git 命令都看不到，别猜，直接问它。'
+        + '注意：对端是**另一个正在跑的智能体**，一次问答可能几十秒到几分钟；同一件事别反复问，也不要拿它当跑命令的通道（本机的活自己用 run_command 干）。',
+      parameters: {
+        type: 'object',
+        properties: {
+          peer: {
+            type: 'string',
+            description: '对端的 id 或昵称（不确定时先不传 question 看清单）。只有一台对端时可以省略。',
+          },
+          question: {
+            type: 'string',
+            description: '要问的话。写得像对人说话：把你已知的上下文一起给它（"X 项目今天推了 3 个提交，部署了吗"），它看不到你这边的会话。',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'register_project',
       description: '把一个目录登记进用户的「常用目录」—— 就是 g ui「切换工作目录」弹窗里那份清单(首屏「最近项目」面板是同一份数据)。'
         + '什么时候用:你**刚创建或克隆了一个新项目**(git init / git clone / 各种脚手架新建出来的目录)之后,顺手把它登记进去 —— '
@@ -1248,6 +1273,40 @@ async function toolListProjects(args, ctx) {
   return ctx.listProjects({ refresh: args.refresh === true })
 }
 
+// ask_peer 与 list_projects 同一条边界：工具的**定义**在这里，对端清单与 HTTP
+// 客户端由 GUI 侧注入 ctx.askPeer / ctx.listPeers。CLI（g ai）下没有 peers.json
+// 的写入入口，所以给一句能照着做的说明，而不是崩掉。
+async function toolAskPeer(args, ctx) {
+  if (typeof ctx.askPeer !== 'function') {
+    return '错误: ask_peer 只在 g ui(GUI 界面)的内置智能体里可用。命令行 g ai 下请直接 `g peer ask <昵称> "问题"`。'
+  }
+  const peer = String(args.peer || '').trim()
+  const question = String(args.question || '').trim()
+
+  // 只问"能问谁"：给清单 + 在线状态
+  if (!question) {
+    const peers = typeof ctx.listPeers === 'function' ? await ctx.listPeers() : []
+    if (!peers.length) {
+      return '还没有登记任何对端。步骤：① 在对端机器上开 `g peer on`（会打印地址与令牌）；'
+        + '② 回到这台机器执行 `g peer add <昵称> <地址> --token <令牌>`。'
+    }
+    return ['已登记的对端（在线状态为本次实时探测）：']
+      .concat(peers.map((p, i) => `${i + 1}. ${p.name}${p.online ? '  [在线]' : '  [离线]'}  ${p.url}  id=${p.id || '未知'}`))
+      .join('\n')
+  }
+
+  try {
+    const result = await ctx.askPeer(peer, question)
+    const name = result?.peer?.name || peer || '对端'
+    const answer = String(result?.answer || '').trim()
+    return answer
+      ? `【来自「${name}」的回答】\n${answer}`
+      : `【「${name}」没有给出正文】它可能把这一轮用于工具调用就结束了，可以换个更具体的问法再问一次。`
+  } catch (err) {
+    return `错误: 向对端提问失败 —— ${err?.message || err}`
+  }
+}
+
 // register_project 的实现同样由 GUI 侧注入(ctx.registerProject)—— 最近目录是
 // configManager 的东西,CLI/Web 共用的本模块只该知道"有这么个工具"。
 // 与 list_projects 同一手法:没有实现时给一句能照着做的话,而不是崩掉。
@@ -1538,6 +1597,7 @@ const TOOL_HANDLERS = {
   list_files: toolListFiles,
   search_text: toolSearchText,
   list_projects: toolListProjects,
+  ask_peer: toolAskPeer,
   register_project: toolRegisterProject,
   update_plan: toolUpdatePlan,
   ask_user: toolAskUser,

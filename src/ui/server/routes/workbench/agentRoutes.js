@@ -31,6 +31,7 @@ import { normalizeAgentEngine, isExternalEngine, engineLabel } from './agentEngi
 import { saveAgentAttachments, MAX_ATTACHMENTS } from '../../utils/agentAttachments.js';
 import { registerAgentMarketplaceRoutes } from './agentMarketplace.js';
 import { createProjectListProvider } from './projectTool.js';
+import { askPeerByRef, listPeerStatus } from '../../../../peer/client.js';
 import { createDispatcher } from './dispatchInstruction.js';
 import { createWorkspaceSnapshotter } from '../aiContext/wiring.js';
 // 用户固定提示词（g ai 默认提示词 + 派发提示词）的解析 —— 两条引擎链路共用同一份
@@ -204,6 +205,12 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
   // 与看板统计,这些依赖只有本层拿得到 —— 与 taskRunner 的 setEnvContextProvider 同理。
   // 不给它加缓存:agent 一轮里最多问一两次,而"项目状态"本来就要现读才准。
   const listProjects = createProjectListProvider({ configManager, getCurrentProjectPath });
+
+  // ask_peer 的两半：对端清单（实时探活）与"问一句"。数据源是 <DATA_DIR>/peers.json，
+  // 与本机项目无关，所以直接复用 src/peer/ 的实现 —— 这里不做二次包装。
+  // 工具在 CLI（g ai）下没有 peers 上下文，见 tools.js 的 toolAskPeer 兜底说明。
+  const askPeer = askPeerByRef;
+  const listPeers = () => listPeerStatus({ probe: true });
 
   // 把目录登记进「常用目录」(config.json 的 recentDirectories)。register_project 工具
   // 与 run_command 里"建了仓库就顺手登记"那一步共用它 —— 智能体建/克隆完新项目,
@@ -812,6 +819,8 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
           dispatchTask,
           listProjects,
           registerProject,
+          askPeer,
+          listPeers,
           getContextBlock,
           // 每轮请求的上下文预算（解析结果）。agentChat 拿它调 prepareRequestMessages，
           // 与 CLI turn.js 同一条口径。

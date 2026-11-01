@@ -31,6 +31,8 @@ import { createRequestLogger } from './middleware/requestLogger.js';
 import { migrateDataDir } from '../../dataDirMigration.js';
 import { createErrorHandler } from './middleware/errorHandler.js';
 import { registerUiSocketHandlers } from './socket/registerUiSocketHandlers.js';
+import { ensureSelf } from '../../peer/store.js';
+import { startPeerServer } from '../../peer/server.js';
 import { registerExecRoutes } from './routes/exec.js';
 import { registerTerminalRoutes } from './routes/terminal.js';
 import { registerProcessRoutes } from './routes/process.js';
@@ -74,6 +76,16 @@ import { perfMark } from './utils/perfMark.js';
 import { normalizeProjectPath } from './utils/pathGuard.js';
 import { createFilePickerMiddleware } from 'local-file-picker';
 import { createAiModelMiddleware } from 'ai-model-form';
+
+// peer 握手时报给对端的版本号（只用来在 CLI/工具输出里区分"对面是谁"）。
+// 从模块自身位置往上找 package.json，不受 cwd 影响 —— 与 utils/aiEndpoint.js 同一手法。
+const PKG_VERSION = (() => {
+  try {
+    return JSON.parse(fsSync.readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')).version || '';
+  } catch {
+    return '';
+  }
+})();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -660,6 +672,37 @@ async function startUIServer(noOpen = false, savePort = false) {
   // 用 'listening' 事件做注册触发：startServerOnAvailablePort 的 await
   // 在端口重试场景下不一定按时返回，但 'listening' 事件只在服务器真正绑定端口时触发
   let registerDone = false;
+
+  // 跨机器 peer：**独立端口**、独立监听，只在 peers.json 里 self.enabled 时启动。
+  //
+  // 为什么不挂在主服务上：主服务没有认证层（能打进来就是全权限），它的安全边界
+  // 靠"只听 127.0.0.1 + Origin 守卫"。peer 端口要能被局域网访问，所以必须是另一张
+  // 极短的路由表（/api/peer/info、/api/peer/ask），带令牌校验，见 src/peer/server.js。
+  //
+  // 端口失败不静默：peers 表里其他机器配的就是这个固定端口，悄悄顺延等于让对端
+  // 连到别人身上，所以直接打出错误。
+  let peerServerHandle = null;
+  async function startPeerIfEnabled(currentPort) {
+    if (peerServerHandle) return;
+    try {
+      const state = await ensureSelf();
+      if (!state.self?.enabled) return;
+      peerServerHandle = await startPeerServer({
+        self: state.self,
+        getLocalPort: () => currentPort,
+        getVersion: () => PKG_VERSION
+      });
+      console.log(chalk.green(`[peer] 跨机器提问已开启：${state.self.host}:${state.self.port}（节点 ${state.self.id}「${state.self.name}」）`));
+      httpServer.once('close', () => {
+        try { peerServerHandle?.close(); } catch {}
+        peerServerHandle = null;
+      });
+    } catch (e) {
+      console.error(chalk.red(`[peer] 启动失败：${e?.message || e}`));
+      console.error(chalk.yellow('[peer] 主服务不受影响；改端口/关掉占用它的进程后重启 g ui 即可。'));
+    }
+  }
+
   httpServer.once('listening', () => {
     if (registerDone) return;
     registerDone = true;
@@ -667,6 +710,11 @@ async function startUIServer(noOpen = false, savePort = false) {
     perfMark(`backend 真正就绪 (listening, port=${addr && addr.port})`)
     registerCurrentInstance().catch((e) => {
       console.warn(chalk.yellow(`[instanceRegistry] 启动注册流程失败: ${e?.message || e}`));
+    });
+
+    // peer 监听与实例注册互不依赖：注册失败也要能收发提问。
+    startPeerIfEnabled(addr && addr.port).catch((e) => {
+      console.warn(chalk.yellow(`[peer] 启动异常: ${e?.message || e}`));
     });
 
     // 预热「工作区状态快照」（g ai 的上下文）—— 这就是"g ui 刚启动"那个时机。
