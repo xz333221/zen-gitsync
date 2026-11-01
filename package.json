@@ -1,6 +1,6 @@
 {
   "name": "zen-gitsync",
-  "version": "2.18.27",
+  "version": "2.19.0",
   "description": "Auto commit, scheduled sync, and visual GUI for Git. Run `g` in any repo for one-key commit & push, AI commit messages, scheduled background sync, and a drag-and-drop workflow builder.",
   "main": "index.js",
   "type": "module",
@@ -190,6 +190,10 @@
     "src/ui/public/**",
     "src/ui/server/**",
     "src/mcp/**",
+    "src/peer/store.js",
+    "src/peer/client.js",
+    "src/peer/server.js",
+    "src/peer/localAsk.js",
     "src/utils/**",
     "src/memory/**",
     "src/gitCommit.js",
