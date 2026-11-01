@@ -18,8 +18,14 @@
 // 别的机器用的（要令牌），这组接口是给本机界面用的（不需要令牌，也拿不到对方机器的
 // 东西）。两套路由同名会混淆，所以这里统一用 /api/peer-settings 前缀。
 //
-// 唯一会返回令牌明文的地方就是 GET /api/peer-settings：配对时用户必须能复制它到
-// 另一台机器。它只在 127.0.0.1 上、只给本机界面看。
+// 一个必须记住的事实：**peer 端口整机唯一**。一台机器可以同时开好几个 g ui
+// （项目窗口随用随开），但 5600 只能有一个进程 listen。所以这里定了一条分工：
+//
+//   · hub / full 角色 —— 自己监听，持有端口
+//   · project 角色   —— 永不监听；改开关时把"重新读配置"转发给 hub
+//
+// 状态一律以"端口上有没有人在服务"为准（本进程 handle ∪ 注册表里的 peerPort 持有者），
+// 不能只看自己进程 —— 否则项目窗口会显示"开关开着却已停止"，而 5600 其实是好的。
 
 import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
 import logger from '../utils/logger.js';
@@ -33,7 +39,8 @@ import {
   PEER_DEFAULT_PORT
 } from '../../../peer/store.js';
 import { fetchPeerInfo } from '../../../peer/client.js';
-import { applyPeerRuntime, isPeerRunning } from '../utils/peerRuntime.js';
+import { applyPeerRuntime, isPeerRunning, getPeerPort } from '../utils/peerRuntime.js';
+import { findPeerOwner, findHubInstance } from '../utils/instanceQuery.js';
 
 const PROBE_TIMEOUT_MS = 2500;
 
@@ -47,7 +54,54 @@ async function probe(peer) {
   }
 }
 
-export function registerPeerSettingsRoutes({ app }) {
+export function registerPeerSettingsRoutes({
+  app,
+  role = 'project',
+  // 注入口（与 explorerContextMenu 的 execFileFn 同一套做法）：
+  //   runtime —— 单测替换掉，避免真的 bind 一个 0.0.0.0 端口；
+  //   query   —— 同上，避免读这台机器真实的实例注册表；
+  //   fetchFn —— 转发给 hub 的那一次请求，单测直接给假响应。
+  runtime = { applyPeerRuntime, isPeerRunning, getPeerPort },
+  query = { findPeerOwner, findHubInstance },
+  fetchFn = (...args) => fetch(...args)
+} = {}) {
+  /** 本角色是否有资格自己监听 peer 端口。 */
+  const canServe = role !== 'project';
+
+  /** 端口上到底有没有人在服务（含"另一个进程在服务"这种情况）。 */
+  async function isServing(port) {
+    if (runtime.isPeerRunning()) return true;
+    const owner = await query.findPeerOwner(port);
+    return !!owner && owner.pid !== process.pid;
+  }
+
+  /**
+   * 让配置生效。
+   * hub/full：就地重起监听；project：转发给 hub（自己不抢端口）。
+   */
+  async function applyConfig(self) {
+    if (canServe) {
+      await runtime.applyPeerRuntime(self);
+      return { running: runtime.isPeerRunning(), port: runtime.getPeerPort(), warning: '' };
+    }
+    const hub = await query.findHubInstance();
+    if (!hub) {
+      return { running: false, port: 0, warning: '当前没有运行中的 hub —— 跨机器服务由 hub 提供，先把 hub 起起来' };
+    }
+    try {
+      const res = await fetchFn(`http://127.0.0.1:${hub.port}/api/peer-settings/reload`, { method: 'POST' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        // 状态码必须露出来：hub 是旧版本时这条路由根本不存在，用户只看到
+        // 「not found」会以为是网络问题；写成 HTTP 404 才看得出是版本不一致。
+        throw new Error(`HTTP ${res.status}${data?.error ? `：${data.error}` : ''}`);
+      }
+      return { running: data.running === true, port: data.port || 0, warning: '' };
+    } catch (err) {
+      throw new HttpError(400, `通知 hub 失败：${err?.message || err}`);
+    }
+  }
+
   /**
    * GET /api/peer-settings
    * 本机身份 + 对端清单（附带一次并发探活）。
@@ -74,7 +128,12 @@ export function registerPeerSettingsRoutes({ app }) {
       };
     }));
 
-    res.json({ success: true, running: isPeerRunning(), self: state.self, peers: rows });
+    res.json({
+      success: true,
+      running: await isServing(state.self.port),
+      self: state.self,
+      peers: rows
+    });
   }));
 
   /** POST /api/peer-settings/self —— 改昵称 / 头像 / 端口 / 开关。 */
@@ -92,15 +151,17 @@ export function registerPeerSettingsRoutes({ app }) {
       port: body.port !== undefined ? Number(body.port) : undefined,
       enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined
     });
-    // 立刻生效：开/关/换端口都当场应用，设置面板里的开关不该要求重启进程。
+
+    let applied;
     try {
-      await applyPeerRuntime(state.self);
+      applied = await applyConfig(state.self);
     } catch (err) {
       // 起不来就别假装开着：回滚开关，把真实原因交给用户
       if (state.self.enabled) await updateSelf({ enabled: false });
       throw new HttpError(400, `peer 端口 ${state.self.port} 起不来：${err?.message || err}`);
     }
-    res.json({ success: true, running: isPeerRunning(), self: state.self });
+
+    res.json({ success: true, running: applied.running, warning: applied.warning, self: state.self });
   }));
 
   /** POST /api/peer-settings/token —— 重新生成令牌（旧的立即失效）。 */
@@ -108,12 +169,29 @@ export function registerPeerSettingsRoutes({ app }) {
     const state = await rotateSelfToken();
     logger.info('[peer-settings] 令牌已重置');
     // 必须重启监听：运行中的实例持有的是**旧令牌**的闭包，不换就不生效
+    let applied = { running: false, warning: '' };
     try {
-      await applyPeerRuntime(state.self);
+      applied = await applyConfig(state.self);
     } catch (err) {
       logger.warn(`[peer-settings] 令牌已换但监听未重启: ${err?.message || err}`);
     }
-    res.json({ success: true, running: isPeerRunning(), self: state.self });
+    res.json({ success: true, running: applied.running, warning: applied.warning, self: state.self });
+  }));
+
+  /**
+   * POST /api/peer-settings/reload —— 让持有 peer 端口的进程重新读一遍 peers.json。
+   *
+   * 存在的理由：项目窗口改开关时不自己绑端口，而是打这个接口让 hub 去做。
+   * 只有 hub/full 会真的处理，别的角色收到就忽略（避免"转发链"打转）。
+   */
+  app.post('/api/peer-settings/reload', asyncRoute(async (req, res) => {
+    if (!canServe) {
+      res.json({ success: true, running: await isServing(runtime.getPeerPort() || PEER_DEFAULT_PORT), port: runtime.getPeerPort() });
+      return;
+    }
+    const state = await ensureSelf();
+    await runtime.applyPeerRuntime(state.self);
+    res.json({ success: true, running: runtime.isPeerRunning(), port: runtime.getPeerPort() });
   }));
 
   /**

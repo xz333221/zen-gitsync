@@ -225,6 +225,45 @@ test('register: 写入 <pid>.json,不含主文件', async () => {
   assert.ok(!names.some((n) => /^instances\.json$/.test(n)), '不应有顶层主文件 instances.json')
 })
 
+test('register: peerPort 原样落盘，缺省与非法值一律归一成 0', async () => {
+  const { registry, fs, registryPath } = setup({ alivePids: new Set([100, 200, 300]) });
+
+  await registry.register({
+    pid: 100, port: 9876, projectPath: '/p/1', projectName: 'p1', role: 'hub', peerPort: 5600
+  });
+  assert.equal((await readEntry(fs, registryPath, 100)).peerPort, 5600);
+
+  await registry.register({
+    pid: 200, port: 9877, projectPath: '/p/2', projectName: 'p2'
+  });
+  assert.equal(
+    (await readEntry(fs, registryPath, 200)).peerPort, 0,
+    '不传时必须是 0 而不是 undefined —— 下游 findPeerOwner 用 peerPort > 0 判定持有者'
+  );
+
+  await registry.register({
+    pid: 300, port: 9878, projectPath: '/p/3', projectName: 'p3', peerPort: -1
+  });
+  assert.equal((await readEntry(fs, registryPath, 300)).peerPort, 0, '非法端口归一成 0');
+})
+
+test('heartbeat: 带上 peerPort 时同步更新（开关变化后靠它补正）', async () => {
+  const { registry, fs, registryPath } = setup({ alivePids: new Set([100]) });
+
+  await registry.register({
+    pid: 100, port: 9876, projectPath: '/p/1', projectName: 'p1', role: 'hub'
+  });
+  assert.equal((await readEntry(fs, registryPath, 100)).peerPort, 0, '初始没在提供 peer 服务');
+
+  // peer 服务起来 / 换端口后，下一次心跳把真实端口写进去
+  await registry.heartbeat(100, { port: 9876, projectPath: '/p/1', peerPort: 5600 });
+  assert.equal((await readEntry(fs, registryPath, 100)).peerPort, 5600);
+
+  // 关掉开关后同理要回落到 0，否则面板会一直以为有人在听
+  await registry.heartbeat(100, { port: 9876, projectPath: '/p/1', peerPort: 0 });
+  assert.equal((await readEntry(fs, registryPath, 100)).peerPort, 0);
+})
+
 test('unregister: 删除对应 entry 文件', async () => {
   const { registry, fs, registryPath } = setup({ alivePids: new Set([100, 200]) });
 

@@ -169,6 +169,8 @@ async function saveSelf() {
     running.value = data.running === true
     savedAt.value = Date.now()
     ElMessage.success($t('@PEER:设置已保存'))
+    // 项目窗口自己不改端口，是让 hub 去改；hub 不在时会带一句 warning 回来
+    if (data.warning) ElMessage.warning(String(data.warning))
   } catch (err: any) {
     ElMessage.error(String(err?.message || err))
   } finally {
@@ -200,6 +202,7 @@ async function rotateToken() {
     Object.assign(self, data.self)
     running.value = data.running === true
     ElMessage.success($t('@PEER:令牌已重置'))
+    if (data.warning) ElMessage.warning(String(data.warning))
   } catch (err: any) {
     ElMessage.error(String(err?.message || err))
   }

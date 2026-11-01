@@ -317,7 +317,7 @@ export function createInstanceRegistry({
   //
   // 关键点:register / heartbeat / unregister 都只读写 *自己* 的 entry 文件,
   // 跨进程并发时不同 PID 的写入互不干扰,从根本上消除 read-modify-write 覆盖。
-  async function register({ pid, port, projectPath, projectName, hostname, role } = {}) {
+  async function register({ pid, port, projectPath, projectName, hostname, role, peerPort } = {}) {
     if (!Number.isInteger(pid) || pid <= 0) throw new Error('register: pid 必填');
     if (!Number.isInteger(port) || port <= 0) throw new Error('register: port 必填');
     if (!projectPath) throw new Error('register: projectPath 必填');
@@ -336,7 +336,9 @@ export function createInstanceRegistry({
       hostname: hostname || osMod.hostname(),
       // 运行角色（project | hub | full）。用来回答"这台机器上有没有活着的 hub"——
       // 没有就由新起的项目窗口拉一个（见 utils/ensureHub.js）。
-      role: role === 'hub' ? 'hub' : (role === 'full' ? 'full' : 'project')
+      role: role === 'hub' ? 'hub' : (role === 'full' ? 'full' : 'project'),
+      // 正在提供 peer 服务的端口（0 = 没提供）。整机唯一，用来回答"谁在听 5600"。
+      peerPort: Number.isInteger(peerPort) && peerPort > 0 ? peerPort : 0
     };
 
     await enqueueWrite(async () => {
@@ -387,7 +389,8 @@ export function createInstanceRegistry({
           startedAt: Date.now(),
           lastHeartbeat: Date.now(),
           hostname: updates.hostname || osMod.hostname(),
-          role: updates.role === 'hub' ? 'hub' : (updates.role === 'full' ? 'full' : 'project')
+          role: updates.role === 'hub' ? 'hub' : (updates.role === 'full' ? 'full' : 'project'),
+          peerPort: Number.isInteger(updates.peerPort) && updates.peerPort > 0 ? updates.peerPort : 0
         };
         logger.info(
           `[instanceRegistry] 心跳检测到本实例条目丢失，已自愈重建 pid=${pid} port=${updates.port}`
@@ -399,6 +402,7 @@ export function createInstanceRegistry({
           ...(updates.projectName ? { projectName: updates.projectName } : {}),
           ...(Number.isInteger(updates.port) && updates.port > 0 ? { port: updates.port } : {}),
           ...(updates.role ? { role: updates.role } : {}),
+          ...(updates.peerPort !== undefined ? { peerPort: Number(updates.peerPort) || 0 } : {}),
           lastHeartbeat: Date.now()
         };
       }

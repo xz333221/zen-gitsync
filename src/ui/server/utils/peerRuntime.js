@@ -28,6 +28,8 @@ import logger from './logger.js';
 let handle = null;
 /** 本机 g ui 的端口（peer 服务端收到提问后要环回调用它）。 */
 let localPort = 0;
+/** 当前真的绑在哪个端口上（0 = 没绑）。 */
+let boundPort = 0;
 
 /** g ui 真正就绪后由 index.js 注入。 */
 export function setPeerLocalPort(port) {
@@ -39,11 +41,17 @@ export function isPeerRunning() {
   return !!handle;
 }
 
+/** 正在提供服务的 peer 端口（没在听就是 0），用于写进实例注册表。 */
+export function getPeerPort() {
+  return handle ? boundPort : 0;
+}
+
 /** 停掉监听（幂等）。 */
 export async function stopPeerRuntime() {
   if (!handle) return;
   const h = handle;
   handle = null;
+  boundPort = 0;
   await new Promise((resolve) => {
     try {
       h.close(() => resolve());
@@ -68,6 +76,7 @@ export async function applyPeerRuntime(self, { getVersion } = {}) {
     return { running: false, port: null };
   }
 
+  boundPort = self.port;
   handle = await startPeerServer({
     self,
     getLocalPort: () => localPort,

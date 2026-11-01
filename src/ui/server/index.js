@@ -32,7 +32,7 @@ import { migrateDataDir } from '../../dataDirMigration.js';
 import { createErrorHandler } from './middleware/errorHandler.js';
 import { registerUiSocketHandlers } from './socket/registerUiSocketHandlers.js';
 import { ensureSelf } from '../../peer/store.js';
-import { setPeerLocalPort, applyPeerRuntime, stopPeerRuntime } from './utils/peerRuntime.js';
+import { setPeerLocalPort, applyPeerRuntime, stopPeerRuntime, getPeerPort } from './utils/peerRuntime.js';
 import { registerExecRoutes } from './routes/exec.js';
 import { registerTerminalRoutes } from './routes/terminal.js';
 import { registerProcessRoutes } from './routes/process.js';
@@ -611,7 +611,7 @@ async function startUIServer(noOpen = false, savePort = false, options = {}) {
   // 「跨机器」设置面板（本机身份 + 对端清单）。两个角色都要挂：hub 也得能配对。
   // 注意与 peer 端口的 /api/peer/* 区分：那套是给别的机器用的（带令牌），
   // 这套只给本机界面用（127.0.0.1 + Origin 守卫）。
-  registerPeerSettingsRoutes({ app });
+  registerPeerSettingsRoutes({ app, role });
 
   perfMark('全部 API 路由注册完成')
 
@@ -746,6 +746,11 @@ async function startUIServer(noOpen = false, savePort = false, options = {}) {
   // 起停统一走 peerRuntime：设置面板里那个开关改完会立刻调同一个函数，
   // 不需要重启 g ui。端口失败不静默 —— 对端配的就是这个固定端口，顺延等于换地址。
   async function startPeerIfEnabled(currentPort) {
+    // peer 端口是**整机唯一**的。项目窗口数量不限（一台机器可以开好几个），
+    // 谁都去 listen 的话只有第一个能绑上，其余全部 EADDRINUSE，而且设置面板会
+    // 出现"开关开着却显示已停止"的假象（那个状态读的是本进程的 handle）。
+    // 所以定一条规矩：只有 hub（以及旧的 full）负责提供 peer 服务，项目窗口一律不绑。
+    if (role === 'project') return;
     setPeerLocalPort(currentPort);
     try {
       const state = await ensureSelf();
@@ -759,18 +764,22 @@ async function startUIServer(noOpen = false, savePort = false, options = {}) {
     }
   }
 
-  httpServer.once('listening', () => {
+  httpServer.once('listening', async () => {
     if (registerDone) return;
     registerDone = true;
     const addr = httpServer.address();
     perfMark(`backend 真正就绪 (listening, port=${addr && addr.port})`)
-    registerCurrentInstance().catch((e) => {
-      console.warn(chalk.yellow(`[instanceRegistry] 启动注册流程失败: ${e?.message || e}`));
-    });
 
-    // peer 监听与实例注册互不依赖：注册失败也要能收发提问。
-    startPeerIfEnabled(addr && addr.port).catch((e) => {
+    // **顺序有意义**：先起 peer 监听，再注册实例。
+    // 注册条目里要写 peerPort（utils/instanceQuery.js 靠它回答"谁在听 5600"），
+    // 反过来的话首笔注册写进去的永远是 0，只能等 5 秒一次的心跳补正 ——
+    // 而用户"打开设置 → 一看已停止"的那个瞬间，正好落在这 5 秒里。
+    // 两者都自带 try/catch（peer 起不来只记日志、注册失败只警告），串行不会互相拖垮。
+    await startPeerIfEnabled(addr && addr.port).catch((e) => {
       console.warn(chalk.yellow(`[peer] 启动异常: ${e?.message || e}`));
+    });
+    await registerCurrentInstance().catch((e) => {
+      console.warn(chalk.yellow(`[instanceRegistry] 启动注册流程失败: ${e?.message || e}`));
     });
     httpServer.once('close', () => { stopPeerRuntime().catch(() => {}); });
 
@@ -834,7 +843,8 @@ async function startUIServer(noOpen = false, savePort = false, options = {}) {
         projectPath: currentProjectPath,
         projectName,
         hostname: os.hostname(),
-        role
+        role,
+        peerPort: getPeerPort()
       });
       console.log(chalk.green(`[instanceRegistry] 已注册 pid=${process.pid} port=${currentPort} name=${projectName}`));
     } catch (e) {
@@ -851,7 +861,8 @@ async function startUIServer(noOpen = false, savePort = false, options = {}) {
         projectPath: currentProjectPath,
         projectName,
         hostname: os.hostname(),
-        role
+        role,
+        peerPort: getPeerPort()
       })
         .catch((e) => console.warn(chalk.yellow(`[instanceRegistry] 心跳失败: ${e?.message || e}`)));
     }, 5000);
