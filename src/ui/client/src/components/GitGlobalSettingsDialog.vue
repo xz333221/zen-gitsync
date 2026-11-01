@@ -81,6 +81,15 @@
         >
           <span>{{ $t('@42BB9:记忆库') }}</span>
         </div>
+        <!-- 跨机器：本机身份 + 对端清单。数据在 <DATA_DIR>/peers.json，与项目无关，
+             所以面板里没有"当前项目"这一维，两个运行角色都能用。 -->
+        <div
+          class="tab-item"
+          :class="{ active: activeTab === 'peer' }"
+          @click="activeTab = 'peer'"
+        >
+          <span>{{ $t('@42BB9:跨机器') }}</span>
+        </div>
       </div>
 
       <!-- 右侧内容区域 -->
@@ -1016,6 +1025,12 @@
           </div>
           <MemoryPanel ref="memoryPanelRef" />
         </div>
+
+        <!-- 跨机器面板：自管读写（各操作即时生效，没有"保存设置"这一层），
+             所以同样不给 hasChanges 加分支。 -->
+        <div v-show="activeTab === 'peer'" class="settings-panel">
+          <PeerSettingsPanel />
+        </div>
       </div>
     </div>
     
@@ -1043,6 +1058,7 @@ import { ElMessage } from 'element-plus'
 import { Check, InfoFilled } from '@element-plus/icons-vue'
 import { createPreview, type PreviewInstance } from 'flowdash-md-preview'
 import CommonDialog from './CommonDialog.vue'
+import PeerSettingsPanel from './PeerSettingsPanel.vue'
 import { useGitStore } from '@/stores/gitStore'
 import { useLocaleStore } from '@/stores/localeStore'
 import { useConfigStore, type ModelInfo } from '@/stores/configStore'
@@ -1122,7 +1138,7 @@ async function onMarkdownThemeChange(value: string) {
   await configStore.setMarkdownTheme(value)
 }
 
-export type SettingsTab = 'general' | 'ai-models' | 'git' | 'commit' | 'config' | 'editor' | 'memory'
+export type SettingsTab = 'general' | 'ai-models' | 'git' | 'commit' | 'config' | 'editor' | 'memory' | 'peer'
 
 const props = defineProps<{
   modelValue: boolean

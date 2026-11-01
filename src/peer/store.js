@@ -270,6 +270,16 @@ export async function setSessionId(peerId, sessionId, filePath = PEERS_FILE) {
   await writeState(state, filePath);
 }
 
+/**
+ * 换一把新令牌（旧令牌立即失效 —— 已经配对过的机器要重新 `g peer add`）。
+ * @param {string} [filePath]
+ */
+export async function rotateSelfToken(filePath = PEERS_FILE) {
+  const state = await ensureSelf(filePath);
+  state.self.token = makeToken();
+  return writeState(state, filePath);
+}
+
 /** 对端清单（供 CLI / 工具描述用，不含令牌明文）。 */
 export async function listPeers(filePath = PEERS_FILE) {
   const state = await readState(filePath);

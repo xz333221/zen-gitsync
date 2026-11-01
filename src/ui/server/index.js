@@ -32,7 +32,7 @@ import { migrateDataDir } from '../../dataDirMigration.js';
 import { createErrorHandler } from './middleware/errorHandler.js';
 import { registerUiSocketHandlers } from './socket/registerUiSocketHandlers.js';
 import { ensureSelf } from '../../peer/store.js';
-import { startPeerServer } from '../../peer/server.js';
+import { setPeerLocalPort, applyPeerRuntime, stopPeerRuntime } from './utils/peerRuntime.js';
 import { registerExecRoutes } from './routes/exec.js';
 import { registerTerminalRoutes } from './routes/terminal.js';
 import { registerProcessRoutes } from './routes/process.js';
@@ -58,6 +58,7 @@ import { registerMonitorRoutes } from './routes/monitor.js';
 import { registerMindmapRoutes } from './routes/mindmap.js';
 import { registerMemoryRoutes } from './routes/memory.js';
 import { registerMcpInstallRoutes } from './routes/mcpInstall.js';
+import { registerPeerSettingsRoutes } from './routes/peerSettings.js';
 import { registerAgentRoutes } from './routes/workbench/agentRoutes.js';
 import { createWorkspaceSnapshotter } from './routes/aiContext/wiring.js';
 // jobStore 只借两个读函数:让 MCP 能用**本进程内存**里的 job 表(完整输出),
@@ -607,6 +608,11 @@ async function startUIServer(noOpen = false, savePort = false, options = {}) {
   // 这里只是它的 HTTP 门面。
   registerMcpInstallRoutes({ app });
 
+  // 「跨机器」设置面板（本机身份 + 对端清单）。两个角色都要挂：hub 也得能配对。
+  // 注意与 peer 端口的 /api/peer/* 区分：那套是给别的机器用的（带令牌），
+  // 这套只给本机界面用（127.0.0.1 + Origin 守卫）。
+  registerPeerSettingsRoutes({ app });
+
   perfMark('全部 API 路由注册完成')
 
   // hub 少了执行面三条路由（exec / terminal / process），但前端有些组件是**常驻挂载**的
@@ -731,33 +737,25 @@ async function startUIServer(noOpen = false, savePort = false, options = {}) {
   // 在端口重试场景下不一定按时返回，但 'listening' 事件只在服务器真正绑定端口时触发
   let registerDone = false;
 
-  // 跨机器 peer：**独立端口**、独立监听，只在 peers.json 里 self.enabled 时启动。
+  // 跨机器 peer：**独立端口**、独立监听，由 peers.json 的 self.enabled 决定开关。
   //
   // 为什么不挂在主服务上：主服务没有认证层（能打进来就是全权限），它的安全边界
   // 靠"只听 127.0.0.1 + Origin 守卫"。peer 端口要能被局域网访问，所以必须是另一张
   // 极短的路由表（/api/peer/info、/api/peer/ask），带令牌校验，见 src/peer/server.js。
   //
-  // 端口失败不静默：peers 表里其他机器配的就是这个固定端口，悄悄顺延等于让对端
-  // 连到别人身上，所以直接打出错误。
-  let peerServerHandle = null;
+  // 起停统一走 peerRuntime：设置面板里那个开关改完会立刻调同一个函数，
+  // 不需要重启 g ui。端口失败不静默 —— 对端配的就是这个固定端口，顺延等于换地址。
   async function startPeerIfEnabled(currentPort) {
-    if (peerServerHandle) return;
+    setPeerLocalPort(currentPort);
     try {
       const state = await ensureSelf();
-      if (!state.self?.enabled) return;
-      peerServerHandle = await startPeerServer({
-        self: state.self,
-        getLocalPort: () => currentPort,
-        getVersion: () => PKG_VERSION
-      });
-      console.log(chalk.green(`[peer] 跨机器提问已开启：${state.self.host}:${state.self.port}（节点 ${state.self.id}「${state.self.name}」）`));
-      httpServer.once('close', () => {
-        try { peerServerHandle?.close(); } catch {}
-        peerServerHandle = null;
-      });
+      const result = await applyPeerRuntime(state.self, { getVersion: () => PKG_VERSION });
+      if (result.running) {
+        console.log(chalk.green(`[peer] 跨机器提问已开启：${state.self.host}:${state.self.port}（节点 ${state.self.id}「${state.self.name}」）`));
+      }
     } catch (e) {
       console.error(chalk.red(`[peer] 启动失败：${e?.message || e}`));
-      console.error(chalk.yellow('[peer] 主服务不受影响；改端口/关掉占用它的进程后重启 g ui 即可。'));
+      console.error(chalk.yellow('[peer] 主服务不受影响；改端口或关掉占用它的进程后，在设置里重新打开即可。'));
     }
   }
 
@@ -774,6 +772,7 @@ async function startUIServer(noOpen = false, savePort = false, options = {}) {
     startPeerIfEnabled(addr && addr.port).catch((e) => {
       console.warn(chalk.yellow(`[peer] 启动异常: ${e?.message || e}`));
     });
+    httpServer.once('close', () => { stopPeerRuntime().catch(() => {}); });
 
     // 项目窗口顺手保证 hub 在跑：公共 4 个板块只在 hub 进程里，没有它这套拆分
     // 就等于"每次都得先记得手动开 hub"。已有活着的 hub 就复用，不重复拉进程。
