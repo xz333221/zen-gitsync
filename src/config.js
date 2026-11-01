@@ -777,6 +777,14 @@ function isJsonParseError(err) {
  * 为什么需要 modelsSeeded 这个标记：没有它就只能二选一 —— 要么新装的人没模型可用，
  * 要么删光后重启又长出来（永远删不掉）。标记由**写入口**打（见 saveConfig 与
  * routes/config.js 的 save-models：收到空数组时写一笔），读路径保持无副作用。
+ *
+ * ⚠️ **凡是运行期要拿模型发请求的地方，都必须走它，别直接读 `raw.models`。**
+ * 内置默认模型只活在 defaultConfig 里，从不落盘（磁盘上的 config.json 根本没有
+ * models 这个键）；直读 raw 的代码看到的是 undefined → 一条候选链都没有 →
+ * "未配置 AI 模型"。而设置页读的是 loadConfig() 的结果（已经过 resolveModels），
+ * 于是界面明明显示着 agnes-3.0-flash、发出去却被服务端拒绝。
+ * 2026-11-02 用户报的"发消息什么都没了"就是这条：agentChat / 代码分析 / 差异总结
+ * 等 10 处直读 raw，全新安装下全部报未配置模型。
  */
 function resolveModels(raw) {
   const list = Array.isArray(raw?.models) ? raw.models : null;
@@ -1168,6 +1176,9 @@ export default {
   // 显式删除某个项目的全部分文件。写路径刻意不做删除(防"只加载了一个项目就写回"
   // 连带清空其它项目),清理失效项目只能走这里。
   deleteProjectConfig: deleteProjectConfigAndInvalidate,
+  // 运行期取模型的唯一入口：内置默认模型不落盘，直读 raw.models 会拿到 undefined
+  // （见 resolveModels 的注释）。GUI 设置页 / 各 AI 路由都必须用它。
+  resolveModels,
   // AI 智能体单轮工具调用上限的规范化/区间(GUI 保存前也要用,见 /api/config/save-ai-settings)
   normalizeAiMaxToolIterations,
   // 请求上下文预算的规范化/区间(同一路由保存时用;公式本体在 cli/ai/context.js)
@@ -1212,4 +1223,7 @@ export {
   AI_MAX_TOOL_ITERATIONS_MAX,
   // 内置的免费默认模型（新装开箱可用）——测试与将来的"恢复默认"入口共用
   builtinModels,
+  // 运行期取模型：raw 配置 → 实际该用的模型列表（含内置默认兜底）。
+  // 命名导出给路由层直接 import（它们只拿得到 readRawConfigFile 的原始对象）。
+  resolveModels,
 };

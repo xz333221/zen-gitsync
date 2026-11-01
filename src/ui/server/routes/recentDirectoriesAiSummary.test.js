@@ -243,14 +243,16 @@ test('路由: 白名单外的路径一律不解读(NO_ITEMS)', async () => {
   assert.equal(events[0].code, 'NO_ITEMS')          // 任意路径解读 = 不能开的口子
 })
 
-test('路由: 没有配置模型时直接 NO_MODEL,不读最近目录也不联网', async () => {
+// modelsSeeded：空数组本身不是"没模型"（会回落内置免费模型，见 config.js 的
+// resolveModels），只有用户主动删光才真的没有候选链。
+test('路由: 用户把模型全删了(modelsSeeded)直接 NO_MODEL,不读最近目录也不联网', async () => {
   let listed = false
   const app = createFakeApp()
   registerRecentDirectoriesSummaryRoutes({
     app,
     configManager: {
       getRecentDirectories: async () => { listed = true; return ['C:\\ws\\a'] },
-      readRawConfigFile: async () => ({ models: [] }),
+      readRawConfigFile: async () => ({ models: [], modelsSeeded: true }),
     },
   })
   const res = createFakeRes()

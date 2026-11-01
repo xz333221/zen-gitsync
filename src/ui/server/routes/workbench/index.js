@@ -35,6 +35,8 @@ import path from 'path';
 import { execFile } from 'child_process';
 import express from 'express';
 import { asyncRoute, HttpError } from '../../utils/asyncRoute.js';
+// 运行期取模型的唯一入口（内置默认模型不落盘，直读 raw.models 会判成"未配置模型"）
+import { resolveModels } from '../../../../config.js';
 
 import {
   logger,
@@ -1554,7 +1556,7 @@ export function registerWorkbenchRoutes({
     if (!configManager || typeof configManager.readRawConfigFile !== 'function') return out;
     try {
       const raw = await configManager.readRawConfigFile();
-      const models = Array.isArray(raw && raw.models) ? raw.models : [];
+      const models = resolveModels(raw);
       out.model = models.find(m => m && m.isDefault) || models[0] || null;
       out.locale = typeof (raw && raw.locale) === 'string' ? raw.locale : '';
     } catch (err) {

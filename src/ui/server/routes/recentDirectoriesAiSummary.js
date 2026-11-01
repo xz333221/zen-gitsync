@@ -38,6 +38,8 @@ import { callLlmStream } from './workbench/llmClient.js';
 import { createThinkFilter } from '../../../cli/ai/streamFilter.js';
 import { normalizeDirKey } from '../utils/directoryGitState.js';
 import { buildModelFallbackChain, modelLabel, runWithModelFallback } from '../../../utils/aiModelFallback.js';
+// 运行期取模型的唯一入口（内置默认模型不落盘，直读 raw.models 会判成"未配置模型"）
+import { resolveModels } from '../../../config.js';
 import logger from '../utils/logger.js';
 
 /** 一次最多解读多少个目录,与 /api/recent_directories/git-state 的上限保持一致 */
@@ -281,7 +283,7 @@ export function registerRecentDirectoriesSummaryRoutes({ app, configManager }) {
       let chain;
       try {
         const rawConfig = await configManager.readRawConfigFile();
-        const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
+        const models = resolveModels(rawConfig);
         chain = buildModelFallbackChain(models);
       } catch (err) {
         send({ type: 'error', error: '读取 AI 配置失败: ' + err.message, code: 'CONFIG_ERR' });

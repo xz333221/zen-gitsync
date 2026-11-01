@@ -17,6 +17,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { buildAiChatRequest } from '../../../utils/aiEndpoint.js';
 import { buildModelFallbackChain, modelLabel, runWithModelFallback } from '../../../utils/aiModelFallback.js';
+// 运行期取模型的唯一入口（内置默认模型不落盘，直读 raw.models 会判成"未配置模型"）
+import { resolveModels } from '../../../config.js';
 
 // 代码文件扩展名
 const CODE_EXTENSIONS = [
@@ -531,7 +533,7 @@ export function registerCodeAnalysisRoutes({ app, configManager, getCurrentProje
     let chain;
     try {
       const rawConfig = await configManager.readRawConfigFile();
-      const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
+      const models = resolveModels(rawConfig);
       const picked = modelId ? models.find(m => m.id === modelId) : null;
       chain = buildModelFallbackChain(
         picked ? [picked, ...models.filter(m => m !== picked)] : models,
@@ -997,7 +999,7 @@ ${hubContentText || '（无）'}
     let chain;
     try {
       const rawConfig = await configManager.readRawConfigFile();
-      const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
+      const models = resolveModels(rawConfig);
       const picked = modelId ? models.find(m => m.id === modelId) : null;
       chain = buildModelFallbackChain(
         picked ? [picked, ...models.filter(m => m !== picked)] : models,

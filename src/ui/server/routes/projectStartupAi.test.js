@@ -358,11 +358,11 @@ function stubLlm(content) {
 
 const MODEL = { model: 'fixture-model', baseURL: 'https://api.example.com/v1', apiKey: 'k', isDefault: true }
 
-async function runRoute({ models, root, locale = 'zh', body = {}, isKnownProject }) {
+async function runRoute({ models, modelsSeeded = false, root, locale = 'zh', body = {}, isKnownProject }) {
   const app = createFakeApp()
   registerProjectStartupAiRoutes({
     app,
-    configManager: { readRawConfigFile: async () => ({ models }) },
+    configManager: { readRawConfigFile: async () => ({ models, ...(modelsSeeded ? { modelsSeeded: true } : {}) }) },
     getCurrentProjectPath: () => root,
     // 不传就交给实现自己的默认判据（读真实 tasks.json / config）——测试里一律注入
     ...(isKnownProject ? { isKnownProject } : {}),
@@ -372,11 +372,14 @@ async function runRoute({ models, root, locale = 'zh', body = {}, isKnownProject
   return res
 }
 
-test('路由: 没配模型直接 NO_MODEL,一次网络请求都不发', async () => {
+// 注意 modelsSeeded：空数组 **不再等于** "没模型" —— 它是"新装 / 没写过这个键"，
+// 会回落内置的免费默认模型（见 config.js 的 resolveModels）。只有用户主动把模型
+// 删光（写入口打上 modelsSeeded）才是真的没模型可发请求。
+test('路由: 用户把模型全删了(modelsSeeded)直接 NO_MODEL,一次网络请求都不发', async () => {
   const root = makeFixture()
   const [restore, calls] = stubLlm('{"suggestions":[]}')
   try {
-    const res = await runRoute({ models: [], root })
+    const res = await runRoute({ models: [], modelsSeeded: true, root })
     assert.equal(res.statusCode, 200)
     assert.equal(res.body.success, false)
     assert.equal(res.body.code, 'NO_MODEL')

@@ -42,6 +42,8 @@ import path from 'path';
 import { callLlmJson } from './workbench/llmClient.js';
 import { stripThinkingBlocks } from './workbench/jsonParse.js';
 import { buildProjectEntries, canonicalProjectPath } from './workbench/projectRegistry.js';
+// 运行期取模型的唯一入口（内置默认模型不落盘，直读 raw.models 会判成"未配置模型"）
+import { resolveModels } from '../../../config.js';
 import { TASKS_FILE, readJson } from './workbench/shared.js';
 import { buildModelFallbackChain, modelLabel, runWithModelFallback } from '../../../utils/aiModelFallback.js';
 import logger from '../utils/logger.js';
@@ -550,7 +552,7 @@ export function registerProjectStartupAiRoutes({ app, configManager, getCurrentP
     let chain;
     try {
       const rawConfig = await configManager.readRawConfigFile();
-      const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
+      const models = resolveModels(rawConfig);
       chain = buildModelFallbackChain(models);
     } catch (err) {
       return res.status(500).json({ success: false, code: 'CONFIG_ERR', error: '读取 AI 配置失败: ' + err.message });

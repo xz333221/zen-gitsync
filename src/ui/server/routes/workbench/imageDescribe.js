@@ -43,6 +43,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { logger, readJson, CONFIG_FILE } from './shared.js';
 import { isImageExt } from './attachmentUtils.js';
+// 运行期取模型的唯一入口（内置默认模型不落盘，直读 raw.models 会判成"未配置模型"）
+import { resolveModels } from '../../../../config.js';
 import { callLlmStream } from './llmClient.js';
 import { buildModelFallbackChain, modelLabel, runWithModelFallback } from '../../../../utils/aiModelFallback.js';
 
@@ -77,7 +79,7 @@ const SYSTEM_PROMPT = [
 export async function resolveDescribeModel() {
   try {
     const raw = await readJson(CONFIG_FILE, {});
-    const models = Array.isArray(raw?.models) ? raw.models : [];
+    const models = resolveModels(raw);
     return models.find(m => m && m.isDefault) || models[0] || null;
   } catch (err) {
     logger.warn('[imageDescribe] 读取 AI 配置失败，跳过图片转文字:', err?.message || err);
@@ -94,7 +96,7 @@ export async function resolveDescribeModel() {
 export async function resolveDescribeModelChain() {
   try {
     const raw = await readJson(CONFIG_FILE, {});
-    return buildModelFallbackChain(Array.isArray(raw?.models) ? raw.models : []);
+    return buildModelFallbackChain(resolveModels(raw));
   } catch (err) {
     logger.warn('[imageDescribe] 读取 AI 配置失败，跳过图片转文字:', err?.message || err);
     return [];

@@ -18,6 +18,8 @@ import path from 'path';
 import fs from 'fs/promises';
 import open from 'open';
 import logger from '../utils/logger.js';
+// 运行期取模型的唯一入口（内置默认模型不落盘，直读 raw.models 会判成"未配置模型"）
+import { resolveModels } from '../../../config.js';
 import { CONFIG_FILE } from '../../../paths.js';
 // AI 请求的地址/请求头统一走这里：OpenCode 网关要求自报 User-Agent 并带
 // x-opencode-session，否则直接 4xx（见 src/utils/aiEndpoint.js 顶部说明）
@@ -1260,7 +1262,7 @@ export function registerConfigRoutes({
     try {
       const rawConfig = await configManager.readRawConfigFile()
       const userLocale = reqLocale || rawConfig.locale || 'zh-CN'
-      const models = Array.isArray(rawConfig.models) ? rawConfig.models : []
+      const models = resolveModels(rawConfig)
       // 候选链 = 默认模型打头 + 其余已配置模型：默认模型额度用完 / 限流时自动换下一个，
       // 而不是让「AI 生成提交信息」直接报错（这几个功能是最常按的按钮）
       const chain = buildModelFallbackChain(models)

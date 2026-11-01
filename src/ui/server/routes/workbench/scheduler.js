@@ -45,6 +45,8 @@ import { isSessionBusy, acquireSession, releaseSession } from './sessionGate.js'
 import { logger as defaultLogger, nowIso } from './shared.js';
 import { recordTurnTiming } from '../../../../cli/ai/sessionStore.js';
 import { resolveRequestBudget } from '../../../../cli/ai/context.js';
+// 运行期取模型的唯一入口（内置默认模型不落盘，直读 raw.models 会判成"未配置模型"）
+import { resolveModels } from '../../../../config.js';
 import {
   loadTasks, getTask, claimFire, cleanClaims, setTaskFire, setTaskRun,
 } from '../../../../utils/scheduleStore.js';
@@ -192,7 +194,7 @@ export function createScheduler({
       try {
         if (!configManager) throw new Error('configManager 不可用');
         const rawConfig = await configManager.readRawConfigFile();
-        const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
+        const models = resolveModels(rawConfig);
         // 任务可指定模型（按 name 或 model 匹配）；匹配不到回落全局默认
         let model = task.model
           ? models.find(m => m.name === task.model || m.model === task.model) || null

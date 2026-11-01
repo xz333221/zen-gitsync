@@ -52,6 +52,10 @@ import { resolveJobImagePath, IMAGE_PATH_STATUS, IMAGE_PATH_ERRORS, isInsideRoot
 import { resolveRequestBudget } from '../../../../cli/ai/context.js';
 // 每轮用时记录的写入口径（与 CLI 侧共用一份，见函数上的注释）
 import { recordTurnTiming } from '../../../../cli/ai/sessionStore.js';
+// 运行期取模型的唯一入口：内置默认模型只在 defaultConfig 里，磁盘上的 config.json
+// 没有 models 这个键 —— 直读 rawConfig.models 会在全新安装上判成"未配置 AI 模型"，
+// 而设置页（走 loadConfig）明明显示着 agnes-3.0-flash。见 config.js 的 resolveModels。
+import { resolveModels } from '../../../../config.js';
 
 const { genSessionId, autoTitle, read: readSession, write: writeSession, delete: deleteSession, listMeta: listSessionsMeta, enforceRetention, rename: renameSession } = agentSessionStore;
 
@@ -637,7 +641,8 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
         try {
           if (!configManager) throw new Error('configManager 不可用');
           const rawConfig = await configManager.readRawConfigFile();
-          const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
+          // 不能直读 rawConfig.models：内置免费模型不落盘（见 resolveModels 的注释）
+          const models = resolveModels(rawConfig);
           model = models.find(m => m.isDefault) || models[0];
           // 请求预算：全局配置 aiMaxRequestTokens（缺省/越界由 resolveRequestBudget
           // 兜底夹取），与 CLI `g ai`、设置页保存回执共用同一份解析 —— 别在这里另算。

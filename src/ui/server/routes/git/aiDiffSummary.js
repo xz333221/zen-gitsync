@@ -39,6 +39,8 @@ import path from 'node:path';
 import express from 'express';
 import { callLlmStream } from '../workbench/llmClient.js';
 import { buildModelFallbackChain, modelLabel, runWithModelFallback } from '../../../../utils/aiModelFallback.js';
+// 运行期取模型的唯一入口（内置默认模型不落盘，直读 raw.models 会判成"未配置模型"）
+import { resolveModels } from '../../../../config.js';
 import { ensureWithinCwd } from '../../utils/pathGuard.js';
 import logger from '../../utils/logger.js';
 import { createThinkFilter } from '../../../../cli/ai/streamFilter.js';
@@ -371,7 +373,7 @@ export function registerAiDiffSummaryRoutes({
       let chain;
       try {
         const rawConfig = await configManager.readRawConfigFile();
-        const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
+        const models = resolveModels(rawConfig);
         chain = buildModelFallbackChain(models);
       } catch (err) {
         send({ type: 'error', error: '读取 AI 配置失败: ' + err.message, code: 'CONFIG_ERR' });

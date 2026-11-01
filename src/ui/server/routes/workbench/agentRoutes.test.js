@@ -366,6 +366,63 @@ test('每轮用时：turn_done 推给前端，并与落盘的 turnTimings 是同
   }
 });
 
+// 回归（2026-11-02 用户报"发完消息什么都没了"）：磁盘上的 config.json 里**没有
+// models 这个键** —— 内置的免费默认模型只在 defaultConfig 里，从不落盘（见 config.js
+// 的 resolveModels）。这条路以前直读 rawConfig.models → 候选链为空 → 秒回一条
+// "未配置 AI 模型"。而设置页读的是 loadConfig（已过 resolveModels），界面上明明
+// 显示着 agnes-3.0-flash，发出去却被拒。这里钉住"没有这个键 = 用内置默认"。
+test('配置里没有 models 键（全新安装）时走内置默认模型，不报未配置模型', async () => {
+  const activeCwd = path.resolve('active-project');
+  let chatHandler;
+  const app = {
+    get() {},
+    delete() {},
+    put() {},
+    post(route, handler) {
+      if (route === '/api/agent/chat') chatHandler = handler;
+    }
+  };
+  registerAgentRoutes({
+    app,
+    getCurrentProjectPath: () => activeCwd,
+    // 与真实磁盘上的形状一致：新装的 config.json 只有 recentDirectories / ui，没有 models
+    configManager: { readRawConfigFile: async () => ({ recentDirectories: [], ui: {} }) },
+    snapshotter: STUB_SNAPSHOTTER
+  });
+
+  let requestedUrl = '';
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    requestedUrl = String(url);
+    return new Response(new ReadableStream({
+      start(stream) {
+        const bytes = new TextEncoder();
+        stream.enqueue(bytes.encode(event({ choices: [{ delta: { content: '内置模型的回答' } }] })));
+        stream.enqueue(bytes.encode('data: [DONE]\n\n'));
+        stream.close();
+      }
+    }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  };
+
+  let output = '';
+  try {
+    const req = { body: { userMessage: '你好', cwd: activeCwd }, headers: {}, socket: { once() {} } };
+    const res = { set() {}, flushHeaders() {}, write(c) { output += c; }, end() {} };
+    await chatHandler(req, res);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.doesNotMatch(output, /未配置 AI 模型/, '内置默认模型不该被当成"没配模型"');
+  assert.doesNotMatch(output, /"type":"error"/);
+  assert.match(output, /内置模型的回答/);
+  assert.match(requestedUrl, /agnes-ai\.com/, '发的就是内置那条通道');
+  // 跑成功 → 会话落盘，前端刷新列表才找得到它（否则那一轮会从界面上消失）
+  const dir = path.join(SANDBOX, '.zen-gitsync', 'agent-sessions');
+  const files = readdirSync(dir).filter(f => f.endsWith('.json'));
+  assert.ok(files.length >= 1, '成功的一轮必须落盘');
+});
+
 // ── dispatch_task 的注入闸门（2026-09-28）────────────────────────────────
 // 改由右下角悬浮面板里的 g ai 派活之后，这一条守两件事：
 //   ① allowDispatch 的对话里，dispatch_task 真的能建出任务，且工具结果说清了

@@ -43,7 +43,9 @@ import { readOrchestrator, resolveDispatchPrompt, appendInstruction } from './or
 import { buildProjectEntries } from './projectRegistry.js';
 import { resolveInstructionTarget } from './targetResolver.js';
 import { runSingleSubtask } from './taskRunner.js';
-import { normalizeTaskExecutor as normalizeExecutorId } from '../../../../config.js';
+// resolveModels 是运行期取模型的唯一入口（内置默认模型不落盘，直读 raw.models
+// 会判成"未配置模型"），见 config.js 的同名函数
+import { normalizeTaskExecutor as normalizeExecutorId, resolveModels } from '../../../../config.js';
 import { publish } from './jobStore.js';
 
 /**
@@ -143,7 +145,7 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
       getModel: async () => {
         if (!configManager) return null;
         const rawConfig = await configManager.readRawConfigFile();
-        const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
+        const models = resolveModels(rawConfig);
         return models.find(m => m.isDefault) || models[0] || null;
       },
       onAgentError: (err) => {
