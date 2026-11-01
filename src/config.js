@@ -327,6 +327,33 @@ function resolveNotifySwitches(raw) {
   };
 }
 
+/**
+ * 内置的默认模型：**开箱可用**，新装的人不必先去别处申请 key 才能跟 g ai 说话。
+ *
+ * 为什么要有它（2026-11-01 用户要求）：机器上已经配了七八个模型的人体会不到那个
+ * 断点 —— 全新安装打开智能体只会看到"没有可用模型"，连一句"你好"都发不出去。
+ * 这里塞一条免费的 agnes-ai 通道，装上就能对话；不想要可以在
+ * 设置 → AI 模型配置 里删掉（删光后不会被再塞回来，见 resolveModels）。
+ *
+ * ⚠️ 这把 key 是**随包公开**的（源码在 GitHub、npm 包里也有），谁装上都能看到。
+ * 它是免费额度的体验 key，只适合"能跑通第一次"；额度耗尽的表现是 401/429，
+ * 那时用户要么换成自己的 key，要么把这个模型删掉。别把它当生产凭据。
+ *
+ * 为什么写成函数而不是常量数组：调用方拿到的必须是**新对象**。defaultConfig 会在
+ * 每次 loadConfig 里被展开，共享同一份对象字面量意味着任何一处顺手改字段，
+ * 都会污染下一个读到它的人。
+ */
+function builtinModels() {
+  return [{
+    id: 'model-agnes-3-0-flash',
+    name: 'agnes-3.0-flash',
+    baseURL: 'https://apihub.agnes-ai.com/v1',
+    model: 'agnes-3.0-flash',
+    apiKey: 'sk-JG91oJ9qYIbAUWvtlXVd3CBnSBJeM1iGsGd8ZmxK58jEFjkG',
+    isDefault: true,
+  }];
+}
+
 // 默认配置
 const defaultConfig = {
   defaultCommitMessage: "submit",
@@ -366,7 +393,8 @@ const defaultConfig = {
   theme: 'light',  // 主题: light | dark | auto
   locale: 'zh-CN',  // 语言: zh-CN | en-US
   // AI 模型配置
-  models: [],
+  // 空列表 = 用内置的免费默认模型（见 builtinModels / resolveModels）。
+  models: builtinModels(),
   // AI 智能体单轮最大工具调用次数(防失控)。CLI `g ai` 与 Web 智能体共用,全局生效。
   // 2026-09-20: 40 → 200。40 轮在"读多个文件 → 逐个验证 → 再改"这类任务里很容易触顶,
   // 触顶后本轮被强制结束,用户必须再发一条消息才能接着跑,体感像被截断。
@@ -737,6 +765,26 @@ function isJsonParseError(err) {
   return err instanceof SyntaxError || err?.name === 'SyntaxError';
 }
 
+/**
+ * 从原始配置里定出「当前该用哪份模型列表」。
+ *
+ * 三种输入，三种结论：
+ *   · 有内容              → 原样用
+ *   · 空数组 / 根本不是数组 → 回落内置默认（新装、配置文件里压根没写过这个键、
+ *                            手改坏了都走这条）
+ *   · 空数组 + 已标记      → 尊重"空"：用户主动在设置里删光了，别把默认塞回来
+ *
+ * 为什么需要 modelsSeeded 这个标记：没有它就只能二选一 —— 要么新装的人没模型可用，
+ * 要么删光后重启又长出来（永远删不掉）。标记由**写入口**打（见 saveConfig 与
+ * routes/config.js 的 save-models：收到空数组时写一笔），读路径保持无副作用。
+ */
+function resolveModels(raw) {
+  const list = Array.isArray(raw?.models) ? raw.models : null;
+  if (list && list.length) return list;
+  if (raw?.modelsSeeded === true) return [];
+  return defaultConfig.models;
+}
+
 // 异步读取配置文件
 async function loadConfig() {
   const key = getCurrentProjectKey();
@@ -755,6 +803,8 @@ async function loadConfig() {
     return {
       ...defaultConfig,
       ...raw,
+      // 旧版扁平结构：...raw 里的空 models 数组会把内置默认盖掉，这里显式收口
+      models: resolveModels(raw),
       aiMaxToolIterations: normalizeAiMaxToolIterations(raw.aiMaxToolIterations)
         ?? defaultConfig.aiMaxToolIterations,
       aiMaxRequestTokens: resolveRequestTokens(raw),
@@ -779,7 +829,7 @@ async function loadConfig() {
     ...(projectConfig || {}),
     theme: raw?.theme ?? defaultConfig.theme,
     locale: raw?.locale ?? defaultConfig.locale,
-    models: raw?.models ?? defaultConfig.models,
+    models: resolveModels(raw),
     ui: raw?.ui ?? defaultConfig.ui,
     // 同 models：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
     aiMaxToolIterations: normalizeAiMaxToolIterations(raw?.aiMaxToolIterations)
@@ -849,13 +899,16 @@ async function saveConfig(config) {
   // 解构出来，否则它会跟着 ...projectConfig 被写进**项目配置**里 —— 全局设置漏进
   // 项目级是这一族键最容易踩的坑。解构出来本身不写回顶层（它已不再被任何地方读取）。
   const {
-    theme, locale, models, ui, aiMaxToolIterations, aiMaxRequestTokens, taskExecutor,
+    theme, locale, models, modelsSeeded, ui, aiMaxToolIterations, aiMaxRequestTokens, taskExecutor,
     agentPresetPrompts, agentPresetPromptsByView, agentDefaultPrompt, webSearch,
     notifyOnTaskDone: legacyNotifyOnTaskDone,
     notifyPageOnTaskDone, notifyBrowserOnTaskDone, notifySoundOnTaskDone,
     ...projectConfig
   } = config;
   void legacyNotifyOnTaskDone;
+  // modelsSeeded 只读不写：它是"用户主动清空过模型"的标记，由下面的空数组分支自动产生。
+  // 从 projectConfig 里摘出来是必须的 —— 否则它会跟着其余全局键漏进**项目配置**。
+  void modelsSeeded;
 
   // 保存全局设置到根级别
   if (theme !== undefined) {
@@ -866,6 +919,9 @@ async function saveConfig(config) {
   }
   if (models !== undefined) {
     raw.models = models;
+    // 空列表 = 用户明确删光了，记一笔（读取侧见 resolveModels）：
+    // 不记的话下次读配置会拿内置默认模型顶上来，表现得像"永远删不掉"
+    if (Array.isArray(models) && models.length === 0) raw.modelsSeeded = true;
   }
   if (ui !== undefined) {
     raw.ui = ui;
@@ -1154,4 +1210,6 @@ export {
   REQUEST_DEFAULT_MAX_TOKENS,
   AI_MAX_TOOL_ITERATIONS_MIN,
   AI_MAX_TOOL_ITERATIONS_MAX,
+  // 内置的免费默认模型（新装开箱可用）——测试与将来的"恢复默认"入口共用
+  builtinModels,
 };

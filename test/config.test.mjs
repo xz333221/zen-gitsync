@@ -63,8 +63,8 @@ after(async () => {
 const configMod = await import(pathToFileURL(path.join(projectRoot, 'src/config.js')).href)
 // 注意:saveConfig / loadConfig 等业务函数挂在 default export 上;
 // ConfigWriteError / normalizeProjectPath 是命名导出(用于测试与复用)
-const { normalizeProjectPath, ConfigWriteError, normalizeAiMaxToolIterations, normalizeNotifySwitch, normalizeAgentPresetPrompts } = configMod
-const { saveConfig } = configMod.default
+const { normalizeProjectPath, ConfigWriteError, normalizeAiMaxToolIterations, normalizeNotifySwitch, normalizeAgentPresetPrompts, builtinModels } = configMod
+const { saveConfig, loadConfig } = configMod.default
 
 // 直接读沙箱磁盘上的 config.json：比走 loadConfig 更能暴露"写入位置不对"
 const configFilePath = path.join(fakeHome, '.zen-gitsync', 'config.json')
@@ -521,4 +521,80 @@ test('ConfigWriteError: 错误对象正确关联 cause', () => {
   assert.equal(err.cause, cause)
   assert.ok(err instanceof Error)
   assert.ok(err instanceof ConfigWriteError)
+})
+
+// ========== 内置默认模型(2026-11-01) ==========
+//
+// 需求原话:「如果没有配置任何模型的话，默认给一个这个模型的配置」。
+// 一整套行为只有三句话,但每条都要钉住 —— 尤其是"删光之后不许再长回来",
+// 否则用户会觉得自己被软件耍了(删一次、重启出现一次)。
+
+test('builtinModels: 一条开箱可用的免费模型,字段齐全', () => {
+  const [m] = builtinModels()
+  assert.equal(m.name, 'agnes-3.0-flash')
+  assert.equal(m.model, 'agnes-3.0-flash')
+  assert.equal(m.baseURL, 'https://apihub.agnes-ai.com/v1')
+  assert.match(m.apiKey, /^sk-/)
+  assert.equal(m.isDefault, true, '必须是默认模型,否则新装的人还是没得用')
+  assert.ok(m.id, 'id 必填 —— 前端的编辑/删除/设为默认都按 id 认')
+})
+
+test('builtinModels: 每次调用返回新对象', () => {
+  // defaultConfig 会在每次 loadConfig 里展开。如果几处共享同一个字面量,
+  // 任何一处顺手改字段都会污染下一个读到它的人(设置面板直接改 aiModels 就是这种)。
+  const a = builtinModels()
+  a[0].name = '被改掉'
+  assert.equal(builtinModels()[0].name, 'agnes-3.0-flash')
+})
+
+test('loadConfig: 旧版扁平结构里没有 models 键 → 用内置默认', async () => {
+  await writeRawConfig({ theme: 'light' })
+  const cfg = await loadConfig()
+  assert.equal(cfg.models.length, 1)
+  assert.equal(cfg.models[0].name, 'agnes-3.0-flash')
+})
+
+test('loadConfig: 新版结构里 models 是空数组 → 仍然给内置默认', async () => {
+  await writeRawConfig({ projects: {}, models: [] })
+  const cfg = await loadConfig()
+  assert.equal(cfg.models.length, 1)
+  assert.equal(cfg.models[0].isDefault, true)
+})
+
+test('loadConfig: 用户主动删光过(modelsSeeded) → 尊重空列表,不许塞回来', async () => {
+  await writeRawConfig({ projects: {}, models: [], modelsSeeded: true })
+  const cfg = await loadConfig()
+  assert.deepEqual(cfg.models, [])
+})
+
+test('loadConfig: 用户自己的模型原样保留,不被内置默认顶掉', async () => {
+  const mine = [{ id: 'm1', name: '我的模型', baseURL: 'https://x/v1', model: 'x', apiKey: 'k', isDefault: true }]
+  await writeRawConfig({ projects: {}, models: mine })
+  const cfg = await loadConfig()
+  assert.deepEqual(cfg.models, mine)
+})
+
+test('saveConfig: 清空模型会落 modelsSeeded 标记,重启后不会长回来', async () => {
+  await writeRawConfig({
+    projects: {},
+    models: [{ id: 'm1', name: 'x', baseURL: 'https://x/v1', model: 'x', apiKey: 'k', isDefault: true }]
+  })
+  await saveConfig({ models: [] })
+
+  const raw = await readRawConfig()
+  assert.deepEqual(raw.models, [], '空列表要真的写进磁盘')
+  assert.equal(raw.modelsSeeded, true, '同时要记下"这是用户主动清空的"')
+
+  const cfg = await loadConfig()
+  assert.deepEqual(cfg.models, [], '再读出来必须还是空 —— 否则就是"删不掉"')
+})
+
+test('saveConfig: modelsSeeded 不会漏进项目配置(全局键的经典坑)', async () => {
+  // 这一族的坑踩过:全局键没从 ...projectConfig 里摘出去,就跟着写进每个项目的
+  // 配置块里,之后再从项目配置读回来,行为变得难以解释。
+  await saveConfig({ models: [], defaultCommitMessage: 'x' })
+  const raw = await readRawConfig()
+  for (const [key, proj] of Object.entries(raw.projects || {})) {
+    assert.equal(proj?.modelsSeeded, undefined, `项目配置 ${key} 里不该出现 modelsSeeded`)
+  }
 })

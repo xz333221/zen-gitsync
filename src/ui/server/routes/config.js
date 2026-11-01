@@ -1207,6 +1207,9 @@ export function registerConfigRoutes({
       }
       const rawConfig = await configManager.readRawConfigFile()
       rawConfig.models = models
+      // 清空 = 明确的"不要再给我内置默认模型"，记一笔（读取侧见 src/config.js 的
+      // resolveModels）。不记的话删光重启又长回来，等于删不掉。
+      if (models.length === 0) rawConfig.modelsSeeded = true
       await configManager.writeRawConfigFile(rawConfig)
       res.json({ success: true })
     } catch (error) {
