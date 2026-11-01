@@ -56,19 +56,25 @@ export function registerPeerSettingsRoutes({ app }) {
     const state = await ensureSelf();
     const peers = state.peers || [];
     const probed = await Promise.all(peers.map(async (p) => ({ ...p, ...(await probe(p)) })));
-    res.json({
-      success: true,
-      running: isPeerRunning(),
-      self: state.self,
-      peers: probed.map((p) => ({
+
+    // 昵称**以对方自报为准**（对方在它自己的设置里改了就跟着变）。
+    // 变了顺手落盘：否则对方改名后、下次它离线时又显示回旧名字。
+    const rows = await Promise.all(probed.map(async (p) => {
+      const remoteName = p.online ? String(p.remoteName || '').trim() : '';
+      if (remoteName && remoteName !== p.name) {
+        await upsertPeer({ id: p.id, name: remoteName, url: p.url, token: p.token }).catch(() => {});
+      }
+      return {
         id: p.id,
-        name: p.name,
+        name: remoteName || p.name,
         url: p.url,
         online: p.online,
         version: p.version || '',
         error: p.error || ''
-      }))
-    });
+      };
+    }));
+
+    res.json({ success: true, running: isPeerRunning(), self: state.self, peers: rows });
   }));
 
   /** POST /api/peer-settings/self —— 改昵称 / 头像 / 端口 / 开关。 */
@@ -115,10 +121,8 @@ export function registerPeerSettingsRoutes({ app }) {
    * 先真连一次：连不上/令牌错当场报错，别让用户以为加好了。
    */
   app.post('/api/peer-settings/peers', asyncRoute(async (req, res) => {
-    const name = String(req.body?.name || '').trim();
     const rawUrl = String(req.body?.url || '').trim();
     const token = String(req.body?.token || '').trim();
-    if (!name) throw new HttpError(400, '请填对端昵称');
     if (!rawUrl) throw new HttpError(400, '请填对端地址');
     if (!token) throw new HttpError(400, '请填对端令牌');
 
@@ -129,6 +133,9 @@ export function registerPeerSettingsRoutes({ app }) {
     } catch (err) {
       throw new HttpError(400, `连不上对端：${err?.message || err}`);
     }
+    // 昵称由**对方**决定（它在自己的设置里写什么就叫什么），本机只在对方没设时退回地址。
+    // 这里允许显式传 name，是给将来"本地备注"留的口子；界面不再问用户填。
+    const name = String(req.body?.name || '').trim() || String(info.name || '').trim() || url;
     const state = await upsertPeer({ id: info.id || '', name, url, token });
     res.json({ success: true, peer: { id: info.id || '', name, url, online: true, version: info.version || '' }, count: state.peers.length });
   }));

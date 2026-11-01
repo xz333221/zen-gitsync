@@ -77,9 +77,6 @@
         <h3>{{ $t('@PEER:添加对端') }}</h3>
       </div>
       <div class="peer-form">
-        <label class="peer-label">{{ $t('@PEER:昵称') }}</label>
-        <input v-model="draft.name" class="peer-input" maxlength="40" :placeholder="$t('@PEER:比如：服务器')" />
-
         <label class="peer-label">{{ $t('@PEER:地址') }}</label>
         <input v-model="draft.url" class="peer-input" :placeholder="`http://192.168.1.20:${defaultPort}`" />
 
@@ -90,7 +87,7 @@
         <button class="peer-btn peer-btn--primary" type="button" :disabled="adding" @click="addPeer">
           {{ adding ? $t('@PEER:连接中…') : $t('@PEER:添加并测试') }}
         </button>
-        <span class="peer-hint-inline">{{ $t('@PEER:会先真连一次，连不上会当场报错。') }}</span>
+        <span class="peer-hint-inline">{{ $t('@PEER:会先真连一次；连上后自动用对方自己设置的昵称。') }}</span>
       </div>
     </section>
   </div>
@@ -130,7 +127,7 @@ interface PeerRow {
 const self = reactive<SelfInfo>({ id: '', name: '', avatar: '', port: 5600, host: '0.0.0.0', enabled: false, token: '' })
 const peers = ref<PeerRow[]>([])
 const defaultPort = ref(5600)
-const draft = reactive({ name: '', url: '', token: '' })
+const draft = reactive({ url: '', token: '' })
 
 const loading = ref(false)
 const savingSelf = ref(false)
@@ -209,8 +206,8 @@ async function rotateToken() {
 }
 
 async function addPeer() {
-  if (!draft.name.trim() || !draft.url.trim() || !draft.token.trim()) {
-    ElMessage.warning($t('@PEER:昵称、地址、令牌都要填'))
+  if (!draft.url.trim() || !draft.token.trim()) {
+    ElMessage.warning($t('@PEER:地址和令牌都要填'))
     return
   }
   adding.value = true
@@ -218,10 +215,9 @@ async function addPeer() {
     const data = await readJson(await fetch('/api/peer-settings/peers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: draft.name.trim(), url: draft.url.trim(), token: draft.token.trim() })
+      body: JSON.stringify({ url: draft.url.trim(), token: draft.token.trim() })
     }))
-    ElMessage.success($t('@PEER:已连上「{name}」', { name: data.peer?.name || draft.name }))
-    draft.name = ''
+    ElMessage.success($t('@PEER:已连上「{name}」', { name: data.peer?.name || draft.url }))
     draft.url = ''
     draft.token = ''
     await load()

@@ -1,6 +1,8 @@
 // 这里是自动生成的内容 Thu Oct 23 2025 16:02:20 GMT+0800 (中国标准时间)
 export default {
   // @PEER: 跨机器设置面板（PeerSettingsPanel.vue）
+  '@PEER:地址和令牌都要填': 'Address and token are both required',
+  '@PEER:会先真连一次；连上后自动用对方自己设置的昵称。': 'It connects once for real, then uses the nickname the peer set for itself.',
   '@PEER:本机节点': 'This node',
   '@PEER:把地址和令牌给对方，对方就能问你。改完即刻生效，不需要重启。': 'Give the address and token to the other machine and it can ask this one. Changes apply immediately.',
   '@PEER:设置已保存': 'Settings saved',
@@ -29,19 +31,16 @@ export default {
   '@PEER:测试': 'Test',
   '@PEER:删除': 'Remove',
   '@PEER:添加对端': 'Add peer',
-  '@PEER:比如：服务器': 'e.g. Server',
   '@PEER:地址': 'Address',
   '@PEER:对方「本机节点」里那串令牌': 'The token shown in the peer page under This node',
   '@PEER:连接中…': 'Connecting…',
   '@PEER:添加并测试': 'Add and test',
-  '@PEER:会先真连一次，连不上会当场报错。': 'It connects once for real; failures are reported immediately.',
   '@PEER:读取跨机器设置失败：{msg}': 'Failed to load cross-machine settings: {msg}',
   '@PEER:令牌已复制': 'Token copied',
   '@PEER:复制失败，请手动选中那串令牌': 'Copy failed, please select the token manually',
   '@PEER:重置后旧令牌立即失效，已经配对过的机器都要重新填。确定重置？': 'Resetting invalidates the old token immediately and every paired machine must re-enter it. Continue?',
   '@PEER:重置令牌': 'Reset token',
   '@PEER:令牌已重置': 'Token reset',
-  '@PEER:昵称、地址、令牌都要填': 'Nickname, address and token are all required',
   '@PEER:已连上「{name}」': 'Connected to 「{name}」',
   '@PEER:「{name}」在线': '「{name}」 is online',
   '@PEER:「{name}」连不上：{msg}': 'Cannot reach 「{name}」: {msg}',
