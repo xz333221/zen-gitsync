@@ -475,11 +475,18 @@ watch(narrow, (isNarrow) => {
 // 新会话的 meta 事件在流式期间就把 currentSessionId 置上了, 若不先
 // 刷新列表, sessions 还是旧的(不含新会话), 会误判"当前会话不属于本项目"
 // 把刚回答完的对话直接清掉(新建会话发第一条消息后被自动关闭的根因)。
+//
+// 2026-11-02 用户报"发完消息什么都没了"：判据里混进了"这一轮跑完了"这条 ——
+// 而 ① 服务端只有在**跑成功**时才 writeSession，一轮因为没配模型 / 连接中断 /
+// 项目不一致而失败时磁盘上根本没有这条会话；② 写盘常常晚于这次刷新。
+// 两种情况下 sessions 里都没有它，于是一失败就把用户刚打的字连同错误气泡一起
+// 抹掉（连错误内容都看不到，只能看到欢迎页）。清理只该由"项目真的换了"触发：
+// 会话不在列表里 ≠ 它属于别的项目。
 watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([cwd, streaming], previous) => {
   const dirChanged = !previous || cwd !== previous[0]
   const streamJustFinished = !!previous && previous[1] === true && !streaming
   if (dirChanged || streamJustFinished) await loadSessions()
-  if (currentSessionId.value && !isStreaming.value &&
+  if (dirChanged && currentSessionId.value && !isStreaming.value &&
       !sessions.value.some(s => s.sessionId === currentSessionId.value)) {
     newSession()
   }
