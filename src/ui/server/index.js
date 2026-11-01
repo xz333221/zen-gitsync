@@ -606,6 +606,17 @@ async function startUIServer(noOpen = false, savePort = false, options = {}) {
 
   perfMark('全部 API 路由注册完成')
 
+  // hub 少了执行面三条路由（exec / terminal / process），但前端有些组件是**常驻挂载**的
+  // （控制台面板就是 KeepAlive 里不带 v-if 的那个），它们启动时照旧轮询
+  // /api/terminal-sessions/status —— 命中 Express 默认 404（HTML），前端 res.json()
+  // 直接抛 "Unexpected token '<'" 并在界面上弹红条。
+  // 这里把 hub 下**未命中的 /api** 统一成 JSON：调用方只会读到"接口不存在"，不再误报。
+  if (isHub) {
+    app.use('/api', (req, res) => {
+      res.status(404).json({ success: false, error: `接口不存在: ${req.method} ${req.originalUrl}` });
+    });
+  }
+
   // 全局错误处理中间件：必须放在所有 register*Routes 之后注册，
   // 作为最后一道兜底捕获 asyncRoute 之外抛出的异常（headersSent 走 express 默认关闭）。
   // 与 asyncRoute 共享同一套错误响应格式 {success:false, error}。

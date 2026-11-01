@@ -1059,9 +1059,11 @@ function stopVResize() {
       </div><!-- /view-pane git -->
 
       <!-- 控制台视图（默认加载：随首屏静态挂载，切过去零等待；KeepAlive 缓存实例保状态） -->
+      <!-- 控制台面板：hub 不挂这个组件 —— 它启动即轮询 /api/terminal-sessions
+           （服务端在 hub 下没这条路由），活动栏又已经把它藏了，留着只会在后台空转 + 打 404 -->
       <div v-show="activeView === 'console'" class="view-pane console-pane">
         <KeepAlive>
-          <ConsoleView />
+          <ConsoleView v-if="appRole !== 'hub'" />
         </KeepAlive>
       </div>
 
