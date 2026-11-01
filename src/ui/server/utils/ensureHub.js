@@ -80,13 +80,13 @@ export async function ensureHubRunning({ port = HUB_DEFAULT_PORT, cwd } = {}) {
     // 日志都开不了就退化成 ignore —— hub 照起，只是失败信息看不到
   }
 
-  const child = spawn(process.execPath, [
-    resolveCliEntry(),
-    'ui',
-    '--role=hub',
-    `--port=${port}`,
-    '--no-open'
-  ], {
+  // 浏览器要开：hub 是"另一扇窗"，只在**新拉起**时开一次（复用已有 hub 时不开 ——
+  // 否则每开一个项目窗口都多蹦一个标签页，而那个页面本来就在）。
+  // ZEN_NO_OPEN=1 可以关掉（CI / 无头环境）。
+  const args = [resolveCliEntry(), 'ui', '--role=hub', `--port=${port}`];
+  if (process.env.ZEN_NO_OPEN === '1') args.push('--no-open');
+
+  const child = spawn(process.execPath, args, {
     detached: true,
     // 关键：不继承 stdout，否则父窗口退出时管道断开会把 hub 一起带走
     stdio: fd === null ? 'ignore' : ['ignore', fd, fd],
