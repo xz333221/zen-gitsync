@@ -38,6 +38,8 @@
     "verify:memory-panel": "node scripts/verify-memory-panel.cjs",
     "verify:provider-logo": "node scripts/verify-provider-logo.cjs",
     "verify:provider-logo:reverse": "node scripts/verify-provider-logo.cjs --reverse",
+    "verify:api-no-cache": "node scripts/verify-api-no-cache.cjs",
+    "verify:api-no-cache:reverse": "node scripts/verify-api-no-cache.cjs --reverse",
     "verify:release:self-update": "node scripts/verify-release-self-update.mjs",
     "verify:release:self-update:reverse": "node scripts/verify-release-self-update.mjs --reverse",
     "verify:wb-agent-dispatch": "node scripts/verify-workbench-agent-dispatch.mjs",

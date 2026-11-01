@@ -257,6 +257,28 @@ async function startUIServer(noOpen = false, savePort = false, options = {}) {
   }
 
   const app = express();
+
+  // ── 实时接口一律不许缓存 ──────────────────────────────────────────────────
+  //
+  // 关掉 res.json/res.send 的 ETag：Express 默认是 weak ETag，于是同一个 URL 第二次
+  // 请求带上 If-None-Match 时它会回 **304 + 空 body**。浏览器正常情况下会拿缓存副本
+  // 合成 200，但只要本地没有副本（清过缓存、DevTools 关了缓存、或中间有安全软件/
+  // 代理在转），fetch 拿到的就是 `status: 304` + 0 字节 —— 前端 `res.json()` 直接抛
+  // 「Unexpected end of JSON input」，表现成"会话列表出不来"。
+  // 实测（2026-11-02，用户另一台机器报障）：GET /api/agent/sessions 带 If-None-Match
+  // → 304、响应体 0 字节；无条件请求 → 200、11870 字节。
+  //
+  // 本地服务省这点带宽没有意义。注意 serve-static 的 etag 是**独立选项**（默认 true），
+  // 前端构建产物照常带 ETag —— 那边确实该缓存，不受这行影响。
+  app.set('etag', false);
+
+  // 再补一层 Cache-Control：ETag 关掉只解决"我们主动回 304"，挡不住浏览器按启发式
+  // 规则自己存一份、或企业代理/杀软网关在中间留副本。静态资源不走 /api，不受影响。
+  app.use('/api', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+  });
+
   const httpServer = createServer(app);
 
   // ─────────────────────────────────────────────────────────────────────────────

@@ -830,7 +830,12 @@ export function useAgentChat() {
     sessionsLoading.value = true
     try {
       const url = `/api/agent/sessions?cwd=${encodeURIComponent(cwd)}`
-      const res = await fetch(url).then(r => r.json())
+      // no-store：会话列表要的是"这一刻的真实列表"，任何缓存副本都是错的。
+      // 服务端已经关掉 ETag 并对 /api 发了 Cache-Control: no-store（见 index.js），
+      // 这里再显式声明一次，是为了绕开**改之前就已经存在**于浏览器里的旧副本 ——
+      // 那份副本带着旧的 ETag，不绕开的话第一次仍可能拿到 304 + 空 body
+      // （表现为"会话出不来"，2026-11-02 用户另一台机器就是这么撞上的）。
+      const res = await fetch(url, { cache: 'no-store' }).then(r => r.json())
       if (requestNonce !== sessionsRequestNonce) return
       if (!res.success) {
         ElMessage.error(res.error || $t('@AGENT:加载会话列表失败'))
