@@ -69,9 +69,9 @@
         <li v-for="p in peers" :key="p.id || p.url" class="peer-row">
           <span class="peer-dot" :class="p.online ? 'is-on' : 'is-off'" :title="p.online ? $t('@PEER:在线') : $t('@PEER:离线')" />
           <!-- 对方头像：对方在它自己那边设的（emoji 或 data URL 图片），随 /api/peer/info 带过来 -->
-          <span v-if="p.avatar" class="peer-avatar" :title="p.name">
-            <img v-if="isAvatarImage(p.avatar)" :src="p.avatar" alt="" />
-            <span v-else>{{ p.avatar.slice(0, 2) }}</span>
+          <span v-if="p.view" class="peer-avatar" :title="p.name">
+            <img v-if="p.view.img" :src="p.view.img" alt="" />
+            <span v-else>{{ p.view.text }}</span>
           </span>
           <span class="peer-row-name">{{ p.name }}</span>
           <span class="peer-row-url">{{ p.url }}</span>
@@ -116,6 +116,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { $t } from '@/lang/static'
 import AvatarPicker from './AvatarPicker.vue'
+import { resolveAvatar } from '@/utils/peerAvatar'
 
 interface SelfInfo {
   id: string
@@ -131,6 +132,8 @@ interface PeerRow {
   id: string
   name: string
   avatar?: string
+  /** 头像怎么画（内置图 / data URL / emoji），在 load() 里一次算好，模板直接用 */
+  view?: { img: string; text: string } | null
   url: string
   online: boolean
   version?: string
@@ -142,7 +145,13 @@ const peers = ref<PeerRow[]>([])
 const defaultPort = ref(5600)
 const draft = reactive({ url: '', token: '' })
 
-const isAvatarImage = (value?: string) => /^data:image\//i.test(value || '') || /^https?:\/\//i.test(value || '')
+/** 把 avatar 值折成模板能直接用的形状；认不出返回 null（不占位）。 */
+function avatarView(value?: string): { img: string; text: string } | null {
+  const resolved = resolveAvatar(value)
+  if (resolved.kind === 'image') return { img: resolved.src, text: '' }
+  if (resolved.kind === 'text') return { img: '', text: resolved.text }
+  return null
+}
 
 const loading = ref(false)
 const loaded = ref(false)
@@ -167,7 +176,7 @@ async function load() {
     const data = await readJson(await fetch('/api/peer-settings'))
     Object.assign(self, data.self)
     running.value = data.running === true
-    peers.value = data.peers || []
+    peers.value = (data.peers || []).map((p: PeerRow) => ({ ...p, view: avatarView(p.avatar) }))
     loaded.value = true
   } catch (err: any) {
     // 只记文案不外抛：表单此时不可保存（见模板的 :disabled="!loaded"），

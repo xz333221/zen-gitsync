@@ -3,8 +3,9 @@
     <div class="avatar-row">
       <!-- 预览：图片走 <img>，字符（emoji / 首字）直接渲染 -->
       <span class="avatar-preview" :style="{ background: previewBg }">
-        <img v-if="isImage" :src="modelValue" alt="" />
-        <span v-else class="avatar-text">{{ fallbackText }}</span>
+        <img v-if="preview.kind === 'image'" :src="preview.src" alt="" />
+        <span v-else-if="preview.kind === 'text'" class="avatar-text">{{ preview.text }}</span>
+        <span v-else class="avatar-empty">🐾</span>
       </span>
 
       <div class="avatar-actions">
@@ -18,23 +19,25 @@
       <input ref="fileRef" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="avatar-file" @change="onFile" />
     </div>
 
-    <!-- 预设：一组 emoji 头像。比内置 PNG 更省事 —— 不受构建哈希影响、不算资源体积，
-         在天蓝色的圆形底上看起来就是一张"头像"。 -->
+    <!-- 内置动物头像：落库存 builtin:<源文件名>，展示用打包后的地址（见 utils/peerAvatar.ts） -->
     <div class="avatar-grid">
       <button
-        v-for="emoji in PRESETS"
-        :key="emoji"
+        v-for="item in PEER_AVATARS"
+        :key="item.name"
         class="avatar-item"
-        :class="{ active: modelValue === emoji }"
+        :class="{ active: modelValue === toStoredAvatar(item.name) }"
         type="button"
-        @click="choose(emoji)"
-      >{{ emoji }}</button>
+        :title="item.name"
+        @click="choose(toStoredAvatar(item.name))"
+      >
+        <img :src="item.url" alt="" />
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-// 头像选择器：预设 emoji + 本地图片上传（客户端裁成 256×256 后转 data URL）。
+// 头像选择器：内置动物图 + 本地图片上传（客户端裁成 256×256 后转 data URL）。
 //
 // 为什么把图片转成 data URL 而不是传文件到服务端：
 //   头像要跨机器显示 —— 对方是拿 /api/peer/info 里的那串字符串去渲染的，没有本机
@@ -44,18 +47,16 @@
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { $t } from '@/lang/static'
+import { PEER_AVATARS, resolveAvatar, toStoredAvatar } from '@/utils/peerAvatar'
 
 const props = defineProps<{ modelValue: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
-const PRESETS = ['🐱', '🦊', '🐼', '🐧', '🐳', '🦉', '🐙', '🦄', '🤖', '👾', '🌵', '🍊', '🌙', '⚡']
-
 const MAX_SIDE = 256
 const fileRef = ref<HTMLInputElement | null>(null)
 
-const isImage = computed(() => /^data:image\//i.test(props.modelValue) || /^https?:\/\//i.test(props.modelValue))
-const fallbackText = computed(() => (props.modelValue || '?').slice(0, 2))
-const previewBg = computed(() => (isImage.value ? 'var(--bg-subtle)' : 'var(--role-ai-surface, var(--bg-subtle))'))
+const preview = computed(() => resolveAvatar(props.modelValue))
+const previewBg = computed(() => (preview.value.kind === 'image' ? 'var(--bg-subtle)' : 'var(--role-ai-surface, var(--bg-subtle))'))
 
 function choose(value: string) {
   emit('update:modelValue', value)
@@ -147,6 +148,11 @@ async function onFile(event: Event) {
   font-size: 22px;
 }
 
+.avatar-empty {
+  font-size: 18px;
+  opacity: 0.5;
+}
+
 .avatar-actions {
   display: flex;
   align-items: center;
@@ -184,22 +190,35 @@ async function onFile(event: Event) {
 
 .avatar-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(34px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(36px, 36px));
   gap: 6px;
-  max-width: 420px;
+  max-width: 460px;
+  max-height: 168px;
+  overflow-y: auto;
+  padding: 2px;
 }
 
 .avatar-item {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   padding: 0;
-  font-size: 18px;
-  line-height: 1;
+  overflow: hidden;
   cursor: pointer;
   background: var(--bg-subtle);
   border: 1px solid transparent;
   border-radius: 50%;
-  transition: border-color 120ms ease, background 120ms ease;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.avatar-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.avatar-item:hover {
+  transform: scale(1.06);
 }
 
 .avatar-item:hover {
