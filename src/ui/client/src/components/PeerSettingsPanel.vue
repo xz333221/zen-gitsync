@@ -1,5 +1,11 @@
 <template>
   <div class="peer-panel">
+    <!-- 读失败必须显眼：表单里此时是默认值，一按保存就会把真实名字/头像/开关覆盖掉 -->
+    <div v-if="loadError" class="peer-error">
+      <span>{{ $t('@PEER:读取配置失败：{msg}', { msg: loadError }) }}</span>
+      <button class="peer-btn" type="button" @click="load">{{ $t('@PEER:重试') }}</button>
+    </div>
+
     <!-- ── 本机节点 ─────────────────────────────────────────────── -->
     <section class="peer-sec">
       <div class="peer-sec-head">
@@ -15,7 +21,7 @@
         <input v-model="self.name" class="peer-input" maxlength="40" :placeholder="$t('@PEER:这台电脑叫什么')" />
 
         <label class="peer-label">{{ $t('@PEER:头像') }}</label>
-        <input v-model="self.avatar" class="peer-input" maxlength="200" :placeholder="$t('@PEER:emoji 或图片地址，可留空')" />
+        <AvatarPicker v-model="self.avatar" />
 
         <label class="peer-label">{{ $t('@PEER:端口') }}</label>
         <input v-model.number="self.port" type="number" min="1" max="65535" class="peer-input peer-input--num" />
@@ -39,7 +45,7 @@
       </p>
 
       <div class="peer-actions">
-        <button class="peer-btn peer-btn--primary" type="button" :disabled="savingSelf" @click="saveSelf">
+        <button class="peer-btn peer-btn--primary" type="button" :disabled="savingSelf || !loaded" @click="saveSelf">
           {{ savingSelf ? $t('@PEER:保存中…') : $t('@PEER:保存') }}
         </button>
         <span v-if="savedAt" class="peer-saved">{{ $t('@PEER:已保存') }}</span>
@@ -62,6 +68,11 @@
       <ul v-else class="peer-list">
         <li v-for="p in peers" :key="p.id || p.url" class="peer-row">
           <span class="peer-dot" :class="p.online ? 'is-on' : 'is-off'" :title="p.online ? $t('@PEER:在线') : $t('@PEER:离线')" />
+          <!-- 对方头像：对方在它自己那边设的（emoji 或 data URL 图片），随 /api/peer/info 带过来 -->
+          <span v-if="p.avatar" class="peer-avatar" :title="p.name">
+            <img v-if="isAvatarImage(p.avatar)" :src="p.avatar" alt="" />
+            <span v-else>{{ p.avatar.slice(0, 2) }}</span>
+          </span>
           <span class="peer-row-name">{{ p.name }}</span>
           <span class="peer-row-url">{{ p.url }}</span>
           <span class="peer-row-ver">{{ p.online ? p.version : (p.error || $t('@PEER:离线')) }}</span>
@@ -104,6 +115,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { $t } from '@/lang/static'
+import AvatarPicker from './AvatarPicker.vue'
 
 interface SelfInfo {
   id: string
@@ -118,6 +130,7 @@ interface SelfInfo {
 interface PeerRow {
   id: string
   name: string
+  avatar?: string
   url: string
   online: boolean
   version?: string
@@ -129,7 +142,11 @@ const peers = ref<PeerRow[]>([])
 const defaultPort = ref(5600)
 const draft = reactive({ url: '', token: '' })
 
+const isAvatarImage = (value?: string) => /^data:image\//i.test(value || '') || /^https?:\/\//i.test(value || '')
+
 const loading = ref(false)
+const loaded = ref(false)
+const loadError = ref('')
 const savingSelf = ref(false)
 const adding = ref(false)
 const savedAt = ref(0)
@@ -145,13 +162,17 @@ async function readJson(res: Response) {
 
 async function load() {
   loading.value = true
+  loadError.value = ''
   try {
     const data = await readJson(await fetch('/api/peer-settings'))
     Object.assign(self, data.self)
     running.value = data.running === true
     peers.value = data.peers || []
+    loaded.value = true
   } catch (err: any) {
-    ElMessage.error($t('@PEER:读取跨机器设置失败：{msg}', { msg: err?.message || err }))
+    // 只记文案不外抛：表单此时不可保存（见模板的 :disabled="!loaded"），
+    // 否则用户会用空值把真实配置覆盖掉
+    loadError.value = String(err?.message || err)
   } finally {
     loading.value = false
   }
@@ -277,6 +298,18 @@ onMounted(async () => {
   gap: 4px;
   padding: 4px 2px 12px;
   color: var(--text-primary);
+}
+
+.peer-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 4px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #e5484d;
+  background: color-mix(in srgb, #e5484d 8%, transparent);
+  border-radius: 4px;
 }
 
 .peer-sec {
@@ -442,6 +475,27 @@ onMounted(async () => {
 
 .peer-dot.is-off {
   background: var(--border-color);
+}
+
+.peer-avatar {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+
+.peer-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .peer-row-name {

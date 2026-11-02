@@ -1,6 +1,14 @@
 // 这里是自动生成的内容 Thu Oct 23 2025 16:02:20 GMT+0800 (中国标准时间)
 export default {
   // @PEER: 跨机器设置面板（PeerSettingsPanel.vue）
+  '@PEER:读取配置失败：{msg}': 'Failed to load settings: {msg}',
+  '@PEER:重试': 'Retry',
+  '@PEER:上传图片': 'Upload',
+  '@PEER:清除': 'Clear',
+  '@PEER:PNG / JPG，自动裁成正方形': 'PNG / JPG, cropped to a square automatically',
+  '@PEER:只能选图片文件': 'Only image files are supported',
+  '@PEER:图片太大了（上限 8MB）': 'Image is too large (8 MB max)',
+  '@PEER:读取图片失败：{msg}': 'Failed to read the image: {msg}',
   '@PEER:地址和令牌都要填': 'Address and token are both required',
   '@PEER:会先真连一次；连上后自动用对方自己设置的昵称。': 'It connects once for real, then uses the nickname the peer set for itself.',
   '@PEER:本机节点': 'This node',
@@ -12,7 +20,6 @@ export default {
   '@PEER:昵称': 'Nickname',
   '@PEER:这台电脑叫什么': 'Name this computer',
   '@PEER:头像': 'Avatar',
-  '@PEER:emoji 或图片地址，可留空': 'Emoji or image URL, optional',
   '@PEER:端口': 'Port',
   '@PEER:允许其他机器提问': 'Allow other machines to ask',
   '@PEER:已开启': 'On',
@@ -35,7 +42,6 @@ export default {
   '@PEER:对方「本机节点」里那串令牌': 'The token shown in the peer page under This node',
   '@PEER:连接中…': 'Connecting…',
   '@PEER:添加并测试': 'Add and test',
-  '@PEER:读取跨机器设置失败：{msg}': 'Failed to load cross-machine settings: {msg}',
   '@PEER:令牌已复制': 'Token copied',
   '@PEER:复制失败，请手动选中那串令牌': 'Copy failed, please select the token manually',
   '@PEER:重置后旧令牌立即失效，已经配对过的机器都要重新填。确定重置？': 'Resetting invalidates the old token immediately and every paired machine must re-enter it. Continue?',

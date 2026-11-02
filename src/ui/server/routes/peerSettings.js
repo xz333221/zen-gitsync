@@ -48,7 +48,7 @@ const PROBE_TIMEOUT_MS = 2500;
 async function probe(peer) {
   try {
     const info = await fetchPeerInfo(peer, { timeoutMs: PROBE_TIMEOUT_MS });
-    return { online: true, remoteName: info.name || '', version: info.version || '', remoteId: info.id || '' };
+    return { online: true, remoteName: info.name || '', remoteAvatar: info.avatar || '', version: info.version || '', remoteId: info.id || '' };
   } catch (err) {
     return { online: false, error: String(err?.message || err) };
   }
@@ -121,6 +121,7 @@ export function registerPeerSettingsRoutes({
       return {
         id: p.id,
         name: remoteName || p.name,
+        avatar: p.online ? String(p.remoteAvatar || '') : '',
         url: p.url,
         online: p.online,
         version: p.version || '',
@@ -147,7 +148,9 @@ export function registerPeerSettingsRoutes({
     }
     const state = await updateSelf({
       name: typeof body.name === 'string' ? body.name : undefined,
-      avatar: typeof body.avatar === 'string' ? body.avatar.slice(0, 200) : undefined,
+      // 上传的头像在客户端已裁成 256×256 并转成 data URL（约 10~30KB），所以这里放宽到 400KB。
+      // 超过这个量级基本是误传原图 —— 前端已经拒绝过 8MB 以上的源文件。
+      avatar: typeof body.avatar === 'string' ? body.avatar.slice(0, 400_000) : undefined,
       port: body.port !== undefined ? Number(body.port) : undefined,
       enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined
     });
