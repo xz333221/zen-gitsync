@@ -686,7 +686,10 @@
   --focus-ring: 0 0 0 3px var(--focus-ring-color);
   --focus-ring-soft: 0 0 0 3px var(--focus-ring-color-soft);
   --focus-ring-strong: 0 0 0 4px var(--focus-ring-color);
-  --focus-outline: var(--focus-outline);
+  /* 必须是实值：写成 var(--focus-outline) 会构成自引用循环，浏览器把该属性判成
+     guaranteed-invalid → 全项目 86 处 `outline: var(--focus-outline)` 在
+     computed-value 阶段一起失效（实测 outline-style 变 none）。 */
+  --focus-outline: 2px solid var(--color-primary);
   --focus-outline-offset: 1px;
   --focus-outline-offset-lg: 2px;
 
