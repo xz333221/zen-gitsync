@@ -46,6 +46,16 @@ const CONFIG_JS = path.join(ROOT, 'src/config.js')
 const PANEL = path.join(ROOT, 'src/ui/client/src/components/AgentPromptSettings.vue')
 const AGENT_VIEW = path.join(ROOT, 'src/ui/client/src/views/AgentView.vue')
 
+/**
+ * saveConfig 的解构块里出现 agentDefaultPrompt。
+ *
+ * 不要把相邻顺序写死 —— 这份名单会随着新增全局键（agentPresetPromptsByView 就是
+ * 后来插进去的）重排，绑死 `agentPresetPrompts,\s*agentDefaultPrompt,` 会误报
+ * （2026-11-02 实测：功能没问题、A7 恒红，连带 R6 的反向注入也空转成假绿）。
+ * 限定 600 字符窗口是为了不跨出这个解构块匹配到别处的同名赋值。
+ */
+const RE_DESTRUCTURES_AGENT_DEFAULT_PROMPT = /const\s*\{[\s\S]{0,600}?\bagentDefaultPrompt\b[\s\S]{0,600}?\}\s*=\s*config/
+
 const results = []
 const consoleErrors = []
 const pageErrors = []
@@ -105,7 +115,7 @@ function staticChecks() {
     '派发那块必须复用工作台的解析（resolveDispatchPrompt），别自己拼一份')
 
   check('A7 agentDefaultPrompt 在 saveConfig 的解构名单里（否则会漏进项目配置）',
-    /agentPresetPrompts,\s*agentDefaultPrompt,/.test(config),
+    RE_DESTRUCTURES_AGENT_DEFAULT_PROMPT.test(config),
     '全局键没解构出来就会被 ...projectConfig 写进 raw.projects[key]')
 
   check('A8 面板写的是两处正确的接口（saveAiSettings + 工作台那对 save*Prompt）',
@@ -144,8 +154,10 @@ function reverseChecks() {
         routesSrc.replace(/promptSection = await resolveChatPromptSection\(\{ cwd, locale \}\);/, "promptSection = '';")),
         (src) => /resolveChatPromptSection\s*\(\s*\{[^}]*cwd[^}]*locale/.test(src)],
       // R2：内置链路不再传 promptSection（源码是 CRLF，正则必须容忍 \r）
+      // 注入只删这一行参数，别假设它是最后一个 —— 后面又加了 dispatchPolicySection，
+      // 旧正则（要求下一行就是 `});`）会失配、注入空转、反向验证恒过
       ['R2 不再把 promptSection 传给 runAgentTurn', write('R2.js',
-        routesSrc.replace(/\r?\n\s*promptSection\r?\n(\s*\}\);)/, '\n$1')),
+        routesSrc.replace(/\r?\n\s*promptSection,\r?\n/, '\n')),
         (src) => /runAgentTurn\(\{[\s\S]{0,1200}?\bpromptSection\b/.test(src)],
       // R3：外部链路不再拼前缀
       ['R3 外部引擎不再拼 promptPrefix', write('R3.js',
@@ -162,9 +174,10 @@ function reverseChecks() {
         chatSrc.replace(/promptSection:\s*userPromptSection\s*,/, '')),
         (src) => /promptSection:\s*userPromptSection/.test(src)],
       // R6：全局键没解构（漏进项目配置）
+      // 注入必须真的删掉那一项，否则源码没变、判据恒 false → 反向验证空转
       ['R6 agentDefaultPrompt 不在解构名单里', write('R6.js',
-        configSrc.replace('agentPresetPrompts, agentDefaultPrompt,', 'agentPresetPrompts,')),
-        (src) => /agentPresetPrompts,\s*agentDefaultPrompt,/.test(src)],
+        configSrc.replace(/(const\s*\{[\s\S]{0,600}?)\bagentDefaultPrompt\s*,\s*/, '$1')),
+        (src) => RE_DESTRUCTURES_AGENT_DEFAULT_PROMPT.test(src)],
       // R7：面板改成只存本地（不再调接口）
       ['R7 面板不再调 saveAiSettings', write('R7.js',
         panelSrc.replace(/saveAiSettings\(\{\s*agentDefaultPrompt/, 'noop(')),

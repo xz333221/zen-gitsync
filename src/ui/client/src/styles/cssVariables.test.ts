@@ -25,7 +25,7 @@
 // 那种需要真的跑一遍 CSS 求值才能判，成本不划算。
 
 import { describe, expect, test } from 'vitest'
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join, resolve, dirname, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
