@@ -1208,11 +1208,26 @@ export function registerConfigRoutes({
         return res.status(400).json({ success: false, error: '缺少 models 参数' })
       }
       const rawConfig = await configManager.readRawConfigFile()
+      // 改之前先记下"谁是默认"，写完比对一次 —— 见下面的日志说明
+      const prevDefault = (Array.isArray(rawConfig.models) ? rawConfig.models : [])
+        .find(m => m && m.isDefault) || null
       rawConfig.models = models
       // 清空 = 明确的"不要再给我内置默认模型"，记一笔（读取侧见 src/config.js 的
       // resolveModels）。不记的话删光重启又长回来，等于删不掉。
       if (models.length === 0) rawConfig.modelsSeeded = true
       await configManager.writeRawConfigFile(rawConfig)
+      // 默认模型换了就落一行日志。这是**事后唯一可追溯的凭据**：用户报
+      // "我的默认模型被自动换掉了"时，只有这里能回答"什么时候、换成了谁"。
+      // 换默认目前只有设置页那个按钮一条路（列表为空时新增第一条会自动当默认），
+      // 但少了这行日志，任何一次改动在事后都无从对账（2026-11-02 用户报障时
+      // 只能靠翻 config.json 的历史备份才看出是哪个字段被改了）。
+      const nextDefault = models.find(m => m && m.isDefault) || null
+      if ((prevDefault?.id || '') !== (nextDefault?.id || '')) {
+        logger.info(
+          `[config] 默认模型: ${prevDefault ? modelLabel(prevDefault) : '（未设置）'}`
+          + ` → ${nextDefault ? modelLabel(nextDefault) : '（未设置）'}`
+        )
+      }
       res.json({ success: true })
     } catch (error) {
       res.status(500).json({ success: false, error: error.message })

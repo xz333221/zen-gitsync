@@ -769,7 +769,7 @@ function isJsonParseError(err) {
  * 从原始配置里定出「当前该用哪份模型列表」。
  *
  * 三种输入，三种结论：
- *   · 有内容              → 原样用
+ *   · 有内容              → 原样用（内容不变，但返回的是副本，见 cloneModelList）
  *   · 空数组 / 根本不是数组 → 回落内置默认（新装、配置文件里压根没写过这个键、
  *                            手改坏了都走这条）
  *   · 空数组 + 已标记      → 尊重"空"：用户主动在设置里删光了，别把默认塞回来
@@ -788,9 +788,27 @@ function isJsonParseError(err) {
  */
 function resolveModels(raw) {
   const list = Array.isArray(raw?.models) ? raw.models : null;
-  if (list && list.length) return list;
+  if (list && list.length) return cloneModelList(list);
   if (raw?.modelsSeeded === true) return [];
-  return defaultConfig.models;
+  return cloneModelList(defaultConfig.models);
+}
+
+/**
+ * 返回模型列表的**副本**（数组 + 每条模型对象各一份浅拷贝）。
+ *
+ * 为什么非复制不可：`defaultConfig.models` 是模块级的唯一一份数组，`raw.models`
+ * 又是读缓存里那个对象的同一个数组。直接返回引用，任何调用方在原地 push /
+ * 改 isDefault 都会污染**整个进程内所有后续读取** —— 2026-11-02 实测：空配置下
+ * `loadConfig()` 拿到内置默认后 push 一条，下一次 `loadConfig()` 里就凭空多一条，
+ * 再被某次 `saveConfig()` 顺手写盘，用户配置里就长出一条"没人配过"的模型。
+ * 而这类写入是静默的，事后只能靠翻备份才看出默认模型被谁换了。
+ *
+ * 浅拷贝够用：模型条目是扁平结构（id/name/baseURL/model/apiKey/isDefault），
+ * 没有嵌套对象；每次 loadConfig 拷几个小对象，开销可以忽略。
+ */
+function cloneModelList(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map(m => (m && typeof m === 'object' ? { ...m } : m));
 }
 
 // 异步读取配置文件

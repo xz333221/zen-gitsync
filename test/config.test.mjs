@@ -574,6 +574,47 @@ test('loadConfig: 用户自己的模型原样保留,不被内置默认顶掉', a
   assert.deepEqual(cfg.models, mine)
 })
 
+// 副本契约(2026-11-02)：这两个用例钉的是"读配置不带副作用"。
+//
+// 背景:resolveModels 以前直接返回 defaultConfig.models / raw.models 的引用,
+// 而 agent.js 的 /addmodel 就是 `const models = cfg.models; models.push(newModel)`。
+// 空配置下这一 push 会把内置 agnes 一起带进下一次读取,再被 saveConfig 顺手写盘 ——
+// 用户配置里凭空长出一条"没人配过"的模型,默认模型也跟着变了,事后只能翻备份对账。
+test('loadConfig: 内置默认返回副本,push 与改字段都不影响下一次读取', async () => {
+  await writeRawConfig({ projects: {} })
+
+  const first = await loadConfig()
+  assert.equal(first.models.length, 1)
+  first.models.push({ id: 'ghost', name: '凭空多出来的', baseURL: 'https://x/v1', model: 'x', apiKey: 'k', isDefault: false })
+  first.models[0].name = '被就地改掉'
+  first.models[0].isDefault = false
+
+  const second = await loadConfig()
+  assert.equal(second.models.length, 1, '下一次读取不能看到上一位调用方 push 的条目')
+  assert.equal(second.models[0].name, 'agnes-3.0-flash', '内置默认的名字不能被就地改掉')
+  assert.equal(second.models[0].isDefault, true, '默认标记不能被就地清掉')
+})
+
+test('loadConfig: 用户模型同样返回副本,原地改不会污染读缓存', async () => {
+  await writeRawConfig({
+    projects: {},
+    models: [
+      { id: 'm1', name: 'mine', baseURL: 'https://x/v1', model: 'x', apiKey: 'k', isDefault: true },
+      { id: 'm2', name: 'other', baseURL: 'https://y/v1', model: 'y', apiKey: 'k2', isDefault: false }
+    ]
+  })
+
+  const first = await loadConfig()
+  first.models[0].isDefault = false
+  first.models[1].isDefault = true
+  first.models.push({ id: 'm3', name: 'extra', baseURL: 'https://z/v1', model: 'z', apiKey: 'k3', isDefault: false })
+
+  const second = await loadConfig()
+  assert.equal(second.models.length, 2, 'push 不该写回读缓存')
+  assert.equal(second.models[0].isDefault, true, '默认标记仍是磁盘上那条')
+  assert.equal(second.models[1].isDefault, false)
+})
+
 test('saveConfig: 清空模型会落 modelsSeeded 标记,重启后不会长回来', async () => {
   await writeRawConfig({
     projects: {},
