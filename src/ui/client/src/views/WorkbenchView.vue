@@ -48,6 +48,7 @@ import type { BoardTask, Task } from '@/types/workbench'
 import { useWorkbenchAttachments, ALLOWED_EXT_HINT, MAX_ATTACHMENT_BYTES } from '@/composables/useWorkbenchAttachments'
 import { useWorkbenchSimpleConversation } from '@/composables/useWorkbenchSimpleConversation'
 import { buildTaskExecutionText, type TaskExecutionScope } from '@/utils/taskExecutionExport'
+import { copyTextToClipboard } from '@/utils/clipboard'
 import { useWorkbenchExecution } from '@/composables/useWorkbenchExecution'
 import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection'
 import { TASK_EXECUTOR_OPTIONS, taskExecutorName, isTaskExecutorId, type TaskExecutorId } from '@/utils/taskExecutor'
@@ -529,29 +530,6 @@ function onBeforeUnloadPersist() {
 // 用户手动收起时这个 ref 只在本组件存活期内有效，不落盘 —— 下次进来仍是展开态。
 const taskDescExpanded = ref(true)
 
-/** 复制文本到剪贴板，失败时降级到 textarea + execCommand。 */
-async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text)
-      return true
-    }
-  } catch { /* 降级 */ }
-  try {
-    const ta = document.createElement('textarea')
-    ta.value = text
-    ta.style.position = 'fixed'
-    ta.style.left = '-9999px'
-    document.body.appendChild(ta)
-    ta.select()
-    const ok = document.execCommand('copy')
-    document.body.removeChild(ta)
-    return ok
-  } catch {
-    return false
-  }
-}
-
 /**
  * 复制任务标题/描述的小工具：
  * - 复制成功 → 短暂切换 icon 为 ✓（1.5s 后还原），并在 1.5s 内显示已复制提示
@@ -564,7 +542,7 @@ const copyDescFlashId = ref<string | null>(null)
 async function copyTaskTitle(t: Task | null) {
   if (!t) return
   const text = (t.title || '').trim() || $t('@WORKBENCH:未命名任务')
-  const ok = await copyToClipboard(text)
+  const ok = await copyTextToClipboard(text)
   if (!ok) {
     ElMessage.error($t('@WORKBENCH:复制失败'))
     return
@@ -583,7 +561,7 @@ async function copyTaskDesc(t: Task | null) {
     ElMessage.warning($t('@WORKBENCH:任务描述为空,无需复制'))
     return
   }
-  const ok = await copyToClipboard(text)
+  const ok = await copyTextToClipboard(text)
   if (!ok) {
     ElMessage.error($t('@WORKBENCH:复制失败'))
     return
@@ -662,7 +640,7 @@ async function copyTaskExecution(t: Task | null, scope: TaskExecutionScope = 'br
     ElMessage.warning($t('@WORKBENCH:暂无执行内容可复制'))
     return
   }
-  const ok = await copyToClipboard(text)
+  const ok = await copyTextToClipboard(text)
   if (!ok) {
     ElMessage.error($t('@WORKBENCH:复制失败'))
     return

@@ -34,6 +34,7 @@ import { PREVIEW_IFRAME_SANDBOX, injectHtmlPreviewShims } from '@/utils/previewS
 import { isOfficeFile } from '@/utils/officeFile'
 import { MEDIA_EXTS } from '@/utils/fileKind'
 import { prepareHtml, prepareRichText } from '@/utils/markdownClipboard'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 // 配置 Monaco web worker(避免回退到主线程导致 UI 卡顿)
 // 使用 Vite 的 ?worker 语法为 Monaco 创建 web worker
@@ -1483,34 +1484,11 @@ function toWorkspaceRelative(absPath: string): string {
   return p
 }
 
-async function copyToClipboard(text: string) {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text)
-      return true
-    }
-  } catch { /* fall through to legacy */ }
-  // Fallback:临时 textarea + execCommand
-  try {
-    const ta = document.createElement('textarea')
-    ta.value = text
-    ta.style.position = 'fixed'
-    ta.style.left = '-9999px'
-    document.body.appendChild(ta)
-    ta.select()
-    const ok = document.execCommand('copy')
-    document.body.removeChild(ta)
-    return ok
-  } catch {
-    return false
-  }
-}
-
 async function ctxCopyAbsolutePath() {
   const node = ctxMenu.value?.node
   closeContextMenu()
   if (!node) return
-  const ok = await copyToClipboard(node.path)
+  const ok = await copyTextToClipboard(node.path)
   if (ok) ElMessage.success($t('@EDITOR:已复制到剪贴板'))
   else ElMessage.error($t('@EDITOR:复制失败'))
 }
@@ -1520,7 +1498,7 @@ async function ctxCopyRelativePath() {
   closeContextMenu()
   if (!node) return
   const rel = toWorkspaceRelative(node.path)
-  const ok = await copyToClipboard(rel)
+  const ok = await copyTextToClipboard(rel)
   if (ok) ElMessage.success($t('@EDITOR:已复制到剪贴板'))
   else ElMessage.error($t('@EDITOR:复制失败'))
 }
@@ -1679,7 +1657,7 @@ function mdCopyFeedback(ok: boolean, leftover: number, type: 'md' | 'html' | 'ri
 }
 
 async function copyMarkdownSource() {
-  const ok = await copyToClipboard(mdSourceText())
+  const ok = await copyTextToClipboard(mdSourceText())
   mdCopyFeedback(ok, 0, 'md')
 }
 
@@ -1689,7 +1667,7 @@ async function copyRenderedHtml() {
   mdCopyBusy.value = true
   try {
     const { html, leftover } = await prepareHtml(root, mdCopyInlineImages.value)
-    const ok = await copyToClipboard(html)
+    const ok = await copyTextToClipboard(html)
     mdCopyFeedback(ok, leftover, 'html')
   } finally {
     mdCopyBusy.value = false

@@ -25,6 +25,7 @@ import type { ChatMessage } from 'zen-ai-chat-ui'
 import { $t } from '@/lang/static'
 import { AGENT_ASSISTANT_NAME } from '@/utils/agentConversations'
 import { buildAgentSessionText, type AgentSessionScope } from '@/utils/agentSessionExport'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 const props = defineProps<{
   /** 当前会话的消息（useAgentChat 的 messages） */
@@ -47,29 +48,6 @@ onBeforeUnmount(() => {
  * 与 JobLogDetails / WorkbenchView 里那两份同源 —— 局域网 IP 访问时页面不是安全上下文，
  * 只有前者会静默失败。
  */
-async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    if (navigator?.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text)
-      return true
-    }
-  } catch { /* 权限拒绝 / 非安全上下文 → 走 textarea 兜底 */ }
-  try {
-    const ta = document.createElement('textarea')
-    ta.value = text
-    ta.style.position = 'fixed'
-    ta.style.opacity = '0'
-    ta.style.left = '-9999px'
-    document.body.appendChild(ta)
-    ta.select()
-    const ok = document.execCommand('copy')
-    document.body.removeChild(ta)
-    return ok
-  } catch {
-    return false
-  }
-}
-
 async function doCopy(scope: AgentSessionScope) {
   const text = buildAgentSessionText(
     props.messages || [],
@@ -82,7 +60,7 @@ async function doCopy(scope: AgentSessionScope) {
     ElMessage.warning($t('@AGENT:暂无会话内容可复制'))
     return
   }
-  const ok = await copyToClipboard(text)
+  const ok = await copyTextToClipboard(text)
   if (!ok) {
     ElMessage.error($t('@AGENT:复制失败'))
     return

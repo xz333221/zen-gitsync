@@ -144,6 +144,7 @@ import { userFacingPrompt } from '@/utils/jobUserPrompt'
 import { resolveLocalImages } from '@/utils/localImageSrc'
 import { $t } from '@/lang/static'
 import { agentFileChangeLabels } from '@/utils/agentConversations'
+import { copyTextToClipboard } from '@/utils/clipboard'
 import CommonDialog from '@/components/CommonDialog.vue'
 import type { Job, JobStatus } from '@/types/workbench'
 import { useConfigStore } from '@/stores/configStore'
@@ -194,29 +195,6 @@ function displayThinking(): string {
   return `${$t('@WORKBENCH:…（前文已截断）')}\n${raw.slice(-MAX_LOG_DISPLAY)}`
 }
 
-async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    if (navigator?.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text)
-      return true
-    }
-  } catch { /* 权限拒绝 / 非安全上下文 → 走 textarea 兜底 */ }
-  try {
-    const ta = document.createElement('textarea')
-    ta.value = text
-    ta.style.position = 'fixed'
-    ta.style.opacity = '0'
-    ta.style.left = '-9999px'
-    document.body.appendChild(ta)
-    ta.select()
-    const ok = document.execCommand('copy')
-    document.body.removeChild(ta)
-    return ok
-  } catch {
-    return false
-  }
-}
-
 async function copyAll() {
   const sections: string[] = []
   if (props.job.prompt) sections.push(`## ${$t('@WORKBENCH:用户提示词')}\n\n${props.job.prompt}`)
@@ -226,7 +204,7 @@ async function copyAll() {
     ElMessage.warning($t('@WORKBENCH:暂无内容可复制'))
     return
   }
-  const ok = await copyToClipboard(sections.join('\n\n---\n\n'))
+  const ok = await copyTextToClipboard(sections.join('\n\n---\n\n'))
   if (ok) ElMessage.success($t('@WORKBENCH:已复制到剪贴板'))
   else ElMessage.error($t('@WORKBENCH:复制失败'))
 }
