@@ -38,7 +38,12 @@ import { createWorkspaceSnapshotter } from '../aiContext/wiring.js';
 import { resolveChatPromptSection, buildDispatchPolicySection } from './chatPrompts.js';
 // 「同一会话同一时刻只允许一个生成中的轮次」的闸，与定时任务调度器共享
 // （见 sessionGate.js —— 拆出去是为了让调度器复用同一份判定口径）。
-import { isSessionBusy, acquireSession, releaseSession } from './sessionGate.js';
+import {
+  acquireSessionTurn,
+  getSessionTurn,
+  releaseSession,
+  requestSessionAbort,
+} from './sessionGate.js';
 import { createScheduler } from './scheduler.js';
 import { registerScheduleRoutes } from './scheduleRoutes.js';
 import { normalizeItems, filterToRecentDirs, buildDirStatusBlock } from '../recentDirectoriesAiSummary.js';
@@ -58,6 +63,12 @@ import { recordTurnTiming } from '../../../../cli/ai/sessionStore.js';
 import { resolveModels } from '../../../../config.js';
 
 const { genSessionId, autoTitle, read: readSession, write: writeSession, delete: deleteSession, listMeta: listSessionsMeta, enforceRetention, rename: renameSession } = agentSessionStore;
+
+// 轮次内"检查点落盘"的节流间隔。
+// 为什么不是每个 token 写一次：一轮几千个增量，磁盘会被当成缓冲区用；
+// 为什么不是只在结束时写：进程崩一次整轮就没了。2 秒是这两者之间的折中 ——
+// 最坏丢 2 秒、正常一轮多几十次原子写。想看实时进度走 SSE，落盘只负责"别丢"。
+const CHECKPOINT_MS = 2000;
 
 // 项目路径规范化：Windows 路径大小写不敏感，POSIX 路径保留大小写语义。
 function normalizeCwd(p) {
@@ -434,6 +445,28 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
   });
 
   // ════════════════════════════════════════════════════════════════════════
+  // §4.5 停止当前这一轮
+  // ════════════════════════════════════════════════════════════════════════
+  //
+  // 为什么需要一条独立路由：点「停止」原先只做前端 `abortController.abort()`
+  // （useAgentChat.stop），服务端唯一的感知是 `req.socket` 的 close 事件。
+  // 走 dev 态的 vite 代理时那段 close 不一定传到后端，生产态浏览器也可能只是
+  // 停止读取而没有立刻关连接 —— 于是"用户已经点停止，服务端还在跑，闸一直占着，
+  // 再发就撞『该会话正在生成中』"。停止必须是**显式**的一条请求，不能靠连接语义猜。
+  //
+  // 回执语义：
+  //   hit=false  → 本来就没在跑，闸是空的，前端可以立刻重发
+  //   hit=true   → 已掐断，但**不立即放闸**（那一轮还在写会话快照）。宽限期内
+  //                它自己退出就由它的 finally 放；超时未退会被标记 abandoned 后
+  //                强制放闸（见 sessionGate.requestSessionAbort）。
+  app.post('/api/agent/abort', async (req, res) => {
+    const sessionId = String(req.body?.sessionId || '').trim();
+    if (!sessionId) return res.status(400).json({ success: false, error: '缺少 sessionId' });
+    const result = requestSessionAbort(sessionId);
+    return res.json({ success: true, sessionId, ...result });
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
   // §5. SSE 流式聊天（含工具调用循环）
   // ════════════════════════════════════════════════════════════════════════
   app.post('/api/agent/chat', async (req, res) => {
@@ -503,15 +536,59 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
     const abortController = new AbortController();
     let finished = false;
     let activeChild = null;
+    // 轮次内的检查点落盘（见下面 session 确定后的那段定义；这里先声明，
+    // 是为了让 finally 在任何退出路径上都能停掉定时器并做最后一次兜底写盘）
+    let checkpointTimer = null;
+    let flushSession = null;
+    let finalPersisted = false;
+
+    // 掐断这一轮的唯一动作。两个触发源共用它：
+    //   · 客户端断开（socket close，见下面那段）
+    //   · 用户点「停止」发来的 POST /api/agent/abort
+    // 第二条是 2026-11-03 补的 —— 只靠 socket close 太看运气（vite 代理下不一定
+    // 传得下来），停止必须是显式请求才靠得住。
+    // 子进程补一刀 SIGKILL：外部 CLI（claude/codex）常带孙进程，SIGTERM 未必理，
+    // 而这一轮卡在子进程上时，闸就跟着一起卡住。
+    const abortTurn = () => {
+      abortController.abort();
+      const child = activeChild;
+      if (!child) return;
+      try { child.kill('SIGTERM'); } catch {}
+      const killTimer = setTimeout(() => {
+        try { child.kill('SIGKILL'); } catch {}
+      }, 3000);
+      killTimer.unref?.();
+    };
 
     // 同一会话同一时刻只允许一个进行中的生成：跨视图（对话 Tab / 文件空间面板）
     // 或前端连点都靠这道闸挡住，否则两个流各自的会话快照会互相覆盖。
-    if (sessionIdInput && isSessionBusy(sessionIdInput)) {
-      send({ type: 'error', error: '该会话正在生成中，请等它结束后再发送' });
-      finished = true;
-      return res.end();
-    }
+    //
+    // 2026-11-03：占用从"读完会话再 acquire"提前到这里，并带上 token 与 abort 通道。
+    // 原先是这里查一次、读完会话再 acquire，中间隔着 await readSession —— 两个并发
+    // 请求都能穿过检查，第二个 acquire 返回 false 还被忽略，于是两轮同跑、先结束的
+    // release 把闸提前放空。现在查与占是同一个原子调用，被占用时把占用时长回给前端，
+    // 界面才能说清"上一轮还在收尾（已 12s）"而不是笼统一句"正在生成中"。
     let activeSessionKey = null;
+    let acquiredTurn = null;
+    if (sessionIdInput) {
+      acquiredTurn = acquireSessionTurn(sessionIdInput, {
+        abort: abortTurn,
+        stage: 'preparing',
+      });
+      if (!acquiredTurn) {
+        const holder = getSessionTurn(sessionIdInput);
+        send({
+          type: 'error',
+          code: 'SESSION_BUSY',
+          error: '该会话正在生成中，请等它结束后再发送',
+          busyMs: holder ? Date.now() - holder.startedAt : null,
+          stage: holder?.stage || '',
+        });
+        finished = true;
+        return res.end();
+      }
+      activeSessionKey = sessionIdInput;
+    }
 
     // 心跳只在真的开跑这一轮之后起（上面那条 busy 短路不需要它，也不该背一个 interval）。
     // 出口统一在 finally 里 clearInterval —— 中间那些 return res.end() 全在 try 里，
@@ -523,12 +600,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
     // 客户端断开
     if (req.socket) {
       req.socket.once('close', () => {
-        if (!finished) {
-          abortController.abort();
-          if (activeChild) {
-            try { activeChild.kill('SIGTERM'); } catch {}
-          }
-        }
+        if (!finished) abortTurn();
       });
     }
 
@@ -604,9 +676,73 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
         isNew = true;
       }
 
-      // 本轮占用该会话（finally 里释放）
-      activeSessionKey = session.sessionId;
-      acquireSession(activeSessionKey);
+      // 本轮占用该会话（finally 里释放）。
+      // 已有会话在请求入口就占了（上面那段）；这里只补"新建会话"的情况 ——
+      // sessionId 是刚生成的，入口时还不存在，没法提前占。
+      if (!acquiredTurn) {
+        acquiredTurn = acquireSessionTurn(session.sessionId, {
+          abort: abortTurn,
+          stage: 'preparing',
+        });
+        if (!acquiredTurn) {
+          send({ type: 'error', code: 'SESSION_BUSY', error: '该会话正在生成中，请等它结束后再发送' });
+          finished = true;
+          return res.end();
+        }
+        activeSessionKey = session.sessionId;
+      }
+
+      // ── 轮次内检查点落盘 ──────────────────────────────────────
+      //
+      // 原先整轮只在最后写一次盘，代价是：跑到一半后端重启 / 进程崩掉，这一轮的
+      // 内容全丢，磁盘上甚至没有这个会话（左栏随之留下一条点开就 404 的幽灵，
+      // 见上面预落盘那段）。用户的原话是"这个不能随时写入么"——能，但不能按
+      // 增量写：一轮几千个 token，等于把磁盘当缓冲区用。
+      //
+      // 折中是按 CHECKPOINT_MS 节流：崩了最多丢这两秒，正常一轮多几十次原子写
+      // （一次 100~200KB，SSD 上几毫秒）。想看实时进度请走 SSE，这里只负责"别丢"。
+      //
+      // 写必须串行：同一份文件两次 rename 交错时，慢的那次会把新内容盖回旧的。
+      // 用一个单槽队列：正在写的时候又要求写，就合并进"下一份"（写的时候取的是
+      // session 引用，序列化发生在真正落笔那一刻，天然是最新内容）。
+      // 积压上限 1 —— 磁盘卡住时不能让队列无限长。
+      let persistChain = Promise.resolve();
+      let persistBacklog = 0;
+      let lastPersistError = null;
+      // force=true 用于"这一轮结束了，必须把最终版写下去"：此时不能被合并掉，
+      // 否则在写队列正忙时可能只写进去一份更早的快照，最终内容反而丢了。
+      flushSession = (opts = {}) => {
+        if (!opts.force && persistBacklog >= 1) return persistChain;
+        persistBacklog += 1;
+        persistChain = persistChain.then(async () => {
+          try {
+            session.updatedAt = nowIso();
+            await writeSession(session.sessionId, session);
+            lastPersistError = null;
+          } catch (err) {
+            // 由下面的定时器统一记一条，避免磁盘异常时每 2 秒刷一行日志
+            lastPersistError = err;
+          } finally {
+            persistBacklog -= 1;
+          }
+        });
+        return persistChain;
+      };
+
+      // 脏检查只看"条数 + 末条长度"：工具循环里正文增量只动最后这一条，
+      // 每 2 秒算一次这两个数的代价可以忽略，比整份 JSON.stringify 便宜得多。
+      let checkpointSig = '';
+      checkpointTimer = setInterval(() => {
+        if (lastPersistError) {
+          logger.warn(`[agent] 检查点落盘失败(本轮继续): ${lastPersistError?.message || lastPersistError}`);
+          lastPersistError = null;
+        }
+        const last = session.messages[session.messages.length - 1];
+        const sig = `${session.messages.length}:${typeof last?.content === 'string' ? last.content.length : 0}`;
+        if (sig === checkpointSig) return;
+        checkpointSig = sig;
+        flushSession();
+      }, CHECKPOINT_MS);
 
       // 附件落盘（拿到绝对路径后再把路径交给模型）。落盘失败不该拖垮整轮对话：
       // 拿不到路径最多是模型看不到附件，用户仍能正常对话。
@@ -708,6 +844,25 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
         isNew,
         title: isNew ? autoTitle([{ role: 'user', content: userMessage }]) : session.title
       });
+
+      // 新会话先落一次盘（草稿）。
+      //
+      // 写盘原先只发生在轮次结束（见下面 writeSession 那段），于是第一轮跑到一半
+      // 后端重启 / 进程崩掉时，这条会话在磁盘上从来没存在过 —— 而前端左栏已经按
+      // meta 把它显示了（还会因为「点过停止」把它记进 pendingPersistIds 一直保留），
+      // 结果就是一条点开必报「会话不存在」的幽灵条目。
+      // 2026-11-03 实测：ag-mvzh17c0-kb8ihnqm 在 hub.log 里连刷四次 404。
+      // 这里先落一份空壳，最坏情况是"打开只有这条 user 消息"，至少不是一个死链。
+      // 失败不拖垮本轮：这一轮照常跑，最坏情况退回原来的行为。
+      if (isNew) {
+        try {
+          session.title = autoTitle([{ role: 'user', content: userMessage }]);
+          session.updatedAt = nowIso();
+          await writeSession(session.sessionId, session);
+        } catch (err) {
+          logger.warn(`[agent] 新会话预落盘失败(本轮继续): ${err?.message || err}`);
+        }
+      }
 
       // dispatch_task 的注入闸门：**只有右下角 g ai 悬浮面板（AgentView）发起的对话**
       // 才有派发能力（前端在请求体里带 allowDispatch: true）。
@@ -856,8 +1011,19 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
 
       // 持久化。中止(用户点"停止")的轮次同样要落盘 —— 磁盘上没有这条会话时，
       // 前端停止后立刻刷新列表会把左栏这一条整个吞掉（表现为"一停止任务就没了"）。
-      session.updatedAt = nowIso();
-      await writeSession(session.sessionId, session);
+      //
+      // 例外：被宽限兜底放弃的轮次不落盘。那种情况说明点了停止之后这一轮 3 秒都没
+      // 退出（卡在不响应 signal 的 await 上），闸已经被强制放给新一轮了 —— 这里再写
+      // 一次只会把新一轮的快照覆盖掉。它也没有读者：前端流早断了，内存里那份 session
+      // 对象随本轮结束一起消失。
+      if (acquiredTurn?.abandoned) {
+        logger.warn(`[agent] 轮次停止超时未退出，已放弃并跳过落盘: ${session.sessionId}`);
+      } else {
+        // 走同一个串行队列：检查点可能还在写，这里排队等它写完再落最终版，
+        // 否则两次 rename 交错会把最终内容盖回旧的。
+        await flushSession({ force: true });
+        finalPersisted = true;
+      }
       enforceRetention().catch(() => {});
 
       finished = true;
@@ -868,7 +1034,16 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
       res.end();
     } finally {
       clearInterval(heartbeat);
-      if (activeSessionKey) releaseSession(activeSessionKey);
+      if (checkpointTimer) clearInterval(checkpointTimer);
+      // 异常 / 中止路径也保住内容：原先 catch 里完全没有 writeSession，
+      // 一轮跑到一半出错（模型报错、工具崩、外部 CLI 退出）就等于整轮蒸发。
+      // 正常路径已经写过，用 finalPersisted 跳过，避免同一份内容写两遍。
+      if (flushSession && !finalPersisted && !acquiredTurn?.abandoned) {
+        await flushSession({ force: true });
+      }
+      // 带 token 释放：闸可能已被宽限兜底放给了新一轮，那一次释放必须无效，
+      // 否则会把别人的占用一起删掉（原先是无主 release，正好漏这一下）。
+      if (activeSessionKey) releaseSession(activeSessionKey, acquiredTurn?.token);
     }
   });
 

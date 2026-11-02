@@ -889,6 +889,18 @@ export function useAgentChat() {
     if (s) s.isGenerating = false
   }
 
+  // ── 清掉一条只活在左栏的会话（服务端磁盘上没有） ──────────────
+  // 四处状态一起清：待落盘标记 / 固定条目 / 运行态 / 列表。
+  // 漏掉 pendingPersistIds 的话，下一次 mergeGeneratingSessions 又会把它补回来，
+  // 用户会看到"清了又出现"。
+  function dropGhostSession(sessionId: string) {
+    pendingPersistIds.delete(sessionId)
+    pinnedSessions.delete(sessionId)
+    runs.delete(sessionId)
+    sessions.value = sessions.value.filter(s => s.sessionId !== sessionId)
+    if (currentSessionId.value === sessionId) currentSessionId.value = null
+  }
+
   // ── 加载会话详情 ────────────────────────────────────────
   async function loadSession(sessionId: string) {
     // 该会话正在后台流式：直接挂载它的实时缓冲，别用磁盘(尚未落盘)内容覆盖
@@ -900,8 +912,15 @@ export function useAgentChat() {
     sessionLoading.value = true
     currentSessionId.value = sessionId
     try {
-      const res = await fetch(`/api/agent/sessions/${encodeURIComponent(sessionId)}`).then(r => r.json())
+      const resp = await fetch(`/api/agent/sessions/${encodeURIComponent(sessionId)}`)
+      const res = await resp.json()
       if (!res.success) {
+        // 404 = 这条只活在左栏。典型成因：新会话第一轮还没跑完后端就重启了 ——
+        // 旧版写盘只发生在轮次结束，文件从没生成，而前端"点过停止"会把它记进
+        // pendingPersistIds 一直补在列表里，于是变成点开必报错的死链。
+        // 服务端已改成新会话先落一次盘（agentRoutes 的预落盘），这里的清理是兜底：
+        // 老数据 / 极端情况（落盘本身失败）不会再留一条打不开的条目。
+        if (resp.status === 404) dropGhostSession(sessionId)
         ElMessage.error(res.error || $t('@AGENT:加载会话失败'))
         return
       }
@@ -1644,11 +1663,30 @@ export function useAgentChat() {
   }
 
   // ── 停止生成（只中止当前激活会话的流，其它后台会话不受影响） ──
+  //
+  // 本地 abort 只掐断"读流"，服务端那一轮其实不知情 —— 它唯一的感知是 socket 的
+  // close 事件，走 dev 态 vite 代理时那段不一定传得下去。于是会出现"点了停止、
+  // 界面已经显示已停止，再发却撞『该会话正在生成中』"：闸还被上一轮占着。
+  // 这里补一条显式通知，让服务端真正 abort 这一轮并释放闸。
+  //
+  // 不 await、不看结果：停止按下去就该立刻生效，不能因为这条请求慢半拍让界面
+  // 卡在"生成中"。keepalive 保证刷新/切走时也能发出去（服务端另有 3s 宽限兜底，
+  // 见 sessionGate.requestSessionAbort）。
   function stop() {
     const run = activeRun.value
-    if (run?.abortController) {
+    if (!run) return
+    const sessionId = run.sessionId
+    if (run.abortController) {
       run.abortController.abort()
       run.abortController = null
+    }
+    if (sessionId) {
+      fetch('/api/agent/abort', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+        keepalive: true,
+      }).catch(() => {})
     }
   }
 
