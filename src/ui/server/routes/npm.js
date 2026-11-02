@@ -22,6 +22,8 @@ import { exec, spawn } from 'child_process';
 import https from 'https';
 import { fileURLToPath } from 'url';
 import { getRegistryPath } from '../utils/instanceRegistry.js';
+// 目录剪枝清单与 AI 侧共用一份；这里保留原名 IGNORED_DIRS，两处使用点不必改
+import { SCAN_IGNORED_DIRS as IGNORED_DIRS } from '../../../utils/skipPatterns.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -795,28 +797,7 @@ export function registerNpmRoutes({
       const startTime = Date.now();
       
       
-      // 需要忽略的目录列表（更全面）
-      const IGNORED_DIRS = new Set([
-        'node_modules',
-        '.git',
-        '.svn',
-        '.hg',
-        'dist',
-        'build',
-        'coverage',
-        'out',
-        'target',
-        'vendor',
-        '__pycache__',
-        '.next',
-        '.nuxt',
-        '.vscode',
-        '.idea',
-        'tmp',
-        'temp',
-        'cache',
-        '.cache'
-      ]);
+      // 目录剪枝清单见 src/utils/skipPatterns.js（与另一处扫描共用）
       
       // 优先扫描的子目录（monorepo常见结构）
       const PRIORITY_DIRS = ['packages', 'apps', 'libs', 'services', 'modules'];
@@ -1016,28 +997,7 @@ export function registerNpmRoutes({
       const packageFiles = [];
       const startTime = Date.now();
       
-      // 需要忽略的目录列表
-      const IGNORED_DIRS = new Set([
-        'node_modules',
-        '.git',
-        '.svn',
-        '.hg',
-        'dist',
-        'build',
-        'coverage',
-        'out',
-        'target',
-        'vendor',
-        '__pycache__',
-        '.next',
-        '.nuxt',
-        '.vscode',
-        '.idea',
-        'tmp',
-        'temp',
-        'cache',
-        '.cache'
-      ]);
+      // 目录剪枝清单见 src/utils/skipPatterns.js（与另一处扫描共用）
       
       let scannedCount = 0;
       let fileReadCount = 0;

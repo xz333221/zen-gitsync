@@ -28,28 +28,8 @@ import { buildModelFallbackChain, modelLabel, runWithModelFallback } from '../..
 // 请求预算的解析公式住在 cli/ai/context.js —— 前端拿"解析后的三参数"做超长输入
 // 预警时，服务端下发同一份解析结果，不在前端重算（口径只有一处）。
 import { resolveRequestBudget } from '../../../cli/ai/context.js';
-
-// 跳过的产物/资源/lock 文件(用 stat 一行带过,不打 patch)
-const SKIP_FILE_PATTERNS = [
-  /(^|[\\/])dist[\\/]/,
-  /(^|[\\/])build[\\/]/,
-  /(^|[\\/])\.next[\\/]/,
-  /(^|[\\/])coverage[\\/]/,
-  /(^|[\\/])node_modules[\\/]/,
-  /\.lock$/,
-  /package-lock\.json$/,
-  /yarn\.lock$/,
-  /pnpm-lock\.yaml$/,
-  /min\.js$/,
-  /min\.css$/,
-  /\.bundle\.js$/,
-  /\.map$/,
-  /\.(png|jpe?g|gif|webp|svg|ico|bmp|tiff)$/,
-  /\.(mp4|mov|avi|mkv|webm)$/,
-  /\.(mp3|wav|ogg|flac)$/,
-  /\.(woff2?|ttf|otf|eot)$/,
-  /\.(pdf|zip|tar|gz|7z|rar)$/
-]
+// 产物/资源/lock 的跳过硬口径与 CLI 侧 aiCommit.js 共用一份（原来这里有一份逐字相同的副本）
+import { isSkippedFile } from '../../../utils/skipPatterns.js';
 
 // 文件优先级:数字越大越重要
 function filePriority(p) {
@@ -59,10 +39,6 @@ function filePriority(p) {
   if (/\.(css|scss|sass|less|html|vue|jsx|tsx)$/i.test(p)) return 4 // 前端
   if (/\.(ts|js|mjs|cjs)$/i.test(p)) return 5 // 后端/脚本
   return 3 // 其它(资源、未知)
-}
-
-function isSkippedFile(path) {
-  return SKIP_FILE_PATTERNS.some(re => re.test(path))
 }
 
 // 从 git diff 文本解析出 per-file 块

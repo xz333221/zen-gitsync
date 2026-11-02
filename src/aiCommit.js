@@ -21,34 +21,7 @@ import config from './config.js';
 import { execGitCommand } from './utils/index.js';
 import { buildAiChatRequest } from './utils/aiEndpoint.js';
 import { buildModelFallbackChain, modelLabel, runWithModelFallback } from './utils/aiModelFallback.js';
-
-// ──────────────────────────────────────────────
-// 跳过的产物/资源/lock 文件(与 GUI config.js SKIP_FILE_PATTERNS 一致)
-// ──────────────────────────────────────────────
-const SKIP_FILE_PATTERNS = [
-  /(^|[\\/])dist[\\/]/,
-  /(^|[\\/])build[\\/]/,
-  /(^|[\\/])\.next[\\/]/,
-  /(^|[\\/])coverage[\\/]/,
-  /(^|[\\/])node_modules[\\/]/,
-  /\.lock$/,
-  /package-lock\.json$/,
-  /yarn\.lock$/,
-  /pnpm-lock\.yaml$/,
-  /min\.js$/,
-  /min\.css$/,
-  /\.bundle\.js$/,
-  /\.map$/,
-  /\.(png|jpe?g|gif|webp|svg|ico|bmp|tiff)$/,
-  /\.(mp4|mov|avi|mkv|webm)$/,
-  /\.(mp3|wav|ogg|flac)$/,
-  /\.(woff2?|ttf|otf|eot)$/,
-  /\.(pdf|zip|tar|gz|7z|rar)$/
-];
-
-function isSkippedFile(filePath) {
-  return SKIP_FILE_PATTERNS.some(re => re.test(filePath));
-}
+import { isSkippedFile } from './utils/skipPatterns.js';
 
 // 文件优先级:数字越大越重要(与 GUI 一致)
 function filePriority(p) {
