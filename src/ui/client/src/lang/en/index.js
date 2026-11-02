@@ -47,7 +47,6 @@ export default {
   '@PEER:移除「{name}」？': 'Remove 「{name}」?',
   '@PEER:移除对端': 'Remove peer',
   '@PEER:已移除': 'Removed',
-  '@42BB9:跨机器': 'Cross-machine',
 
   // @F13B4: file path: App.vue
   '@F13B4:编辑项目配置': 'Edit project configuration',
@@ -2889,6 +2888,8 @@ export default {
   // @ACTBAR: file end (追加5)
 
   // @AGENT: file path: views/AgentView.vue
+  '@AGENT:跨机器': 'Cross-machine',
+  '@AGENT:配对之后，别的机器上的 g ai 就能问你；你也能在对话里让它去问对方。改完即刻生效。': 'Once paired, g ai on another machine can ask this one, and you can ask it from the chat. Changes apply immediately.',
   '@AGENT:新建会话': 'New Session',
   '@AGENT:搜索会话...': 'Search sessions...',
   '@AGENT:未找到匹配的会话': 'No matching sessions found',

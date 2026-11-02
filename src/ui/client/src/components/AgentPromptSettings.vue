@@ -29,6 +29,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { $t } from '@/lang/static'
+import PeerSettingsPanel from './PeerSettingsPanel.vue'
 import { ElMessage } from 'element-plus'
 import { useConfigStore } from '@/stores/configStore'
 import { useOrchestrator } from '@/composables/useOrchestrator'
@@ -235,6 +236,20 @@ async function saveDispatch() {
       <!-- 宿主追加的设置块（派发设置）。放在**同一个滚动容器**里：再开一个
            flex:1 的兄弟节点会在窄面板里各分一半高度、各滚各的。 -->
       <slot />
+
+      <!-- ── ③ 跨机器 ──
+           为什么在"智能体设置"里而不是全局设置：这是"另一个 g ai"的能力矩阵
+           （让不让别人问我 / 我能问谁），用户找它时想的是智能体，不是应用偏好。
+           面板本身自管读写（点保存即生效），所以这里不需要 footer。 -->
+      <section class="aps__card aps__card--peer">
+        <div class="aps__card-head">
+          <h4 class="aps__card-title">{{ $t('@AGENT:跨机器') }}</h4>
+        </div>
+        <p class="aps__hint">
+          {{ $t('@AGENT:配对之后，别的机器上的 g ai 就能问你；你也能在对话里让它去问对方。改完即刻生效。') }}
+        </p>
+        <PeerSettingsPanel />
+      </section>
     </div>
   </div>
 </template>

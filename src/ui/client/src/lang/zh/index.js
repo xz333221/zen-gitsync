@@ -47,7 +47,6 @@ export default {
   '@PEER:移除「{name}」？': '移除「{name}」？',
   '@PEER:移除对端': '移除对端',
   '@PEER:已移除': '已移除',
-  '@42BB9:跨机器': '跨机器',
 
   // @F13B4: file path: App.vue
   '@F13B4:编辑项目配置': '编辑项目配置',
@@ -2896,6 +2895,8 @@ export default {
   // @ACTBAR: file end (追加5)
 
   // @AGENT: file path: views/AgentView.vue
+  '@AGENT:跨机器': '跨机器',
+  '@AGENT:配对之后，别的机器上的 g ai 就能问你；你也能在对话里让它去问对方。改完即刻生效。': '配对之后，别的机器上的 g ai 就能问你；你也能在对话里让它去问对方。改完即刻生效。',
   '@AGENT:新建会话': '新建会话',
   '@AGENT:搜索会话...': '搜索会话...',
   '@AGENT:未找到匹配的会话': '未找到匹配的会话',
