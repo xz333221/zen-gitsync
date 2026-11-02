@@ -1292,10 +1292,16 @@ async function toolAskPeer(args, ctx) {
     }
     // 离线要带原因：只写"[离线]"的话模型只能转述"连不上"，用户还得自己猜是
     // 没开机、防火墙、还是令牌过期。client.listPeerStatus 已经把 error 带出来了。
+    //
+    // 在线要带**版本**：两台机器版本不一致时，症状往往长得像"对端配置有问题"
+    // （2026-11-02 实况：对端 2.19.3 内置默认模型只在设置页可见、运行期报
+    // "未配置 AI 模型"，看起来像那边没配模型，其实是旧版的已知缺陷）。
+    // 把版本摆在清单里，这类"配置猜谜"一秒就能看出来。
     return ['已登记的对端（在线状态为本次实时探测）：']
       .concat(peers.map((p, i) => {
         const stateText = p.online ? '[在线]' : `[离线${p.error ? `：${p.error}` : ''}]`
-        return `${i + 1}. ${p.name}  ${stateText}  ${p.url}  id=${p.id || '未知'}`
+        const version = peerVersionText(p)
+        return `${i + 1}. ${p.name}  ${stateText}  ${p.url}  id=${p.id || '未知'}${version ? `  ${version}` : ''}`
       }))
       .join('\n')
   }
@@ -1308,7 +1314,34 @@ async function toolAskPeer(args, ctx) {
       ? `【来自「${name}」的回答】\n${answer}`
       : `【「${name}」没有给出正文】它可能把这一轮用于工具调用就结束了，可以换个更具体的问法再问一次。`
   } catch (err) {
-    return `错误: 向对端提问失败 —— ${err?.message || err}`
+    // 失败原因常常是**版本差**（旧版不认内置默认模型 → 报"未配置 AI 模型"），
+    // 把对端版本带进错误里，省得用户在两台机器上对着配置猜半天。
+    const version = await peerVersionOf(ctx, peer)
+    return `错误: 向对端提问失败 —— ${err?.message || err}${version ? `（对端版本 ${version}）` : ''}`
+  }
+}
+
+/** 对端版本统一显示成 `vX.Y.Z`（探测不到就什么都不显示，别编占位）。 */
+function peerVersionText(peer) {
+  const raw = String(peer?.label || '').trim().replace(/^v/i, '')
+  return raw ? `v${raw}` : ''
+}
+
+/**
+ * 按 id / 昵称找对端的版本号（只在**失败路径**调，正常提问不多走一跳）。
+ * 找不到就是空串 —— 版本只是诊断信息，拿不到不该再把错误盖掉。
+ */
+async function peerVersionOf(ctx, ref) {
+  if (typeof ctx.listPeers !== 'function') return ''
+  try {
+    const peers = await ctx.listPeers()
+    const key = String(ref || '').trim().toLowerCase()
+    const hit = peers.find(p => String(p?.id || '').toLowerCase() === key
+      || String(p?.name || '').toLowerCase() === key)
+      || (peers.length === 1 ? peers[0] : null)
+    return peerVersionText(hit)
+  } catch {
+    return ''
   }
 }
 

@@ -655,3 +655,33 @@ test('background_task 的 kill 会真的结束进程，未知 id / 空 id 给可
   assert.match(await executeTool('background_task', { action: 'read', id: 'bg_99999' }, ctx), /没有找到/)
   assert.match(await executeTool('background_task', { action: 'nope', id }, ctx), /未知 action/)
 })
+
+// ── ask_peer：对端清单 / 失败信息里都要能看到对端版本 ────────────────
+// 2026-11-02 用户实况：对端跑 2.19.3，内置默认模型只在设置页可见、运行期报
+// "未配置 AI 模型"，看着像那边没配模型。版本摆出来，这类"配置猜谜"才不用猜。
+test('ask_peer: 对端清单带上版本号（在线才有，探测不到不编占位）', async () => {
+  const out = await executeTool('ask_peer', {}, {
+    cwd: null,
+    // 工具的可用性守卫看的是 askPeer 在不在（清单分支也在守卫之后），这里给个桩
+    askPeer: async () => ({ answer: '' }),
+    listPeers: async () => ([
+      { id: 'node-a', name: 'xz的服务器', url: 'http://192.168.3.44:5600', online: true, label: '2.19.3' },
+      { id: 'node-b', name: '离线那台', url: 'http://192.168.3.45:5600', online: false, error: 'connect ECONNREFUSED' }
+    ])
+  })
+  assert.match(out, /xz的服务器[\s\S]*v2\.19\.3/)
+  assert.match(out, /离线那台[\s\S]*ECONNREFUSED/)
+  assert.doesNotMatch(out, /vundefined|v\s/, '探测不到版本时不要塞占位')
+})
+
+test('ask_peer: 提问失败时把对端版本带进错误', async () => {
+  const out = await executeTool('ask_peer', { peer: 'xz的服务器', question: '你好' }, {
+    cwd: null,
+    askPeer: async () => { throw new Error('本机智能体报错：未配置 AI 模型，请先在通用设置中添加模型') },
+    listPeers: async () => ([
+      { id: 'node-a', name: 'xz的服务器', url: 'http://192.168.3.44:5600', online: true, label: '2.19.3' }
+    ])
+  })
+  assert.match(out, /未配置 AI 模型/)
+  assert.match(out, /对端版本 v2\.19\.3/)
+})
