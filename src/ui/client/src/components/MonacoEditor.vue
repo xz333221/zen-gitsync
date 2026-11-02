@@ -17,6 +17,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import 'monaco-editor/min/vs/editor/editor.main.css'
 import { useThemeObserver } from '@/composables/useThemeObserver'
+import { getLanguageFromPath } from '@/utils/editorLang'
 
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
@@ -310,36 +311,9 @@ async function ensureMonacoLoaded() {
   return monacoLoaderPromise
 }
 
-function detectLanguageFromPath(p: string) {
-  const filePath = (p || '').toLowerCase()
-  const m = filePath.match(/\.([a-z0-9]+)$/)
-  const ext = m ? m[1] : ''
-
-  if (ext === 'ts' || ext === 'tsx') return 'typescript'
-  if (ext === 'js' || ext === 'jsx' || ext === 'cjs' || ext === 'mjs') return 'javascript'
-  if (ext === 'json') return 'json'
-  if (ext === 'html' || ext === 'htm' || ext === 'vue') return 'html'
-  if (ext === 'css') return 'css'
-  if (ext === 'scss') return 'scss'
-  if (ext === 'less') return 'less'
-  if (ext === 'md' || ext === 'markdown') return 'markdown'
-  if (ext === 'yml' || ext === 'yaml') return 'yaml'
-  if (ext === 'xml') return 'xml'
-  if (ext === 'sh') return 'shell'
-  if (ext === 'ps1') return 'powershell'
-  if (ext === 'go') return 'go'
-  if (ext === 'rs') return 'rust'
-  if (ext === 'py') return 'python'
-  if (ext === 'java') return 'java'
-  if (ext === 'cpp' || ext === 'cc' || ext === 'cxx' || ext === 'hpp' || ext === 'h') return 'cpp'
-  if (ext === 'cs') return 'csharp'
-
-  return 'plaintext'
-}
-
 function getResolvedLanguage() {
   if (props.language === 'auto') {
-    return detectLanguageFromPath(props.filePath || '')
+    return getLanguageFromPath(props.filePath || '')
   }
   return props.language || 'plaintext'
 }

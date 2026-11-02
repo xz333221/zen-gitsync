@@ -50,6 +50,9 @@ export function getLanguageByExt(ext: string): string {
     php: 'php',
     c: 'c',
     cpp: 'cpp',
+    cc: 'cpp',
+    cxx: 'cpp',
+    hpp: 'cpp',
     h: 'cpp',
     cs: 'csharp',
     sql: 'sql',
@@ -63,4 +66,17 @@ export function getLanguageByExt(ext: string): string {
     dockerfile: 'dockerfile',
   }
   return map[ext.toLowerCase()] ?? 'plaintext'
+}
+
+/**
+ * 按完整文件路径取 Monaco 语言 ID。
+ *
+ * 这个函数存在的唯一理由：MonacoEditor / MonacoDiffViewer 曾各自手写一份
+ * `detectLanguageFromPath`，能力比上面这张表少一半（缺 toml / svg / kt / rb /
+ * php / c / sql / graphql / bash 等）—— 同一个文件在 EditorView 里有高亮、
+ * 在 Monaco 预览里却退化成 plaintext。现在统一走这一份，别在组件里再抄。
+ */
+export function getLanguageFromPath(filePath: string): string {
+  const m = (filePath || '').toLowerCase().match(/\.([a-z0-9]+)$/)
+  return getLanguageByExt(m ? m[1] : '')
 }
