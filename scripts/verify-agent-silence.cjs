@@ -1,19 +1,12 @@
 #!/usr/bin/env node
 /**
- * g ai 的「平铺输入框 + 静默提示」契约探针。
+ * g ai 的「静默提示」契约探针。
  *
- * 两件事是同一轮用户反馈的两半（2026-10-17）：
- *   ① "我不喜欢圆角加单 border 的样式" —— 四个 g ai 入口共用的 .acu-input-wrap
- *      从组件库的「20px 圆角 + 1px 描边 + 静息阴影」改成「浅底 + 6px 圆角 + 无描边」；
- *   ② "任务看板不动了有静默时间，g ai 静默了体现不出来" —— 对话头部新增
- *      「静默 x 秒」（ChatSilenceBadge），计时源是本轮最后一次 SSE 事件。
- *
- * A 组（输入框）：直接量 computed style，light / dark 两套都要成立。
- *   A1 静止态描边不可见（transparent，保留 1px 占位）   A2 圆角 6px
- *   A3 无静息阴影                                     A4 静止底色不是纯白（平铺浅底）
- *   A5 聚焦后出现 1px 主色描边（不是 3px 光晕）        A6 深色静止态同样无可见描边
- *   ⚠️ 选择器必须带 html body + 重复类名：库的 ChatInput 是 scoped 样式
- *      （.acu-input-wrap[data-v-x] = 0,2,0），普通 `html .acu-input-wrap` 压不住它。
+ * 来历（2026-10-17）：用户反馈「任务看板不动了有静默时间，g ai 静默了体现不出来」
+ *   —— 对话头部新增「静默 x 秒」（ChatSilenceBadge），计时源是本轮最后一次 SSE 事件。
+ * 同一轮里还给 .acu-input-wrap 加过一层「平铺」覆盖（浅底 + 6px 圆角 + 无描边），
+ * 那一层在 2026-11-01 **整块删掉**了：库自己改成了 WorkBuddy 式卡片，用户要求
+ * g ai 与演示页一致。所以本探针不再量输入框样式 —— 那已经是库的契约，宿主别再覆盖。
  *
  * B 组（静默徽标）：桩一条「吐两个事件后永不结束」的 SSE（route.fulfill 会整段发完、
  * 流立刻结束，测不出中间的静默态，必须覆盖 window.fetch 自己造流）。
@@ -22,8 +15,8 @@
  *   B5 点「停止」后消失（isStreaming=false 要立刻收掉，不是等下一轮）
  * 桩必须自己响应 AbortSignal：真 fetch 会随 signal 断流，不实现它「停止」永远不生效。
  *
- * 反向（--reverse）：注入旧输入框样式 + 把徽标 display:none!important，
- *   A1~A4 / B3 必须全部翻红 —— 否则这组断言在"样式没生效"时照样绿。
+ * 反向（--reverse）：把徽标 display:none!important，B3 必须翻红 ——
+ *   否则这组断言在"样式没生效"时照样绿。
  *
  * 前置：dev server 已起（前端 5544；后端 5545 供其它请求走通）。
  * 用法：node scripts/verify-agent-silence.cjs
@@ -97,58 +90,6 @@ function installChatStub(page) {
   })
 }
 
-function readWrap(page) {
-  return page.evaluate(() => {
-    const el = document.querySelector('.agent-chat-host .acu-input-wrap')
-    if (!el) return null
-    const cs = getComputedStyle(el)
-    return {
-      border: `${cs.borderTopWidth} ${cs.borderTopStyle} ${cs.borderTopColor}`,
-      radius: cs.borderTopLeftRadius,
-      bg: cs.backgroundColor,
-      shadow: cs.boxShadow,
-    }
-  })
-}
-const noBorder = (v) => !!v && v.startsWith('1px solid rgba(0, 0, 0, 0)')
-const primaryBorder = (v) => !!v && /^1px solid rgb\(59, 130, 246\)/.test(v)
-
-async function styleChecks(page) {
-  // 明确 blur / focus，别靠"点一下别处"（Chrome 下按钮点击不一定转移焦点）
-  await page.evaluate(() => document.activeElement && document.activeElement.blur())
-  await page.waitForTimeout(250)
-  const light = await readWrap(page)
-  await page.evaluate(() => document.querySelector('.agent-chat-host .acu-input-textarea')?.focus())
-  await page.waitForTimeout(250)
-  const lightFocus = await readWrap(page)
-  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'))
-  await page.evaluate(() => document.activeElement && document.activeElement.blur())
-  await page.waitForTimeout(250)
-  const dark = await readWrap(page)
-
-  // 反向：把库的旧写法注回去（!important 才压得过 scoped 规则），A 组必须翻红
-  if (REVERSE) {
-    await page.addStyleTag({
-      content: `.acu-input-wrap{border:1px solid #dfe0e9!important;border-radius:20px!important;
-        box-shadow:0 1px 2px rgba(24,24,35,.04)!important;background:#fff!important}`,
-    })
-    await page.waitForTimeout(200)
-    const back = await readWrap(page)
-    check('R1 旧样式注入后「无描边」翻红', !noBorder(back?.border), back?.border)
-    check('R2 旧样式注入后「6px 圆角」翻红', back?.radius !== '6px', back?.radius)
-    check('R3 旧样式注入后「无阴影」翻红', back?.shadow !== 'none', back?.shadow)
-    check('R4 旧样式注入后「非纯白底」翻红', back?.bg === 'rgb(255, 255, 255)', back?.bg)
-    return
-  }
-
-  check('A1 静止态无可见描边（浅色）', noBorder(light?.border), light?.border)
-  check('A2 圆角 6px（--radius-md）', light?.radius === '6px', light?.radius)
-  check('A3 无静息阴影', light?.shadow === 'none', light?.shadow)
-  check('A4 静止底是浅色平铺底（不是纯白）', !!light && light.bg !== 'rgb(255, 255, 255)', light?.bg)
-  check('A5 聚焦后是 1px 主色描边', primaryBorder(lightFocus?.border), lightFocus?.border)
-  check('A6 深色静止态同样无可见描边', noBorder(dark?.border), dark?.border)
-}
-
 async function silenceChecks(page) {
   if (REVERSE) {
     await page.addStyleTag({ content: '.chat-silence{display:none!important}' })
@@ -203,7 +144,6 @@ async function silenceChecks(page) {
 
     await installChatStub(page)
     await openAgent(page)
-    await styleChecks(page)
     await silenceChecks(page)
 
     check('无新增 pageerror（库内 MessageRail 存量已排除）', errors.length === 0, errors.join(' | '))

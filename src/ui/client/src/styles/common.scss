@@ -1306,34 +1306,13 @@ input:not(:focus) {
 }
 
 /* =======================================================
-   g ai 输入框：平铺（2026-10-17）
+   g ai 输入框：回到组件库默认卡片（2026-11-01）
    -------------------------------------------------------
-   用户："我不喜欢圆角加单 border 的样式"（截的是四个 g ai 入口共用的这条输入框）。
-   组件库的 .acu-input-wrap 是「20px 大圆角 + 1px 描边 + 静息阴影」的卡片，
-   这里按本仓库的列表语言改成：浅底 + 6px 小圆角 + 无描边、无阴影；
-   hover 换一档底色，focus 才出现一条 1px 内描边（库原来那圈 3px 光晕
-   和气泡/看板卡抢注意力）。
-   ⚠️ 选择器为什么这么长：库的 ChatInput 样式是 **scoped** 的，编译后是
-   `.acu-input-wrap[data-v-xxxx]`（0,2,0），比 `html .acu-input-wrap`（0,1,1）还高；
-   而它按组件 chunk 后注入，同特异性也会赢。这里用 `html body` + 重复类名
-   把这个钩子抬到 0,2,2，免得跟着库的构建产物一起漂。
+   2026-10-17 这里有一层「平铺」覆盖：透明描边 + 6px 圆角 + 无阴影，
+   起因是当时库的输入框还是「20px 大圆角 + 1px 描边」的老样式，
+   用户不喜欢。后来库改成了 WorkBuddy 式卡片（a662484），
+   用户再看反而觉得 g ai 这边「和 7788 演示不一样」，要求去掉覆盖 ——
+   所以整块删除，让 .acu-input-wrap 用库自己的卡片样式。
+   别再按 `.acu-input-wrap` 叠宿主皮肤：库的 ChatInput 是 scoped 的，
+   覆盖要抬到 `html body` + 重复类名才压得住，会跟着库的产物一起漂。
    ======================================================= */
-html body .acu-input-wrap.acu-input-wrap {
-  border-color: transparent;
-  border-radius: var(--radius-md);
-  background: var(--bg-panel);
-  box-shadow: none;
-}
-html body .acu-input-wrap.acu-input-wrap:hover {
-  background: var(--bg-panel-hover);
-}
-html body .acu-input-wrap.acu-input-wrap:focus-within {
-  background: var(--bg-container);
-  border-color: var(--color-primary);
-  box-shadow: none;
-}
-html body .acu-input-wrap.acu-input-wrap.is-dragging {
-  border-color: var(--color-primary);
-  background: var(--bg-container);
-  box-shadow: none;
-}

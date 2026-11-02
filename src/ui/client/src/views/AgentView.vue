@@ -637,7 +637,8 @@ defineExpose({
       <div class="agent-tab-body">
         <!-- ── 对话 ── -->
         <div v-if="activeTab === 'chat'" class="agent-chat-pane">
-          <!-- 窄屏 · 会话列表页：列表独占整页 -->
+          <!-- 窄屏 · 会话列表页：列表独占整页。
+               整页列表没有「收起」的去处，而库从 0.1.0-beta.30 起默认带收起按钮 —— 显式关掉 -->
           <div v-if="narrow && chatPage === 'list'" class="agent-list-page">
             <ConversationList
               class="agent-conversations"
@@ -645,6 +646,7 @@ defineExpose({
               :active-id="currentSessionId"
               :loading="sessionsLoading"
               :labels="conversationLabels"
+              :collapsible="false"
               @select="selectSession"
               @new="handleNewSession"
               @rename="renameSession"
