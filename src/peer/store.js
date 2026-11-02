@@ -38,6 +38,12 @@ import { atomicWriteText } from '../fsAtomic.js';
 // 两个都是长驻服务，撞在一起会让「开 peer」和「开 hub」变成互斥。
 export const PEER_DEFAULT_PORT = 5600;
 
+/** 本机节点的默认昵称（没设过就叫这个，界面上也按这个名字显示）。 */
+export const DEFAULT_SELF_NAME = 'g ai';
+
+/** 早期版本写死的默认昵称，遇到就迁成 DEFAULT_SELF_NAME。 */
+const LEGACY_DEFAULT_NAME = '这台电脑';
+
 /** peers.json 的默认形状（读不到 / 坏文件时的兜底）。 */
 function emptyState() {
   return { version: 1, self: null, peers: [], sessions: {} };
@@ -156,11 +162,20 @@ export async function writeState(state, filePath = PEERS_FILE) {
  */
 export async function ensureSelf(filePath = PEERS_FILE) {
   const state = await readState(filePath);
-  if (state.self && state.self.id && state.self.token) return state;
+
+  // 历史默认昵称迁移：「这台电脑」是早期硬编码的默认值，不是用户填的。
+  // 现在默认叫「g ai」，把残留的旧默认值一起换掉（用户自己改过的名字不动）。
+  if (state.self && state.self.id && state.self.token) {
+    if (state.self.name === LEGACY_DEFAULT_NAME) {
+      state.self.name = DEFAULT_SELF_NAME;
+      await writeState(state, filePath);
+    }
+    return state;
+  }
 
   state.self = {
     id: state.self?.id || makeNodeId(),
-    name: state.self?.name || '这台电脑',
+    name: state.self?.name || DEFAULT_SELF_NAME,
     avatar: state.self?.avatar || '',
     port: state.self?.port || PEER_DEFAULT_PORT,
     host: state.self?.host || '0.0.0.0',

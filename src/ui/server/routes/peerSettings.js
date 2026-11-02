@@ -238,6 +238,22 @@ export function registerPeerSettingsRoutes({
     res.json({ success: true, ...result });
   }));
 
+  /**
+   * GET /api/agent-identity —— 这个 g ai 叫什么、长什么样。
+   *
+   * 单独一条极小的接口，是因为它要用在**每个**对话容器和悬浮 dock 上：让它们都去调
+   * /api/peer-settings 会连带做一遍对端探活（每台 2.5s 超时），代价完全没必要。
+   * 也不返回令牌 —— 界面只需要名字和头像。
+   */
+  app.get('/api/agent-identity', asyncRoute(async (req, res) => {
+    const state = await ensureSelf();
+    res.json({
+      success: true,
+      name: state.self.name || '',
+      avatar: state.self.avatar || ''
+    });
+  }));
+
   /** GET /api/peer-settings/defaults —— 面板第一次打开时给默认值（端口号）。 */
   app.get('/api/peer-settings/defaults', (req, res) => {
     res.json({ success: true, port: PEER_DEFAULT_PORT });

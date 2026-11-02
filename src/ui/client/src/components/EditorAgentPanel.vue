@@ -126,8 +126,8 @@
           ref="chatRef"
           :show-input="false"
           :messages="displayMessages"
-          :assistant-name="AGENT_ASSISTANT_NAME"
-          :assistant-avatar="AGENT_ASSISTANT_AVATAR"
+          :assistant-name="assistantName"
+          :assistant-avatar="assistantAvatar"
           :theme="chatTheme"
           :question="questionPanel"
           :question-submitting="answeringQuestion"
@@ -231,13 +231,15 @@ import {
   agentQuestionLabels,
   agentQueueLabels,
   agentFileChangeLabels,
-  AGENT_ASSISTANT_NAME,
-  AGENT_ASSISTANT_AVATAR,
   MESSAGE_RAIL_CONFIG,
   MESSAGE_META_CONFIG,
 } from '@/utils/agentConversations'
+import { useAgentIdentity } from '@/composables/useAgentIdentity'
 import AgentEngineSelector from '@/components/AgentEngineSelector.vue'
 import CopySessionButton from '@/components/CopySessionButton.vue'
+
+// 昵称 + 头像跟着「跨机器」里设的身份走
+const { name: assistantName, avatar: assistantAvatar } = useAgentIdentity()
 import ChatSilenceBadge from '@/components/ChatSilenceBadge.vue'
 
 const props = defineProps<{

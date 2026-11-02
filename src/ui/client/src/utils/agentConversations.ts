@@ -3,7 +3,6 @@
 // 两处的标题兜底、时间格式、生成中徽标、来源角标与文案保持一致，不会各自漂移。
 import { $t } from '@/lang/static'
 import type { ConversationItem, ConversationListLabels, MessageMetaConfig, MessageRailConfig } from 'zen-ai-chat-ui'
-import gAiAvatar from '@/assets/icons/svg/g-ai.svg'
 
 /** 侧栏 / 面板里那份会话（字段来自服务端 SessionMeta，允许本地乐观标记） */
 export interface AgentSessionLike {
@@ -78,16 +77,8 @@ export function agentConversationLabels(): Partial<ConversationListLabels> {
   }
 }
 
-/** g ai 品牌名（两处对话容器统一用它） */
-export const AGENT_ASSISTANT_NAME = 'g ai'
-
-/**
- * g ai 品牌头像 —— 复用仓库自有的产品标识（assets/icons/svg/g-ai.svg，
- * 与顶栏"用 g ai 打开当前目录"按钮、引擎下拉里的内置引擎图标同一张）。
- * 与 AGENT_ASSISTANT_NAME 同源，传给 zen-ai-chat-ui 的 :assistant-avatar；
- * 不传时组件库会回落成默认的闪光小图标。
- */
-export const AGENT_ASSISTANT_AVATAR = gAiAvatar
+// 昵称与头像不再是常量：改由 composables/useAgentIdentity 提供（用户能在「跨机器」里
+// 改昵称和头像，写死成 'g ai' + 固定图标就永远改不动了）。
 
 /**
  * 消息侧边条（zen-ai-chat-ui 的 MessageRail）：对话流左边缘一列短横条，

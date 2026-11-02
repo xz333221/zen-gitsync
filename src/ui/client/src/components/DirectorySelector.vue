@@ -15,6 +15,7 @@
   -->
 <script setup lang="ts">
 import { $t } from '@/lang/static'
+import { useAgentIdentity } from '@/composables/useAgentIdentity'
 import CommonDialog from "@components/CommonDialog.vue";
 import { FilePickerModal as FilePicker } from 'local-file-picker/client';
 import { ElMessage, ElMessageBox, ElPopover } from "element-plus";
@@ -151,6 +152,9 @@ const isBrowserDialogVisible = ref(false);
 const installDialogVisible = ref(false);
 const selectedInstallTool = ref<ToolId | null>(null);
 const isOpeningAi = ref(false);
+
+// g ai 入口按钮的图标：设过头像就换成头像，没设才是产品自带的蓝色图标
+const { avatar: agentAvatar, hasCustomAvatar } = useAgentIdentity();
 
 async function onOpenInAi() {
   if (isOpeningAi.value || warnIfEmptyDirectory()) return
@@ -1007,7 +1011,7 @@ function onBrowserSelect(path: string) {
         </el-icon>
       </IconButton>
       <IconButton
-        icon-class="g-ai"
+        :icon-class="hasCustomAvatar ? '' : 'g-ai'"
         :tooltip="$t('@67CE7:用 g ai 打开当前目录')"
         :aria-label="$t('@67CE7:用 g ai 打开当前目录')"
         :disabled="isOpeningAi || !currentDirectory"
@@ -1015,7 +1019,9 @@ function onBrowserSelect(path: string) {
         custom-class="g-ai-launch-button"
         size="large"
         @click="onOpenInAi"
-      />
+      >
+        <img v-if="hasCustomAvatar" class="g-ai-launch-avatar" :src="agentAvatar" :alt="$t('@ACTBAR:智能体')" />
+      </IconButton>
       <!--
         编辑器 / AI 工具：已安装的常驻显示，未安装的收进右侧"更多"菜单。
         检测未完成时全部按 checking 态显示，避免首屏按钮位置跳来跳去。
@@ -1997,5 +2003,14 @@ function onBrowserSelect(path: string) {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* 自定义头像时，顶栏那个 g ai 按钮显示圆形小头像（没设头像时仍走 icon-class="g-ai" 的 svg） */
+.g-ai-launch-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
 }
 </style>

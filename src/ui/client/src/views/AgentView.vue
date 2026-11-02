@@ -32,7 +32,8 @@ import 'zen-ai-chat-ui/style.css'
 import { useConfigStore } from '@/stores/configStore'
 import { useGitStore } from '@/stores/gitStore'
 import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
-import { buildConversationItems, agentConversationLabels, agentQuestionLabels, agentQueueLabels, agentFileChangeLabels, AGENT_ASSISTANT_NAME, AGENT_ASSISTANT_AVATAR, MESSAGE_RAIL_CONFIG, MESSAGE_META_CONFIG } from '@/utils/agentConversations'
+import { buildConversationItems, agentConversationLabels, agentQuestionLabels, agentQueueLabels, agentFileChangeLabels, MESSAGE_RAIL_CONFIG, MESSAGE_META_CONFIG } from '@/utils/agentConversations'
+import { useAgentIdentity } from '@/composables/useAgentIdentity'
 import { resolveAgentPresets } from '@/utils/agentPresets'
 import { subscribeScheduleEvents } from '@/utils/scheduleApi'
 import { agentEngineName, type AgentEngineId } from '@/utils/agentEngine'
@@ -247,7 +248,9 @@ const currentSessionTitle = computed(
 // 改造成图片盒子，背景图走这里。SVG 被 vite 内联成 data URI，而它内部含单引号
 // （xmlns='...'），所以外层必须用**双引号**包 url() —— 用单引号会被 data URI
 // 里的第一个单引号截断，整条 background 声明作废（实测 bgImage=none，图标空白）。
-const welcomeAvatarStyle = { '--welcome-avatar': `url("${AGENT_ASSISTANT_AVATAR}")` }
+// 昵称 + 头像：跟着「跨机器」里设的身份走（没设头像就是产品自带的 g ai 图标）
+const { name: assistantName, avatar: assistantAvatar } = useAgentIdentity()
+const welcomeAvatarStyle = computed(() => ({ '--welcome-avatar': `url("${assistantAvatar.value}")` }))
 
 // ── 当前文档上下文卡：锚点插进库输入框容器，和附件同处一行 ────────
 // 与 EditorAgentPanel 同一套形状（那里是文件空间面板的常住实现）：组件库的
@@ -696,8 +699,8 @@ defineExpose({
                 :preset-questions="presetQuestions"
                 :welcome-title="$t('@AGENT:智能体助手')"
                 :welcome-description="$t('@AGENT:我可以帮你阅读代码、执行命令、修改文件。选择下方话题或直接输入你的问题。')"
-                :assistant-name="AGENT_ASSISTANT_NAME"
-                :assistant-avatar="AGENT_ASSISTANT_AVATAR"
+                :assistant-name="assistantName"
+                :assistant-avatar="assistantAvatar"
                 :theme="chatTheme"
                 :generating="isStreaming"
                 :allow-queue="true"
@@ -1092,7 +1095,7 @@ defineExpose({
 /* ── 欢迎区大图标：换成 g ai 标识 ────────────────────────────────
    zen-ai-chat-ui 的 WelcomeScreen 把 logo 写死成一串内联 SVG（三颗闪光星），
    没有 prop / 插槽可换（dist 里 slots 出现 0 次），所以只能盖样式：
-   藏掉它自带的 <svg>，把 div 本身当图片盒子，背景图走 AGENT_ASSISTANT_AVATAR
+   藏掉它自带的 <svg>，把 div 本身当图片盒子，背景图走 useAgentIdentity 给的地址
    （与消息气泡里的助手头像同一张，模板上用 --welcome-avatar 传进来）。
    同样因为图标自带底色，那层 primary-soft 圆底 + 描边要去掉，不然会露出灰圈。 */
 .agent-chat-host :deep(.acu-welcome-logo) {

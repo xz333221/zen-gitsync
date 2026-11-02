@@ -70,10 +70,12 @@ beforeEach(() => {
 })
 
 describe('AgentDock 徽标（从 ActivityBar 搬迁的口径）', () => {
-  it('没有轮次在跑时不显示徽标，aria-label 是纯名称', () => {
+  it('没有轮次在跑时不显示徽标，aria-label 是智能体昵称', () => {
     const w = mountDock()
     expect(w.find('.agent-dock__badge').exists()).toBe(false)
-    expect(mascot(w).attributes('aria-label')).toBe('@ACTBAR:智能体')
+    // 简称跟昵称走（「跨机器」里能改），没设过就是默认的 "g ai"；
+    // 测试环境拿不到 /api/agent-identity，取的就是默认值。
+    expect(mascot(w).attributes('aria-label')).toBe('g ai')
     expect(mascot(w).attributes('aria-pressed')).toBe('false')
   })
 

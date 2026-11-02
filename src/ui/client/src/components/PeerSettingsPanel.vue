@@ -117,6 +117,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { $t } from '@/lang/static'
 import AvatarPicker from './AvatarPicker.vue'
 import { resolveAvatar } from '@/utils/peerAvatar'
+import { refreshAgentIdentity } from '@/composables/useAgentIdentity'
 
 interface SelfInfo {
   id: string
@@ -198,6 +199,8 @@ async function saveSelf() {
     Object.assign(self, data.self)
     running.value = data.running === true
     savedAt.value = Date.now()
+    // 昵称/头像改了要立刻反映到 dock、顶栏按钮和对话气泡（它们读的是同一份共享身份）
+    void refreshAgentIdentity()
     ElMessage.success($t('@PEER:设置已保存'))
     // 项目窗口自己不改端口，是让 hub 去改；hub 不在时会带一句 warning 回来
     if (data.warning) ElMessage.warning(String(data.warning))

@@ -46,7 +46,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, defineAsync
 import { $t } from '@/lang/static'
 import { ElTooltip } from 'element-plus'
 import { useAgentActivityStore } from '@stores/agentActivity'
-import { AGENT_ASSISTANT_AVATAR } from '@/utils/agentConversations'
+import { useAgentIdentity } from '@/composables/useAgentIdentity'
 import { refreshAiContext, ALL_AI_CONTEXT_SECTIONS } from '@/composables/useAiContextSync'
 import { agentDockBus } from '@/utils/agentDockBus'
 import ViewLoading from '@/components/ViewLoading.vue'
@@ -86,8 +86,12 @@ const agentViewRef = ref<InstanceType<typeof AgentView> | null>(null)
 // ── 徽标与文案（口径从 ActivityBar 原样搬来）────────────────────
 const runningText = computed(() => `${agentStatus.runningCount} ${$t('@ACTBAR:个对话正在生成')}`)
 const runningBadge = computed(() => (agentStatus.runningCount > 99 ? '99+' : String(agentStatus.runningCount)))
+// 提示里用昵称而不是"智能体"：这个圆点是**那一个**智能体（用户给它起了名字），
+// 而不是一个叫"智能体"的功能入口。
+const { name: agentName, avatar: agentAvatar } = useAgentIdentity()
+
 const mascotLabel = computed(() =>
-  agentStatus.hasRunning ? `${$t('@ACTBAR:智能体')} · ${runningText.value}` : $t('@ACTBAR:智能体'),
+  agentStatus.hasRunning ? `${agentName.value} · ${runningText.value}` : agentName.value,
 )
 
 function open() {
@@ -192,7 +196,7 @@ onBeforeUnmount(() => {
         :aria-pressed="opened ? 'true' : 'false'"
         @click="toggle"
       >
-        <img class="agent-dock__avatar" :src="AGENT_ASSISTANT_AVATAR" alt="" width="30" height="30" />
+        <img class="agent-dock__avatar" :src="agentAvatar" :alt="agentName" width="30" height="30" />
         <!-- 正在生成的对话数：切走视图 / 关上面板后仍在跑的轮次，这是唯一可见的信号 -->
         <span
           v-if="agentStatus.hasRunning"
@@ -218,8 +222,8 @@ onBeforeUnmount(() => {
       tabindex="-1"
     >
       <header class="agent-dock__head">
-        <img class="agent-dock__head-avatar" :src="AGENT_ASSISTANT_AVATAR" alt="" width="20" height="20" />
-        <span class="agent-dock__title">{{ $t('@ACTBAR:智能体') }}</span>
+        <img class="agent-dock__head-avatar" :src="agentAvatar" :alt="agentName" width="20" height="20" />
+        <span class="agent-dock__title">{{ agentName }}</span>
         <span v-if="agentStatus.hasRunning" class="agent-dock__running">{{ runningText }}</span>
         <span class="agent-dock__spacer" />
           <button

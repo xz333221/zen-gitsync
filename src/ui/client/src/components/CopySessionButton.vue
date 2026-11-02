@@ -23,9 +23,11 @@ import { onBeforeUnmount, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { ChatMessage } from 'zen-ai-chat-ui'
 import { $t } from '@/lang/static'
-import { AGENT_ASSISTANT_NAME } from '@/utils/agentConversations'
+import { useAgentIdentity } from '@/composables/useAgentIdentity'
 import { buildAgentSessionText, type AgentSessionScope } from '@/utils/agentSessionExport'
 import { copyTextToClipboard } from '@/utils/clipboard'
+
+const { name: assistantName } = useAgentIdentity()
 
 const props = defineProps<{
   /** 当前会话的消息（useAgentChat 的 messages） */
@@ -51,7 +53,7 @@ onBeforeUnmount(() => {
 async function doCopy(scope: AgentSessionScope) {
   const text = buildAgentSessionText(
     props.messages || [],
-    { title: props.title, engine: props.engine, assistantName: AGENT_ASSISTANT_NAME },
+    { title: props.title, engine: props.engine, assistantName: assistantName.value },
     { scope }
   )
   // 空串 = 这条会话一条有内容的消息都没有（刚新建 / 还没跑过）：
