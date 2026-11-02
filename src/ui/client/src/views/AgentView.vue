@@ -66,12 +66,16 @@ const props = defineProps<{
    */
   contextNote?: string
   /**
-   * dock 传入：强制窄屏单页（会话列表页 ↔ 对话页）。
+   * 强制窄屏单页（会话列表页 ↔ 对话页），压过 ResizeObserver 的实测宽度。
    *
-   * 为什么需要它：悬浮 dock 默认面板宽到 1120px，若按宽度阈值（680）自动进两栏，
-   * 中间会有一段「窗口变大、聊天区反而变窄」的怪区间（691px 面板 → 侧栏 240 + 聊天 451，
-   * 比 560px 单页时更挤）。dock 的规则改成与屏幕大小无关：
-   * **默认恒单页（聊天吃满面板宽），点最大化才两栏**（最大化 ≥680，切回宽屏体验）。
+   * 2026-11-02 起 dock **不再传**它：面板默认宽度提到 860~1240，扣掉 280 的会话列后
+   * 聊天区仍有 ≥580，默认就进两栏（用户要的是「一打开就能看到左边的对话列表」）。
+   * 能力保留 —— 把 AgentView 塞进已知很窄、又不想等测量的容器时还能用。
+   *
+   * 历史坑（别再退回那套）：旧面板宽 560~1120，按 680 阈值自动折行会出现
+   * 「窗口变大、聊天区反而变窄」的区间（691px 面板 → 侧栏 + 聊天只剩 411，
+   * 比 560 单页还挤），当年才用 forceNarrow 把 dock 钉成恒单页。
+   * 这次是靠**把面板调宽**消掉那个区间，而不是禁用两栏。
    */
   forceNarrow?: boolean
   /**
@@ -98,23 +102,20 @@ const priorityChainTitle = computed(() =>
 // 量的是这个视图容器自己的宽度（窄屏下拖动侧栏 / 分屏都会变；视口宽度反映不了）。
 const rootRef = ref<HTMLElement | null>(null)
 const { width, narrow: measuredNarrow } = useNarrowPane(rootRef)
-// forceNarrow（dock 默认态）压过实测值：见 props.forceNarrow 的注释
+// 显式强制优先于实测值（见 props.forceNarrow 的注释）
 const narrow = computed(() => props.forceNarrow === true || measuredNarrow.value)
 /**
- * 头部至少这么宽才摆「静默 x 秒」。
+ * Tab 行至少这么宽才摆「静默 x 秒」。量的是**聊天区**宽度（两栏时已扣掉会话列）。
  *
  * 这一行已经站着五个 Tab + 引擎选择器 + 复制按钮；再加一枚 ~90px 的徽标，
  * 900px 以下 Tab 文字就会被压得折行（导航条突然长高一倍，比少一条提示更糟）。
- * 扣掉左侧会话列（240px）之后 ≈ 860px，够放下整行。
  */
-const TABS_SILENCE_MIN_WIDTH = 1100
+const TABS_SILENCE_MIN_WIDTH = 900
 /**
  * 再窄就把 Tab 行压成「图标 + tooltip」紧凑态：5 个文字 tab + 引擎选择器 + 复制按钮
  * 在 640px 以下放不下（文字会被压折行，导航条突然长高一倍）。
- * dock 默认面板 560px 恒触发；最大化（≥680）恢复完整文字态。
  */
 const TABS_COMPACT_MAX_WIDTH = 640
-const tabsCompact = computed(() => width.value > 0 && width.value < TABS_COMPACT_MAX_WIDTH)
 /** 窄屏下的当前页。宽屏两栏并排时用不到它 */
 const chatPage = ref<'list' | 'chat'>('chat')
 
@@ -439,6 +440,21 @@ const { convListCollapsed, setConvListCollapsed } = useConvListCollapse()
  */
 const CONV_RAIL_WIDTH = 40
 
+/**
+ * Tab 行真正能用的宽度：宽屏两栏时要扣掉左侧会话列。
+ *
+ * 不扣会误判 —— 920px 的面板看着远超 640 的紧凑阈值，实际 Tab 行只有 640
+ * （920 - 280 会话列），5 个文字 Tab 正好卡在这一档折行。
+ * 非「对话」Tab（广场 / 定时 / 设置）和单页态都没有左栏，直接吃满容器。
+ */
+const chatAreaWidth = computed(() => {
+  const sidebar = narrow.value || activeTab.value !== 'chat'
+    ? 0
+    : (convListCollapsed.value ? CONV_RAIL_WIDTH : sidebarWidth.value)
+  return Math.max(0, width.value - sidebar)
+})
+const tabsCompact = computed(() => chatAreaWidth.value > 0 && chatAreaWidth.value < TABS_COMPACT_MAX_WIDTH)
+
 function startResize(e: MouseEvent) {
   if (convListCollapsed.value) return
   isResizing.value = true
@@ -607,11 +623,11 @@ defineExpose({
 
         <!-- 本轮静默：挂在 Tab 行最右端（与引擎 / 复制同一条右对齐线）。
              等回答时不算静默 —— 那一轮挂着是在等用户点选项（见 ChatSilenceBadge 文件头）。
-             紧凑态（dock 默认 560px 面板）也显示：图标行的剩余宽度放得下这枚 ~90px
-             徽标，而「静默 N 秒」正是用户盯着面板时最需要的信号；TABS_SILENCE_MIN_WIDTH
-             那条 1100px 门槛是给整行文字 tab 定的，紧凑行不适用。 -->
+             紧凑态也显示：图标行的剩余宽度放得下这枚 ~90px 徽标，而「静默 N 秒」
+             正是用户盯着面板时最需要的信号；TABS_SILENCE_MIN_WIDTH 那条门槛是给
+             整行文字 tab 定的，紧凑行不适用。 -->
         <ChatSilenceBadge
-          v-if="activeTab === 'chat' && (tabsCompact || width >= TABS_SILENCE_MIN_WIDTH)"
+          v-if="activeTab === 'chat' && (tabsCompact || chatAreaWidth >= TABS_SILENCE_MIN_WIDTH)"
           class="agent-silence"
           :silent-ms="silentMs"
           :streaming="isStreaming && !questionPanel"

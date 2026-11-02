@@ -33,9 +33,11 @@
     并把问题发给 AgentView.askQuestion（见 utils/agentDockBus.ts）。
   - 编辑器上下文：App.vue 判定 activeView==='editor' 时传入当前激活文件，
     发送时随消息注入（openFilePath，请求级、不落会话历史）。
-  - 尺寸：随视口自适应 —— 宽 clamp(560px, 36vw, 1120px)，高 clamp(600px, 80vh, 1080px)
-    （4K 屏上不再是固定 560 的小块）；头部「最大化」铺到活动栏右侧的近满屏
-    （≥680 宽 → AgentView 宽屏两栏，就是旧 tab 的完整体验）。最大化态是 ref，开关面板不重置。
+  - 尺寸：随视口自适应 —— 宽 clamp(860px, 48vw, 1240px)，高 clamp(600px, 80vh, 1080px)
+    （4K 屏上不再是固定 560 的小块）。**默认就是两栏**（会话列表 | 对话）：
+    面板恒 ≥860 宽，扣掉 280 的会话列仍有 ≥580 给聊天区，比旧版 560 单页还宽；
+    只有视口窄到 max-width 把面板压到 680 以下（≈712px 视口）才自动退化成单页。
+    头部「最大化」仍是整窗铺开。最大化态是 ref，开关面板不重置。
   - 关闭四条路：Esc / 再点 mascot / 头部 ✕ / 点击面板外部（活动栏与 EP 弹层豁免 ——
     点视图按钮切视图时对话必须还在右下角）。
 -->
@@ -264,7 +266,6 @@ onBeforeUnmount(() => {
           :context-file-name="props.contextFile?.name"
           :context-note="props.contextNote"
           :view="props.view"
-          :force-narrow="!maximized"
         />
       </div>
     </section>
@@ -360,14 +361,15 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  /* 默认 560×720；视口不够时按 calc 收缩 */
   /* 尺寸随屏幕自适应（用户在 4K 屏上反馈 560px 只剩一小块）：
-     宽 = clamp(560, 36vw, 1120)，高 = clamp(600, 80vh, 1080)。
-     - 1440 / 1600 宽的屏仍是 560-ish（不改变常规屏观感）
-     - 2560（4K@150%）→ 922×1080；3840（4K@100%）→ 1120×1080
+     宽 = clamp(860, 48vw, 1240)，高 = clamp(600, 80vh, 1080)。
+     - 1440 → 860（两栏后聊天区 ≈580，仍比旧版 560 单页宽）
+     - 1920 → 922（聊天区 ≈640）
+     - 2560 → 1229；3840 → 1240
      - 小屏继续被 max-width / max-height 压住，不会顶穿
-     宽度 ≥680 时 AgentView 自动进宽屏两栏（会话列表 | 对话），正好吃下这块尺寸 */
-  width: clamp(560px, 36vw, 1120px);
+     默认两栏：AgentView 的折行阈值是 680，扣掉 280 的会话列后聊天区仍 ≥580，
+     所以不再需要「只有最大化才展开列表」那套 forceNarrow。 */
+  width: clamp(860px, 48vw, 1240px);
   max-width: calc(100vw - 32px);
   height: clamp(600px, 80vh, 1080px);
   max-height: calc(100vh - 140px);

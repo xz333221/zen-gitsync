@@ -484,7 +484,7 @@ describe('AgentView 外部发问（defineExpose askQuestion）', () => {
   })
 })
 
-describe('AgentView 紧凑 Tab（dock 默认 560px 面板）', () => {
+describe('AgentView 紧凑 Tab（判据是聊天区宽度，不是容器宽度）', () => {
   it('宽度 <640 时 tab 只留图标，文字进 title；复制按钮隐藏', async () => {
     const w = mountView()
     // mountView 会把 width 复位成 1000，紧凑态要在挂载后拨出来
@@ -494,6 +494,16 @@ describe('AgentView 紧凑 Tab（dock 默认 560px 面板）', () => {
 
     const chatTab = w.findAll('.agent-tab')[0]
     expect(chatTab.attributes('title')).toBe('@AGENT:对话')
+    expect(chatTab.text()).toBe('')
+    expect(w.find('.agent-copy').exists()).toBe(false)
+  })
+
+  it('容器够宽但扣掉会话列后不够 → 仍走紧凑态（两栏下 tab 行只有剩余那段）', async () => {
+    const w = mountView()
+    pane.width.value = 900 // mountView 会把 width 复位成 1000，必须挂载后再拨；900 > 640 但减去 280 会话列只剩 620
+    await nextTick()
+
+    const chatTab = w.findAll('.agent-tab')[0]
     expect(chatTab.text()).toBe('')
     expect(w.find('.agent-copy').exists()).toBe(false)
   })
