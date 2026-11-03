@@ -24,7 +24,7 @@
   只管编辑与保存：草稿在关窗时丢弃，父组件负责调接口并把结果回灌进来。
 -->
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
 import { $t } from '@/lang/static'
 import CommonDialog from '@/components/CommonDialog.vue'
 
@@ -53,13 +53,42 @@ const MAX_CHARS = 4000
 
 const globalDraft = ref('')
 const projectDraft = ref('')
+/** 上次从 props 抄进草稿的值。草稿和它不等 = 这一栏用户改过，props 再变也不能覆盖 */
+const globalSynced = ref('')
+const projectSynced = ref('')
+
+/**
+ * 让草稿跟着服务端值走，**但只跟没被改过的那一栏**。
+ *
+ * 为什么需要第二个 watch：打开弹窗那一刻编排状态可能还没到（`defaultPrompt` 是空串），
+ * 草稿就先按 '' 建了出来；等 5s 轮询把真值送到 props，草稿还是空的 —— 此时
+ * `dirty` 变 true、保存按钮亮着、两个框却都空着，点一下保存就把用户写好的
+ * 全局 + 项目提示词一起写成空串（2026-11-02 真实丢过一次）。
+ */
+function syncField(draft: Ref<string>, synced: Ref<string>, next: string) {
+  if (draft.value !== synced.value) return
+  draft.value = next
+  synced.value = next
+}
 
 // 打开时把服务端的值抄成草稿，关掉丢弃 —— 不给"半途改了一半"留下持久状态
 watch(() => props.modelValue, (open) => {
   if (!open) return
   globalDraft.value = props.defaultPrompt || ''
+  globalSynced.value = globalDraft.value
   projectDraft.value = props.projectPrompt || ''
+  projectSynced.value = projectDraft.value
 })
+
+// 弹窗开着时 props 晚到 / 切了项目：只要那一栏还是原样，就补上服务端的新值
+watch(
+  () => [props.defaultPrompt, props.projectPrompt] as const,
+  () => {
+    if (!props.modelValue) return
+    syncField(globalDraft, globalSynced, props.defaultPrompt || '')
+    syncField(projectDraft, projectSynced, props.projectPrompt || '')
+  }
+)
 
 const hasProject = computed(() => !!props.projectPath)
 const dirty = computed(() =>

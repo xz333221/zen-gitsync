@@ -248,16 +248,25 @@ async function main() {
     const badConsole = consoleErrors.filter(t => !/favicon|ResizeObserver/i.test(t))
     check('H2 无控制台错误', badConsole.length === 0, badConsole.slice(0, 3).join(' | '))
   } finally {
-    await browser.close()
+    // 先恢复、再关浏览器。恢复排在 browser.close() 后面时，只要 close 抛错
+    // （或者进程被编排台的 30 分钟硬上限掐断），就会停在「已清空、未恢复」——
+    // 用户真实的预设提示词因此丢过一次（2026-11-02）。恢复本身也单独兜一层：
+    // 断言结果已经拿到了，收尾失败不该把它变成异常退出。
+    try {
+      // 恢复原状态：先清掉这一轮写进去的，再把快照里的值写回去
+      await post('/api/workbench/orchestrator/default-prompt', { prompt: snapshot.defaultPrompt || '' })
+      const snapProject = (snapshot.projectPrompts || {})[Object.keys(snapshot.projectPrompts || {})
+        .find(k => samey(k, target.path)) || '']
+      await post('/api/workbench/orchestrator/project-prompt', {
+        projectPath: target.path,
+        prompt: snapProject?.prompt || '',
+      })
+    } catch (err) {
+      log('⚠️ 恢复预设提示词失败，请手工检查 orchestrator.json:', (err && err.message) || err)
+    }
 
-    // 恢复原状态：先清掉这一轮写进去的，再把快照里的值写回去
-    await post('/api/workbench/orchestrator/default-prompt', { prompt: snapshot.defaultPrompt || '' })
-    const snapProject = (snapshot.projectPrompts || {})[Object.keys(snapshot.projectPrompts || {})
-      .find(k => samey(k, target.path)) || '']
-    await post('/api/workbench/orchestrator/project-prompt', {
-      projectPath: target.path,
-      prompt: snapProject?.prompt || '',
-    })
+    try { await browser.close() } catch { /* 关不掉不影响上面的恢复 */ }
+
     // ⚠️ 必须**串行**删：DELETE 是"读 tasks.json → 过滤 → 写回"，并发会互相覆盖
     for (const id of createdTaskIds) {
       try {
