@@ -224,6 +224,7 @@ import { useGitStore } from '@/stores/gitStore'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import { useNarrowPane } from '@/composables/useNarrowPane'
 import { useConvListCollapse } from '@/composables/useConvListCollapse'
+import { subscribeAgentSessionEvents } from '@/utils/agentSessionEvents'
 import { agentEngineName, type AgentEngineId } from '@/utils/agentEngine'
 import {
   buildConversationItems,
@@ -513,8 +514,14 @@ watch(showContextCard, (show) => {
   if (show) nextTick(syncContextSlot)
 })
 
+// 面板常驻（v-show 保状态）：别的窗口 / 远端 peer / CLI 刚落盘的会话不会自己进列表，
+// 靠服务端的目录变更事件补上（口径与 AgentView 同一份，见 utils/agentSessionEvents）。
+let disposeSessionEvents: (() => void) | null = null
 onMounted(() => {
   loadSessions().catch(() => {})
+  disposeSessionEvents = subscribeAgentSessionEvents(() => {
+    loadSessions({ silent: true }).catch(() => {})
+  })
   nextTick(() => {
     syncContextSlot()
     watchChatDom()
@@ -522,6 +529,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  disposeSessionEvents?.()
+  disposeSessionEvents = null
   slotObserver?.disconnect()
   slotObserver = null
   // 锚点是插进库 DOM 的，随组件一起卸载（父级销毁时它自然没了），

@@ -36,6 +36,7 @@ import { buildConversationItems, agentConversationLabels, agentQuestionLabels, a
 import { useAgentIdentity } from '@/composables/useAgentIdentity'
 import { resolveAgentPresets } from '@/utils/agentPresets'
 import { subscribeScheduleEvents } from '@/utils/scheduleApi'
+import { subscribeAgentSessionEvents } from '@/utils/agentSessionEvents'
 import { agentEngineName, type AgentEngineId } from '@/utils/agentEngine'
 import { useNarrowPane } from '@/composables/useNarrowPane'
 import { useConvListCollapse } from '@/composables/useConvListCollapse'
@@ -517,14 +518,26 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
 // 复用定时任务面板那个事件源（/api/schedules/events），跑完就重拉一次。
 // 只认 task_finished：task_started 那一刻会话还没落盘，拉了也是旧数据。
 let disposeScheduleEvents: (() => void) | null = null
+// ── 会话目录变了 → 重拉列表（静默） ────────────────────────
+// 会话文件是整机共享的：远端 peer 提问、另一个 g ui 窗口、CLI 都会往里写，而这些
+// 写入方在本窗口里留不下任何痕迹。服务端盯目录（/api/agent/events）推一条"变了"，
+// 这里就重拉一次 —— 于是另一台电脑问完话，这台机器的左栏会自己冒出新会话。
+//
+// 静默：一轮对话中途有检查点落盘，若每次都用 loading 态重拉，左栏会跟着闪。
+let disposeSessionEvents: (() => void) | null = null
 onMounted(() => {
   disposeScheduleEvents = subscribeScheduleEvents((evt) => {
     if (evt.type === 'task_finished') loadSessions().catch(() => {})
+  })
+  disposeSessionEvents = subscribeAgentSessionEvents(() => {
+    loadSessions({ silent: true }).catch(() => {})
   })
 })
 onBeforeUnmount(() => {
   disposeScheduleEvents?.()
   disposeScheduleEvents = null
+  disposeSessionEvents?.()
+  disposeSessionEvents = null
 })
 
 /**

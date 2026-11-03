@@ -819,7 +819,14 @@ export function useAgentChat() {
     if (extra.length) sessions.value = [...sessions.value, ...extra].sort(byUpdatedDesc)
   }
 
-  async function loadSessions() {
+  /**
+   * 拉会话列表。
+   *
+   * silent：不动 loading 态。给"服务端推来一条变更、后台顺手重拉"用 —— 那类刷新
+   * 用户没有发起任何操作，让左栏闪一下骨架等于凭空制造抖动（一轮对话中途还有
+   * 检查点落盘，会在生成期间反复触发）。
+   */
+  async function loadSessions(options: { silent?: boolean } = {}) {
     const requestNonce = ++sessionsRequestNonce
     const cwd = configStore.currentDirectory || ''
     if (!cwd) {
@@ -827,7 +834,8 @@ export function useAgentChat() {
       sessionsLoading.value = false
       return
     }
-    sessionsLoading.value = true
+    const showLoading = !options.silent
+    if (showLoading) sessionsLoading.value = true
     try {
       const url = `/api/agent/sessions?cwd=${encodeURIComponent(cwd)}`
       // no-store：会话列表要的是"这一刻的真实列表"，任何缓存副本都是错的。
@@ -848,7 +856,7 @@ export function useAgentChat() {
       if (requestNonce !== sessionsRequestNonce) return
       ElMessage.error($t('@AGENT:加载会话列表失败') + ': ' + (err?.message || err))
     } finally {
-      if (requestNonce === sessionsRequestNonce) sessionsLoading.value = false
+      if (requestNonce === sessionsRequestNonce && showLoading) sessionsLoading.value = false
     }
   }
 

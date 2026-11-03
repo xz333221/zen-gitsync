@@ -2968,6 +2968,7 @@ export default {
   '@AGENT:今天': 'Today',
   '@AGENT:天前': 'days ago',
   '@AGENT:无标题': '(Untitled)',
+  '@AGENT:远端': 'Remote',
   '@AGENT:查看项目结构': 'View project structure',
   '@AGENT:分析代码质量': 'Analyze code quality',
   '@AGENT:帮我提交代码': 'Commit my code',

@@ -49,7 +49,10 @@ export function buildConversationItems(
     meta: `${formatSessionDate(s.updatedAt)} · ${s.messageCount ?? 0} ${$t('@AGENT:条')}`,
     generatingText:
       s.isGenerating || isSessionGenerating(s.sessionId) ? $t('@AGENT:正在生成中...') : '',
-    badge: s.source === 'cli' ? 'CLI' : '',
+    // peer：另一台机器问过来的对话（不属于任何项目，见服务端 agentRoutes 的 peerAsk）。
+    // 不给它一个角标，用户只会看到一条标题像问题的会话凭空出现、也不知道为什么每条
+    // 项目里都有它。
+    badge: s.source === 'cli' ? 'CLI' : s.source === 'peer' ? $t('@AGENT:远端') : '',
     searchText: s.model,
   }))
 }

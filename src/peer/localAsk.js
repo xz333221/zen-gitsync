@@ -65,7 +65,15 @@ export async function askLocalAgent({
         'Content-Type': 'application/json',
         Accept: 'text/event-stream'
       },
-      body: JSON.stringify({ userMessage: text, sessionId: sessionId || undefined, locale }),
+      body: JSON.stringify({
+        userMessage: text,
+        sessionId: sessionId || undefined,
+        locale,
+        // 标记这次提问来自另一台机器：会话要有 source=peer、且不归属任何项目
+        // （见 agentRoutes 的 peerAsk —— 远端提问在这台机器上没有被选过项目，
+        // 挂在某个项目下会让本机用户在别的项目里一直看不到它）。
+        peer: true
+      }),
       signal: controller.signal
     });
   } catch (err) {

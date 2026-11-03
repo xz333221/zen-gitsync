@@ -34,6 +34,7 @@ import { createProjectListProvider } from './projectTool.js';
 import { askPeerByRef, listPeerStatus } from '../../../../peer/client.js';
 import { createDispatcher } from './dispatchInstruction.js';
 import { createWorkspaceSnapshotter } from '../aiContext/wiring.js';
+import { subscribeAgentSessionChanges } from './agentSessionEvents.js';
 // 用户固定提示词（g ai 默认提示词 + 派发提示词）的解析 —— 两条引擎链路共用同一份
 import { resolveChatPromptSection, buildDispatchPolicySection } from './chatPrompts.js';
 // 「同一会话同一时刻只允许一个生成中的轮次」的闸，与定时任务调度器共享
@@ -333,6 +334,38 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
     res.json({ success: true, sessions });
   }));
 
+  /**
+   * GET /api/agent/events — SSE：会话目录变了就推一条，前端据此重拉列表。
+   *
+   * 为什么不是每个写入方各自发事件：会话文件是整机共享的，写盘方可能是远端 peer、
+   * 另一个 g ui 窗口、CLI、定时任务 —— 逐个接线必然会漏一个。这里盯目录本身
+   * （见 agentSessionEvents.js），所有写盘路径天然覆盖。
+   *
+   * 只推"变了"这一个事实，不推具体是哪条：前端拿到就重拉，口径与手动刷新完全一致，
+   * 不会出现两套列表合并逻辑。
+   */
+  app.get('/api/agent/events', (req, res) => {
+    res.set({
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+    res.flushHeaders?.();
+    const send = (data) => {
+      try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch {}
+    };
+    send({ type: 'hello' });
+    const dispose = subscribeAgentSessionChanges(() => send({ type: 'sessions_changed' }));
+    const keepAlive = setInterval(() => {
+      try { res.write(': keep-alive\n\n'); } catch {}
+    }, SSE_HEARTBEAT_MS);
+    req.on('close', () => {
+      clearInterval(keepAlive);
+      dispose();
+    });
+  });
+
   // ════════════════════════════════════════════════════════════════════════
   // §2. 会话详情
   // ════════════════════════════════════════════════════════════════════════
@@ -482,6 +515,14 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
     // 两条一模一样的请求，还会把已经跑完的工具再跑一遍（见 agentChat.js 的 resume 参数）。
     const resume = req.body?.resume === true;
 
+    // 远端 peer 提问：peer 服务端环回调本路由，带 peer:true（见 peer/localAsk.js）。
+    //
+    // 这类对话**不属于任何项目** —— 是另一台机器发起的问题，用户在这台机器上根本没
+    // 为它选过项目。老版本按 hub 的当前项目（启动时的 process.cwd()）给它落 cwd，
+    // 于是用户在本机的项目窗口里按项目过滤列表时永远看不到它（"另一台电脑问完，
+    // 这台机器的会话列表没有新增"就是这么来的）。
+    const peerAsk = req.body?.peer === true;
+
     // 图片附件（base64 dataURL 数组）：前端已限制只能选图片，这里再做一层白名单校验
     const images = (Array.isArray(req.body?.images) ? req.body.images : [])
       .filter(u => typeof u === 'string' && /^data:image\/[\w.+-]+;base64,/.test(u))
@@ -629,7 +670,21 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
           }
           throw err;
         }
-        if (session.cwd && normalizeCwd(session.cwd) !== normalizeCwd(currentProjectCwd)) {
+        if (peerAsk) {
+          // 存量远端会话当时被写成了"hub 的项目"：这里顺手迁成项目中立，否则它在
+          // 任何一个项目窗口里都被过滤掉，等于永远打不开。
+          //
+          // 就地落盘（不等本轮结束）：这一轮后面还可能因为没配模型 / 断网直接收尾，
+          // 那些路径不会写 session，迁移就得再等一次成功的轮次 —— 而在此之前它仍然
+          // 被项目过滤掉，用户也就没机会让它成功跑一轮。
+          if (session.cwd || session.source !== 'peer') {
+            session.cwd = '';
+            session.source = 'peer';
+            await writeSession(session.sessionId, session).catch((err) => {
+              logger.warn(`[agent] 远端会话迁移到项目中立失败(本轮继续): ${err?.message || err}`);
+            });
+          }
+        } else if (session.cwd && normalizeCwd(session.cwd) !== normalizeCwd(currentProjectCwd)) {
           send({ type: 'error', error: '该会话属于其他项目，无法在当前项目中继续', code: 'PROJECT_MISMATCH' });
           finished = true;
           return res.end();
@@ -660,8 +715,10 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
           version: 1,
           sessionId: genSessionId(),
           title: '(新会话)',
-          source: 'web',
-          cwd: currentProjectCwd,
+          // 远端提问单独标 source：列表里能一眼认出"这条不是我在这台机器上开的"，
+          // 也是它不归属任何项目的显式标记（cwd 留空）。
+          source: peerAsk ? 'peer' : 'web',
+          cwd: peerAsk ? '' : currentProjectCwd,
           model: '',
           // 引擎：gai（内置，默认）| claude | opencode | codex | codebuddy | pi
           engine: normalizeAgentEngine(req.body?.engine),
