@@ -36,6 +36,9 @@ import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
 import { join, relative, dirname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+// glob 匹配是唯一实现，和 scripts/release.js 的自检共用（别各写一份：两套语义对不上
+// 就会「测试绿、发布红」，2026-11-05 加 `!` 取反规则时正是这么卡住的）
+import { matchFilesPattern, splitFilesEntries } from '../scripts/npm-files-glob.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8'))
@@ -69,38 +72,6 @@ function walkFiles(dir, acc = []) {
   return acc
 }
 
-// `**` 与 `*` 的 glob → 正则。双星号后跟斜杠时必须能匹配零层目录，
-// 否则 "双星号斜杠 + *.test.js" 这种写法匹配不到根级同后缀文件。
-function globToRegExp(glob) {
-  let out = ''
-  for (let i = 0; i < glob.length; i++) {
-    const c = glob[i]
-    if (c === '*') {
-      if (glob[i + 1] === '*') {
-        if (glob[i + 2] === '/') { out += '(?:.*/)?'; i += 2 } else { out += '.*'; i += 1 }
-      } else {
-        out += '[^/]*'
-      }
-    } else if ('\\.+^${}()|[]'.includes(c)) {
-      out += '\\' + c
-    } else {
-      out += c
-    }
-  }
-  return new RegExp('^' + out + '$')
-}
-
-/** 极简版 npm `files` 匹配:支持"目录/**"、"精确文件"与 `!` 取反后的 glob。 */
-function matchPattern(entry, relPath) {
-  const e = entry.replace(/\\/g, '/').replace(/^\.\//, '')
-  if (e.endsWith('/**')) {
-    const prefix = e.slice(0, -3)
-    return relPath === prefix || relPath.startsWith(prefix + '/')
-  }
-  if (e.includes('*')) return globToRegExp(e).test(relPath)
-  return relPath === e
-}
-
 /** 展开 `files` → 实际会被打包的仓库相对路径集合(含 npm 自动带上/被强制引用的入口)。 */
 function collectShipped() {
   const entries = Array.isArray(pkg.files) ? pkg.files : []
@@ -108,8 +79,7 @@ function collectShipped() {
 
   // npm 7+ 的 files 支持 `!` 取反（gitignore 风格）。推演必须同步这套语义，
   // 否则测试与真实 tarball 各算一套 = 假绿（例如 `!**/*.test.js` 被当成普通路径忽略）。
-  const includes = entries.filter((e) => !e.startsWith('!'))
-  const excludes = entries.filter((e) => e.startsWith('!')).map((e) => e.slice(1))
+  const { includes, excludes } = splitFilesEntries(entries)
 
   const shipped = new Set()
   for (const entry of includes) {
@@ -122,7 +92,7 @@ function collectShipped() {
     }
   }
   for (const relPath of [...shipped]) {
-    if (excludes.some((p) => matchPattern(p, relPath))) shipped.delete(relPath)
+    if (excludes.some((p) => matchFilesPattern(p, relPath))) shipped.delete(relPath)
   }
   // bin 与 main 是"无论 files 怎么写都必须存在"的入口,一并纳入检查范围。
   const entries2 = [pkg.main, ...Object.values(pkg.bin || {})].filter(Boolean)

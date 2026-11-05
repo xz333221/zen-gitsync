@@ -212,6 +212,7 @@
     "scripts/run-tests.cjs",
     "scripts/release.js",
     "scripts/dev-ping.cjs",
+    "scripts/npm-files-glob.mjs",
     "package.json",
     "index.js",
     "!**/*.test.js",

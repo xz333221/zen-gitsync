@@ -71,6 +71,7 @@ import {
   FORCE_INSTALL_EVERY,
 } from '../src/utils/selfUpdatePolicy.js'
 import { notifyDesktop, setTerminalTitle } from '../src/utils/desktopNotify.js'
+import { matchFilesPattern, splitFilesEntries } from './npm-files-glob.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -503,7 +504,10 @@ async function verifyPackageContents() {
     await abortRelease('npm pack 打出了空包,绝对有问题')
   }
 
-  const notPacked = (pkg.files || []).filter((entry) => {
+  // `!` 开头的是取反规则，不该被期望「有文件进包」——当普通条目处理会 100% 误报。
+  const { includes, excludes } = splitFilesEntries(pkg.files)
+
+  const notPacked = includes.filter((entry) => {
     if (entry.endsWith('/**')) {
       const prefix = entry.slice(0, -3)
       return ![...packed].some((p) => p === prefix || p.startsWith(prefix + '/'))
@@ -517,7 +521,24 @@ async function verifyPackageContents() {
       + notPacked.map((e) => `  - ${e}`).join('\n')
     )
   }
-  console.log(chalk.green(`② 真实打包 ${packed.size} 个文件,白名单逐条命中`))
+
+  // 取反规则也要验：写错（或 npm 版本不支持 `!`）时会静默失效，
+  // 本该排除的测试文件就悄悄回到 tarball 里。
+  const leaked = excludes.length
+    ? [...packed].filter((p) => excludes.some((pattern) => matchFilesPattern(pattern, p)))
+    : []
+  if (leaked.length) {
+    await abortRelease(
+      `package.json#files 的取反规则没生效，${leaked.length} 个本该排除的文件仍会进包:\n`
+      + leaked.slice(0, 10).map((f) => `  - ${f}`).join('\n')
+      + (leaked.length > 10 ? `\n  ...还有 ${leaked.length - 10} 个` : '')
+    )
+  }
+
+  console.log(chalk.green(
+    `② 真实打包 ${packed.size} 个文件，白名单逐条命中`
+    + (excludes.length ? `，${excludes.length} 条取反规则生效` : '')
+  ))
 }
 
 // 仅把显式白名单文件 stage,并 sanity check
