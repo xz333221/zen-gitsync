@@ -19,7 +19,6 @@
 //   - shared.js          常量 + 通用工具 (nowIso, genId, readJson, writeJson, interpolate)
 //   - jsonParse.js       从 LLM 输出里抠 JSON 的纯函数
 //   - llmClient.js       LLM 客户端 (callLlmJson, callLlmStream)
-//   - projectScan.js     子项目识别 (findSubProjects, detectProjectManifest)
 //   - attachmentUtils.js 附件白名单 (sanitizeExt, resolveExt, MIME_TO_EXT)
 //   - jobStore.js        jobs Map + bus + 持久化 + retention
 //   - taskRunner.js      任务执行引擎 (runSingleSubtask)

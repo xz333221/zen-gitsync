@@ -199,31 +199,14 @@ export default defineConfig(({ command }) => {
     build: {
       outDir: path.resolve(__dirname, "../public"),
       emptyOutDir: true,
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            // 体积大且仅特定视图用到的库 → 各自独立 chunk,首屏不下载
-            // monaco-editor 仅 EditorView 用(~3 MB)
-            if (id.includes('monaco-editor')) return 'monaco'
-            // @vue-flow/* 仅 SourceMapView + FlowOrchestrationWorkspace 用(~700 KB)
-            if (id.includes('@vue-flow')) return 'vue-flow'
-            // flow-mindmap 仅 MindmapPreview 用(~500 KB)
-            if (id.includes('flow-mindmap')) return 'flow-mindmap'
-            // socket.io-client 仅 Stores 用,但长连接常驻,独立 chunk 利于缓存
-            if (id.includes('socket.io-client')) return 'socket-io'
-            // element-plus 整体(被 resolver 按需,但全量包仍在)
-            if (id.includes('element-plus')) return 'element-plus'
-            // dagre 仅 FlowOrchestrationWorkspace 用
-            if (id.includes('dagre')) return 'dagre'
-            // Office 预览只在打开对应文件时加载，避免首屏打包解析器
-            if (id.includes('@vue-office/docx')) return 'office-docx'
-            if (id.includes('@vue-office/excel')) return 'office-excel'
-            if (id.includes('@vue-office/pptx')) return 'office-pptx'
-            // 其它 node_modules 统一 vendor,避免过度切分
-            if (id.includes('node_modules')) return 'vendor'
-          },
-        },
-      },
+      // 刻意不写 manualChunks，交给打包器按动态 import 边界自动切分。
+      //
+      // 旧配置是「大库各自独立 chunk + 其余 node_modules 统一进 vendor」。最后那句
+      // `if (id.includes('node_modules')) return 'vendor'` 会把**只被懒加载视图引用**的
+      // 库也并进同一个 vendor：zen-ai-chat-ui 硬依赖 mermaid/shiki/katex（压缩后约 12 MB），
+      // 它挂在 AgentDock → AgentView 的异步链下，本该点开 AI 面板才加载；被兜底并进 vendor 后，
+      // 首屏只要 import 了任意第三方模块，整个 vendor 就被静态加载 → 首屏 20 MB。
+      // 去掉兜底后，这些库回到各自的懒加载 chunk 里（实测首屏见 scripts/ 下的构建对比）。
     },
   }
 })

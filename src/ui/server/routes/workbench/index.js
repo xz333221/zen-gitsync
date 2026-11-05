@@ -15,11 +15,10 @@
 // 工作台路由入口。
 //
 // 历史背景：本文件曾是 3539 行的巨型文件，包含所有顶层工具函数 + 45 个路由端点。
-// 2026-06-29 按业务域拆分为 workbench/ 子目录的 9 个模块：
+// 2026-06-29 按业务域拆分为 workbench/ 子目录的 8 个模块：
 //   - shared.js          常量 + 通用工具 (nowIso, genId, readJson, writeJson, interpolate)
 //   - jsonParse.js       从 LLM 输出里抠 JSON 的纯函数
 //   - llmClient.js       LLM 客户端 (callLlmJson, callLlmStream)
-//   - projectScan.js     子项目识别 (findSubProjects, detectProjectManifest)
 //   - attachmentUtils.js 附件白名单 (sanitizeExt, resolveExt, MIME_TO_EXT)
 //   - jobStore.js        jobs Map + bus + 持久化 + retention
 //   - taskRunner.js      任务执行引擎 (runSingleSubtask —— 一次任务 = 一次会话)

@@ -15,7 +15,7 @@
   -->
 <script setup lang="ts">
 import { $t } from '@/lang/static.ts'
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue';
 import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElMessage, ElSplitter, ElInput, ElButton } from 'element-plus';
 import { FolderOpened, DocumentCopy, CopyDocument, Document, Search, Warning, CircleCheck, View } from '@element-plus/icons-vue';
 import TreeIcon from '@/components/icons/TreeIcon.vue';
@@ -32,8 +32,11 @@ import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/file
 import type { ConflictBlock } from '@/types/conflict';
 import { useConfigStore } from '@stores/configStore';
 import { useGitStore } from '@stores/gitStore';
-import MonacoDiffViewer from '@/components/MonacoDiffViewer.vue'
-import MonacoEditor from '@/components/MonacoEditor.vue'
+// Monaco 是首屏最大的单块依赖(~4 MB):GitStatus 走静态 import,这条链会把整个
+// monaco 拉进首屏。改成异步组件后,只有真正渲染 diff/编辑区时才请求该 chunk。
+// 两个组件都没有 defineExpose,父级也没有 ref 调用 → 异步化不影响交互。
+const MonacoDiffViewer = defineAsyncComponent(() => import('@/components/MonacoDiffViewer.vue'))
+const MonacoEditor = defineAsyncComponent(() => import('@/components/MonacoEditor.vue'))
 import ImagePreview from '@/components/ImagePreview.vue'
 import AiDiffSummary from '@/components/AiDiffSummary.vue'
 import DiffPreviewPanel from '@/components/DiffPreviewPanel.vue'
