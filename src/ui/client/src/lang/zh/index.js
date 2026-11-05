@@ -2343,6 +2343,7 @@ export default {
   '@WORKBENCH:正在执行中,请先「停止」再重新执行': '正在执行中,请先「停止」再重新执行',
   '@WORKBENCH:把要做的事直接写在这里,执行时会把这段描述作为 prompt 喂给 Claude': '把要做的事直接写在这里,执行时会把这段描述作为 prompt 喂给 Claude',
   '@WORKBENCH:任务描述（可选）': '任务描述（可选）',
+  '@WORKBENCH:补充背景、验收标准…': '补充背景、验收标准…',
   '@WORKBENCH:合并(跳过已存在)': '合并(跳过已存在)',
   '@WORKBENCH:取消': '取消',
   '@WORKBENCH:进程ID': '进程ID',

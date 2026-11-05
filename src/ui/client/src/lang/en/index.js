@@ -2335,6 +2335,7 @@ export default {
   '@WORKBENCH:正在执行中,请先「停止」再重新执行': 'Currently running — click "Stop" before re-running',
   '@WORKBENCH:把要做的事直接写在这里,执行时会把这段描述作为 prompt 喂给 Claude': 'Write what needs to be done here — this description will be sent to Claude as the prompt at run time.',
   '@WORKBENCH:任务描述（可选）': 'Task description (optional)',
+  '@WORKBENCH:补充背景、验收标准…': 'Add context, acceptance criteria…',
   '@WORKBENCH:合并(跳过已存在)': 'Merge (skip existing)',
   '@WORKBENCH:取消': 'Cancel',
   '@WORKBENCH:进程ID': 'PID',

@@ -839,7 +839,7 @@ const taskDescTextareaRef = ref<HTMLTextAreaElement | null>(null)
  * - 切走任务再切回来时 selectedTask.desc 可能已变,触发 watch 走同一逻辑
  * - 焦点状态下使用更大的最大高度，方便查看输入内容
  */
-const DESC_TEXTAREA_MIN_PX = 52
+const DESC_TEXTAREA_MIN_PX = 34
 const DESC_TEXTAREA_MAX_PX = 320
 const DESC_TEXTAREA_MAX_PX_FOCUS = 500
 
@@ -1539,8 +1539,9 @@ const selectedTaskQueue = computed(() =>
           <textarea
             ref="taskDescTextareaRef"
             class="wb-textarea wb-textarea--autogrow"
+            rows="1"
             v-model="selectedTask.desc"
-            :placeholder="$t('@WORKBENCH:任务描述（可选）')"
+            :placeholder="$t('@WORKBENCH:补充背景、验收标准…')"
             :aria-label="$t('@WORKBENCH:任务描述（可选）')"
             @input="autoGrowTextarea($event)"
             @focus="autoGrowTextarea($event)"
@@ -1936,12 +1937,14 @@ const selectedTaskQueue = computed(() =>
 
 /* 顶部条已移除：执行日志入口直接合到任务头（与「执行任务」按钮同处），节省首屏纵向空间。 */
 
-/* 任务描述折叠块：默认展开，点 summary 可收起。 */
+/* 任务描述折叠块：默认展开，点 summary 可收起。
+   不再是一张「圆角卡片」：描述是任务头的正文，不是独立面板。
+   外壳完全透明，靠 summary 的 11px 小节标签和下方正文建立层级。 */
 .wb-task-desc {
-  border-radius: var(--radius-md);
-  background: var(--bg-subtle);
+  border-radius: 0;
+  background: transparent;
   padding: 0;
-  margin: 0;
+  margin: -1px 0 0;
   flex-shrink: 0;
   /* 兜底：作为 flex column 子项时被自身内容(尤其 summary 的标签 + textarea 的 placeholder)
      撑出右边界,导致 textarea 看起来"右侧超出"。min-width: 0 让它老老实实按容器宽度收。 */
@@ -1958,35 +1961,35 @@ const selectedTaskQueue = computed(() =>
   color: var(--text-secondary);
 }
 .wb-task-desc[open] {
-  background: var(--bg-container);
+  background: transparent;
 }
 .wb-task-desc__summary {
   list-style: none;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 6px;
-  /* 去掉左右 padding:让 summary 的图标/文字/复制按钮/已填写标签
-     全部紧贴父容器左右内边线,跟下面 textarea 的 0 margin 对齐,
-     整体视觉更紧凑、不再有"两边挤压"的不对齐感。 */
-  padding: 8px 0;
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
+  gap: 5px;
+  /* 小节标签化：11px 的 meta 色标签，不再占一整行卡片头 */
+  padding: 3px 0 2px;
+  font-size: var(--font-size-xs);
+  line-height: 16px;
+  color: var(--text-meta);
   user-select: none;
 }
 .wb-task-desc__summary::-webkit-details-marker { display: none; }
-.wb-task-desc__summary:hover { background: var(--bg-container-hover); }
+.wb-task-desc__summary:hover { color: var(--text-secondary); }
 .wb-task-desc__caret {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   color: var(--text-meta);
   transition: transform var(--transition-fast);
 }
 .wb-task-desc__label {
   font-weight: 500;
-  letter-spacing: 0.1px;
+  letter-spacing: 0.2px;
 }
 .wb-task-desc__tag {
-  margin-left: auto;
+  /* 跟着标签走，不甩到行尾：1500px 宽下「已填写」孤零零挂在最右边又是一片空白 */
+  margin-left: 2px;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -2006,29 +2009,42 @@ const selectedTaskQueue = computed(() =>
   color: var(--color-primary);
   font-variant-numeric: tabular-nums;
 }
+/* 展开时内容就在眼前，「已填写 / 附件 N」标签是重复信息，收起来让头部只剩一行小标签 */
+.wb-task-desc[open] .wb-task-desc__tag { display: none; }
 .wb-task-desc[open] .wb-task-desc__summary {
   margin-bottom: 0;
 }
-.wb-task-desc > .wb-textarea,
-.wb-task-desc > :deep(.attachment-zone) {
-  /* 右外边距 14px(与 summary 同步):之前 12px 在 focus 状态下被焦点边框吃掉 1px,
-     视觉上 textarea 右边缘几乎贴住父容器右内边缘,显得"右侧超出/没显示全"。
-     加 2px 缓冲,并配合 .wb-task-desc 的 min-width: 0 一起保证不撑出父容器。
-     上 margin 0:让 textarea 紧贴 summary(默认展开后 summary 和 textarea 紧贴更紧凑)。
-     左外边距 0:让 textarea 文本基线与 summary 文本对齐(summary 的图标+文字也是
-     紧贴父容器左内边线),不要让 textarea 再往里缩 14px 出现"视觉上偏移"。
-     下 margin 0:由 attachment-zone 的上 margin(8px)和 border 视觉自然分隔。 */
-  margin: 0 14px 0 0;
-}
+/* 描述正文去掉输入框外壳：通栏平铺，文字与标题左端在同一条竖线上。
+   静息完全透明，hover / focus 才用底色和一条内描边标出可编辑范围 ——
+   避免再出现"圆角 + 1px border 的第二个空盒子"。 */
 .wb-task-desc > .wb-textarea {
-  margin-bottom: 0;
-  /* 双保险:即便父容器出现内容撑出,textarea 也止步于父容器 content-box 之内 */
+  margin: 0;
   max-width: 100%;
+  padding: 4px 6px;
+  margin-left: -6px;
+  border-color: transparent;
+  background: transparent;
+  border-radius: var(--radius-base);
+  box-shadow: none;
 }
-.wb-task-desc > :deep(.attachment-zone) {
-  /* 给 attachment-zone 一个 8px 上 margin,与 textarea 的 0 上 margin
-     形成 8px 视觉间距(避免去掉 textarea 上 margin 后两者贴在一起)。 */
-  margin-top: 8px;
+.wb-task-desc > .wb-textarea:hover:not(:focus) {
+  border-color: transparent;
+  background: var(--bg-subtle);
+}
+/* focus 不套圆角描边：一条左侧主色竖条 + 6% 淡底，和全站「选中/进行中 = 竖条」的语言一致，
+   也不会把三行描述重新框成一张圆角卡片。 */
+.wb-task-desc > .wb-textarea:focus {
+  border-color: transparent;
+  background: var(--tint-primary-06);
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+.wb-task-desc > :deep(.wb-attachments) {
+  margin-top: 2px;
+}
+/* 「添加附件」贴回标签右侧：整页宽 1500px 时 margin-left:auto 会把它甩到最右边，
+   和「附件 0」隔着一整片空白，看起来像一条孤立的蓝色链接。 */
+.wb-task-desc :deep(.wb-attachments__add) {
+  margin-left: 0;
 }
 
 /* editor 视图的子行容器：把 sidebar + split 重新横向排列（workbench 改成 column 后需要这一层） */
@@ -2504,7 +2520,8 @@ const selectedTaskQueue = computed(() =>
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  /* 任务头三段（标题 / 描述 / 执行主体）本来是同一条信息流，间距压到 6px */
+  gap: 6px;
 }
 .wb-placeholder {
   flex: 1;
@@ -2557,7 +2574,7 @@ const selectedTaskQueue = computed(() =>
   row-gap: 6px;
   align-items: center;
   flex-shrink: 0;
-  padding-bottom: 4px;
+  padding-bottom: 0;
   /* 右侧 8px padding 让"复制/保存状态"等小工具不被外边线贴住,
      解决"看不到又边框"的问题（之前是 0,边缘 1px focus ring 吃掉 padding
      会让按钮紧贴父容器右内边线,看起来"超出/缺 padding"）。 */
@@ -2585,8 +2602,9 @@ const selectedTaskQueue = computed(() =>
   width: 28px;
   height: 28px;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border-color);
-  background: var(--bg-container);
+  /* 次级动作静息不画框：任务头已经没有输入框外壳，再来一圈描边就成了噪音 */
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--text-meta);
   cursor: pointer;
   padding: 0;
@@ -2599,7 +2617,7 @@ const selectedTaskQueue = computed(() =>
 }
 .wb-copy-btn:hover:not(:disabled) {
   background: var(--tint-primary-12);
-  border-color: var(--tint-primary-35);
+  border-color: transparent;
   color: var(--color-primary);
 }
 .wb-copy-btn:active:not(:disabled) { transform: scale(0.94); }
@@ -2862,30 +2880,39 @@ const selectedTaskQueue = computed(() =>
     var(--wb-card-inset-shadow);
 }
 
-/* ── 标题：hero 级单行输入 ─────────────────────────── */
+/* ── 标题：文档标题式单行输入 ──────────────────────────
+   原来是 36px 高的「圆角 + 单 border」输入框，里面只放一行短标题 ——
+   横向拉满 1200px，看过去就是一大块空盒子（用户反复说过不喜欢这种语言）。
+   改成排版式标题：字号/字重拉开层级，静息无框，hover / focus 只亮一条底线。
+   注意不能用 box-shadow 画底线：common.scss 有 `input:not(:focus){box-shadow:none!important}`，
+   hover 那条会被整条压掉（实测 computed 恒为 none）。 */
 .wb-input--title {
-  /* 极简化：去掉 box-shadow inset，更低视觉重量 */
-  height: 36px;
+  height: 30px;
   flex: 1;
-  font-size: var(--font-size-base);
-  font-weight: 600;
-  letter-spacing: -0.4px;
-  padding: 0 12px;
-  border-color: var(--border-color);
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.3px;
+  padding: 0 6px;
+  margin-left: -6px;
+  border-color: transparent;
+  border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
 .wb-input--title:hover:not(:focus) {
-  border-color: var(--border-color-medium);
-  background: var(--bg-container);
+  border-color: transparent;
+  border-bottom-color: var(--border-color-medium);
+  background: transparent;
+  box-shadow: none;
 }
 .wb-input--title:focus {
-  border-color: var(--color-primary);
-  background: var(--bg-container);
-  box-shadow: 0 0 0 3px var(--tint-primary-14);
+  border-color: transparent;
+  border-bottom-color: var(--color-primary);
+  background: transparent;
+  box-shadow: none;
 }
 .wb-input--title::placeholder {
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-placeholder);
 }
 
@@ -2929,11 +2956,11 @@ const selectedTaskQueue = computed(() =>
    设 overflow-y: hidden 默认,JS 在内容超 max 时改 overflow-y: auto。 */
 .wb-textarea--autogrow {
   resize: none;
-  min-height: 52px;
+  min-height: 34px;
   max-height: 320px;
   overflow-y: hidden;
-  /* line-height 1.55 配合 13px 字号 → 行高 ~20px,
-     52px 起手约 2 行可写空间,足够 placeholder 完整显示。 */
+  /* line-height 1.55 配合 13px 字号 → 行高 ~20px，
+     34px 起手 = 一行正文 + 上下内边距，空描述不再占一个两行高的空盒子。 */
   transition: height var(--transition-fast) var(--ease-custom);
 }
 

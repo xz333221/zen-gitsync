@@ -959,3 +959,43 @@ border / radius / box-shadow，注回旧 CSS 会立刻翻红 —— 反证做过
 回归网：`verify:agent-prompt-settings` 加了 G 组（G1 两栏并排 / G2 内容宽度跟面板走 /
 G3 面板窄到 600px 回落单栏）。G1R 在**同一次运行**里把旧的 `max-width:860 + display:block`
 注回去，验证这两条判据真的会翻红（实测 cols.w 1460 → 820），不另开 `--reverse` 流程。
+
+## 补记（2026-11-05）：任务执行页顶部「标题 + 描述」压紧
+
+用户圈的是任务执行弹窗最上面两块（标题输入框、任务描述输入框），原话是「我想把上边弄
+紧凑一些，现在有大量的空白，你可以改变布局」。这两块正好是「圆角 + 单 border」的两个
+全宽空盒子：标题框 36px 高、横向拉满 1200px 只放一行短标题；描述框 `min-height:52`，
+而且 `<textarea>` 没写 `rows`，浏览器默认 `rows=2` —— `autoGrowTextarea()` 把 height
+设成 `auto` 时 `scrollHeight` 的下限就是两行，所以「按内容长高」其实永远收不到一行。
+
+改法（`WorkbenchView.vue`，只动样式 + 给 textarea 补 `rows="1"`）：
+
+- **标题改成排版式**：18px / 650 字重，静息完全无框；hover 在文字下方亮一条浅灰底线，
+  focus 换成主色底线。⚠️ 底线不能用 `box-shadow` 画：`common.scss` 有一条
+  `input:not(:focus){box-shadow:none!important}`，会把 hover 那条整条压掉
+  （实测 computed 恒为 `none`），只能用 `border-bottom-color`。
+- **描述去壳**：`details` 外壳透明、`summary` 从 38px 的卡片头压成 11px 小节标签
+  （「任务描述（可选）」+ 复制 + 收起），正文 textarea 无边框、`min-height:34px`、
+  `rows="1"`，按内容长高；focus 用「左侧 3px 主色竖条 + 6% 淡底」，不再套一圈圆角描边。
+- **元信息不再甩到行尾**：展开时隐藏重复的「已填写」标签；「添加附件」从 `margin-left:auto`
+  改回紧跟「附件 N」，否则 1500px 宽下它孤零零挂在最右边。
+- **间距**：`.wb-split` 三段 gap 10 → 6，header 的 `padding-bottom` 4 → 0，复制按钮去描边
+  改 ghost（hover 才出现 12% 主色底）。
+- 占位文案从「任务描述（可选）」改成「补充背景、验收标准…」——上面一行已经是同名标签，
+  两行一样的话叠在一起很蠢。新 key 中英都补了。
+
+实测（1600×950，标题行顶到「提示词」行底）：**216px → 160px（−56px）**；
+标题 36→30、描述 60→34、小节标签 38→27。
+
+| 改前（两个圆角边框空盒子） | 改后（标题 + 小节标签 + 通栏正文） |
+|---|---|
+| ![改前](./task-head-before.png) | ![改后](./task-head-after.png) |
+
+深色 / 三行描述（按内容长高）/ 聚焦态：
+
+![深色](./task-head-dark.png) ![多行](./task-head-multiline.png) ![聚焦](./task-head-focus.png)
+
+回归：`tsc` / `build` / `verify:i18n-keys --ns @WORKBENCH` 均通过；
+`verify:wb-editor-persist` 12/12、`verify:wb-dialogs` 27/27、`verify:wb-head-actions` 16/16
+（后两个探针依赖 `.wb-split__title-wrap .wb-input--title` 与
+`.wb-task-desc .wb-textarea--autogrow` 两个选择器，都保留了）。
