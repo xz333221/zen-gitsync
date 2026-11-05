@@ -230,6 +230,56 @@ describe('AgentDock 点击外部关闭', () => {
     outside.remove()
   })
 
+  // 拖拽选择对话文本时 mouseup 会跑到面板外，click 目标变成公共祖先 —— 不能当成
+  // 「点外面」关面板（否则选区直接落到蒙在下面的编辑器上）
+  it('面板内按下、在外部松开（拖选越界）→ 不关闭', async () => {
+    const w = mountDock()
+    await mascot(w).trigger('click')
+    await nextTick()
+    expect(panelShown(w)).toBe(true)
+
+    const panel = w.find('.agent-dock__panel').element
+    panel.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    const outside = document.createElement('div')
+    document.body.appendChild(outside)
+    outside.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await nextTick()
+    expect(panelShown(w)).toBe(true)
+    outside.remove()
+  })
+
+  // 面板压着编辑器时，拖选越界会把底下的文本一起卷进选区 —— 按下点在面板内就把
+  // 面板外临时锁成不可选，松手摘掉（只挂类，样式在 AgentDock 的 :global 里）
+  it('面板内按下 → 锁住面板外的选择；松手解锁', async () => {
+    const w = mountDock()
+    await mascot(w).trigger('click')
+    await nextTick()
+
+    // 派发在游离节点上的事件不会冒泡到 document（组件监听挂在 document 上），
+    // 必须先挂进文档
+    document.body.appendChild(w.element)
+    const panel = w.find('.agent-dock__panel').element
+    panel.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    expect(document.documentElement.classList.contains('agent-dock-selecting')).toBe(true)
+
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    expect(document.documentElement.classList.contains('agent-dock-selecting')).toBe(false)
+    w.unmount()
+  })
+
+  it('点面板外部 → 不锁选择', async () => {
+    const w = mountDock()
+    await mascot(w).trigger('click')
+    await nextTick()
+
+    const outside = document.createElement('div')
+    document.body.appendChild(outside)
+    outside.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    expect(document.documentElement.classList.contains('agent-dock-selecting')).toBe(false)
+    outside.remove()
+    document.documentElement.classList.remove('agent-dock-selecting')
+  })
+
   it('点活动栏（切视图）→ 不关闭', async () => {
     const w = mountDock()
     await mascot(w).trigger('click')

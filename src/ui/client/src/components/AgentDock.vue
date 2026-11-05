@@ -153,14 +153,35 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
 // mousedown 先快照「事件开始前面板是否已开」：chips 点击会在同一事件里把面板打开
 //（bus → watch → open），若不看快照，随后的 document click 会立刻把它关掉。
 let wasOpenAtPress = false
-function onPressCapture() {
+// 按下时是否落在面板里。**拖拽选择文本**时 mouseup 常跑到面板外，浏览器派发的
+// click 目标因此是两端的公共祖先（body / 底下的视图），按 target 判「外部」会把
+// 面板关掉 —— 用户选一段跨出边界的对话文字，面板就消失、选区直接落到蒙在下面的
+// Monaco 上（2026-11-05 截图：选中的是编辑器第 7~38 行）。真实「点外面」必然是
+// 在外部按下的，所以用按下点判定。
+let pressedInDock = false
+// 在面板里按下就开始「只准选面板里的字」：Chrome 的选区是文档级的，鼠标拖出面板
+// 边界（左边就是底下的编辑器）时，整片 Monaco / 视图文本会被卷进选区 —— 用户看到的
+// 就是「想选对话，结果选中了编辑器」。按下点在面板内时给根节点挂一个类，把面板外
+// 临时设为不可选；松手就摘掉，正常点选编辑器不受影响。
+function lockSelection() {
+  document.documentElement.classList.add('agent-dock-selecting')
+}
+function unlockSelection() {
+  document.documentElement.classList.remove('agent-dock-selecting')
+}
+function onPressCapture(e: MouseEvent) {
   wasOpenAtPress = opened.value
+  const t = e.target as HTMLElement | null
+  pressedInDock = !!(t && t.closest && t.closest('.agent-dock'))
+  if (pressedInDock) lockSelection()
+  else unlockSelection()
 }
 function onDocClick(e: MouseEvent) {
   if (!wasOpenAtPress || !opened.value) return
   // 这一下是追问 chips 的「打开 dock 并发问」：pending 还没被 watch 消费掉，
   // 关掉就等于把用户刚点的回答藏起来 —— 不关
   if (agentDockBus.pending) return
+  if (pressedInDock) return
   const t = e.target as HTMLElement | null
   if (!t) return
   // 目标可能在本次点击里被 Vue 重渲染摘掉（最大化/还原按钮换图标就是：
@@ -173,13 +194,21 @@ function onDocClick(e: MouseEvent) {
   if (t.closest('.agent-dock, .activity-bar, .el-popper, .el-overlay, .el-dialog, .el-message, .el-notification, .el-message-box')) return
   close()
 }
+function onDocMouseUp() {
+  unlockSelection()
+}
 onMounted(() => {
   document.addEventListener('mousedown', onPressCapture, true)
   document.addEventListener('click', onDocClick)
+  document.addEventListener('mouseup', onDocMouseUp)
+  window.addEventListener('blur', onDocMouseUp)
 })
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', onPressCapture, true)
   document.removeEventListener('click', onDocClick)
+  document.removeEventListener('mouseup', onDocMouseUp)
+  window.removeEventListener('blur', onDocMouseUp)
+  unlockSelection()
 })
 </script>
 
@@ -277,6 +306,15 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped lang="scss">
+/* 面板内开始拖选时（见 onPressCapture 的 lockSelection），把面板外的内容临时锁成
+   不可选 —— 否则鼠标越过浮层边界，底下编辑器/视图的整片文本会被一起卷进选区。 */
+:global(html.agent-dock-selecting #app) {
+  user-select: none;
+}
+:global(html.agent-dock-selecting .agent-dock) {
+  user-select: text;
+}
+
 .agent-dock {
   position: fixed;
   right: var(--spacing-lg);
