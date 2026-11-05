@@ -241,6 +241,28 @@ async function waitFor(fn, { timeout = 8000, interval = 250 } = {}) {
   }
 }
 
+/**
+ * 量一次设置面板的版式几何。只回标量（page.evaluate 里回 DOMRect 会变 undefined）。
+ */
+function measureLayout(page) {
+  return page.evaluate(() => {
+    const box = (s) => {
+      const el = document.querySelector(s)
+      if (!el) return null
+      const b = el.getBoundingClientRect()
+      return { x: b.x, y: b.y, w: b.width, h: b.height }
+    }
+    const side = document.querySelector('.aps__col--side')
+    return {
+      panel: box('.aps'),
+      cols: box('.aps__cols'),
+      main: box('.aps__col--main'),
+      side: box('.aps__col--side'),
+      sideBorder: side ? getComputedStyle(side).borderLeftWidth : '',
+    }
+  })
+}
+
 async function browserChecks() {
   const MARK = Date.now().toString().slice(-6)
   const GAI_TEXT = `【g ai 默认提示词验证${MARK}】回答用中文`
@@ -312,6 +334,43 @@ async function browserChecks() {
       (await page.$('#aps-gai')) !== null
       && (await page.$('.aps__card--dispatch #aps-global')) !== null
       && (await page.$('.aps__card--dispatch #aps-project')) !== null)
+
+    // ── G 组：版式（宽面板两栏铺满 / 窄面板回落单栏）──
+    // 回归的是「一列 max-width:860 靠左，宽窗口右边空一大块」（用户 2026-11-05 配图提的）。
+    // 判据全部量几何，别数节点：两个 .aps__col 永远都在，数节点恒绿。
+    const wide = await measureLayout(page)
+    const isTwoCol = (g) => !!g.cols && !!g.main && !!g.side
+      && g.side.x >= g.main.x + g.main.w + 8          // 右栏真的在左栏右边
+      && Math.abs(g.side.y - g.main.y) <= 2           // 同一行起跑，不是上下堆
+      && g.panel.w - g.cols.w <= 48                   // 内容铺满面板（只剩两侧 padding）
+    check('G1 ★ 宽面板是两栏并排', isTwoCol(wide),
+      wide.cols ? `面板 ${Math.round(wide.panel.w)} / 内容 ${Math.round(wide.cols.w)}，左栏 ${Math.round(wide.main.w)}，右栏 x=${Math.round(wide.side.x)}` : '没量到 .aps__cols')
+
+    check('G2 ★ 内容宽度跟着面板走（不再钉死在 860px 右边留白）',
+      !!wide.cols && wide.cols.w > 900,
+      wide.cols ? `cols.w = ${Math.round(wide.cols.w)}` : '')
+
+    // 反向：把旧版「一列 860 + block」注回去，G1/G2 的判据必须翻红 —— 否则这两条是空跑。
+    // 注完立刻摘掉（同一次运行里做正反两遍，不另开 --reverse 流程）
+    const oldStyle = await page.addStyleTag({ content:
+      '.aps__scroll{max-width:860px !important;display:block !important}'
+      + '.aps__cols{display:block !important}' })
+    const old = await measureLayout(page)
+    await oldStyle.evaluate((el) => el.remove())
+    check('G1R ★ 反向：退回「一列 860px」时 G1/G2 的判据转红',
+      !isTwoCol(old) && !(old.cols && old.cols.w > 900),
+      old.cols ? `旧版 cols.w = ${Math.round(old.cols.w)}` : '')
+
+    // 面板收窄到 600px（悬浮 dock 的宽度档）：容器查询该把它打回单栏
+    await page.evaluate(() => { document.querySelector('.aps').style.maxWidth = '600px' })
+    await sleep(200)
+    const narrow = await measureLayout(page)
+    await page.evaluate(() => { document.querySelector('.aps').style.maxWidth = '' })
+    check('G3 ★ 面板窄到 600px 时回落单栏（且不画竖分隔线）',
+      !!narrow.side && narrow.side.y > narrow.main.y
+      && Math.abs(narrow.side.x - narrow.main.x) <= 1
+      && narrow.sideBorder === '0px',
+      narrow.side ? `右栏 y=${Math.round(narrow.side.y)} 左栏 y=${Math.round(narrow.main.y)}，竖线 ${narrow.sideBorder}` : '')
 
     // ── C 组：存 g ai 默认提示词 ──
     await page.fill('#aps-gai', GAI_TEXT)

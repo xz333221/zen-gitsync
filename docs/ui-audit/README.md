@@ -935,3 +935,27 @@ border / radius / box-shadow，注回旧 CSS 会立刻翻红 —— 反证做过
 | 改前（两块圆角高亮粘连） | 改后（通栏平铺） |
 |---|---|
 | ![改前](./mindmap-sidebar-before.png) | ![改后](./mindmap-sidebar-after.png) |
+
+## 补记（2026-11-05）：智能体「设置」页右边一大块空白 → 改成两栏
+
+用户圈的是设置面板右侧约 40% 的空区，问「是不是结构不太合理」。根因不是间距：
+`.aps__scroll` 钉了 `max-width:860px`，四块内容（两块提示词 / 派发设置 / 跨机器）
+本来能分成两堆，却硬塞进一列往下堆，1700px 的面板只用了一半。
+
+- 版式：左栏＝两块提示词（长文本），右栏＝派发设置 + 跨机器（开关类），中间一条竖分隔线。
+  判据用 `@container (min-width: 900px)` 而不是媒体查询 —— 同一份面板既要铺满 1700px
+  工作区，也要塞进 560px 的悬浮 dock，而视口宽度永远是满的，媒体查询在这儿会判错。
+- 分区从「圆角 + 单 border 卡片」改成「标题 + 分隔线」平铺，和派发设置 / 跨机器原有的
+  语言一致（也是用户反复提的那条偏好）。`DispatchSettings` 自己那条 `border-top` 让给宿主
+  `.aps__card + .aps__card`，否则右栏顶端会多出一条压在整个页头下面的横线。
+- 页头说明限 `82ch`：整行铺满后一行七八十个字，读起来累。
+
+| 改前（一列 860，右边全空） | 改后（两栏；窄面板自动回落单栏） |
+|---|---|
+| ![改前](./agent-settings-before.png) | ![改后](./agent-settings-2col-light.png) |
+
+深色与窄档：![深色](./agent-settings-2col-dark.png) ![600px](./agent-settings-1col-narrow.png)
+
+回归网：`verify:agent-prompt-settings` 加了 G 组（G1 两栏并排 / G2 内容宽度跟面板走 /
+G3 面板窄到 600px 回落单栏）。G1R 在**同一次运行**里把旧的 `max-width:860 + display:block`
+注回去，验证这两条判据真的会翻红（实测 cols.w 1460 → 820），不另开 `--reverse` 流程。

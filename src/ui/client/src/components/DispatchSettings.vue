@@ -191,9 +191,8 @@ const targetName = computed(() => taskExecutorName(dispatchTarget.value))
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding-top: 18px;
-  margin-top: 6px;
-  border-top: 1px solid var(--border-color);
+  /* 分区之间的分隔线交给宿主（AgentPromptSettings 的 .aps__card 兄弟选择器）——
+     自己画一条，放在右栏顶部会多出一条压在整个页头下面的横线 */
 }
 
 .dps__head {
