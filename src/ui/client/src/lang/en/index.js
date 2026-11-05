@@ -2223,6 +2223,8 @@ export default {
   '@EDITOR:重新加载': 'Reload',
   '@EDITOR:保留我的': 'Keep mine',
   '@EDITOR:暂无文件': 'No files',
+  '@EDITOR:最近修改的文件': 'Recently modified',
+  '@EDITOR:暂无最近修改的文件': 'No recently modified files',
   '@EDITOR:从左侧选择文件打开': 'Select a file from the sidebar to open',
   '@EDITOR:Ctrl+S 保存': 'Ctrl+S to save',
   '@EDITOR:预览': 'Preview',

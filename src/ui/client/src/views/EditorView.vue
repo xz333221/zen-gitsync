@@ -35,6 +35,7 @@ import { isOfficeFile } from '@/utils/officeFile'
 import { MEDIA_EXTS } from '@/utils/fileKind'
 import { prepareHtml, prepareRichText } from '@/utils/markdownClipboard'
 import { copyTextToClipboard } from '@/utils/clipboard'
+import { relativeTimeFromIso } from '@/utils/relativeTime'
 
 // 配置 Monaco web worker(避免回退到主线程导致 UI 卡顿)
 // 使用 Vite 的 ?worker 语法为 Monaco 创建 web worker
@@ -226,6 +227,8 @@ function startTreePolling() {
     // 正在搜索时不刷,避免覆盖用户输入的关键词
     if (searchQuery.value.trim()) return
     refreshTree()
+    // 「最近修改」跟着同一轮刷新：用户等的是"别人推过来的笔记什么时候出现"
+    if (!recentFilesCollapsed.value) void loadRecentFiles()
   }, TREE_POLL_MS)
 }
 
@@ -247,6 +250,10 @@ watch(() => configStore.currentDirectory, async () => {
   resetContentSearch()
   startTreePolling()
   await initTree()
+  // 上一个项目的"最近修改"必须立刻清掉，否则会挂着别的仓库的文件名
+  recentFilesLoadedRoot = ''
+  recentFiles.value = []
+  await loadRecentFiles(true)
   if (tabs.value.some(t => t.isDirty)) {
     // 有未保存改动就不动标签（内容只在内存里，重建标签等于直接丢），
     // 但要把写入放回去，否则用户在这个项目里后面的操作全都记不下来
@@ -263,6 +270,70 @@ watch(() => configStore.currentDirectory, async () => {
 watch(() => configStore.ui.fileTreeAutoRefresh, () => {
   startTreePolling()
 })
+
+// ── 最近修改的文件 ─────────────────────────────────────
+// 按**磁盘 mtime**取，不是"打开历史"：同步盘里的笔记可能是别的电脑改的，
+// 打开历史完全反映不出这件事。后端负责遍历 + 缓存，前端只管展示与手动刷新。
+interface RecentFile {
+  path: string
+  relPath: string
+  name: string
+  dir: string
+  mtimeMs: number
+}
+
+const RECENT_FILES_LIMIT = 20
+// 树轮询（60s）会顺带刷新这张榜；低于这个间隔的手动展开不再重复请求
+const RECENT_FILES_STALE_MS = 20000
+const recentFiles = ref<RecentFile[]>([])
+const recentFilesLoading = ref(false)
+const recentFilesCollapsed = ref(false)
+let recentFilesLoadedAt = 0
+let recentFilesLoadedRoot = ''
+let recentFilesSeq = 0
+
+async function loadRecentFiles(force = false) {
+  const root = configStore.currentDirectory
+  if (!root) {
+    recentFiles.value = []
+    recentFilesLoadedRoot = ''
+    return
+  }
+  const fresh = recentFilesLoadedRoot === root && Date.now() - recentFilesLoadedAt < RECENT_FILES_STALE_MS
+  if (!force && fresh) return
+  const seq = ++recentFilesSeq
+  recentFilesLoading.value = true
+  try {
+    const params = new URLSearchParams({ path: root, limit: String(RECENT_FILES_LIMIT) })
+    // 手动刷新必须看盘上最新状态，绕过后端 12s 缓存（刚在同机保存完也走这条）
+    if (force) params.set('refresh', '1')
+    const resp = await fetch(`/api/recent_files?${params.toString()}`)
+    const data = await resp.json().catch(() => null)
+    if (seq !== recentFilesSeq) return
+    if (!data?.success || !Array.isArray(data.items)) return
+    recentFiles.value = data.items as RecentFile[]
+    recentFilesLoadedAt = Date.now()
+    recentFilesLoadedRoot = root
+  } catch {
+    // 后台刷新失败：保留旧榜，下一轮再试
+  } finally {
+    if (seq === recentFilesSeq) recentFilesLoading.value = false
+  }
+}
+
+function toggleRecentFiles() {
+  recentFilesCollapsed.value = !recentFilesCollapsed.value
+  // 收起期间不刷新；展开时补一次（过期才真的发请求）
+  if (!recentFilesCollapsed.value) void loadRecentFiles()
+}
+
+function recentFileTime(file: RecentFile): string {
+  return relativeTimeFromIso(new Date(file.mtimeMs).toISOString())
+}
+
+function openRecentFile(file: RecentFile) {
+  void openFile({ name: file.name, path: file.path, type: 'file', depth: 0 })
+}
 
 async function loadDir(dirPath: string, depth = 0): Promise<TreeNode[]> {
   const resp = await fetch(`/api/browse_directory?path=${encodeURIComponent(dirPath)}`)
@@ -1140,6 +1211,8 @@ function setupViewVisibilityObserver() {
 onMounted(async () => {
   mountEditor()
   await initTree()
+  // 「最近修改」与树并行即可，但等 initTree 能让首屏顺序稳定（树先出、榜后到）
+  void loadRecentFiles(true)
   // 恢复上次的工作区（树展开态 + 打开的标签）。必须在 initTree 之后：
   // initTree 把 treeNodes 覆盖成"只有根、全折叠"，先恢复会被它冲掉。
   await restoreWorkspace()
@@ -2032,6 +2105,68 @@ function stopPreviewResize() {
       <div v-else class="sidebar-loading">
         <span class="spin-icon" />
       </div>
+
+      <!-- 最近修改：按磁盘 mtime 排序（不是打开历史）。同步盘里别的电脑改过的文件也在这 -->
+      <div v-if="configStore.currentDirectory" class="recent-files">
+        <div class="recent-files-head">
+          <div
+            class="recent-files-toggle"
+            role="button"
+            tabindex="0"
+            :aria-expanded="!recentFilesCollapsed"
+            :title="$t('@EDITOR:最近修改的文件')"
+            @click="toggleRecentFiles"
+            @keydown.enter.prevent="toggleRecentFiles"
+            @keydown.space.prevent="toggleRecentFiles"
+          >
+            <svg class="recent-files-chevron" :class="{ expanded: !recentFilesCollapsed }" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+            <span class="recent-files-title">{{ $t('@EDITOR:最近修改的文件') }}</span>
+            <span v-if="recentFiles.length" class="recent-files-count">{{ recentFiles.length }}</span>
+          </div>
+          <button
+            class="sidebar-action-btn recent-files-refresh"
+            :title="$t('@EDITOR:刷新')"
+            :aria-label="$t('@EDITOR:刷新')"
+            @click="loadRecentFiles(true)"
+          >
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M20 11a8.1 8.1 0 0 0-15.5-2m-.5-4v4h4" />
+              <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+            </svg>
+          </button>
+        </div>
+        <div v-show="!recentFilesCollapsed" class="recent-files-body">
+          <div v-if="recentFilesLoading && recentFiles.length === 0" class="recent-files-status">
+            <span class="spin-icon" />
+          </div>
+          <div v-else-if="recentFiles.length === 0" class="recent-files-empty">
+            {{ $t('@EDITOR:暂无最近修改的文件') }}
+          </div>
+          <template v-else>
+            <div
+              v-for="file in recentFiles"
+              :key="file.path"
+              class="recent-file"
+              :class="{ 'recent-file--active': activeTabPath === file.path }"
+              :title="file.relPath"
+              @click="openRecentFile(file)"
+            >
+              <svg class="tree-icon mit-icon" aria-hidden="true">
+                <use :xlink:href="`#${getFileIconClass(file.name)}`" />
+              </svg>
+              <span class="recent-file-main">
+                <span class="recent-file-top">
+                  <span class="recent-file-name">{{ file.name }}</span>
+                  <span class="recent-file-time">{{ recentFileTime(file) }}</span>
+                </span>
+                <span v-if="file.dir" class="recent-file-dir">{{ file.dir }}</span>
+              </span>
+            </div>
+          </template>
+        </div>
+      </div>
     </div>
 
     <!-- 拖拽分隔条 -->
@@ -2734,6 +2869,167 @@ function stopPreviewResize() {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* ── 最近修改（左栏底部，可折叠）─────────────────────────────
+   平铺列表 + hover 底色：不加卡片/圆角/边框，只有一条顶部分隔线区分区域。
+   收起时只剩标题行，高度立刻回落到 40px 以内。 */
+.recent-files {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 45%;
+  border-top: 1px solid var(--border-color);
+}
+
+.recent-files-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 6px 0 0;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: background var(--transition-fast);
+}
+
+.recent-files-head:hover {
+  background: var(--bg-hover);
+}
+
+.recent-files-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding-left: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.recent-files-chevron {
+  flex-shrink: 0;
+  color: var(--text-meta);
+  transition: transform var(--transition-fast);
+}
+
+.recent-files-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.recent-files-title {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-files-count {
+  font-size: 11px;
+  color: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.recent-files-refresh {
+  flex-shrink: 0;
+}
+
+.recent-files-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px 0 6px;
+}
+
+.recent-files-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 0;
+}
+
+.recent-files-status .spin-icon {
+  width: 14px;
+  height: 14px;
+  border-width: 1.5px;
+}
+
+.recent-files-empty {
+  padding: 14px 12px;
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--text-meta);
+}
+
+.recent-file {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  color: var(--text-primary);
+  transition: background var(--transition-fast);
+}
+
+.recent-file:hover {
+  background: var(--bg-hover);
+}
+
+.recent-file--active {
+  background: var(--tint-primary-12);
+  color: var(--color-primary);
+}
+
+.recent-file > .tree-icon {
+  margin-top: 2px;
+}
+
+.recent-file-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.recent-file-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.recent-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-mid);
+}
+
+.recent-file-time {
+  flex-shrink: 0;
+  color: var(--text-meta);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.recent-file-dir {
+  color: var(--text-meta);
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── 拖拽分隔条 ─────────────────────────────── */

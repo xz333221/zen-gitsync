@@ -675,6 +675,138 @@ export function registerFsRoutes({
     });
   }));
 
+  // ── 最近修改的文件（文件空间左栏底部的「最近修改」）─────────────────────
+  //
+  // 用户诉求：同步盘里的笔记常常是在**别的电脑**上改的，文件树按名字排序看不出
+  // 谁新谁旧。这里按磁盘 mtime 倒序 —— 明确不是"这个应用打开过哪些文件"，
+  // 后者是另一套数据（本应用从不记录打开历史，也不需要记录）。
+  //
+  // 遍历代价靠边界控制（和上面的内容搜索同一套判据）：跳过隐藏目录 / 依赖目录 /
+  // 软链接，最多扫 2 万个文件、8 秒兜底；结果按根目录缓存 12 秒 ——
+  // 面板展开、60s 树轮询、点刷新会连着问同一件事。
+  const RECENT_FILES_MAX_SCAN = 20000;
+  const RECENT_FILES_MAX_DIRS = 3000;
+  const RECENT_FILES_TIME_BUDGET_MS = 8000;
+  const RECENT_FILES_STAT_CONCURRENCY = 24;
+  const RECENT_FILES_CACHE_TTL_MS = 12000;
+  const RECENT_FILES_LIMIT_DEFAULT = 20;
+  const RECENT_FILES_LIMIT_MAX = 50;
+  const RECENT_FILES_DIR_BATCH = 16;
+  const recentFilesCache = new Map();
+
+  // 遍历 + stat。返回按 mtime 倒序的全量表（路由层再按 limit 切），
+  // 这样同一份缓存能服务不同的 limit，不必因为前端改条数就重扫一遍。
+  async function collectRecentFiles(rootPath, deadline) {
+    const files = [];
+    const dirQueue = [rootPath];
+    let scannedFiles = 0;
+    let scannedDirs = 0;
+    let truncated = false;
+
+    while (dirQueue.length > 0) {
+      if (Date.now() > deadline) { truncated = true; break; }
+      const batch = dirQueue.splice(0, RECENT_FILES_DIR_BATCH);
+      const listings = await Promise.all(
+        batch.map((dir) => fs.readdir(dir, { withFileTypes: true }).catch(() => []))
+      );
+
+      const pending = [];
+      for (let i = 0; i < listings.length; i += 1) {
+        for (const entry of listings[i]) {
+          // 符号链接不跟：可能指回祖先目录，直接把遍历变成死循环
+          if (entry.isSymbolicLink()) continue;
+          const fullPath = path.join(batch[i], entry.name);
+          if (entry.isDirectory()) {
+            // 隐藏目录（.git / .obsidian / .venv ...）与依赖/构建产物目录都不是"笔记"
+            if (entry.name.startsWith('.') || CONTENT_SEARCH_IGNORED_DIRS.has(entry.name)) continue;
+            if (scannedDirs >= RECENT_FILES_MAX_DIRS) { truncated = true; break; }
+            scannedDirs += 1;
+            dirQueue.push(fullPath);
+          } else if (entry.isFile()) {
+            // 隐藏文件同理：.gitignore / .DS_Store 这类会把"最近修改"榜单挤满
+            if (entry.name.startsWith('.')) continue;
+            if (scannedFiles >= RECENT_FILES_MAX_SCAN) { truncated = true; break; }
+            scannedFiles += 1;
+            pending.push(fullPath);
+          }
+        }
+        if (truncated) break;
+      }
+
+      // 有界并发 stat：一次 24 个，避免 2 万个文件串行把请求拖成 10 秒
+      let cursor = 0;
+      const workers = Array.from(
+        { length: Math.min(RECENT_FILES_STAT_CONCURRENCY, pending.length) },
+        async () => {
+          while (cursor < pending.length && Date.now() <= deadline) {
+            const filePath = pending[cursor];
+            cursor += 1;
+            try {
+              const stat = await fs.stat(filePath);
+              if (stat.isFile()) {
+                // mtimeMs 是浮点（NTFS 精度更高），取整即可 —— 前端只拿它排时间文案
+                files.push({ path: filePath, name: path.basename(filePath), mtimeMs: Math.round(stat.mtimeMs) });
+              }
+            } catch {
+              // 刚被删 / 无权限：跳过这只文件，不影响整张榜
+            }
+          }
+        }
+      );
+      await Promise.all(workers);
+      if (truncated) break;
+    }
+
+    files.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    return { files, truncated, scannedFiles };
+  }
+
+  app.get('/api/recent_files', asyncRoute(async (req, res) => {
+    const rawRoot = req.query.path;
+    if (typeof rawRoot !== 'string' || !rawRoot.trim()) {
+      res.status(400).json({ success: false, error: '缺少 path 参数' });
+      return;
+    }
+    const guard = await safePathInProject(rawRoot);
+    if (!guard) {
+      res.status(403).json({ success: false, error: '禁止读取工作目录以外的路径' });
+      return;
+    }
+    const rootPath = guard.safePath;
+    const rawLimit = Number(req.query.limit);
+    const limit = Number.isFinite(rawLimit)
+      ? Math.min(RECENT_FILES_LIMIT_MAX, Math.max(1, Math.floor(rawLimit)))
+      : RECENT_FILES_LIMIT_DEFAULT;
+
+    const cacheKey = process.platform === 'win32' ? rootPath.toLowerCase() : rootPath;
+    // refresh=1：用户手点刷新 / 探针刚造完文件时必须看盘上最新状态，不能吃 12s 缓存
+    const force = req.query.refresh === '1' || req.query.refresh === 'true';
+    const cached = recentFilesCache.get(cacheKey);
+    const now = Date.now();
+    let entry = !force && cached && now - cached.at < RECENT_FILES_CACHE_TTL_MS ? cached : null;
+    if (!entry) {
+      const startedAt = now;
+      const collected = await collectRecentFiles(rootPath, startedAt + RECENT_FILES_TIME_BUDGET_MS);
+      entry = { at: Date.now(), ...collected, elapsedMs: Date.now() - startedAt };
+      recentFilesCache.set(cacheKey, entry);
+    }
+
+    const items = entry.files.slice(0, limit).map((file) => {
+      const relPath = path.relative(rootPath, file.path).split(path.sep).join('/');
+      const dir = path.posix.dirname(relPath);
+      return { ...file, relPath, dir: dir === '.' ? '' : dir };
+    });
+
+    res.json({
+      success: true,
+      root: rootPath,
+      items,
+      truncated: entry.truncated,
+      scannedFiles: entry.scannedFiles,
+      elapsedMs: entry.elapsedMs,
+    });
+  }));
+
   // 获取最近访问的目录列表
   //
   // 每条带一个 `iconUrl`（项目自己的 favicon，见 workbench/projectIcon.js）——
