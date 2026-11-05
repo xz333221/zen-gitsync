@@ -1668,10 +1668,26 @@ const mindmapTitleCount = computed(() => {
 })
 const isMindmapable = computed(() => activeExt.value === 'md' && mindmapTitleCount.value > 0)
 
+const tabsScrollRef = ref<HTMLElement | null>(null)
+
+/** tab 条会横向滚动（滚动条隐藏），新开的文件可能落在可视区外，把当前 tab 带进来 */
+async function scrollActiveTabIntoView() {
+  await nextTick()
+  const box = tabsScrollRef.value
+  if (!box) return
+  const active = box.querySelector<HTMLElement>('.editor-tab.active')
+  if (!active) return
+  const boxRect = box.getBoundingClientRect()
+  const tabRect = active.getBoundingClientRect()
+  if (tabRect.left < boxRect.left) box.scrollLeft -= boxRect.left - tabRect.left
+  else if (tabRect.right > boxRect.right) box.scrollLeft += tabRect.right - boxRect.right
+}
+
 // 切换文件时,若当前文件不可预览则自动关闭预览 / 思维导图
 watch(activeTabPath, () => {
   if (showPreview.value && !isPreviewable.value) showPreview.value = false
   if (showMindmap.value && !isMindmapable.value) showMindmap.value = false
+  scrollActiveTabIntoView()
 })
 
 function togglePreview() {
@@ -2174,65 +2190,69 @@ function stopPreviewResize() {
 
     <!-- 右侧编辑区 -->
     <div class="editor-main">
-      <!-- 标签栏：没有打开文件时也留着 —— 右侧 g ai 面板的口子在它右端，
-           藏掉整条就是"不选文件就没法跟 g ai 说话"（用户 2026-10-21 反馈）。
-           此时左半边是空的，只留右端那几个按钮。 -->
+      <!-- 标签栏：没有打开文件时也留着（空的 tab 条 + 右端按钮）。
+           左半边是横向滚动的 tab 条，右端按钮固定在栏内 —— 以前按钮和 tab 挤在同一个
+           滚动容器里，tab 一多就把「预览 / 思维导图」推出可视区（滚动条还隐藏了），
+           表现为"预览按钮不见了"。 -->
       <div class="editor-tabs">
-        <div
-          v-for="tab in tabs"
-          :key="tab.path"
-          class="editor-tab"
-          :class="{ active: activeTabPath === tab.path, dirty: tab.isDirty }"
-          @click="activeTabPath = tab.path"
-          :title="tab.path"
-        >
-          <span class="tab-name">{{ tab.name }}</span>
-          <span v-if="tab.isDirty" class="tab-dirty-dot" />
-          <button class="tab-close" @click="closeTab(tab.path, $event)">
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        <div class="editor-tabs-scroll" ref="tabsScrollRef">
+          <div
+            v-for="tab in tabs"
+            :key="tab.path"
+            class="editor-tab"
+            :class="{ active: activeTabPath === tab.path, dirty: tab.isDirty }"
+            @click="activeTabPath = tab.path"
+            :title="tab.path"
+          >
+            <span class="tab-name">{{ tab.name }}</span>
+            <span v-if="tab.isDirty" class="tab-dirty-dot" />
+            <button class="tab-close" @click="closeTab(tab.path, $event)">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="editor-tabs-actions">
+          <!-- 预览切换按钮 -->
+          <button
+            v-if="isPreviewable"
+            class="preview-toggle-btn"
+            :class="{ active: showPreview }"
+            :title="showPreview ? $t('@EDITOR:关闭预览') : $t('@EDITOR:打开预览')"
+            @click="togglePreview"
+          >
+            <!-- eye.svg（Tabler icons，MIT） -->
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0-4 0" />
+              <path d="M21 12c-2.4 4-5.4 6-9 6c-3.6 0-6.6-2-9-6c2.4-4 5.4-6 9-6c3.6 0 6.6 2 9 6" />
             </svg>
+            <span>{{ $t('@EDITOR:预览') }}</span>
+          </button>
+          <!-- 思维导图:整篇 markdown 渲染为一张大导图 -->
+          <button
+            v-if="isMindmapable"
+            class="preview-toggle-btn mindmap-toggle-btn"
+            :class="{ active: showMindmap, disabled: !isMindmapable }"
+            :disabled="!isMindmapable"
+            :title="isMindmapable ? (showMindmap ? $t('@EDITOR:关闭思维导图') : $t('@EDITOR:打开思维导图')) : $t('@EDITOR:需要至少一个 # 标题')"
+            @click="toggleMindmap"
+          >
+            <!-- topology-star.svg（Tabler icons，MIT）：中心节点 + 四向辐射（与左栏「思维导图」同款） -->
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 18a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
+              <path d="M20 6a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
+              <path d="M8 6a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
+              <path d="M20 18a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
+              <path d="M14 12a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
+              <path d="M7.5 7.5l3 3" />
+              <path d="M7.5 16.5l3-3" />
+              <path d="M13.5 13.5l3 3" />
+              <path d="M16.5 7.5l-3 3" />
+            </svg>
+            <span>{{ $t('@EDITOR:思维导图') }}</span>
           </button>
         </div>
-        <div class="editor-tabs-spacer" />
-        <!-- 预览切换按钮 -->
-        <button
-          v-if="isPreviewable"
-          class="preview-toggle-btn"
-          :class="{ active: showPreview }"
-          :title="showPreview ? $t('@EDITOR:关闭预览') : $t('@EDITOR:打开预览')"
-          @click="togglePreview"
-        >
-          <!-- eye.svg（Tabler icons，MIT） -->
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-            <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0-4 0" />
-            <path d="M21 12c-2.4 4-5.4 6-9 6c-3.6 0-6.6-2-9-6c2.4-4 5.4-6 9-6c3.6 0 6.6 2 9 6" />
-          </svg>
-          <span>{{ $t('@EDITOR:预览') }}</span>
-        </button>
-        <!-- 思维导图:整篇 markdown 渲染为一张大导图 -->
-        <button
-          v-if="isMindmapable"
-          class="preview-toggle-btn mindmap-toggle-btn"
-          :class="{ active: showMindmap, disabled: !isMindmapable }"
-          :disabled="!isMindmapable"
-          :title="isMindmapable ? (showMindmap ? $t('@EDITOR:关闭思维导图') : $t('@EDITOR:打开思维导图')) : $t('@EDITOR:需要至少一个 # 标题')"
-          @click="toggleMindmap"
-        >
-          <!-- topology-star.svg（Tabler icons，MIT）：中心节点 + 四向辐射（与左栏「思维导图」同款） -->
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-            <path d="M8 18a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
-            <path d="M20 6a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
-            <path d="M8 6a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
-            <path d="M20 18a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
-            <path d="M14 12a2 2 0 1 0-4 0a2 2 0 0 0 4 0" />
-            <path d="M7.5 7.5l3 3" />
-            <path d="M7.5 16.5l3-3" />
-            <path d="M13.5 13.5l3 3" />
-            <path d="M16.5 7.5l-3 3" />
-          </svg>
-          <span>{{ $t('@EDITOR:思维导图') }}</span>
-        </button>
       </div>
 
       <!-- 无文件打开时的提示 -->
@@ -3076,15 +3096,29 @@ function stopPreviewResize() {
 
 .editor-tabs {
   display: flex;
-  overflow-x: auto;
-  overflow-y: hidden;
+  align-items: stretch;
   flex-shrink: 0;
   background: var(--bg-panel);
+}
+
+/* tab 条自己横向滚动；右端按钮在滚动区**之外**，所以永不随 tab 溢出被推走 */
+.editor-tabs-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
 }
 
-.editor-tabs::-webkit-scrollbar {
+.editor-tabs-scroll::-webkit-scrollbar {
   display: none;
+}
+
+.editor-tabs-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .editor-tab {
@@ -3449,9 +3483,6 @@ function stopPreviewResize() {
 }
 
 /* ── tabs 右侧预览按钮 ─────────────────────── */
-.editor-tabs-spacer {
-  flex: 1;
-}
 
 .preview-toggle-btn {
   display: flex;

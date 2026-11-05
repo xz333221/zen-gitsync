@@ -122,6 +122,7 @@
     "verify:editor-disk-sync": "node scripts/verify-editor-disk-sync.cjs",
     "verify:editor-recent-files": "node scripts/verify-editor-recent-files.cjs",
     "verify:editor-recent-files:reverse": "node scripts/verify-editor-recent-files.cjs --reverse",
+    "verify:editor-tabs-actions": "node scripts/verify-editor-tabs-actions.cjs",
     "verify:file-search": "node scripts/verify-file-search.mjs",
     "verify:file-search:reverse": "node scripts/verify-file-search.mjs --reverse",
     "verify:wb-copy-folder-name": "node scripts/verify-copy-folder-name.cjs",
