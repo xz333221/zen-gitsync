@@ -83,6 +83,17 @@ function baseName(dir: string): string {
   return parts[parts.length - 1] || dir
 }
 
+// 分组头第二行只放「上级目录」：目录名上面那行已经有了，绝对路径在 240px 宽里
+// 从尾部截断后只剩盘符和 workspace 这类人人都有的段，等于什么都没说。
+function parentLabel(dir: string): string {
+  const sep = dir.includes('\\') ? '\\' : '/'
+  const parts = dir.replace(/[\\/]+$/, '').split(/[\\/]/)
+  parts.pop()
+  if (!parts.length) return dir
+  const tail = parts.slice(-2)
+  return (parts.length > 2 ? '…' + sep : '') + tail.join(sep)
+}
+
 function isActiveDir(dir: string): boolean {
   return !!store.activeDir && store.activeDir.toLowerCase() === dir.toLowerCase()
 }
@@ -619,7 +630,7 @@ function formatSize(bytes: number): string {
                     <span class="mm-group-title">{{ baseName(group.dir) }}</span>
                     <span class="mm-group-count">{{ group.files.length }}</span>
                   </div>
-                  <div class="mm-group-path">{{ group.dir }}</div>
+                  <div class="mm-group-path">{{ parentLabel(group.dir) }}</div>
                 </div>
               </div>
 
@@ -898,7 +909,9 @@ function formatSize(bytes: number): string {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px;
+  /* 行是通栏的（见下方分组 / 文件行），所以左右不留内边距，
+     高亮从侧栏左边一直铺到右边，不做"一块圆角卡片"。 */
+  padding: 4px 0;
 }
 
 /* 空态排版交给 EmptyState（inline 档），这里只留"在侧栏里占多大地方" */
@@ -915,15 +928,20 @@ function formatSize(bytes: number): string {
 
 /* ── 目录分组 ─────────────────────────────────────────────────── */
 .mm-group {
-  margin-bottom: 2px;
+  margin: 0;
+}
+
+/* 分组之间用一条通栏细线断开，代替"每组一张卡" */
+.mm-group + .mm-group {
+  margin-top: 2px;
+  border-top: 1px solid var(--border-color);
 }
 
 .mm-group-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px;
-  border-radius: var(--radius-md);
+  padding: 7px 12px;
   cursor: pointer;
   transition: background var(--transition-fast) ease;
 }
@@ -932,9 +950,15 @@ function formatSize(bytes: number): string {
   background: var(--bg-container-hover);
 }
 
-/* 当前「新建 / 导入」的目标目录：背景高亮（与文件条目的选中样式一致） */
-.mm-group-header.active {
-  background: color-mix(in srgb, var(--color-primary) 12%, var(--bg-container));
+/* 「新建 / 导入」的目标目录：只把标题和三角染成主色、计数换一层淡底，不再铺一整块
+   底色 —— 否则它会和下面「当前打开文件」的选中底色连成一个糖果状的高亮块。
+   目标目录同时也是打开文件所在目录（最常见的情况），靠标题颜色足够。 */
+.mm-group-header.active .mm-group-title {
+  color: var(--color-primary);
+}
+
+.mm-group-header.active .mm-group-caret {
+  color: var(--color-primary);
 }
 
 .mm-group-caret {
@@ -958,15 +982,15 @@ function formatSize(bytes: number): string {
 
 .mm-group-name {
   display: flex;
-  align-items: baseline;
-  gap: 4px;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
 }
 
 .mm-group-title {
-  font-size: var(--font-size-mid);
+  font-size: var(--font-size-sm);
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -978,11 +1002,20 @@ function formatSize(bytes: number): string {
 
 .mm-group-count {
   font-size: var(--font-size-xs);
+  line-height: 16px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--bg-panel);
   color: var(--text-meta);
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
 
-/* 完整路径小字：同名目录也能分辨（hover 有 title 看全文） */
+.mm-group-header.active .mm-group-count {
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--bg-panel));
+}
+
+/* 上级目录小字：同名目录也能分辨（完整路径在分组头的 title 里） */
 .mm-group-path {
   font-size: var(--font-size-xs);
   color: var(--text-meta);
@@ -992,7 +1025,7 @@ function formatSize(bytes: number): string {
 }
 
 .mm-group-body {
-  padding-left: 8px;
+  padding: 0;
 }
 
 .mm-group-error {
@@ -1000,7 +1033,7 @@ function formatSize(bytes: number): string {
   align-items: center;
   justify-content: space-between;
   gap: 4px;
-  padding: 8px 8px 8px 12px;
+  padding: 8px 12px 8px 30px;
   font-size: var(--font-size-sm);
   color: var(--color-danger-dark);
 }
@@ -1010,8 +1043,8 @@ function formatSize(bytes: number): string {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
-  border-radius: var(--radius-md);
+  /* 左边 30px = 分组头的「三角 + 间距」，让文件名正好落在目录名下面 */
+  padding: 6px 12px 6px 30px;
   cursor: pointer;
   transition: background var(--transition-fast) ease;
   position: relative;
@@ -1021,9 +1054,9 @@ function formatSize(bytes: number): string {
   background: var(--bg-container-hover);
 }
 
-/* 同上：选中底色不透明，浮层遮罩才挡得住文字 */
+/* 选中行：通栏底色（不圆角）。上方分组头不铺底色，两者不会再连成一块 */
 .mm-file-item.active {
-  background: color-mix(in srgb, var(--color-primary) 12%, var(--bg-container));
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--bg-container));
 }
 
 .mm-file-item.active .mm-file-title {
@@ -1060,7 +1093,7 @@ function formatSize(bytes: number): string {
   position: absolute;
   top: 0;
   bottom: 0;
-  right: 8px;
+  right: 12px;
   display: flex;
   align-items: center;
   gap: 2px;
