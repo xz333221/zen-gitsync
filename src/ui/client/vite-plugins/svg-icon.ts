@@ -14,7 +14,7 @@
 //
 import * as path from 'path'
 import type { OptimizeOptions } from 'svgo'
-import { createSvgIconsPlugin } from 'vite-plugin-svg-icons'
+import createSvgSprite from './svg-sprite'
 
 /**
  * svgo 配置（仅 build 期启用，dev 保持源文件原样，方便对着 SVG 源码调试）。
@@ -48,7 +48,10 @@ export default function createSvgIcon(isBuild: boolean) {
   // 单一 sprite：项目自有图标与 Material Icon Theme 一起编译
   // symbolId 用 'icon-[name]'，让两个目录的图标共享同一前缀（无 [dir]），由调用方按目录名 + 文件名自行拼接
   // Material Icon Theme 的 key 用 'mit-{key}' 前缀以避免命名冲突（与项目自有图标无重名）
-  return createSvgIconsPlugin({
+  //
+  // 用本地 vite-plugins/svg-sprite.ts 而不是 vite-plugin-svg-icons@2.0.1：
+  // 后者的 load 会对每个模块重编译一遍全部图标（build 实测 198s / 209s）。
+  return createSvgSprite({
     iconDirs: [
       path.resolve(process.cwd(), 'src/assets/icons/svg/'),
       path.resolve(process.cwd(), 'src/assets/icons/material/'),

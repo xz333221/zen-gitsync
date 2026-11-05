@@ -206,7 +206,7 @@ export default defineConfig(({ command }) => {
       // 库也并进同一个 vendor：zen-ai-chat-ui 硬依赖 mermaid/shiki/katex（压缩后约 12 MB），
       // 它挂在 AgentDock → AgentView 的异步链下，本该点开 AI 面板才加载；被兜底并进 vendor 后，
       // 首屏只要 import 了任意第三方模块，整个 vendor 就被静态加载 → 首屏 20 MB。
-      // 去掉兜底后，这些库回到各自的懒加载 chunk 里（实测首屏见 scripts/ 下的构建对比）。
+      // 去掉兜底后，这些库回到各自的懒加载 chunk 里：首屏静态 JS 20.26 MB → 3.75 MB。
     },
   }
 })

@@ -40,8 +40,9 @@ describe('svg sprite 的 svgo 配置', () => {
     for (const file of files) {
       const source = fs.readFileSync(path.join(SVG_DIR, file), 'utf8')
       if (!EXPLICIT_BLACK.test(source)) continue
-      const optimized = optimize(source, svgSpriteSvgoOptions).data
-      if (!KEPT_BLACK.test(optimized)) stripped.push(file)
+      const optimized = optimize(source, svgSpriteSvgoOptions)
+      const data = 'data' in optimized ? optimized.data : source
+      if (!KEPT_BLACK.test(data)) stripped.push(file)
     }
 
     expect(stripped).toEqual([])

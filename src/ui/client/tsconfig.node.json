@@ -20,5 +20,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["vite.config.ts"]
+  // vite-plugins/ 一并纳入：构建期插件（svg sprite 生成）也要参与类型检查，
+  // 否则 svgo 这类无类型依赖的 shim 只在编辑器里生效、`vue-tsc -b` 时失明。
+  "include": ["vite.config.ts", "vite-plugins/**/*.ts"]
 }
