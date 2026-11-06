@@ -183,10 +183,13 @@ export function launchClaudeInNewWindow(cwd, promptText, resumeSessionId) {  ret
       } catch { /* fallback */ }
       if (!spawnExe) spawnExe = claudeExe;
       spawnedExe = spawnExe;
+      // windowsHide 必须 true：执行器是控制台程序（node.exe），从桌面版/无控制台的
+      // 父进程 spawn 时 Windows 会给它新开一个黑色 cmd 窗口。输出全走 stdio pipe，
+      // 隐藏不影响任何交互。六家执行器口径一致（见下方各 launchXxxPrint）。
       child = spawn(spawnExe, spawnArgs, {
         cwd,
         stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: false,
+        windowsHide: true,
         env: { ...process.env, LANG: 'zh_CN.UTF-8' }
       });
     } else {
@@ -326,7 +329,7 @@ export function launchOpencodeRun(cwd, promptText, resumeSessionId) {
       child = spawn(resolveOpencodeExe(), args, {
         cwd,
         stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: false,
+        windowsHide: true,
         env: buildOpencodeEnv()
       });
     } else {
@@ -415,7 +418,7 @@ export function launchCodexExec(cwd, promptText, resumeSessionId) {
       child = spawn(resolveCodexExe(), args, {
         cwd,
         stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: false,
+        windowsHide: true,
         env: buildCodexEnv()
       });
     } else {
@@ -622,7 +625,7 @@ export async function launchCodebuddyPrint(cwd, promptText, resumeSessionId) {
       child = spawn(exe, spawnArgs, {
         cwd,
         stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: false,
+        windowsHide: true,
         env: buildCodebuddyEnv()
       });
     } else {
@@ -855,7 +858,7 @@ export async function launchPiPrint(cwd, promptText, resumeSessionId) {
       child = spawn(exe, spawnArgs, {
         cwd,
         stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: false,
+        windowsHide: true,
         env: buildPiEnv()
       });
     } else {
@@ -1538,7 +1541,7 @@ export async function launchCodeArtsRun(cwd, promptText, resumeSessionId) {
       child = spawn(exe, spawnArgs, {
         cwd,
         stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: false,
+        windowsHide: true,
         env: buildCodeArtsEnv()
       });
     } else {
