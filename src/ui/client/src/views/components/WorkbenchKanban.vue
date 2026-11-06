@@ -195,10 +195,13 @@ const columns = computed(() => {
   /* 空列**宽度归零、整个不展示**，有内容了再展开。
      上一轮做的是"收成 58px 竖排轨道条"，实测那条竖排色带在整屏里反而最扎眼，
      而且 58×1030 的面积照旧是占着的 —— 归零才是真的把宽度让出来。
-     两条例外：
-       ① 待处理列永不塌：它末尾常驻「新建任务」，塌了看板上就没有建任务的入口了
-          （顶栏那两个按钮 2026-09-29 已经删掉，见文件头）。它是看板的收件箱，不是空列。
-       ② 三列都空时不塌：那是"刚清空 / 搜索没命中"的过渡态，一屏三列全不见会像坏了。 */
+     ① 待处理列 2026-11-06 起**也塌**。它以前是例外（末尾常驻「新建任务」，
+        塌了看板上就没有建任务的入口），代价是"一条待处理都没有"时左边仍占着
+        三分之一屏、里面只有一个虚线空框 —— 而这恰恰是最常见的状态。
+        现在新建入口搬到标题行（WorkbenchBoard 的 .board__new-btn），列本身
+        回到跟另两列同一条规则：没有卡片就不占位。
+     ② 三列都空时不塌：那是"刚清空 / 搜索没命中"的过渡态，一屏三列全不见会像坏了
+        （那种时候待处理列里的「新建任务」正好兼任整个空板的入口）。 */
   const anyContent = raw.some(c => c.all.length > 0)
   return raw.map(c => ({
     key: c.key,
@@ -206,7 +209,7 @@ const columns = computed(() => {
     total: c.all.length,
     hidden: c.key === 'done' ? Math.max(0, c.all.length - doneLimit.value) : 0,
     tasks: c.key === 'done' ? c.all.slice(0, doneLimit.value) : c.all,
-    collapsed: anyContent && c.all.length === 0 && c.key !== 'todo',
+    collapsed: anyContent && c.all.length === 0,
   }))
 })
 
@@ -837,6 +840,11 @@ function coverTitle(img: BoardImage): string {
             两件事本来就无关——空状态说的是"这列没有卡片"，新建入口说的是"能往这儿加卡片"。
             列空时它顺带兼任空状态（--solo 撑高），所以待处理列不会再渲染下面的 kb-col__empty。
             位置沿用 Trello「Add a card」的做法：跟着列表滚（不吸底），长列表滚到底就是它。
+
+            2026-11-06：列空时整列会塌掉（见 columns 那段），所以这条已经**不是**
+            新建的主入口了 —— 标题行那枚「+」（WorkbenchBoard 的 .board__new-btn）才是，
+            任何时候都在、也不受"待处理列有没有卡片"影响。这里留着的是"在这张列表的
+            末尾加一条"这种就地语义：列里已经有卡片、你正看着它时，手不用离开这一列。
           -->
           <li v-if="col.key === 'todo'" class="kb-col__add">
             <button

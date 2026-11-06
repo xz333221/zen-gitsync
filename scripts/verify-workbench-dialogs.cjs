@@ -5,7 +5,8 @@
  *   A 看板是**常驻底图** —— 它不再和编辑器二选一
  *   B 点看板卡片 -> **直接打开任务编辑器弹窗**，看板仍在（不再有中间的只读详情弹窗）
  *   C 关掉编辑器 -> 还在看板原处
- *   D 看板「待处理」列末尾的「新建任务」-> **直接打开任务编辑器**（2026-10-25），
+ *   D 标题行右侧的「+」新建任务 -> **直接打开任务编辑器**（2026-10-25；2026-11-06
+ *     入口从「待处理列末尾」搬到标题行 .board__new-btn，因为空列会整列隐藏），
  *     不再有独立的 600px 窄窗，也没有另做的"草稿表单"：标题 / 描述 / 附件 / 执行
  *     全部复用编辑器里已有的那套组件，光标直接落在标题输入框里
  *   E 填标题即落盘 -> 卡片出现在看板上（同一个编辑器里完成，不用再点"创建"）
@@ -173,7 +174,7 @@ async function main() {
     // 点新建 = 立刻建一条空白任务 + 顶起编辑器 + 光标落在标题上。
     const beforeIds = await fetch(`${BASE}/api/workbench/tasks`)
       .then(r => r.json()).then(j => (j.tasks || []).map(t => t.id)).catch(() => [])
-    await page.locator('.kb-col__add-btn').first().click()
+    await page.locator('.board__new-btn').first().click()
     const cdlg = await waitDialog(page, d => d.hasEditor, 12000)
     check('D 「新建任务」直接打开任务编辑器', !!cdlg, cdlg ? `title="${cdlg.title}"` : '未出现编辑器')
     check('D2 新建时看板仍在（弹窗浮在它上面）', await boardVisible(page))
@@ -224,7 +225,7 @@ async function main() {
     })
     check('D7b 没填内容的空任务被丢弃（看板不留脏卡）', gone, `id=${blankId}`)
 
-    await page.locator('.kb-col__add-btn').first().click()
+    await page.locator('.board__new-btn').first().click()
     const cdlg2 = await waitDialog(page, d => d.hasEditor, 12000)
     const again = await page.locator('.wb-split__title-wrap .wb-input--title').first().inputValue().catch(() => '?')
     check('D8 再次新建时标题为空（上一次的残渣不跟过来）', !!cdlg2 && again === '', `value="${again}"`)

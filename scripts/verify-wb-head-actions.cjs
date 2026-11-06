@@ -13,7 +13,10 @@
  *   B7 有词时失焦不收起（筛选结果还在屏幕上）；空词失焦收起
  *   B8 Esc 收起
  *   B9 动作区整体不溢出标题行（几何：右边界 ≤ 标题行右边界）
- *   B10 默认视图是看板（localStorage 空值时三列在）
+ *   B10 标题行里有「+」新建任务按钮（.board__new-btn，24px、aria-label、落在动作区内）
+ *   B11/B12 待处理 0 条 → 那一列不占位（列宽归零），宽度归另两列（进行中 / 已完成 各一半）
+ *   B13 列塌了也不影响新建入口（「+」仍在标题行可见）
+ *   B14 默认视图是看板（localStorage 空值时三列在）
  *
  * 为什么 B4/B7/B8 必须是**几何量测**（width）而不是"元素在不在"：
  * 展开态是个 width 过渡，display 切换会让"在不在"恒真恒假，
@@ -23,6 +26,9 @@
  *   R1 append 一个假 .board__project-meta 徽章        → B1 红
  *   R2 删掉两个 tab 的 role / aria-label               → B2 / B3 红
  *   R3 注入 CSS 把输入框钉成"永不收起"                  → B4 / B7b / B8 红
+ *   R4 注入 CSS 把三列钉回等宽（= 待处理列不再塌掉）     → B11 / B12 红
+ *      ⚠️ R4 必须在页面 reload **之后**注入（夹具在 B11 那段换过一次数据），
+ *      否则样式标签随旧文档一起没了，两条会假绿。
  */
 const path = require('node:path')
 const fs = require('node:fs')
@@ -123,9 +129,11 @@ async function main() {
     await page.addInitScript(() => {
       try { localStorage.setItem('wb.boardProject.v1', 'd:\\ws\\zen-verify-head') } catch { /* ignore */ }
     })
+    // 这份快照可变：B11/B12 要把三条任务挪出「待处理」，验"该列空了会塌"
+    let tasksForApi = TASKS
     await page.route('**/api/workbench/projects*', (route) => route.fulfill({
       status: 200, contentType: 'application/json',
-      body: JSON.stringify({ success: true, projects: [PROJ], tasks: TASKS, currentProjectPath: PATH }),
+      body: JSON.stringify({ success: true, projects: [PROJ], tasks: tasksForApi, currentProjectPath: PATH }),
     }))
 
     await page.goto(BASE, { waitUntil: 'domcontentloaded' })
@@ -174,12 +182,12 @@ async function main() {
       && tabs.every((t) => t.role === 'tab' && /看板|列表|Board|List/.test(t.aria) && t.text === ''),
       JSON.stringify(tabs.map((t) => `${t.role}/${t.aria}/${t.text}`)))
 
-    // B10 默认视图 = 看板。放在一切点击**之前**验：B3 会把视图切走，
+    // B14 默认视图 = 看板。放在一切点击**之前**验：B3 会把视图切走，
     // 那时再验"默认"验的就不是默认了（reverse 下 B3a 失败时视图从没切走，
     // 放在后边会恒绿）。
     const initiallyKanban = await page.locator('.kb__columns').count() > 0
       && await page.locator('.kb__table-wrap').count() === 0
-    check('B10 默认视图是看板（localStorage 空值时三列在）', initiallyKanban)
+    check('B14 默认视图是看板（localStorage 空值时三列在）', initiallyKanban)
 
     // B3 切换视图。reverse 下 role 被删，getByRole 找不到 —— 短超时 + 吞异常，
     // 让后面的 waitForSelector 断言判红（点不存在的元素抛异常会吞掉整轮结论）。
@@ -262,6 +270,80 @@ async function main() {
       geo.actR <= geo.headR + 0.5 && geo.actL >= geo.headL - 0.5,
       `actions=[${geo.actL.toFixed(0)},${geo.actR.toFixed(0)}] head=[${geo.headL.toFixed(0)},${geo.headR.toFixed(0)}]`)
 
+    /* ── B10 新建任务的「+」在标题行（2026-11-06）───────────────
+       入口原先挂在「待处理」列末尾，而那一列现在空了会整列塌掉 —— 塌掉之后
+       看板上就没有建任务的入口了（见 B11）。所以这枚按钮是**替代品**，
+       必须验它真的在动作区里、真的是 24px 的图标按钮，而不是"文件里写了"。
+
+       ⚠️ 只断"按钮存在"会在"它被 .board__head-actions 的 overflow 裁掉"、
+       "它其实渲染在别的行"这些情况下照样绿 —— 量它落在动作区矩形之内。
+       点击行为不在这里验（那会真的建出一条任务），由 verify-wb-dialogs 的 D 组守。 */
+    const newBtn = await page.evaluate(() => {
+      const b = document.querySelector('.board__new-btn')
+      if (!b) return null
+      const r = b.getBoundingClientRect()
+      const act = document.querySelector('.board__head-actions').getBoundingClientRect()
+      return {
+        aria: b.getAttribute('aria-label') || '',
+        title: b.getAttribute('title') || '',
+        w: r.width, h: r.height,
+        inActions: r.left >= act.left - 0.5 && r.right <= act.right + 0.5,
+      }
+    })
+    check('B10 标题行有「+」新建任务按钮（24px 图标、aria-label 在、落在动作区里）',
+      !!newBtn && /新建任务|New task/.test(newBtn.aria) && Math.abs(newBtn.w - 24) < 1
+      && Math.abs(newBtn.h - 24) < 1 && newBtn.inActions,
+      JSON.stringify(newBtn))
+
+    /* ── B11/B12 待处理一条都没有 → 那一列不占位（2026-11-06）────────────
+       这条是本次改动的本体：用户报的是"待处理 0 条，左边却空着三分之一屏"。
+       判据必须是**几何**（列宽归零），不能是"列还在 DOM 里"—— 塌缩本来就是
+       0fr + overflow 裁，节点一直在（见 WorkbenchKanban 的 columns）。
+
+       夹具换成一屏全是已完成的任务，重载后量三列宽度。
+       ⚠️ reverse 注入的 CSS 在 reload 后就没了，R4 得在这一段里重新注入。 */
+    /* 夹具：一条进行中 + 两条已完成，待处理空。
+       为什么留一条进行中：只留已完成的话另两列**都**会塌，已完成列吃掉整块宽度 ——
+       "让出来的空间归了另两列"就退化成"归了唯一剩下的那列"，两条断言都白写。 */
+    tasksForApi = TASKS.map((t, i) => ({ ...t, column: i === 0 ? 'doing' : 'done' }))
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.waitForSelector('.kb-card', { timeout: 15000 })
+    // 塌掉的列是 aria-hidden + 0 宽 → 用 attached 等它（visible 永远等不到）
+    await page.waitForSelector('.kb-col--todo', { state: 'attached', timeout: 15000 })
+    await sleep(800)
+    if (REVERSE) {
+      // R4 把三列打回"永远等宽"（= 改造前的样子）
+      await page.addStyleTag({ content: '.kb__columns { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }' })
+      await sleep(500)
+    }
+    const cols = await page.evaluate(() => {
+      const box = (sel) => {
+        const el = document.querySelector(sel)
+        return el ? el.getBoundingClientRect() : null
+      }
+      const wrap = box('.kb__columns')
+      const todo = box('.kb-col--todo')
+      const doing = box('.kb-col--doing')
+      const done = box('.kb-col--done')
+      const cards = document.querySelectorAll('.kb-card').length
+      return {
+        wrapW: wrap ? wrap.width : -1,
+        todoW: todo ? todo.width : -1,
+        doingW: doing ? doing.width : -1,
+        doneW: done ? done.width : -1,
+        cards,
+        todoCount: (document.querySelector('.kb-col--todo .kb-col__count')?.textContent || '').trim(),
+      }
+    })
+    check('B11 待处理 0 条时该列不占位（列宽归零，不是只把内容藏起来）',
+      cols.cards === 3 && cols.todoCount === '0' && cols.todoW >= 0 && cols.todoW < 1,
+      `todoW=${cols.todoW === -1 ? '无节点' : cols.todoW.toFixed(1)}px todoCount=${cols.todoCount} cards=${cols.cards}`)
+    check('B12 让出来的宽度归另两列（进行中/已完成各 ≈ 整块的一半）',
+      cols.doingW > cols.wrapW * 0.4 && cols.doneW > cols.wrapW * 0.4,
+      `doingW=${cols.doingW.toFixed(0)}px doneW=${cols.doneW.toFixed(0)}px wrapW=${cols.wrapW.toFixed(0)}px`)
+    check('B13 塌缩不影响新建入口（「+」仍在标题行）',
+      await page.locator('.board__new-btn').isVisible().catch(() => false))
+
     await page.screenshot({ path: path.join(SHOT_DIR, REVERSE ? 'head-reverse.png' : 'head.png') })
     log('截图:', path.join(SHOT_DIR, REVERSE ? 'head-reverse.png' : 'head.png'))
   } finally {
@@ -286,6 +368,9 @@ async function main() {
     'B4 搜索默认收起：输入框宽 ≈ 0，只露放大镜按钮',
     'B7b 空词失焦收起',
     'B8 Esc 收起',
+    // R4 把三列钉回等宽（改造前的样子）→ 这两条必须红
+    'B11 待处理 0 条时该列不占位（列宽归零，不是只把内容藏起来）',
+    'B12 让出来的宽度归另两列（进行中/已完成各 ≈ 整块的一半）',
   ]
 
   console.log(`用例 ${results.length}，通过 ${results.length - failed.length}，失败 ${failed.length}`

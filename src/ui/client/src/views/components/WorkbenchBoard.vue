@@ -29,8 +29,9 @@
 
   顶栏右侧原来并排着「刷新」和「新建开发任务」两个按钮，2026-09-29 都去掉：
   · 刷新：5s 轮询 + 切回标签页立刻取一次，手动那一下几乎永远点不到"新"数据；
-  · 新建开发任务：看板「待处理」列末尾常驻一个「新建任务」，右栏调度台也能直接派发，
-    顶栏这个只是第三个入口，还把标题栏右侧占得满满的。
+  · 新建开发任务：2026-09-29 从顶栏挪走后，入口一直在看板「待处理」列末尾；
+    2026-11-06 待处理列改成"空就塌"之后搬回标题行右侧（.board__new-btn 那枚「+」），
+    右栏调度台也能直接派发。
   2026-10-27 连顶栏本身（标题 + 四项统计）也整块移除了，见模板里的说明。
 -->
 <script setup lang="ts">
@@ -919,6 +920,31 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
                位置正好，视图与筛选从此贴着项目名，不再单独占一行。
                形态收成图标：切换两枚（aria-label 说话），搜索默认只露一枚放大镜。 -->
           <div class="board__head-actions">
+            <!--
+              新建任务（2026-11-06）：入口从「待处理列末尾」搬到标题行。
+              起因是待处理列有 0 条时整列会塌掉（WorkbenchKanban 的 columns），
+              原先挂在列里的那个大虚线框入口跟着一起没了；而"一条待处理都没有"
+              恰恰是最常见的状态 —— 没有这枚按钮，看板上就没有建任务的入口了。
+
+              形态跟同排的视图切换 / 搜索一致：一枚 24px 图标，aria-label 与 title 说话。
+              放在动作区最前（视图切换那一组之前）：它是**动作**，右边那两枚是显示方式，
+              一串图标里新的东西贴在操作最顺手的一端。
+            -->
+            <button
+              type="button"
+              class="board__new-btn"
+              :title="$t('@WORKBENCH:新建任务')"
+              :aria-label="$t('@WORKBENCH:新建任务')"
+              @click="onCreateClick"
+            >
+              <el-icon>
+                <!-- plus（Tabler icons，MIT）：与同排的视图/搜索同一形状族（14/描边 2） -->
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path d="M12 5l0 14" />
+                  <path d="M5 12l14 0" />
+                </svg>
+              </el-icon>
+            </button>
             <div class="board__view-switch" role="tablist">
               <button
                 type="button"
@@ -1227,11 +1253,12 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   min-width: 0;
 }
 
-/* ══ 头部右侧动作区（视图切换 + 搜索） ══════════════════════════════
+/* ══ 头部右侧动作区（新建 + 视图切换 + 搜索） ════════════════════════
    2026-10-16 从看板自己的工具条（原 WorkbenchKanban 的 .kb__toolbar）搬上来。
    那一行原来只有一枚「80/82 任务完成」徽章（用户要求去掉），位置正好。
    形态收成图标：切换两枚、搜索默认一枚 —— 标题行是"这是哪个项目"的
    地方，不是操作台，常驻一排文字按钮和一整个搜索框都太吵。
+   2026-11-06 又加了最前面那枚「+」（新建任务），理由见模板里那段。
    展开的搜索框向左挤，项目名 / 路径可压缩（.board__main-title 有
    flex:1 + min-width:0，路径自己会省略号），actions 本身永不缩。 */
 .board__head-actions {
@@ -1241,6 +1268,29 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
   flex-shrink: 0;
   min-width: 0;
 }
+/* 新建任务：24px 一枚图标，与 .board__view-btn / .board__search-btn 同槽同高，
+   这样标题行这一排读起来是一族按钮，不会因为"它是主操作"就高出一截。
+   静息不上底色（标题行不是操作台，常驻一块色只会跟项目名抢），
+   hover 才给主色 + 淡底 —— 与 .board__icon-btn 同一套反馈。
+   flex-shrink:0：搜索展开时被压缩的该是项目路径，不是这排按钮。 */
+.board__new-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color var(--transition-fast) var(--ease-custom),
+              background var(--transition-fast) var(--ease-custom);
+}
+.board__new-btn .el-icon { font-size: var(--font-size-base); }
+.board__new-btn:hover { color: var(--color-primary); background: var(--bg-subtle-hover); }
+.board__new-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 .board__view-switch {
   display: inline-flex;
   align-items: center;
