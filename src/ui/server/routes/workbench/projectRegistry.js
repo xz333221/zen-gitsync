@@ -35,7 +35,7 @@
 
 import { probeDirectoryGitStates } from '../../utils/directoryGitState.js';
 import { resolveProjectIcons, projectIconUrl } from './projectIcon.js';
-import { pickLiveActivity, tailExcerpt, jobAgent, jobDurationMs } from './jobActivity.js';
+import { pickLiveActivity, tailExcerpt, jobAgent, jobDurationMs, looksLikeAskingUser } from './jobActivity.js';
 // 图片后缀白名单只此一份（jobImage.js 的注释里也钉着这条）：卡片封面、附件缩略图、
 // 对话流内嵌图三处要是各写一份，迟早出现"这张缩略图能显示、那张不行"。
 import { IMAGE_EXTS } from './attachmentUtils.js';
@@ -400,12 +400,20 @@ export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now() 
   const jobs = Array.isArray(jobsForTask) ? jobsForTask : [];
   const last = latestJob(jobs);
   const live = pickLiveActivity(jobs, now);
+  const column = deriveTaskColumn(task, jobs);
+  const manualDoneAt = manualDoneHolds(task, jobs) ? task.manualDoneAt : null;
+  /**
+   * 最近一条 job 的正文摘录（"它最后说了什么"）；有 job 在跑时恒为 null，从没跑过 → ''。
+   * 取 `last` 而不是"最近一条有输出的 job"：那次执行要是没产出正文，宁可空着，
+   * 也不能把上一次的旧话当成这次的结果摆出来。
+   */
+  const lastReply = live ? null : tailExcerpt(last ? last.output : '');
   return {
     id: task.id,
     title: task.title || '',
     desc: task.desc || '',
     projectPath: task.projectPath || '',
-    column: deriveTaskColumn(task, jobs),
+    column,
     attachmentCount: Array.isArray(task.attachments) ? task.attachments.length : 0,
     /**
      * 附件里的图片（卡片封面的数据源，空数组 = 这张卡不画封面）。
@@ -416,12 +424,24 @@ export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now() 
     runningJobs: jobs.filter(j => j && (j.status === 'running' || j.status === 'pending')).length,
     /** 正在跑时的活动摘要；没有在跑 → null */
     live,
+    lastReply,
     /**
-     * 最近一条 job 的正文摘录（"它最后说了什么"）；有 job 在跑时恒为 null，从没跑过 → ''。
-     * 取 `last` 而不是"最近一条有输出的 job"：那次执行要是没产出正文，宁可空着，
-     * 也不能把上一次的旧话当成这次的结果摆出来。
+     * 「这条跑完了，但它在等你回话」（2026-11-06 补）。
+     *
+     * 已完成列混着两种任务：真做完的，和模型收尾时反问「要不要我接着做？」的。
+     * 两种在卡片上长得一样（都是「已完成」+ 用时 + 一段话），用户要区分只能把那段读完 ——
+     * 而这一列动辄两三百张。判据在 jobActivity.looksLikeAskingUser（只看最后两句）。
+     *
+     * 三个前置，缺一不可：
+     *   · 不在跑（有 job 在跑就不可能有"收尾"）；
+     *   · 真在「已完成」列（待处理里的旧回复不算待你回话 —— 那是另一件事）；
+     *   · **没有**用户手动标的完成标记 —— 手动收掉等于用户已经表过态，
+     *     此时再挂「等你回话」是在替用户反悔。
+     *
+     * 为什么由服务端判而不是前端拿 lastReply 现算：列表视图、看板卡片、以后可能加的
+     * 筛选/计数都要同一个答案；判据放两处必然分叉（同 autoCompleted 那条理由）。
      */
-    lastReply: live ? null : tailExcerpt(last ? last.output : ''),
+    awaitingReply: !live && column === 'done' && !manualDoneAt && looksLikeAskingUser(lastReply),
     /**
      * 最近一条 job 用的执行器（卡片上的品牌图标；认不出 / 从没跑过 → ''）。
      * 与 live.agent 的分工：那个只在**跑的时候**有值，跑完就断——而"这条是 Claude 还是
@@ -474,7 +494,7 @@ export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now() 
      * ② 是必须的：手动收掉的任务没有"跑完的时刻"，最近一条 job 可能是三天前那次报错，
      * 照旧取 lastJobEndedAt 的话，用户刚点完完成，卡片上写的是「3 天前」。
      */
-    manualDoneAt: manualDoneHolds(task, jobs) ? task.manualDoneAt : null,
+    manualDoneAt,
     createdAt: task.createdAt || null,
     updatedAt: task.updatedAt || null,
   };

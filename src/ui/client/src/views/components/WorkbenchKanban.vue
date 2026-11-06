@@ -325,6 +325,17 @@ function autoDoneTitle(t: BoardTask): string {
 }
 
 /**
+ * 「等你回话」那枚标的悬停提示。
+ *
+ * 标本身只有四个字，看不出"为什么它算等你" —— 而这条状态是**模型的话说的**，
+ * 判断依据就在卡片下面那段引文里。所以提示只负责把"该怎么用"说清楚（点开看看再定），
+ * 不重复引文（"这是 AI 判完成"那条另有一枚自己的标，见模板里 auto-done 那段）。
+ */
+function awaitingTitle(): string {
+  return $t('@WORKBENCH:这条已经跑完，但 Agent 最后的话是在问你 —— 点开看看再决定下一步')
+}
+
+/**
  * 列表视图的行序：最新的在最上边。
  *
  * 排序键 = 显示键（cardTime），理由同上面那段：按 A 排、显示 B 的话，
@@ -613,22 +624,53 @@ function coverTitle(img: BoardImage): string {
             </p>
 
             <!--
-              「这条不是跑完的，是**判**完的」—— 紧跟在那行用时下面（它修饰的就是上面那个时长）。
+              两枚「这条是怎么收尾的」状态标（可同时成立）：
+
+                AI 判定完成  —— 谁把它放进已完成列的（静默看门狗）
+                等你回话     —— 它最后那句话是在问你，得有人回
+
+              「AI 判定完成」为什么值得一枚标：自动收尾与"进程自己正常退出"在看板上
+              长得一模一样（都是「已完成」+ 一段用时），但含义差很远 —— 后者是跑完了，
+              前者是**模型读了它的思考与最后那段话，认为活已经干完**。不标的话，
+              用户看到的就是一条任务不声不响换了列，而模型给的依据（悬停可见）
+              只躺在 jobs.json 里没人看得到。
+              两枚同时成立的卡真实存在（静默看门狗把"收尾在反问要不要 push"判成完成
+              是常态，见 verify-wb-auto-done 里那条合成依据）：两种事实各自有用，
+              前者解释"它为什么会自己跳进已完成列"，后者说"你现在该去看它"。
 
               为什么**另起一行**、而不是挂在那行用时后面：那行有探针按逐字相等断言
               （verify-wb-task-duration 的 A1「与服务端 lastDurationMs 逐字一致」，A3 还要求
               它不被裁掉尾巴），往里面塞一枚标会同时踩到这两条 —— 而且那行本来就窄。
-              竖着放只多一行 16px，横向一个字节都不占。
 
-              为什么要标出来：自动收尾与"进程自己正常退出"在看板上长得一模一样
-              （都是「已完成」+ 一段用时），但含义差很远 —— 后者是跑完了，
-              前者是**模型读了它的思考与最后那段话，认为活已经干完**。不标的话，
-              用户看到的就是一条任务不声不响换了列，而模型给的依据（悬停可见）
-              只躺在 jobs.json 里没人看得到。
+              套一层 flex 壳而不是让两个 <p> 各自 inline-block：它们会落进同一个行盒，
+              基线对齐时一枚比另一枚高 8px（实测 auto top=4068 / awaiting top=4060）——
+              两枚并列的状态标高低不齐，看着像没对齐的故障，而不是两件事。
             -->
-            <p v-if="t.autoCompleted" class="kb-card__auto-done" :title="autoDoneTitle(t)">
-              {{ $t('@WORKBENCH:AI 判定完成') }}
-            </p>
+            <div v-if="t.autoCompleted || t.awaitingReply" class="kb-card__marks">
+              <p v-if="t.autoCompleted" class="kb-card__auto-done" :title="autoDoneTitle(t)">
+                {{ $t('@WORKBENCH:AI 判定完成') }}
+              </p>
+
+              <!--
+                「这条跑完了，但它在等你回话」—— 已完成列里**唯一需要区分的那两种卡**的记号。
+
+                已完成列混着两种任务：真做完的，和模型收尾时反问「要不要我接着做？」的。
+                在此之前两者在卡片上完全一样（标题 + 用时 + 一段收尾），用户要分辨只能把
+                那段收尾读完 —— 而这一列动辄两三百张（本机实测 237 张），扫不完。
+                判据在服务端（jobActivity.looksLikeAskingUser，只看最后两句），这里只画。
+
+                位置刻意在引文**上面一行**，不塞进 .kb-card__reply：
+                引文那段有逐字断言（verify-wb-card-reply 的 A2「与服务端 lastReply 逐字一致」），
+                往里加字会直接把那条打红；而它俩本来就是两层意思 ——
+                这枚标说的是状态，底下那段是证据。
+
+                也不用左边竖条 / 卡片左边框那种表达：用户明确否过「卡片不要左边框」
+                （见文件头 .kb-card.is-opened 那段），状态的落点是这枚标本身。
+              -->
+              <p v-if="t.awaitingReply" class="kb-card__awaiting" :title="awaitingTitle()">
+                {{ $t('@WORKBENCH:等你回话') }}
+              </p>
+            </div>
 
             <!--
               正在跑的任务：把"现在在干嘛"直接写在卡片上。
@@ -952,6 +994,12 @@ function coverTitle(img: BoardImage): string {
             <td class="kb-table__td">
               <span class="kb-table__status" :class="'is-' + t.column">
                 {{ $t(COLUMNS.find(c => c.key === t.column)!.labelKey) }}
+              </span>
+              <!-- 「等你回话」在列表里挂在**状态列**（不是回复那行）：那一行的文字
+                   有逐字断言（verify-wb-card-reply 的 G1），加个字就打红了；
+                   而状态列本来就是"这条处在什么状态"的落点。 -->
+              <span v-if="t.awaitingReply" class="kb-table__awaiting" :title="awaitingTitle()">
+                {{ $t('@WORKBENCH:等你回话') }}
               </span>
             </td>
             <td class="kb-table__td kb-table__td--num">
@@ -1357,6 +1405,25 @@ function coverTitle(img: BoardImage): string {
   text-overflow: ellipsis;
 }
 /*
+ * 两枚状态标（「AI 判定完成」/「等你回话」）所在的那一行。
+ *
+ * flex 而不是让两个 <p> 各自 inline-block：两者会落进同一个行盒，基线对齐时
+ * 高度不一致（实测差 8px），看着像没对齐的故障。flex 下按 top 对齐、间距统一。
+ * 单枚时与原来独占一行的观感一致 —— 上下间距由这里的 margin 决定
+ * （spent 的下边距 8 → 这里 -2 → 净 6，与原来那枚标的 -4 只差 2px）。
+ */
+.kb-card__marks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 4px 6px;
+  margin: -2px 0 8px;
+}
+/* 行内的两枚标不再自己带外边距（间距归上面的 gap / margin 管） */
+.kb-card__marks .kb-card__auto-done,
+.kb-card__marks .kb-card__awaiting { margin: 0; }
+
+/*
  * 「AI 判定完成」：卡片上紧跟「用时 x」的那一枚小标（模板那段的理由写在那里）。
  * 配色照抄项目色标那套（跟 surface-elevated 混，深浅两套主题自动成立），
  * 色相固定用成功色 —— 它说的是"这条已经落进「已完成」列了"这个事实。
@@ -1384,6 +1451,48 @@ function coverTitle(img: BoardImage): string {
  */
 .kb-table__auto-done {
   color: color-mix(in srgb, var(--color-success) 62%, var(--text-primary));
+}
+/*
+ * 「等你回话」：已完成列里唯一需要用户动手的那一类。
+ *
+ * 形状沿用「AI 判定完成」那一枚（圆角矩形 + 极淡底 + 同色描边），只换色相：
+ * 成功绿说的是"这条落进已完成列了"这个事实，琥珀说的是"还得你一句话"——
+ * 两枚标会同时出现在这一列里，同形状才读得出"它们是一类东西（状态标）"。
+ * 不用胶囊：胶囊在这张卡上是「项目名」的专用形状（同 .kb-card__auto-done 的理由）。
+ *
+ * 宽度按内容收（inline-block）：铺满整行会像一条分隔线，而不是一枚标记。
+ */
+.kb-card__awaiting {
+  display: inline-block;
+  max-width: 100%;
+  margin: 0 0 2px;
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 26%, var(--surface-elevated));
+  border-radius: var(--radius-base);
+  background: color-mix(in srgb, var(--color-warning) 10%, var(--surface-elevated));
+  color: color-mix(in srgb, var(--color-warning) 70%, var(--text-primary));
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/*
+ * 列表视图那一枚：挂在状态列、**另起一行**。
+ * 状态列宽 96px，「已完成」和「等你回话」并排塞不下（两枚各 60px 上下），
+ * 而两行的行高代价只落在需要你回话的那几行上，比把字压成省略号强。
+ * width: fit-content —— display:block 会铺满整格，看着像一颗按钮。
+ */
+.kb-table__awaiting {
+  display: block;
+  width: fit-content;
+  margin-top: 3px;
+  padding: 1px 6px;
+  border-radius: var(--radius-base);
+  background: var(--role-active-wash);
+  color: var(--role-active-ink);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
 }
 .kb-card__title {
   margin: 0;

@@ -88,6 +88,8 @@
     "verify:wb-run-executor-badge:reverse": "node scripts/verify-wb-run-executor-badge.cjs --reverse",
     "verify:wb-auto-done": "node scripts/verify-wb-auto-done.cjs",
     "verify:wb-auto-done:reverse": "node scripts/verify-wb-auto-done.cjs --reverse",
+    "verify:wb-awaiting-reply": "node scripts/verify-wb-awaiting-reply.cjs",
+    "verify:wb-awaiting-reply:reverse": "node scripts/verify-wb-awaiting-reply.cjs --reverse",
     "verify:wb-card-cover": "node scripts/verify-wb-card-cover.cjs",
     "verify:wb-card-cover:reverse": "node scripts/verify-wb-card-cover.cjs --reverse",
     "verify:wb-card-move": "node scripts/verify-wb-card-move.cjs",

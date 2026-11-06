@@ -28,6 +28,7 @@ import assert from 'node:assert/strict';
 import {
   tailLine,
   tailExcerpt,
+  looksLikeAskingUser,
   describeLastTool,
   describeToolMix,
   silentMsOf,
@@ -344,4 +345,38 @@ test('jobDurationMs：结束早于开始（时钟漂移 / 手工改过 jobs.json
     jobDurationMs({ status: 'done', startedAt: '2026-09-28T10:00:10.000Z', endedAt: '2026-09-28T10:00:00.000Z' }),
     0,
   );
+});
+
+// ── 「它最后是在问你吗」（looksLikeAskingUser） ─────────────────────────
+// 已完成卡片上「等你回话」那枚标的判据。误判的代价是用户点开一条本来做完的卡片，
+// 漏判的代价是那条一直躺着没人回 —— 但不做区分的话，两种任务在界面上完全一样。
+// 这组守的是**边界**：问号要认、礼貌性征询（"说一声"）要认、
+// 陈述句里出现的"要不要 / 是否"不能认。
+
+test('looksLikeAskingUser：收尾是问句就认（中英文问号，含被引号括号包住的）', () => {
+  assert.equal(looksLikeAskingUser('已经改好了。要 push 吗？'), true);
+  assert.equal(looksLikeAskingUser('需要我把构建产物同步过去吗？（不动你正在跑的进程）'), true);
+  assert.equal(looksLikeAskingUser('Shall I push it?'), true);
+  assert.equal(looksLikeAskingUser('Done. Want me to update the docs?'), true);
+});
+
+test('looksLikeAskingUser：没有问号的礼貌性征询也认（模型真实收尾里最常见的就是这一种）', () => {
+  assert.equal(looksLikeAskingUser('这次只落盘、不提交。你要我提交的话说一声。'), true);
+  assert.equal(looksLikeAskingUser('两个方向：A) 覆盖 CSS，B) 拉源码重构建。你选一个我就开工。'), true);
+  assert.equal(looksLikeAskingUser('如果你希望两处完全统一，我可以把 .mark 也换掉。'), true);
+  assert.equal(looksLikeAskingUser('这轮没动文档，需要的话我再补。'), true);
+});
+
+test('looksLikeAskingUser：只看最后两句 —— 正文里复述的「要不要 / 是否」不算', () => {
+  // 实测里踩到的误判：一条讲"判断是否收起"的收尾，全句没有问的意思
+  assert.equal(looksLikeAskingUser('记录一条经验：Chrome 收起 details 时，用 offsetParent 判断是否收起会误判。'), false);
+  assert.equal(looksLikeAskingUser('已提交并 push（ed546369）。另外我发现你截图里的实例跑的是全局包。'), false);
+  assert.equal(looksLikeAskingUser('验证全绿：tsc / build / 探针 12 项。远程没有新提交。'), false);
+});
+
+test('looksLikeAskingUser：空值 / 非字符串不炸（老 job 可能没有 output）', () => {
+  assert.equal(looksLikeAskingUser(''), false);
+  assert.equal(looksLikeAskingUser(null), false);
+  assert.equal(looksLikeAskingUser(undefined), false);
+  assert.equal(looksLikeAskingUser(123), false);
 });

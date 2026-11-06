@@ -278,6 +278,25 @@ async function main() {
     // 固定 sleep 会在这台机器上先于异步数据落 DOM：截图里明明已有「用时」，
     // readCard 却读到 null，后面整串断言假红。等到目标卡片自己的用时行出现，
     // 才是页面上真正渲染完成的那一刻。
+    //
+    // 但目标卡可能压根不在**前 30 张**里：已完成列默认只铺最近 30 条（DONE_PAGE），
+    // 而 target 是"跑得最久"的那条 —— 真实数据攒到 200+ 条之后它稳定排在第 160 位左右
+    // （2026-11-06 实测 160/200）。先把「显示更早的」点到它出现，再等渲染。
+    const revealDoneCard = async (title) => {
+      for (let i = 0; i < 20; i++) {
+        const present = await page.evaluate((t) => Array.from(document.querySelectorAll('.kb-col--done .kb-card'))
+          .some(c => (c.querySelector('.kb-card__title')?.textContent || '').trim() === t), title)
+        if (present) return true
+        const more = page.locator('.kb-col--done .kb-col__more-btn')
+        if ((await more.count()) === 0) return false
+        await more.first().click()
+        await sleep(200)
+      }
+      return false
+    }
+    if (!await revealDoneCard(target.title)) {
+      throw new Error(`「显示更早的」点到底也找不到断言对象：${target.title}`)
+    }
     await page.waitForFunction((title) => {
       const card = Array.from(document.querySelectorAll('.kb-card'))
         .find(c => (c.querySelector('.kb-card__title')?.textContent || '').trim() === title)

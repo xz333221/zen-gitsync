@@ -264,6 +264,29 @@ async function main() {
     await page.locator('.proj-item--all').first().click()
     await sleep(1200)
 
+    /*
+     * 已完成列默认只铺最近 30 张（WorkbenchKanban 的 DONE_PAGE），而合成卡片的完成时刻
+     * 是按"三 / 四小时前"造的 —— 真实数据攒到 200+ 条之后（本机 2026-11-06 实测 237 条），
+     * 它们必然落在 30 张之外，readCard 直接找不到卡。
+     * 这不是功能坏了，是夹具被真实数据规模顶出去了：把「显示更早的」点到出现为止
+     * （verify-wb-card-reply 早就是同一手法）。
+     */
+    const revealDoneCard = async (title) => {
+      for (let i = 0; i < 20; i++) {
+        const present = await page.evaluate((t) => Array.from(document.querySelectorAll('.kb-col--done .kb-card'))
+          .some(c => (c.querySelector('.kb-card__title')?.textContent || '').trim() === t), title)
+        if (present) return true
+        const more = page.locator('.kb-col--done .kb-col__more-btn')
+        if ((await more.count()) === 0) return false
+        await more.first().click()
+        await sleep(200)
+      }
+      return false
+    }
+    for (const t of [autoCard.title, plainCard.title]) {
+      if (!await revealDoneCard(t)) throw new Error(`「显示更早的」点到底也找不到合成卡片：${t}`)
+    }
+
     /** 按标题找到卡片，读它的标 + 那行用时（DOM ↔ 数据关联不用标题当键会串） */
     const readCard = (title) => page.evaluate((t) => {
       const cards = Array.from(document.querySelectorAll('.kb-card'))

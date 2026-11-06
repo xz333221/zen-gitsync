@@ -2696,6 +2696,8 @@ export default {
   '@WORKBENCH:用时 {d}': 'took {d}',
   '@WORKBENCH:AI 判定完成': 'AI marked done',
   '@WORKBENCH:静默超时后由 AI 核对，判定这条任务已经完成': 'The task went silent, so an AI check reviewed it and judged it finished',
+  '@WORKBENCH:等你回话': 'Waiting on you',
+  '@WORKBENCH:这条已经跑完，但 Agent 最后的话是在问你 —— 点开看看再决定下一步': 'This run finished, but the last thing the agent said was a question to you — open it before deciding what is next',
   '@WORKBENCH:打开文件夹': 'Open folder',
   '@WORKBENCH:已在文件管理器中打开文件夹': 'Opened the folder in your file manager',
   '@WORKBENCH:打开文件夹失败': 'Failed to open folder',
