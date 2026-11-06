@@ -106,6 +106,34 @@ test('deriveTaskColumn: 看执行记录 —— 最近一条 done 才算已完成
   assert.equal(deriveTaskColumn({}, jobs), 'todo');
 });
 
+test('deriveTaskColumn: 执行记录被保留策略裁光后，靠 task.autoDoneAt 留在已完成', () => {
+  // jobs.json 只留最近 N 条：某条任务最后一条记录被裁掉后 jobsForTask 就是空的。
+  // 没有这个回落，做完的任务会重新掉回「待处理」—— 用户看到的就是"做过的又冒出来了"。
+  assert.equal(deriveTaskColumn({ autoDoneAt: '2026-01-02T00:00:00Z' }, []), 'done');
+  // 又跑过一轮时以执行记录为准：那轮报错就回待处理（autoDoneAt 是旧事实，不参与）
+  const later = [job('j2', 't1', 'error', '2026-01-03T00:00:00Z', '2026-01-03T00:01:00Z')];
+  assert.equal(deriveTaskColumn({ autoDoneAt: '2026-01-02T00:00:00Z' }, later), 'todo');
+  // 空串 / 非字符串一律不算"跑完过"
+  assert.equal(deriveTaskColumn({ autoDoneAt: '' }, []), 'todo');
+  assert.equal(deriveTaskColumn({ autoDoneAt: 12345 }, []), 'todo');
+});
+
+test('decorateTaskForBoard: 记录被裁掉后仍给出跑完的时刻', () => {
+  const now = Date.parse('2026-01-05T00:00:00Z');
+  const card = decorateTaskForBoard({ id: 't1', autoDoneAt: '2026-01-02T00:00:00Z' }, [], { now });
+  assert.equal(card.column, 'done');
+  // 已完成列按完成时刻倒序排，靠这两个字段；缺了会退回 createdAt
+  assert.equal(card.lastJobEndedAt, '2026-01-02T00:00:00Z');
+  assert.equal(card.lastJobStatus, 'done');
+  // 有 job 时照旧以 job 为准
+  const withJob = decorateTaskForBoard(
+    { id: 't1', autoDoneAt: '2026-01-02T00:00:00Z' },
+    [job('j2', 't1', 'error', '2026-01-03T00:00:00Z', '2026-01-03T00:01:00Z')],
+    { now }
+  );
+  assert.equal(withJob.lastJobEndedAt, '2026-01-03T00:01:00Z');
+});
+
 test('latestJob 按 startedAt 取最新的一条', () => {
   const list = [
     job('j1', 't1', 'error', '2026-01-01T00:00:00Z', '2026-01-01T00:01:00Z'),

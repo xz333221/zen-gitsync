@@ -381,6 +381,8 @@ export async function enforceRetention() {
   if (!data || !Array.isArray(data.jobs) || data.jobs.length === 0) return;
   const sortKey = (j) => j.endedAt || j.startedAt || j.id || '';
   data.jobs.sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
+  // 快照要 copy：maxCount 为 0 时 data.jobs 下面会被 pop 原地改，别让快照跟着变
+  const beforeTrim = data.jobs.slice();
   if (cfg.maxCount > 0) data.jobs = data.jobs.slice(0, cfg.maxCount);
   if (cfg.maxSizeMB > 0) {
     const cap = cfg.maxSizeMB * 1024 * 1024;
@@ -390,9 +392,16 @@ export async function enforceRetention() {
       total -= (dropped && dropped.size) || 0;
     }
   }
+  // **先**把"被裁掉的那条跑完了"写回任务，**再**真的丢记录 —— 顺序反了的话，
+  // 写任务那一步失败（磁盘满 / 文件被占用）就等于把事实永久删掉。
+  const keepIds = new Set(data.jobs.map(j => j.id));
+  try {
+    await persistDroppedFacts(beforeTrim.filter(j => !keepIds.has(j.id)), data.jobs);
+  } catch (err) {
+    logger.warn('[workbench] 保留策略回写任务完成事实失败:', err?.message || err);
+  }
   await writeJson(JOBS_FILE, data);
   invalidateDiskCache();
-  const keepIds = new Set(data.jobs.map(j => j.id));
   for (const id of Array.from(jobs.keys())) {
     const j = jobs.get(id);
     // **运行中的 job 一律不许在这里被删掉**：它还没进过 jobs.json(或者进来的是上一轮的
@@ -402,6 +411,54 @@ export async function enforceRetention() {
     if (j && (j.status === 'running' || j.status === 'pending')) continue;
     if (!keepIds.has(id)) jobs.delete(id);
   }
+}
+
+/**
+ * 丢一条执行记录之前，把它"跑完了"这件事落到任务上（`task.autoDoneAt`）。
+ *
+ * 为什么必须落：看板的列完全由执行记录推导（projectRegistry.deriveTaskColumn），
+ * 而 jobs.json 是有上限的（默认 500 条 / 256MB）。跑到第 501 条时，最老的那条记录
+ * 被裁掉 —— 如果它恰好是某条任务**唯一**的一条记录，那条任务在推导里就变成
+ * "从没跑过"，于是从「已完成」掉回「待处理」。这不是一次性的：每完成一条新任务
+ * 就会再挤掉一条老的，用户看到的就是"为什么待处理里老出现做过的任务"。
+ *
+ * 只给**裁完之后一条记录都不剩**的任务写：还有记录留着的任务，列继续由那些记录推导，
+ * 多存一个时刻反而会变成第二个口径。
+ *
+ * 存的是"最新的那条被裁记录"的结果（done 才落时刻，其余终态就把旧值删掉）：
+ * dropped 是从 `beforeTrim`（已按时间倒序）里筛出来的，所以同一任务的第一条就是最新的。
+ */
+async function persistDroppedFacts(droppedJobs, keptJobs) {
+  const dropped = Array.isArray(droppedJobs) ? droppedJobs : [];
+  if (dropped.length === 0) return;
+  const keptTaskIds = new Set((Array.isArray(keptJobs) ? keptJobs : []).map(j => j && j.taskId).filter(Boolean));
+  const latestDropped = new Map(); // taskId -> 最新那条被裁掉的 job
+  for (const j of dropped) {
+    if (!j || !j.taskId) continue;
+    if (latestDropped.has(j.taskId)) continue;
+    latestDropped.set(j.taskId, j);
+  }
+  if (latestDropped.size === 0) return;
+
+  const tasksData = await readJson(TASKS_FILE, { tasks: [] });
+  const tasks = Array.isArray(tasksData.tasks) ? tasksData.tasks : [];
+  if (tasks.length === 0) return;
+  const byId = new Map(tasks.map(t => [t && t.id, t]));
+
+  let changed = 0;
+  for (const [taskId, j] of latestDropped) {
+    if (keptTaskIds.has(taskId)) continue;
+    const task = byId.get(taskId);
+    if (!task) continue; // 任务已删：没有要维护的卡片
+    const at = j.status === 'done' ? String(j.endedAt || j.startedAt || '') : '';
+    const cur = typeof task.autoDoneAt === 'string' ? task.autoDoneAt : '';
+    if (at === cur) continue;
+    if (at) task.autoDoneAt = at;
+    else delete task.autoDoneAt;
+    changed += 1;
+  }
+  if (changed === 0) return;
+  await writeJson(TASKS_FILE, tasksData);
 }
 
 // 进程启动时拉回历史 job（陈旧 running/pending 自动降级 error）

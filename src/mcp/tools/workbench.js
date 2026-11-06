@@ -44,8 +44,12 @@ import { canonicalProjectPath, projectNameOf, readJsonFile, truncate, asString, 
 function deriveColumn(task, jobsForTask) {
   const jobs = Array.isArray(jobsForTask) ? jobsForTask : [];
   if (jobs.some(j => j && (j.status === 'running' || j.status === 'pending'))) return 'doing';
-  if (String(task?.status) === 'done') return 'done'; // 手动标完成
-  if (jobs.length === 0) return 'todo';
+  // 手动标完成（task.manualDoneAt），标记之后又跑过一轮就作废 —— 与
+  // projectRegistry.manualDoneHolds 同一条口径
+  const manualAt = String(task?.manualDoneAt || '');
+  if (manualAt && !jobs.some(j => j && typeof j.startedAt === 'string' && j.startedAt > manualAt)) return 'done';
+  // 执行记录被保留策略裁光了，但任务跑完过（task.autoDoneAt）
+  if (jobs.length === 0) return String(task?.autoDoneAt || '') ? 'done' : 'todo';
   const sorted = jobs.slice().sort((a, b) => String(a.startedAt || a.endedAt || '').localeCompare(String(b.startedAt || b.endedAt || '')));
   const last = sorted[sorted.length - 1];
   return last && last.status === 'done' ? 'done' : 'todo';

@@ -68,6 +68,8 @@ const {
   refreshJobsFromDisk,
   flushJobsSaveNow,
   flushActiveJobsSave,
+  enforceRetention,
+  writeJobsConfig,
 } = await import(modUrl('src/ui/server/routes/workbench/jobStore.js'));
 const {
   writeLiveJobsFile,
@@ -351,4 +353,94 @@ test('终态收口:job 跑完后自己那份 live 文件必须消失,读者看�
   await refreshJobsFromDisk({ force: true });
   assert.equal(snapshotJobs().find(j => j.id === 'j-run').status, 'done');
   jobs.clear();
+});
+
+// ── 保留策略:丢执行记录之前先把"跑完了"写回任务 ────────────────────
+// 2026-11-06:jobs.json 默认只留最近 500 条。一条任务唯一的那条记录被裁掉之后,
+// 看板列(纯由执行记录推导)就把它当成"从没跑过" —— 已完成的任务重新掉回待处理。
+// 这不是一次性的:每完成一条新任务就会再挤掉一条老的,用户看到的就是
+// "待处理里老是冒出之前已经做过的任务"。这一组钉住修复:
+// 裁掉之前把完成时刻落到 task.autoDoneAt 上。
+
+const tasksFile = path.join(dataDir, 'tasks.json');
+
+test('保留策略:裁掉某条任务的最后一条记录前,把完成时刻写回 tasks.json', async () => {
+  await resetStores();
+  const older = diskJob('j-old', 't1', 'done', {
+    startedAt: '2026-09-20T00:40:00.000Z',
+    endedAt: '2026-09-20T00:50:00.000Z',
+  });
+  const newer = diskJob('j-new', 't2', 'done', {
+    startedAt: '2026-09-20T01:40:00.000Z',
+    endedAt: '2026-09-20T01:50:00.000Z',
+  });
+  await seedJobsFile([older, newer]);
+  await fs.writeFile(
+    tasksFile,
+    JSON.stringify({ tasks: [simpleTask('t1'), simpleTask('t2')] }),
+    'utf-8'
+  );
+  await writeJobsConfig({ maxCount: 1, maxSizeMB: 0 });
+  try {
+    await enforceRetention();
+
+    const kept = JSON.parse(await fs.readFile(jobsFile, 'utf-8'));
+    assert.deepEqual(kept.jobs.map(j => j.id), ['j-new'], '只该留最新那条记录');
+
+    const tasks = JSON.parse(await fs.readFile(tasksFile, 'utf-8')).tasks;
+    const t1 = tasks.find(t => t.id === 't1');
+    const t2 = tasks.find(t => t.id === 't2');
+    assert.equal(t1.autoDoneAt, '2026-09-20T00:50:00.000Z', '被裁掉的那条跑完了,任务要记得');
+    assert.equal(t2.autoDoneAt, undefined, '还有记录留着的任务不落回落值(口径只留一份)');
+
+    // 推导结果就是用户在那一列看到的
+    assert.equal(deriveTaskColumn(t1, []), 'done');
+    assert.equal(deriveTaskColumn(t2, [newer]), 'done');
+  } finally {
+    await writeJobsConfig({ maxCount: 500, maxSizeMB: 256 });
+    await fs.rm(tasksFile, { force: true });
+  }
+});
+
+test('保留策略:最新一条被裁的是失败/取消 → 不落完成时刻,并清掉旧值', async () => {
+  await resetStores();
+  const done = diskJob('j-done', 't3', 'done', {
+    startedAt: '2026-09-20T00:10:00.000Z',
+    endedAt: '2026-09-20T00:20:00.000Z',
+  });
+  const failed = diskJob('j-err', 't3', 'error', {
+    startedAt: '2026-09-20T00:30:00.000Z',
+    endedAt: '2026-09-20T00:40:00.000Z',
+  });
+  const keeper = diskJob('j-keep', 't4', 'done', {
+    startedAt: '2026-09-20T02:00:00.000Z',
+    endedAt: '2026-09-20T02:10:00.000Z',
+  });
+  // t5 只有一条被裁掉的失败记录,但任务上还挂着早前留下的完成时刻
+  const stale = diskJob('j-stale', 't5', 'error', {
+    startedAt: '2026-09-20T00:05:00.000Z',
+    endedAt: '2026-09-20T00:06:00.000Z',
+  });
+  await seedJobsFile([failed, done, keeper, stale]);
+  await fs.writeFile(
+    tasksFile,
+    JSON.stringify({ tasks: [simpleTask('t3'), simpleTask('t4'), { ...simpleTask('t5'), autoDoneAt: '2026-09-01T00:00:00.000Z' }] }),
+    'utf-8'
+  );
+  await writeJobsConfig({ maxCount: 1, maxSizeMB: 0 });
+  try {
+    await enforceRetention();
+    const tasks = JSON.parse(await fs.readFile(tasksFile, 'utf-8')).tasks;
+    const t3 = tasks.find(t => t.id === 't3');
+    // 上一轮成功后又被跑挂:最新的那条是 error,任务该回待处理,不能挂着"已完成"
+    assert.equal(t3.autoDoneAt, undefined);
+    assert.equal(deriveTaskColumn(t3, []), 'todo');
+
+    // 记录被裁光但最新一条是失败 → 之前留下的完成时刻要清掉(否则会永远冒充已完成)
+    const t5 = tasks.find(t => t.id === 't5');
+    assert.equal(t5.autoDoneAt, undefined);
+  } finally {
+    await writeJobsConfig({ maxCount: 500, maxSizeMB: 256 });
+    await fs.rm(tasksFile, { force: true });
+  }
 });

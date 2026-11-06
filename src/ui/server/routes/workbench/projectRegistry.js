@@ -157,7 +157,8 @@ export function manualDoneHolds(task, jobsForTask = []) {
  * 口径（按优先级，逐条短路）：
  *   1. 有 job 处于 running/pending → `doing`
  *   2. 有成立的手动「已完成」标记 → `done`
- *   3. 从没执行过 → `todo`
+ *   3. 从没执行过 → `todo`（**除非**这条任务的执行记录已被保留策略裁掉、
+ *      只留下 `task.autoDoneAt` —— 那说明它跑完过，见 jobStore.persistDroppedFacts）
  *   4. 最近一条 job 是 done → `done`；其余终态（error/cancelled）→ `todo`
  *
  * error/cancelled 不再单列：列表示任务是否仍待处理，错误是这一轮执行的结果，
@@ -175,7 +176,12 @@ export function deriveTaskColumn(task, jobsForTask = []) {
 
   if (manualDoneHolds(task, jobs)) return 'done';
 
-  if (jobs.length === 0) return 'todo';
+  if (jobs.length === 0) {
+    // 执行记录被保留策略裁光之后，"跑完过"这件事只剩任务自己记得。
+    // 没有这个回落，每跑完一条新任务就会有一条老任务从「已完成」掉回「待处理」——
+    // 用户看到的就是"做完的事又冒出来了"（见 jobStore.persistDroppedFacts）。
+    return task && typeof task.autoDoneAt === 'string' && task.autoDoneAt ? 'done' : 'todo';
+  }
   const last = latestJob(jobs);
   return last && last.status === 'done' ? 'done' : 'todo';
 }
@@ -399,6 +405,17 @@ export function pickBoardImages(attachments) {
 export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now(), triage = null } = {}) {
   const jobs = Array.isArray(jobsForTask) ? jobsForTask : [];
   const last = latestJob(jobs);
+  /**
+   * 执行记录已被保留策略裁掉、但这条任务确实跑完过（`task.autoDoneAt`，
+   * 由 jobStore.persistDroppedFacts 在丢记录之前写回）。
+   *
+   * 只拿来顶"最近一条 job"的时间/状态两处：卡片上「几小时前」和已完成列的时间倒序
+   * 都靠它们，缺了会退回到任务创建时间 —— 一条 10 月的任务显示"10 月创建"排在最新完成
+   * 的卡片后面，比列本身不准更让人迷惑。
+   */
+  const retainedDoneAt = !last && task && typeof task.autoDoneAt === 'string' && task.autoDoneAt
+    ? task.autoDoneAt
+    : null;
   const live = pickLiveActivity(jobs, now);
   const column = deriveTaskColumn(task, jobs);
   const manualDoneAt = manualDoneHolds(task, jobs) ? task.manualDoneAt : null;
@@ -457,12 +474,12 @@ export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now(),
      * "跑着显示 A、跑完变成 B"。
      */
     lastJobAgent: jobAgent(last),
-    lastJobStatus: last ? last.status : null,
+    lastJobStatus: last ? last.status : (retainedDoneAt ? 'done' : null),
     // 最近一条 job 的结束时间 = 这张卡片"跑完"的时刻。
     // 看板的「已完成」列要按完成时间倒序排（最新完成的在最上边），而 updatedAt 撑不起这个排序：
     // 执行完成只写 jobs.json，tasks.json 里的 updatedAt 一直停在创建/编辑时间，
     // 于是十几张卡片的时间会全是创建时刻，"最新完成的"根本排不出来。
-    lastJobEndedAt: last ? (last.endedAt || last.startedAt || null) : null,
+    lastJobEndedAt: last ? (last.endedAt || last.startedAt || null) : retainedDoneAt,
     /**
      * 最近一条 job 实际跑了多久（毫秒）—— 卡片上那串「用时 3 分 20 秒」。
      *
