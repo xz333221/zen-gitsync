@@ -906,8 +906,16 @@ function disposeAllModels() {
   modelCache.clear()
 }
 
+// 按下点是否落在预览面板里（决定 blur 时要不要把焦点还给 Monaco，见 onDidBlurEditorText）
+let pointerDownInPreview = false
+function onEditorMouseDownCapture(e: MouseEvent) {
+  const target = e.target as HTMLElement | null
+  pointerDownInPreview = !!(target && target.closest && target.closest('.preview-panel'))
+}
+
 function mountEditor() {
   if (!editorContainerRef.value) return
+  containerRef.value?.addEventListener('mousedown', onEditorMouseDownCapture, true)
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
   editorInstance.value = monaco.editor.create(editorContainerRef.value, {
     theme: isDark ? 'vs-dark' : 'vs',
@@ -943,6 +951,8 @@ function mountEditor() {
   // ② 如果编辑器视图仍可见，且焦点去往的是非输入控件（按钮、div、body 等），
   //    则在下一帧把焦点归还给 Monaco，彻底消除"点击侧边栏按钮后空格键失效"的问题。
   //    焦点去往真实输入框（搜索框 / 内联新建 / 重命名输入框 / Monaco 自身 EC 节点）时不抢焦点。
+  // ③ 例外：按下点在预览面板里（用户正要拖选预览文字）时不归还焦点 —— Monaco 的
+  //    隐藏 textarea 一拿到焦点，文档选区就被收进 textarea，鼠标拖选预览等于白拖。
   editorInstance.value.onDidBlurEditorText(() => {
     if (configStore.ui.editorAutoSave) {
       const tab = activeTab()
@@ -951,6 +961,9 @@ function mountEditor() {
     requestAnimationFrame(() => {
       // 编辑器视图已被 v-show 隐藏，不抢焦点
       if (!containerRef.value || containerRef.value.offsetParent === null) return
+      const pressedInPreview = pointerDownInPreview
+      pointerDownInPreview = false
+      if (pressedInPreview) return
       const ae = document.activeElement as HTMLElement | null
       const isInputLike = ae && (
         ae.tagName === 'INPUT'
@@ -1234,6 +1247,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   // useThemeObserver 自动 disconnect,无需手动清理
+  containerRef.value?.removeEventListener('mousedown', onEditorMouseDownCapture, true)
   viewVisibilityObserver?.disconnect()
   viewVisibilityObserver = null
   window.removeEventListener('focus', handleWindowFocus)
