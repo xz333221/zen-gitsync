@@ -675,6 +675,114 @@ export function registerFsRoutes({
     });
   }));
 
+  // ── 文件名 / 文件夹名搜索（资源管理器搜索框的全库名称匹配）──────────────
+  //
+  // 为什么要有这一条：树是**懒加载**的（前端只拿"根 + 已展开目录"），本地过滤
+  // 因此只覆盖用户手动展开过的那几层。搜 "skills" 时第 3 层那个没展开过的文件夹
+  // 根本不在内存里，名字永远匹配不到 —— 只能靠内容匹配偶然撞见。
+  // 名称搜索不需要读文件内容，只 readdir，比内容搜索便宜一个量级，所以允许在
+  // 同一份关键词下单独跑一轮全盘遍历（两层遍历互不依赖，各管自己的截断）。
+  const NAME_SEARCH_MAX_SCAN_DIRS = 20000;
+  const NAME_SEARCH_MAX_HIT_DIRS = 100;
+  const NAME_SEARCH_MAX_HIT_FILES = 200;
+  const NAME_SEARCH_TIME_BUDGET_MS = 8000;
+  const NAME_SEARCH_DIR_BATCH = 16;
+
+  app.post('/api/search_names', express.json(), asyncRoute(async (req, res) => {
+    const rawRoot = req.body?.path;
+    const rawQuery = req.body?.query;
+    if (typeof rawRoot !== 'string' || !rawRoot.trim()) {
+      res.status(400).json({ success: false, error: '缺少 path 参数' });
+      return;
+    }
+    if (typeof rawQuery !== 'string' || !rawQuery.trim()) {
+      res.status(400).json({ success: false, error: '缺少 query 参数' });
+      return;
+    }
+    const query = rawQuery.trim().slice(0, 120);
+    const queryLower = query.toLowerCase();
+
+    const guard = await safePathInProject(rawRoot);
+    if (!guard) {
+      res.status(403).json({ success: false, error: '禁止搜索工作目录以外的路径' });
+      return;
+    }
+    const rootPath = guard.safePath;
+
+    const startedAt = Date.now();
+    const deadline = startedAt + NAME_SEARCH_TIME_BUDGET_MS;
+    let scannedDirs = 0;
+    let stopped = false;
+    let truncated = false;
+    const dirs = [];
+    const files = [];
+
+    res.on('close', () => {
+      stopped = true;
+    });
+
+    const toHit = (absPath, type) => {
+      const relPath = path.relative(rootPath, absPath).split(path.sep).join('/');
+      const dir = path.posix.dirname(relPath);
+      return {
+        path: absPath,
+        relPath,
+        name: path.basename(absPath),
+        dir: dir === '.' ? '' : dir,
+        type,
+      };
+    };
+
+    try {
+      // BFS：浅层先出结果。只 readdir，不 stat、不读文件。
+      const dirQueue = [rootPath];
+      while (dirQueue.length > 0 && !stopped) {
+        if (scannedDirs >= NAME_SEARCH_MAX_SCAN_DIRS || Date.now() > deadline) {
+          truncated = true;
+          break;
+        }
+        const batch = dirQueue.splice(0, NAME_SEARCH_DIR_BATCH);
+        const listings = await Promise.all(
+          batch.map((dir) => fs.readdir(dir, { withFileTypes: true }).catch(() => []))
+        );
+        scannedDirs += batch.length;
+        for (let i = 0; i < listings.length; i += 1) {
+          for (const entry of listings[i]) {
+            // 符号链接不跟：可能指回祖先目录，直接把遍历变成死循环
+            if (entry.isSymbolicLink()) continue;
+            const fullPath = path.join(batch[i], entry.name);
+            const hit = entry.name.toLowerCase().includes(queryLower);
+            if (entry.isDirectory()) {
+              if (CONTENT_SEARCH_IGNORED_DIRS.has(entry.name)) continue;
+              dirQueue.push(fullPath);
+              if (hit && dirs.length < NAME_SEARCH_MAX_HIT_DIRS) dirs.push(toHit(fullPath, 'directory'));
+            } else if (entry.isFile() && hit && files.length < NAME_SEARCH_MAX_HIT_FILES) {
+              files.push(toHit(fullPath, 'file'));
+            }
+          }
+        }
+        // 两类都到上限就没必要再扫了
+        if (dirs.length >= NAME_SEARCH_MAX_HIT_DIRS && files.length >= NAME_SEARCH_MAX_HIT_FILES) {
+          truncated = true;
+          break;
+        }
+      }
+    } catch (error) {
+      res.status(500).json({ success: false, error: `搜索失败: ${error.message}` });
+      return;
+    }
+
+    res.json({
+      success: true,
+      query,
+      dirs,
+      files,
+      scannedDirs,
+      truncated,
+      elapsedMs: Date.now() - startedAt,
+    });
+  }));
+
   // ── 最近修改的文件（文件空间左栏底部的「最近修改」）─────────────────────
   //
   // 用户诉求：同步盘里的笔记常常是在**别的电脑**上改的，文件树按名字排序看不出

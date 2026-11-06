@@ -105,9 +105,86 @@ watch(searchQuery, (val) => {
   }, 180)
 })
 
+// ── 搜索：名称（本地树 + 全库） / 内容（全库） ─────────────
+// 名称过滤先走本地整棵**已加载**的树（毫秒级、带树形结构）；但树是懒加载的，
+// 没展开过的深层目录压根不在内存里，所以再补一次后端全库名称搜索
+// （/api/search_names 只 readdir，比内容搜索便宜一个量级）。
+// 内容匹配必须读盘，同样问后端。三条链路共用同一个防抖关键词：
+// 输入时先出本地名称结果，两个后端结果稍后补进来。
+
+interface NameHit {
+  path: string
+  relPath: string
+  name: string
+  dir: string
+  type: 'file' | 'directory'
+}
+
+// 单个字符也值得搜：名称搜索只 readdir，成本比内容搜索低得多
+const NAME_SEARCH_MIN_LEN = 1
+const nameDirs = ref<NameHit[]>([])
+const nameFiles = ref<NameHit[]>([])
+const nameQuery = ref('')
+const nameSearching = ref(false)
+const nameTruncated = ref(false)
+let nameAbort: AbortController | null = null
+let nameSeq = 0
+
+function resetNameSearch() {
+  nameAbort?.abort()
+  nameAbort = null
+  nameSeq += 1
+  nameDirs.value = []
+  nameFiles.value = []
+  nameQuery.value = ''
+  nameSearching.value = false
+  nameTruncated.value = false
+}
+
+async function runNameSearch(rawKeyword: string) {
+  const keyword = rawKeyword.trim()
+  const root = configStore.currentDirectory
+  if (!root || keyword.length < NAME_SEARCH_MIN_LEN) {
+    resetNameSearch()
+    return
+  }
+  if (keyword === nameQuery.value && nameSearching.value) return
+
+  nameAbort?.abort()
+  const seq = ++nameSeq
+  const ctrl = new AbortController()
+  nameAbort = ctrl
+  nameSearching.value = true
+  nameQuery.value = keyword
+  try {
+    const resp = await fetch('/api/search_names', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: root, query: keyword }),
+      signal: ctrl.signal,
+    })
+    const data = await resp.json().catch(() => null)
+    if (seq !== nameSeq) return
+    if (!data?.success) {
+      nameDirs.value = []
+      nameFiles.value = []
+      nameTruncated.value = false
+      return
+    }
+    nameDirs.value = Array.isArray(data.dirs) ? (data.dirs as NameHit[]) : []
+    nameFiles.value = Array.isArray(data.files) ? (data.files as NameHit[]) : []
+    nameTruncated.value = !!data.truncated
+  } catch (e: any) {
+    if (e?.name === 'AbortError' || seq !== nameSeq) return
+    nameDirs.value = []
+    nameFiles.value = []
+    nameTruncated.value = false
+  } finally {
+    if (seq === nameSeq) nameSearching.value = false
+  }
+}
+
 // ── 文件内容搜索 ─────────────────────────────────────────
-// 名称过滤走本地整棵树；内容匹配必须问后端（要读盘）。两条链路共用同一个
-// 防抖关键词：输入时先出名称结果，内容结果稍后补进来。
 // 单独一个 AbortController：连着改关键词时把上一轮请求掐掉，
 // 否则慢的那次（大仓库遍历）回来晚一步就会把新结果覆盖成旧词的结果。
 interface ContentMatchLine {
@@ -192,11 +269,14 @@ async function runContentSearch(rawKeyword: string) {
 }
 
 watch(debouncedSearchQuery, (val) => {
+  // 名称先发：它只 readdir，通常几十毫秒就回来，先占位再等内容结果
+  void runNameSearch(val)
   void runContentSearch(val)
 })
 
 onBeforeUnmount(() => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  nameAbort?.abort()
   contentAbort?.abort()
   stopTreePolling()
   stopDiskSyncPolling()
@@ -549,10 +629,32 @@ const noSearchResults = computed(() =>
 )
 
 // 名称、内容都没有命中才算"未找到匹配文件"。
-// 内容搜索还在跑时先不摆空态 —— 否则会先闪一行"未找到"，再冒出结果。
+// 两个后端搜索都还在跑时先不摆空态 —— 否则会先闪一行"未找到"，再冒出结果。
 const noAnySearchResults = computed(() =>
-  noSearchResults.value && contentHits.value.length === 0 && !contentSearching.value
+  noSearchResults.value
+  && contentHits.value.length === 0
+  && !contentSearching.value
+  && extraDirHits.value.length === 0
+  && extraFileHits.value.length === 0
+  && !nameSearching.value
 )
+
+// 上方树里已经渲染出来的节点不再在全库结果里重复列一遍（含被保留的祖先目录）。
+const treeHitPaths = computed(() => {
+  const paths = new Set<string>()
+  const walk = (nodes: TreeNode[]) => {
+    for (const n of nodes) {
+      paths.add(n.path)
+      if (n.children) walk(n.children)
+    }
+  }
+  walk(visibleTree.value)
+  return paths
+})
+
+const extraDirHits = computed(() => nameDirs.value.filter((h) => !treeHitPaths.value.has(h.path)))
+const extraFileHits = computed(() => nameFiles.value.filter((h) => !treeHitPaths.value.has(h.path)))
+
 
 // 将文本按当前防抖关键词拆成段,用于在渲染时高亮命中部分(节点名 / 内容片段共用)。
 // 空关键词 → 单段无高亮;大小写不敏感匹配。
@@ -588,6 +690,46 @@ async function openContentHit(hit: ContentFileHit, line?: number) {
   editor.revealLineInCenter(line, monaco.editor.ScrollType.Smooth)
   editor.setPosition({ lineNumber: line, column: 1 })
   editor.focus()
+}
+
+// 点全库文件命中：直接开标签（和内容命中的文件行同一套打开方式）
+function openNameFileHit(hit: NameHit) {
+  void openFile({ name: hit.name, path: hit.path, type: 'file', depth: 0 })
+}
+
+// 点全库文件夹命中：先退出搜索态，再按路径逐层 loadDir + 展开，最后滚到那一行。
+// 为什么必须退搜索：搜索态渲染的是过滤后的**拷贝树**，没命中的祖先节点不参与
+// 渲染，在那棵树上展开就等于展开给空气看。
+async function revealDirHit(hit: NameHit) {
+  clearSearch()
+  const segments = hit.relPath.split('/').filter(Boolean)
+  let level: TreeNode[] = treeNodes.value
+  let target: TreeNode | null = null
+  for (const seg of segments) {
+    const node = level.find((n) => n.type === 'directory' && n.name === seg)
+    if (!node) break
+    if (!node.children) {
+      node.loading = true
+      try {
+        node.children = await loadDir(node.path, node.depth + 1)
+      } finally {
+        node.loading = false
+      }
+    }
+    node.expanded = true
+    target = node
+    level = node.children
+  }
+  if (!target) return
+  const targetPath = target.path
+  await nextTick()
+  const rows = document.querySelectorAll<HTMLElement>('.sidebar-tree .tree-node')
+  for (const row of rows) {
+    if (row.dataset.path === targetPath) {
+      row.scrollIntoView({ block: 'center' })
+      break
+    }
+  }
 }
 
 // 搜索输入框 ref + 快捷键聚焦 / Esc 清空
@@ -2004,6 +2146,7 @@ function stopPreviewResize() {
               'tree-node--selected': selectedNode?.path === node.path && activeTabPath !== node.path,
             }"
             :style="{ paddingLeft: (12 + node.depth * 14) + 'px' }"
+            :data-path="node.path"
             @click="openFile(node)"
             @contextmenu="openContextMenu($event, node)"
           >
@@ -2082,6 +2225,65 @@ function stopPreviewResize() {
             @blur="cancelInlineInput"
             @click.stop
           />
+        </div>
+
+        <!-- 全库名称匹配：树只加载「根 + 已展开目录」，没展开过的深层文件夹/文件
+             只能靠后端全盘 readdir 兜住。已在树里渲染过的节点不重复列。 -->
+        <div
+          v-if="searchQueryLower && !nameSearching && (extraDirHits.length > 0 || extraFileHits.length > 0)"
+          class="name-results"
+          :data-query="nameQuery"
+        >
+          <template v-if="extraDirHits.length > 0">
+            <div class="search-section-head">
+              <span>{{ $t('@EDITOR:文件夹匹配') }}</span>
+              <span class="search-section-count">{{ extraDirHits.length }}</span>
+              <span v-if="nameTruncated" class="search-section-note">{{ $t('@EDITOR:结果过多，已截断') }}</span>
+            </div>
+            <div
+              v-for="hit in extraDirHits"
+              :key="hit.path"
+              class="name-hit name-hit--dir"
+              :title="hit.relPath"
+              @click="revealDirHit(hit)"
+            >
+              <svg class="name-hit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+              </svg>
+              <span class="name-hit-name">
+                <template v-for="(part, i) in highlightText(hit.name)" :key="i">
+                  <span v-if="part.hit" class="name-hit-mark">{{ part.text }}</span>
+                  <template v-else>{{ part.text }}</template>
+                </template>
+              </span>
+              <span class="name-hit-dir">{{ hit.dir }}</span>
+            </div>
+          </template>
+          <template v-if="extraFileHits.length > 0">
+            <div class="search-section-head">
+              <span>{{ $t('@EDITOR:文件匹配') }}</span>
+              <span class="search-section-count">{{ extraFileHits.length }}</span>
+              <span v-if="nameTruncated" class="search-section-note">{{ $t('@EDITOR:结果过多，已截断') }}</span>
+            </div>
+            <div
+              v-for="hit in extraFileHits"
+              :key="hit.path"
+              class="name-hit name-hit--file"
+              :title="hit.relPath"
+              @click="openNameFileHit(hit)"
+            >
+              <svg class="tree-icon mit-icon" aria-hidden="true">
+                <use :xlink:href="`#${getFileIconClass(hit.name)}`" />
+              </svg>
+              <span class="name-hit-name">
+                <template v-for="(part, i) in highlightText(hit.name)" :key="i">
+                  <span v-if="part.hit" class="name-hit-mark">{{ part.text }}</span>
+                  <template v-else>{{ part.text }}</template>
+                </template>
+              </span>
+              <span class="name-hit-dir">{{ hit.dir }}</span>
+            </div>
+          </template>
         </div>
 
         <!-- 内容匹配：搜索框的第二块结果。名称在树里已经能懒加载，内容命中只能平铺 -->
@@ -2679,6 +2881,60 @@ function stopPreviewResize() {
 .content-results {
   margin-top: 6px;
   padding-bottom: 6px;
+}
+
+/* ── 全库名称匹配（文件夹 / 文件）───────────────
+   和内容匹配同一套骨架：分区标题 + 平铺行 + hover 底色，不套卡片边框。 */
+.name-results {
+  margin-top: 6px;
+}
+
+.name-results > .search-section-head {
+  border-top: 1px solid var(--border-color);
+}
+
+.name-hit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px 0 12px;
+  cursor: pointer;
+  color: var(--text-primary);
+  transition: background var(--transition-fast);
+}
+
+.name-hit:hover {
+  background: var(--bg-hover);
+}
+
+.name-hit-icon {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  color: var(--color-warning-dark);
+}
+
+.name-hit-name {
+  font-size: var(--font-size-mid);
+  white-space: nowrap;
+}
+
+.name-hit-mark {
+  color: var(--color-warning-light);
+  background: rgba(245, 158, 11, 0.15);
+  border-radius: var(--radius-xs);
+  padding: 0 1px;
+}
+
+.name-hit-dir {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .content-results > .search-section-head,

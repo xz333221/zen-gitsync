@@ -2263,6 +2263,8 @@ export default {
   '@EDITOR:输入文件夹名': 'Enter folder name (Enter to confirm, Esc to cancel)',
   '@EDITOR:搜索文件名或内容...': 'Search file names or contents...',
   '@EDITOR:名称匹配': 'Name matches',
+  '@EDITOR:文件夹匹配': 'Folder matches',
+  '@EDITOR:文件匹配': 'File matches',
   '@EDITOR:内容匹配': 'Content matches',
   '@EDITOR:正在搜索文件内容...': 'Searching file contents...',
   '@EDITOR:结果过多，已截断': 'Too many results, truncated',

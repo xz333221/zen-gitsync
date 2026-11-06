@@ -52,14 +52,19 @@ async function run() {
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`))
   page.on('console', (msg) => { if (msg.type() === 'error') errors.push(`console: ${msg.text()}`) })
 
-  // 反向验证：把内容搜索接口打桩成"永远 0 命中"，A 组断言必须翻红。
-  // 用来证明"命中"不是别的区块（名称匹配 / 上一轮残留）冒充出来的。
+  // 反向验证：把两个搜索接口都打桩成"永远 0 命中"，A 组断言必须翻红。
+  // 用来证明"命中"不是别的区块（本地名称匹配 / 上一轮残留）冒充出来的。
   if (REVERSE) {
-    log('⚠ REVERSE 模式：/api/search_content 固定返回空结果，内容搜索断言应翻红')
+    log('⚠ REVERSE 模式：/api/search_content 与 /api/search_names 固定返回空结果，对应断言应翻红')
     await page.route('**/api/search_content', (route) => route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ success: true, files: [], totalFiles: 0, totalMatches: 0, scannedFiles: 0, truncated: false }),
+    }))
+    await page.route('**/api/search_names', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, dirs: [], files: [], scannedDirs: 0, truncated: false }),
     }))
   }
 
@@ -196,6 +201,51 @@ async function run() {
     else log(`  ⚠ ${dir} 未命中 (预期可能因目录名匹配规则有差异)`)
   }
   await shot(page, '07-search-dirs.png')
+
+  // ── 2.2 全库名称匹配：只在「没展开过的深层目录」里存在的名字 ──────────
+  // src/ui/client/src/views 在第 4 层，初始树只加载根 → 本地树过滤永远看不到它，
+  // 命中只可能来自后端 /api/search_names（这一组就是那个缺口的守门人）。
+  await input.fill('views')
+  await page.waitForFunction(() => {
+    const el = document.querySelector('.name-results')
+    return !!el && el.getAttribute('data-query') === 'views'
+  }, { timeout: 30_000 })
+  const nameDirTexts = await page.$$eval('.name-hit--dir', (els) =>
+    els.map((el) => el.textContent.trim())
+  )
+  const localViewsNodes = await page.$$eval('.sidebar-tree .tree-node', (els) => els.length)
+  log(`[2.2] 全库文件夹匹配 views → ${nameDirTexts.length} 条:`, nameDirTexts.slice(0, 4))
+  log(`  - 本地树命中节点数: ${localViewsNodes}（应为 0，证明不是本地过滤冒充的）`)
+  await shot(page, '07a1-search-name-dir.png')
+  if (nameDirTexts.length === 0) throw new Error('全库名称搜索没有返回文件夹命中')
+  if (!nameDirTexts.some((t) => t.includes('views'))) throw new Error(`文件夹命中里没有 views: ${nameDirTexts.join(' / ')}`)
+  if (localViewsNodes !== 0) throw new Error(`views 不该命中已加载的树（本地树 ${localViewsNodes} 个节点），断言基准失效`)
+
+  // 点文件夹命中 → 清空搜索 + 逐层展开定位到该目录
+  await page.locator('.name-hit--dir').first().click()
+  await page.waitForFunction(() => {
+    const rows = [...document.querySelectorAll('.sidebar-tree .tree-node')]
+    return rows.some((r) => (r.textContent || '').trim() === 'views')
+  }, { timeout: 20_000 })
+  const clearedInput = await input.inputValue()
+  log(`[2.2] 点文件夹结果后：输入框 "${clearedInput}"，树里已定位到 views`)
+  await shot(page, '07a2-name-dir-revealed.png')
+  if (clearedInput !== '') throw new Error('点文件夹结果后搜索框没有清空')
+
+  // 深层文件名同理（scripts/ 没展开过，文件在树里也不存在）
+  await input.fill('verify-editor-preview-scroll')
+  await page.waitForFunction(() => {
+    const el = document.querySelector('.name-results')
+    return !!el && el.getAttribute('data-query') === 'verify-editor-preview-scroll'
+  }, { timeout: 30_000 })
+  const nameFileTexts = await page.$$eval('.name-hit--file', (els) =>
+    els.map((el) => el.textContent.trim())
+  )
+  log(`[2.2] 全库文件匹配 → ${nameFileTexts.length} 条:`, nameFileTexts.slice(0, 4))
+  await shot(page, '07a3-search-name-file.png')
+  if (!nameFileTexts.some((t) => t.includes('verify-editor-preview-scroll'))) {
+    throw new Error(`文件命中里没有目标文件: ${nameFileTexts.join(' / ')}`)
+  }
 
   // ── 2.5 内容搜索：关键词只出现在文件内容里，任何文件名都不含它 ────────
   // 用 fs.js 里那句中文报错当关键词：只可能命中内容，不会命中文件名。
