@@ -661,39 +661,45 @@ test('buildTaskDetail: recentJobLimit 生效；无 job 时 lastJob 为 null 而�
 
 // ── 已完成卡片上的「等你回话」（awaitingReply） ────────────────────────
 // 已完成列里混着两种任务：真做完的，和模型收尾时反问「要不要我接着做？」的。
-// 两种卡片长得一模一样，用户只能把那段收尾读完才知道 —— 而这一列动辄两三百张。
-// 这组守的是：该标的标、不该标的一条都不标（满屏都是标等于没标）。
+// 判据由主 Agent 给出（replyTriage 缓存），本模块只负责挂标 —— 所以这里守的是
+// 判定结果怎么落到卡片上，以及那几个前置（在跑 / 手动完成）不能漏。
 
-test('decorateTaskForBoard: 收尾在问用户 → awaitingReply 为 true', () => {
+test('decorateTaskForBoard: 主 Agent 判成在等你回话 → 挂标并把依据带出来', () => {
   const base = { id: 't1', title: '', desc: '', createdAt: '2026-01-01T00:00:00Z' };
   const card = decorateTaskForBoard(base, [
     { ...job('j1', 't1', 'done', '2026-01-01T00:00:00Z', '2026-01-01T00:10:00Z'), output: '改好了，已提交。要 push 吗？' },
-  ]);
+  ], { triage: { waiting: true, reason: '收尾在问要不要 push' } });
   assert.equal(card.column, 'done');
   assert.equal(card.awaitingReply, true);
-  // 同一条事实要在卡片上看得见（不然标出来了也点不开原因）
+  // 依据要能到卡片上（悬停提示里给人看，不然标出来了也点不开原因）
+  assert.equal(card.awaitingReason, '收尾在问要不要 push');
   assert.equal(card.lastReply, '改好了，已提交。要 push 吗？');
 });
 
-test('decorateTaskForBoard: 陈述式收尾不标（正文里出现过"要不要"也不算）', () => {
+test('decorateTaskForBoard: 没有判定 / 判定为 false 时不挂标', () => {
   const base = { id: 't1', title: '', desc: '', createdAt: '2026-01-01T00:00:00Z' };
-  assert.equal(decorateTaskForBoard(base, [
-    { ...job('j1', 't1', 'done', '2026-01-01T00:00:00Z', '2026-01-01T00:10:00Z'), output: '要不要这件事我们讨论过。结论是不做。已提交。' },
-  ]).awaitingReply, false);
+  const jobs = [
+    { ...job('j1', 't1', 'done', '2026-01-01T00:00:00Z', '2026-01-01T00:10:00Z'), output: '改好了，已提交。' },
+  ];
+  assert.equal(decorateTaskForBoard(base, jobs).awaitingReply, false);
+  assert.equal(decorateTaskForBoard(base, jobs, { triage: { waiting: false, reason: '' } }).awaitingReply, false);
+  // 没判的时候连依据都不该有
+  assert.equal(decorateTaskForBoard(base, jobs).awaitingReason, '');
 });
 
-test('decorateTaskForBoard: 在跑 / 待处理 / 手动标完成 都不算「等你回话」', () => {
+test('decorateTaskForBoard: 在跑 / 待处理 / 手动标完成 时，即使有判定也不挂标', () => {
   const base = { id: 't1', title: '', desc: '', createdAt: '2026-01-01T00:00:00Z' };
-  // 在跑：live 覆盖，卡片上不可能同时有"收尾"
+  const triage = { waiting: true, reason: '在问你' };
+  // 在跑：live 覆盖，卡片上不可能同时有收尾
   assert.equal(decorateTaskForBoard(base, [
     { ...job('j1', 't1', 'running', '2026-02-01T00:00:00Z'), output: '要我现在继续吗？' },
-  ], { now: Date.parse('2026-02-01T00:01:00Z') }).awaitingReply, false);
-  // 待处理（最近一条 error）：那句旧话不是"这次的结果"
+  ], { now: Date.parse('2026-02-01T00:01:00Z'), triage }).awaitingReply, false);
+  // 待处理（最近一条 error）：那句旧话不是这次的结果
   assert.equal(decorateTaskForBoard(base, [
     { ...job('j1', 't1', 'error', '2026-01-01T00:00:00Z', '2026-01-01T00:00:05Z'), output: '要我重试吗？' },
-  ]).awaitingReply, false);
+  ], { triage }).awaitingReply, false);
   // 手动标完成：用户已经表过态，再挂「等你回话」等于替他反悔
   assert.equal(decorateTaskForBoard({ ...base, manualDoneAt: '2026-01-02T00:00:00Z' }, [
     { ...job('j1', 't1', 'done', '2026-01-01T00:00:00Z', '2026-01-01T00:10:00Z'), output: '要我继续吗？' },
-  ]).awaitingReply, false);
+  ], { triage }).awaitingReply, false);
 });

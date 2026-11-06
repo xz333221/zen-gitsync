@@ -135,6 +135,12 @@ import {
   judgeStalledJob,
   shouldCheckStall,
 } from './stallWatchdog.js';
+import {
+  readTriageStore,
+  writeTriageStore,
+  pickTriageForTask,
+  runTriageBatch,
+} from './replyTriage.js';
 import { detectExecutorModels, formatExecutorModel } from './executorModels.js';
 
 /**
@@ -150,8 +156,23 @@ let reportTimer = null;
 /** 静默看门狗的定时器（与报告同一个粒度，各自独立装配/清理） */
 let stallTimer = null;
 
+/** 「等你回话」判定（replyTriage）的定时器。同上 */
+let triageTimer = null;
+
 /** 自动报告的检查粒度。它**不等于**报告间隔 —— 见 tickProgressReport 的注释 */
 const REPORT_TICK_MS = 30 * 1000;
+
+/**
+ * 「这条已完成的任务在等你回话」判定（replyTriage）的节奏。
+ *
+ * 与报告、静默看门狗共用 30s 这一跳，但多两个约束：
+ *   · 每跳最多跑几批 —— 首次启用时库里已有两三百条历史任务，一口气全问等于开场
+ *     就打几十次模型；分批（每批 8 条）能让标一条条冒出来，也不会把事件循环占住。
+ *   · 失败后退避 5 分钟 —— 模型没配好 / 网关挂了时，别每 30 秒重撞一次。
+ */
+const TRIAGE_TICK_MS = 30 * 1000;
+const TRIAGE_BATCHES_PER_TICK = 4;
+const TRIAGE_BACKOFF_MS = 5 * 60 * 1000;
 
 /**
  * 注册所有 workbench 路由（共 45 个端点）。
@@ -1162,7 +1183,18 @@ export function registerWorkbenchRoutes({
     const hidden = await readHiddenProjects();
     if (hidden.length) projects = filterHiddenProjects(allProjects, hidden);
     const jobsByTask = groupJobsByTask(jobsSnap);
-    const boardTasks = tasks.map(t => decorateTaskForBoard(t, jobsByTask.get(t.id) || []));
+    /**
+     * 「这条已完成的任务还在等你回话」——主 Agent 判过的那份缓存（replyTriage）。
+     * 只读不判：判定跑在后台 tick 里（30s 一跳），这里 5s 轮询一次只是把结论挂到卡上。
+     * pickTriageForTask 会核对 jobId —— 任务重跑过，上一轮的结论就不算数了。
+     */
+    const triageStore = await readTriageStore();
+    const boardTasks = tasks.map((t) => {
+      const jobsForTask = jobsByTask.get(t.id) || [];
+      return decorateTaskForBoard(t, jobsForTask, {
+        triage: pickTriageForTask(triageStore, t.id, jobsForTask),
+      });
+    });
     return { projects, tasks: boardTasks, currentProjectPath };
   }
 
@@ -1737,6 +1769,70 @@ export function registerWorkbenchRoutes({
     });
   }, REPORT_TICK_MS);
   stallTimer.unref?.();
+
+  /**
+   * 「这条跑完了，但它在等你回话」判定的一跳。
+   *
+   * 为什么是**主 Agent（模型）**判而不是关键词：同一组词能出现在意思相反的两句话里 ——
+   * 「记录一条经验：用 offsetParent 判断是否收起会误判」（陈述）与
+   * 「需要我把构建产物同步过去吗？」（提问）。用户 2026-11-06 明确要求交给 agent，
+   * 判据与 prompt 都在 replyTriage.js。
+   *
+   * 与静默看门狗的三点不同：
+   *   · **不需要 SSE 推送**：这枚标只影响看板卡片，而看板本来就 5s 拉一次接口；
+   *   · **要吃模型配置**：没配模型就安静跳过（每跳重读配置 → 配置好之后自动开始，
+   *     不用重启）；
+   *   · **能重判**：任务重跑一轮后 jobId 变了，旧结论自动失效，下一跳会重新问。
+   *
+   * 失败退避 5 分钟：判定是"锦上添花"的标注，网关抖动时不该每 30 秒重撞一次。
+   */
+  let triageInFlight = false;
+  let triageBackoffUntil = 0;
+  async function tickReplyTriage() {
+    if (triageInFlight) return;
+    const now = Date.now();
+    if (now < triageBackoffUntil) return;
+    triageInFlight = true;
+    try {
+      const ctx = await readReportContext();
+      if (!ctx.model) return; // 没配模型：不标（宁可不标，也不拿正则猜一个顶上）
+
+      const data = await readJson(TASKS_FILE, { tasks: [] });
+      const tasks = data.tasks || [];
+      await refreshJobsFromDisk();
+      const jobs = snapshotJobs();
+      const keepTaskIds = new Set(tasks.map(t => t && t.id).filter(Boolean));
+
+      let store = await readTriageStore();
+      for (let i = 0; i < TRIAGE_BATCHES_PER_TICK; i++) {
+        const out = await runTriageBatch({
+          tasks, jobs, store, model: ctx.model, locale: ctx.locale,
+        });
+        store = out.store;
+        if (out.errorCode) {
+          if (out.errorCode !== 'NO_MODEL') {
+            triageBackoffUntil = Date.now() + TRIAGE_BACKOFF_MS;
+            logger.info(`[workbench] 「等你回话」判定跳过: ${out.errorCode} ${out.errorDetail}`.trim());
+          }
+          break;
+        }
+        if (!out.asked) break; // 没有候选了（都判过 / 都没收尾 / 都没收尾正文）
+        // 每批都落盘：进程随时可能退出，而重跑一遍完整判定是白烧额度
+        await writeTriageStore(store, { keepTaskIds });
+        if (!out.judged) break; // 整批漏答：同一批再问也是同一个结果，留给下一跳
+      }
+    } finally {
+      triageInFlight = false;
+    }
+  }
+
+  if (triageTimer) { clearInterval(triageTimer); triageTimer = null; }
+  triageTimer = setInterval(() => {
+    tickReplyTriage().catch(err => {
+      logger.warn('[workbench] 「等你回话」判定失败:', (err && err.message) || err);
+    });
+  }, TRIAGE_TICK_MS);
+  triageTimer.unref?.();
 
   /** 提示词参数校验：空串是合法值（= 清除），只拦超长与非字符串 */
   function assertPromptText(prompt) {

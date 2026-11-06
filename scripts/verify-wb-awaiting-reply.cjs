@@ -6,20 +6,25 @@
  * 用户要分辨只能把那段收尾读完，而这一列动辄两三百张（本机 2026-11-06 实测 237 张）。
  *
  * 验收契约（改这块时别破坏）：
- *   A 收尾在问用户的卡片上有「等你回话」标，文字对、能看见、悬停提示说得清"该怎么办"
- *   B 陈述式收尾的对照卡**没有**这枚标（满屏都是标等于没标）
+ *   A 判成「在等回话」的卡片上有「等你回话」标，文字对、能看见，
+ *     悬停提示里带着**主 Agent 给的依据**（标只有四个字，凭什么说它在等我，只有依据能答）
+ *   B 判成"普通完成"的对照卡**没有**这枚标（满屏都是标等于没标）
  *   C 用户手动标过完成的任务不再挂这枚标（那是用户已经表过态的事）
  *   D 标**不在** .kb-card__reply 里面 —— 引文有逐字断言（verify-wb-card-reply 的 A2），
  *     往里加字会把它打红；这里直接量"引文文字与 lastReply 逐字一致"
  *   E 列表视图也挂在**状态列**（与卡片同一口径），回复那行的文字不动（G1 的契约）
- *   F 服务端判据：问句 / 礼貌性征询算，正文里的"要不要"不算；在跑 / 待处理 / 手动完成都不算
+ *   F 服务端：判定只在自己那一轮 job 上有效（jobId 记账），手动完成 / 不在已完成列都不挂标
  *   G 页面无 console / page 错误
  *   R 负控（--reverse）：夹具里把这枚标抹掉 —— A/E 必须变红
  *
+ * 注意：**判定本身（模型读句子）不在这里验**。它是异步的、要真实模型往返，
+ * 而且是"读懂一句话"，不是可以离线复现的纯函数 —— prompt / 解析 / 缓存边界的
+ * 单测在 replyTriage.test.js。本脚本只钉"判定结果怎么落到屏幕上"。
+ *
  * 为什么用 route 拦截 /api/workbench/projects 而不是读真实响应：
- *   "收尾在问用户"是个概率事件（本机 237 条已完成里 48 条），而且要看的是
- *   **有没有标的对照**；真实数据哪天一条都没有，这脚本就成了永远绿的空跑。
- *   所以夹具在脚本里调用真正的后端函数（decorateTaskForBoard）造三种收尾，只少一次网络跳。
+ *   "哪条在等你回话"取决于模型当时怎么判，真实数据里凑不齐"该标 / 不该标"的对照；
+ *   没有对照，这脚本就成了永远绿的空跑。所以夹具在脚本里调用真正的后端函数
+ *   （decorateTaskForBoard + pickTriageForTask）造三种情形，只少一次网络跳。
  *
  * 前置：dev server 已启动（vite 5544）；后端活着（默认 5545，端口漂了用 ZEN_API 指）
  * 用法：node scripts/verify-wb-awaiting-reply.cjs [--reverse]
@@ -42,6 +47,8 @@ const CHROME = process.env.ZEN_CHROME || 'C:/Program Files/Google/Chrome/Applica
 const REVERSE = process.argv.includes('--reverse')
 
 const LABEL = '等你回话'
+/** 合成卡片上主 Agent 给的依据 —— A2 要断言它真的出现在悬停提示里 */
+const REASON = '收尾在问要不要顺手更新文档'
 const PROJECT_PATH = 'D:\\ws\\zen-gitsync'
 const ASK_TITLE = '【合成】收尾在问用户：该有这枚标'
 const PLAIN_TITLE = '【合成】陈述式收尾：不该有这枚标'
@@ -104,24 +111,33 @@ function doneJob(taskId, output, endedAt) {
 }
 
 /**
- * 三条合成任务：问用户的 / 陈述式收尾的 / 用户手动标完成的。
+ * 三条合成任务：判成"在等回话"的 / 判成普通完成的 / 用户手动标完成的。
  * `--reverse` 把 awaitingReply 抹掉（= 这次改动之前的形态），用来证明断言真的在守它。
+ *
+ * ⚠️ 判据本身（主 Agent / 模型）不在这里验：判定是异步的、要真实模型往返，
+ * 探针只负责"判定结果怎么落到卡片上"。prompt / 解析 / 按 jobId 记账的边界在
+ * replyTriage.test.js 里，逐条覆盖。
  */
 function syntheticTasks({ decorate }) {
   const at = (minAgo) => new Date(Date.now() - minAgo * 60 * 1000).toISOString()
   const rows = [
-    [ASK_TITLE, { id: 'syn-ask', title: ASK_TITLE, desc: '', projectPath: PROJECT_PATH, createdAt: at(30) },
-      [doneJob('syn-ask', '三处都改完了，已提交。需要我顺手把文档也更新一下吗？', at(5))]],
-    [PLAIN_TITLE, { id: 'syn-plain', title: PLAIN_TITLE, desc: '', projectPath: PROJECT_PATH, createdAt: at(30) },
-      [doneJob('syn-plain', '三处都改完了，已提交并推送。', at(7))]],
-    [MANUAL_TITLE, {
+    [{
+      id: 'syn-ask', title: ASK_TITLE, desc: '', projectPath: PROJECT_PATH, createdAt: at(30),
+    }, [doneJob('syn-ask', '三处都改完了，已提交。需要我顺手把文档也更新一下吗？', at(5))],
+    { waiting: true, reason: '收尾在问要不要顺手更新文档' }],
+    [{
+      id: 'syn-plain', title: PLAIN_TITLE, desc: '', projectPath: PROJECT_PATH, createdAt: at(30),
+    }, [doneJob('syn-plain', '三处都改完了，已提交并推送。', at(7))],
+    { waiting: false, reason: '' }],
+    [{
       id: 'syn-manual', title: MANUAL_TITLE, desc: '', projectPath: PROJECT_PATH,
       createdAt: at(30), manualDoneAt: at(9),
-    }, [doneJob('syn-manual', '改了一半。要我现在接着做吗？', at(10))]],
+    }, [doneJob('syn-manual', '改了一半。要我现在接着做吗？', at(10))],
+    { waiting: true, reason: '收尾在问要不要接着做' }],
   ]
-  return rows.map(([, task, jobs]) => {
-    const card = decorate(task, jobs)
-    return REVERSE ? { ...card, awaitingReply: false } : card
+  return rows.map(([task, jobs, triage]) => {
+    const card = decorate(task, jobs, { triage })
+    return REVERSE ? { ...card, awaitingReply: false, awaitingReason: '' } : card
   })
 }
 
@@ -129,40 +145,59 @@ async function main() {
   const registry = await import(pathToFileURL(
     path.resolve(__dirname, '../src/ui/server/routes/workbench/projectRegistry.js')
   ).href)
+  const triage = await import(pathToFileURL(
+    path.resolve(__dirname, '../src/ui/server/routes/workbench/replyTriage.js')
+  ).href)
 
-  // ── F 服务端判据 ─────────────────────────────────────────────────────
+  // ── F 服务端：判定结果怎么落到卡片上 ─────────────────────────────────
+  // 判定本身（模型读句子）不在这里验 —— 那是异步的、要真实模型往返；
+  // prompt / 解析 / 按 jobId 记账的边界在 replyTriage.test.js 里逐条覆盖。
   const sampleTask = { id: 't-sample', title: '样本', desc: '', projectPath: PROJECT_PATH }
-  const askCard = registry.decorateTaskForBoard(sampleTask, [
-    doneJob('t-sample', '改好了。要不要我顺手把测试也补上？', new Date().toISOString()),
-  ])
-  check('F1 收尾是问句 → awaitingReply=true，且 lastReply 原样给出（判定依据要看得见）',
-    askCard.awaitingReply === true && askCard.lastReply.includes('要不要我'), JSON.stringify(askCard.awaitingReply))
+  const sampleJob = doneJob('t-sample', '改好了。要不要我顺手把测试也补上？', new Date().toISOString())
+  const askCard = registry.decorateTaskForBoard(sampleTask, [sampleJob], {
+    triage: { waiting: true, reason: '收尾在征求用户意见' },
+  })
+  check('F1 主 Agent 判成「在等回话」→ 卡片挂标，且把它的依据一并带出',
+    askCard.awaitingReply === true && askCard.awaitingReason === '收尾在征求用户意见',
+    `${askCard.awaitingReply} / ${askCard.awaitingReason}`)
 
-  const plainCardServer = registry.decorateTaskForBoard(sampleTask, [
-    doneJob('t-sample', '改好了，已提交并推送。', new Date().toISOString()),
-  ])
-  check('F2 陈述式收尾 → false（不把"看什么都像在等你"变成噪声）',
-    plainCardServer.awaitingReply === false, String(plainCardServer.awaitingReply))
-
-  const midCard = registry.decorateTaskForBoard(sampleTask, [{
-    ...doneJob('t-sample', '要不要这件事我们讨论过。结论是不做。已提交。', new Date().toISOString()),
-  }])
-  check('F3 正文里出现「要不要」但收尾是陈述 → false（只看最后两句）',
-    midCard.awaitingReply === false, String(midCard.awaitingReply))
+  const plainCardServer = registry.decorateTaskForBoard(sampleTask, [sampleJob], {
+    triage: { waiting: false, reason: '' },
+  })
+  check('F2 判定为 false → 不挂标（满屏都是标等于没标）',
+    plainCardServer.awaitingReply === false && plainCardServer.awaitingReason === '', String(plainCardServer.awaitingReply))
 
   const manualCard = registry.decorateTaskForBoard(
     { ...sampleTask, manualDoneAt: new Date().toISOString() },
-    [doneJob('t-sample', '要我现在接着做吗？', new Date().toISOString())],
+    [sampleJob],
+    { triage: { waiting: true, reason: '在问你要不要继续' } },
   )
-  check('F4 用户手动标过完成 → false（用户已经表过态，不该替他反悔）',
+  check('F3 用户手动标过完成 → 即使模型判了"在等回话"也不挂（用户已经表过态）',
     manualCard.awaitingReply === false, String(manualCard.awaitingReply))
+
+  // 缓存按 jobId 记账：任务重跑一轮，上一轮的结论必须失效
+  const staleStore = { 't-sample': { jobId: 'old-job', waiting: true, reason: '上一轮', at: '', attempts: 1 } }
+  const stale = triage.pickTriageForTask(staleStore, 't-sample', [sampleJob])
+  const fresh = triage.pickTriageForTask(
+    { 't-sample': { jobId: sampleJob.id, waiting: true, reason: '这一轮', at: '', attempts: 1 } },
+    't-sample', [sampleJob],
+  )
+  check('F4 判定按 jobId 记账：换了一轮 job 旧结论作废，同一轮才采纳',
+    stale === null && !!fresh && fresh.waiting === true, JSON.stringify({ stale, fresh }))
 
   // ── 真实数据 + 合成数据拼成看板负载 ──────────────────────────────────
   const now = Date.now()
   const realTasks = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'tasks.json'), 'utf-8')).tasks || []
   const jobs = await readRealJobs()
   const byTask = registry.groupJobsByTask(jobs)
-  const boardTasks = realTasks.map(t => registry.decorateTaskForBoard(t, byTask.get(t.id) || [], { now }))
+  // 真实卡也用真实缓存（只读）：这样看板上"等回话"的分布就是用户实际看到的那份
+  const realStore = await triage.readTriageStore()
+  const boardTasks = realTasks.map((t) => {
+    const jobsForTask = byTask.get(t.id) || []
+    return registry.decorateTaskForBoard(t, jobsForTask, {
+      now, triage: triage.pickTriageForTask(realStore, t.id, jobsForTask),
+    })
+  })
   log(`真实数据：任务 ${boardTasks.length} 条，已完成里 ${boardTasks.filter(t => t.awaitingReply).length} 条在等你回话`)
 
   const live = await fetch(`${API}/api/workbench/projects`).then(r => r.json())
@@ -253,8 +288,8 @@ async function main() {
     if (!ask.found) throw new Error(`看板上找不到合成卡片，实际有：${JSON.stringify(ask.titles)}`)
     check('A1 收尾在问用户的卡片上有「等你回话」标',
       REVERSE ? ask.mark === null : norm(ask.mark) === LABEL, String(ask.mark))
-    check('A2 悬停提示说清"该怎么办"（标只有四个字，读不出为什么算等你）',
-      REVERSE ? ask.markTitle === null : /点开看看/.test(String(ask.markTitle)), String(ask.markTitle))
+    check('A2 悬停提示里有主 Agent 给的依据 + 该怎么办（标只有四个字，读不出为什么算等你）',
+      REVERSE ? ask.markTitle === null : (/点开看看/.test(String(ask.markTitle)) && String(ask.markTitle).includes(REASON)), String(ask.markTitle))
     check('A3 标能被看见（宽度 > 0，且没铺满整张卡）',
       REVERSE ? ask.mark === null : (ask.markVisible === true && ask.markWidth < ask.cardWidth),
       `${ask.markVisible} / ${ask.markWidth}of${ask.cardWidth}`)

@@ -72,6 +72,18 @@ export const MAX_PROGRESS_REPORTS = 20;
 export const HIDDEN_PROJECTS_FILE = path.join(DATA_DIR, 'hidden-projects.json');
 
 /**
+ * 「这条已完成的卡，主 Agent 判断它在等你回话」——判定结果缓存。
+ *
+ * 为什么要独立一个文件：它是 5s 轮询路径上要读的东西（看板每轮都要给每张卡挂标），
+ * 但写它的只有后台的判定 tick（30s 一跳）。混进 tasks.json 会让"判定"变成一次
+ * 任务写操作（还会跟手动完成、编辑任务的写入抢同一个文件），混进 config.json
+ * 则要为了读它把整份主配置解析一遍。
+ *
+ * 结构见 replyTriage.js（按 taskId 存，带 jobId —— 重跑一轮就自然失效）。
+ */
+export const AWAITING_REPLIES_FILE = path.join(DATA_DIR, 'awaiting-replies.json');
+
+/**
  * 自动进度报告允许的间隔（毫秒），0 = 关闭。
  *
  * 用白名单而不是"任意正整数"：这个值直接决定**每隔多久烧一次模型额度**，

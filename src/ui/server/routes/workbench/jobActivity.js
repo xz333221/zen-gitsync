@@ -122,39 +122,6 @@ export function tailExcerpt(output, { maxChars = MAX_REPLY_CHARS, windowChars = 
 }
 
 /**
- * 「它最后是在问你，还是在汇报」—— 看板「已完成」卡片上「等你回话」那枚标的判据。
- *
- * 为什么要判：已完成列里两种任务长得一模一样（标题 + 用时 + 一段收尾的话），含义却差很远。
- * 一种真收工了；另一种是模型干到一半反问「要不要我接着做？」，整条任务**停在等用户回话**。
- * 光看卡片分不出来，只能把那段收尾逐字读完 —— 而这一列动辄两三百张（本机实测 237 张）。
- *
- * 判据只看**收尾的最后两句**，词表按真实收尾口吻列（本机 200 条已完成任务的收尾标定过，
- * 不是照着语法书列的）：
- *   · 正文里出现「要不要」不算 —— 那多半是在复述旧对话或写文档。实测有一张卡的收尾在讲
- *     "判断是否收起"的结论，全句没有问的意思；按整段匹配就会把它标成待回话。
- *   · 但判据本身宁宽不严：漏判的代价是那条继续躺着没人回（就是这个问题本身），
- *     误判的代价只是点开看一眼 —— 所以「需要的话我再补」这类礼貌性收尾也算。
- *   · 满屏都是标等于没标，所以"宽"只宽到这两句之内，不扩大到整段。
- * 新增执行器说别的语言时在这里补一条即可。
- */
-const ASK_TAIL_SENTENCES = 2;
-const ASK_ENDS_WITH_QUESTION = /[?？][”"'’）)]*$/;
-const ASK_PATTERNS = [
-  /(要不要|需不需要|需要我|要我(?!求)|是否要|是否需要|你希望|你想|你愿意|请你确认|你确认|等你确认|说一声|告诉我|你点头|你来定|你决定|你选|选一个|选哪个|可以吗|行吗|好吗|需要的话|要的话|想的话|如果你想|如果需要)/,
-  /\b(shall i|should i|do you want|would you like|want me to|let me know|please confirm)\b/i,
-];
-
-export function looksLikeAskingUser(text) {
-  const s = typeof text === 'string' ? text.trim() : '';
-  if (!s) return false;
-  if (ASK_ENDS_WITH_QUESTION.test(s)) return true;
-  // 按句末标点切（保留标点），只留最后两句：征询语气几乎总落在收尾那一两句上
-  const sentences = s.split(/(?<=[。！？；!?;])/).map(x => x.trim()).filter(Boolean);
-  const tail = sentences.slice(-ASK_TAIL_SENTENCES).join('');
-  return ASK_PATTERNS.some(re => re.test(tail));
-}
-
-/**
  * 最近一次工具调用的一句话描述（如 `Edit src/ui/client/src/App.vue`）。
  * 从后往前找：数组里最后一条未必带 name（老数据 / 半截记录），跳过它们而不是返回空。
  */
@@ -336,7 +303,6 @@ export function pickLiveActivity(jobsForTask, now = Date.now()) {
 export const __testables = {
   tailLine,
   tailExcerpt,
-  looksLikeAskingUser,
   describeLastTool,
   describeToolMix,
   silentMsOf,

@@ -35,7 +35,7 @@
 
 import { probeDirectoryGitStates } from '../../utils/directoryGitState.js';
 import { resolveProjectIcons, projectIconUrl } from './projectIcon.js';
-import { pickLiveActivity, tailExcerpt, jobAgent, jobDurationMs, looksLikeAskingUser } from './jobActivity.js';
+import { pickLiveActivity, tailExcerpt, jobAgent, jobDurationMs } from './jobActivity.js';
 // 图片后缀白名单只此一份（jobImage.js 的注释里也钉着这条）：卡片封面、附件缩略图、
 // 对话流内嵌图三处要是各写一份，迟早出现"这张缩略图能显示、那张不行"。
 import { IMAGE_EXTS } from './attachmentUtils.js';
@@ -396,7 +396,7 @@ export function pickBoardImages(attachments) {
     }));
 }
 
-export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now() } = {}) {
+export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now(), triage = null } = {}) {
   const jobs = Array.isArray(jobsForTask) ? jobsForTask : [];
   const last = latestJob(jobs);
   const live = pickLiveActivity(jobs, now);
@@ -430,18 +430,25 @@ export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now() 
      *
      * 已完成列混着两种任务：真做完的，和模型收尾时反问「要不要我接着做？」的。
      * 两种在卡片上长得一样（都是「已完成」+ 用时 + 一段话），用户要区分只能把那段读完 ——
-     * 而这一列动辄两三百张。判据在 jobActivity.looksLikeAskingUser（只看最后两句）。
+     * 而这一列动辄两三百张。
+     *
+     * 判据**不在本模块**：由主 Agent（模型）读收尾后给出，缓存在 replyTriage 的
+     * awaiting-replies.json 里（按 jobId 记账，重跑一轮自动失效），调用侧用
+     * `pickTriageForTask` 取好再通过 `triage` 传进来。
+     *
+     * 为什么不用关键词匹配：第一版就是正则（`要不要 / 需要我 / 说一声`），用户否掉了 ——
+     * 「记录一条经验：用 offsetParent 判断是否收起会误判」与「需要我把构建产物同步过去吗」
+     * 带同一组词、语义相反。这类判断只能读懂那句话，不能查词（详见 replyTriage.js 文件头）。
      *
      * 三个前置，缺一不可：
      *   · 不在跑（有 job 在跑就不可能有"收尾"）；
      *   · 真在「已完成」列（待处理里的旧回复不算待你回话 —— 那是另一件事）；
      *   · **没有**用户手动标的完成标记 —— 手动收掉等于用户已经表过态，
      *     此时再挂「等你回话」是在替用户反悔。
-     *
-     * 为什么由服务端判而不是前端拿 lastReply 现算：列表视图、看板卡片、以后可能加的
-     * 筛选/计数都要同一个答案；判据放两处必然分叉（同 autoCompleted 那条理由）。
      */
-    awaitingReply: !live && column === 'done' && !manualDoneAt && looksLikeAskingUser(lastReply),
+    awaitingReply: !live && column === 'done' && !manualDoneAt && !!(triage && triage.waiting),
+    /** 主 Agent 给的依据（悬停提示里展示；没判 / 判 false 时是空串） */
+    awaitingReason: triage && triage.waiting && triage.reason ? triage.reason : '',
     /**
      * 最近一条 job 用的执行器（卡片上的品牌图标；认不出 / 从没跑过 → ''）。
      * 与 live.agent 的分工：那个只在**跑的时候**有值，跑完就断——而"这条是 Claude 还是

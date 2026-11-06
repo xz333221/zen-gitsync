@@ -327,12 +327,14 @@ function autoDoneTitle(t: BoardTask): string {
 /**
  * 「等你回话」那枚标的悬停提示。
  *
- * 标本身只有四个字，看不出"为什么它算等你" —— 而这条状态是**模型的话说的**，
- * 判断依据就在卡片下面那段引文里。所以提示只负责把"该怎么用"说清楚（点开看看再定），
- * 不重复引文（"这是 AI 判完成"那条另有一枚自己的标，见模板里 auto-done 那段）。
+ * 标本身只有四个字，看不出"凭什么说它在问我" —— 所以把**主 Agent 给的依据**原样摆出来
+ * （与「AI 判定完成」把模型理由放进悬停是同一个取舍：判断越像人做的，越要让人能复核）。
+ * 依据缺省时退回一句"该怎么办"，而不是把标也藏掉 —— 藏了这条卡就和普通已完成没区别。
  */
-function awaitingTitle(): string {
-  return $t('@WORKBENCH:这条已经跑完，但 Agent 最后的话是在问你 —— 点开看看再决定下一步')
+function awaitingTitle(t: BoardTask): string {
+  const head = $t('@WORKBENCH:这条已经跑完，但主 Agent 判断它在等你回话 —— 点开看看再决定下一步')
+  const reason = (t.awaitingReason || '').trim()
+  return reason ? `${head}\n${reason}` : head
 }
 
 /**
@@ -657,7 +659,9 @@ function coverTitle(img: BoardImage): string {
                 已完成列混着两种任务：真做完的，和模型收尾时反问「要不要我接着做？」的。
                 在此之前两者在卡片上完全一样（标题 + 用时 + 一段收尾），用户要分辨只能把
                 那段收尾读完 —— 而这一列动辄两三百张（本机实测 237 张），扫不完。
-                判据在服务端（jobActivity.looksLikeAskingUser，只看最后两句），这里只画。
+                判据由**主 Agent（模型）**读完收尾后给出（服务端 replyTriage，按 jobId 记账，
+                重跑一轮自动失效）；这里只画，并且把模型给的依据放进悬停提示。
+                不做关键词匹配：同一组词能出现在意思相反的两句话里（见 replyTriage 文件头）。
 
                 位置刻意在引文**上面一行**，不塞进 .kb-card__reply：
                 引文那段有逐字断言（verify-wb-card-reply 的 A2「与服务端 lastReply 逐字一致」），
@@ -667,7 +671,7 @@ function coverTitle(img: BoardImage): string {
                 也不用左边竖条 / 卡片左边框那种表达：用户明确否过「卡片不要左边框」
                 （见文件头 .kb-card.is-opened 那段），状态的落点是这枚标本身。
               -->
-              <p v-if="t.awaitingReply" class="kb-card__awaiting" :title="awaitingTitle()">
+              <p v-if="t.awaitingReply" class="kb-card__awaiting" :title="awaitingTitle(t)">
                 {{ $t('@WORKBENCH:等你回话') }}
               </p>
             </div>
@@ -998,7 +1002,7 @@ function coverTitle(img: BoardImage): string {
               <!-- 「等你回话」在列表里挂在**状态列**（不是回复那行）：那一行的文字
                    有逐字断言（verify-wb-card-reply 的 G1），加个字就打红了；
                    而状态列本来就是"这条处在什么状态"的落点。 -->
-              <span v-if="t.awaitingReply" class="kb-table__awaiting" :title="awaitingTitle()">
+              <span v-if="t.awaitingReply" class="kb-table__awaiting" :title="awaitingTitle(t)">
                 {{ $t('@WORKBENCH:等你回话') }}
               </span>
             </td>
