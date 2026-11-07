@@ -58,6 +58,7 @@ import { prepareRequestMessages, measureContextUsage, resolveRequestBudget } fro
 import { streamChatOnce } from '../../../../cli/ai/transport.js';
 import { checkDangerousCommand } from '../../../../cli/ai/safety.js';
 import { guardCommand } from '../../../../cli/ai/platformGuard.js';
+import { toolGuardMs, runWithToolGuard, TOOL_STALLED } from './toolGuard.js';
 import configManager from '../../../../config.js';
 // 用户固定提示词（g ai 默认提示词 + 派发提示词）的取数与拼装。与外部 CLI 引擎那条
 // 链路共用同一份（见 runExternalTurn 的调用点），免得两块提示词在两处各拼一遍。
@@ -613,7 +614,28 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
           signal,
         });
       }
-      const output = await executeOne(name, args, toolCtx);
+      // 工具调用要有"最迟什么时候回来"的兜底。
+      //
+      // 各工具自己的超时只保证"子进程被杀掉 / 请求被 abort"，保证不了**这个 Promise
+      // 一定落地**：run_command 前后还挂着 augmentEnvPath（读注册表）、platformGuard
+      // （where 探测）、registerProject（登记常用目录）这些没有超时的 await。
+      // 2026-11-07 实测栽过一次：一轮停在这里 29 分 25 秒，会话闸被占死、SSE 再没吐过
+      // 一个字节，finally 永远不跑 —— 既不落盘也不 res.end()，界面只能一直"生成中"。
+      // 所以按工具自己的预算再包一层：走到了就说明它回不来，不是它慢。
+      const guardMs = toolGuardMs(name, args);
+      let output;
+      try {
+        output = guardMs
+          ? await runWithToolGuard(() => executeOne(name, args, toolCtx), guardMs)
+          : await executeOne(name, args, toolCtx);
+      } catch (err) {
+        if (err?.code !== TOOL_STALLED) throw err;
+        // 放弃等待，但把话说清楚回喂给模型：它还能换个做法继续，用户也不必重开一轮。
+        // 被放弃的那个 Promise 由它自己的超时收尾（execCommand 会 taskkill /T）。
+        logger.warn(`[agentChat] 工具 ${name} 超过 ${Math.round(guardMs / 1000)}s 未返回，放弃等待并回喂错误`);
+        output = `错误: ${err.message}（已放弃继续等待，可能卡在不响应中止的 await 上）。`
+          + '请换一种做法、缩小范围或分步重试；原操作可能已在后台完成，先核实再重复执行。';
+      }
       // read_image 会返回 { text, images }。前端只吃文本(result 是字符串,
       // 直接把对象丢过去会渲染成 "[object Object]"),图片进会话历史里的
       // 多模态 tool 消息 —— 模型看得见图,用户看到的是"已读取图片 xxx.png"。

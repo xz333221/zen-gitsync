@@ -31,6 +31,8 @@
      不在组件里重新算时间（两份时钟迟早分叉）。
   3. **等回答时不算静默**：调用方传的 `streaming` 要把 `pendingQuestion` 排除掉 ——
      那一轮挂着是在等用户点选项，不是模型卡住了。
+  4. **过了 5 分钟要说人话**：光报"静默 12 分"用户不知道能做什么。到这里改成
+     「可能已卡住，可停止后重试」——停止按钮就在同一屏，这是唯一的自救入口。
 -->
 <template>
   <span
@@ -40,7 +42,9 @@
     :title="$t('@AGENT:已经有一段时间没有收到模型的输出与工具调用了')"
   >
     <span class="chat-silence__dot" aria-hidden="true" />
-    {{ $t('@AGENT:静默 {elapsed}', { elapsed: formatDurationMs(silentMs) }) }}
+    {{ stuck
+      ? $t('@AGENT:静默 {elapsed} · 可能已卡住，可停止后重试', { elapsed: formatDurationMs(silentMs) })
+      : $t('@AGENT:静默 {elapsed}', { elapsed: formatDurationMs(silentMs) }) }}
   </span>
 </template>
 
@@ -53,6 +57,15 @@ import { formatDurationMs } from '@/utils/relativeTime'
 const NOTABLE_MS = 10 * 1000
 /** 静默到这一刻换成告警色（与看板「静默 x 分」同一个门槛） */
 const WARN_MS = 60 * 1000
+/**
+ * 静默到这一刻就**不止报数**，还要给出动作。
+ *
+ * 2026-11-07 实测：一轮卡在工具调用上 29 分 25 秒，界面一直显示"正在调用工具"，
+ * 用户看得出它没动静，却不知道该干什么（服务端的会话闸被占死，只能靠"停止"解）。
+ * 5 分钟的依据：run_command 上限 600s 里绝大多数命令早就该有输出了，而正常等模型
+ * 更不会静默这么久 —— 到这里基本只剩"这一轮回不来了"。
+ */
+const STUCK_MS = 5 * 60 * 1000
 
 const props = withDefaults(defineProps<{
   /** 距最后一次 SSE 事件的毫秒数；null = 不在跑 / 还没收到过事件 */
@@ -68,6 +81,8 @@ const visible = computed(() =>
   props.streaming && props.silentMs !== null && props.silentMs >= NOTABLE_MS
 )
 const warn = computed(() => (props.silentMs ?? 0) >= WARN_MS)
+/** 到了这个点就不只是"报个数"，要提示用户这一轮可能已经回不来了 */
+const stuck = computed(() => (props.silentMs ?? 0) >= STUCK_MS)
 </script>
 
 <style scoped>

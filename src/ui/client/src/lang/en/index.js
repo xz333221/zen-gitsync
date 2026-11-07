@@ -2950,6 +2950,7 @@ export default {
   '@AGENT:生成中，发送后会排队，等本轮跑完自动接上…': 'Generating — messages you send will be queued and sent after this turn…',
   // Turns with no SSE event for a while (ChatSilenceBadge)
   '@AGENT:静默 {elapsed}': 'Silent for {elapsed}',
+  '@AGENT:静默 {elapsed} · 可能已卡住，可停止后重试': 'Silent for {elapsed} · likely stuck, stop and retry',
   '@AGENT:已经有一段时间没有收到模型的输出与工具调用了': 'No output or tool call from the model for a while',
   '@AGENT:回答提交失败': 'Failed to submit answer',
   '@AGENT:请先停止当前生成': 'Please stop the current generation first',

@@ -922,8 +922,43 @@ async function isGitRepoRoot(dir) {
 // 各工具实现
 // ──────────────────────────────────────────────
 
+// 末尾那一段分页器：`| more`、`| more +0`、`| less -R`、`| pg`
+// 只认末尾、只认这三个（`| head -20` / `| tail -60` 是**有语义**的截断，不能动）
+const PAGER_TAIL_RE = /\s*\|\s*(?:more|less|pg)(?:\s+(?:\+\d+|-\d+|-[A-Za-z]+))*\s*$/
+
+/**
+ * 摘掉命令末尾的分页器管道。
+ *
+ * 为什么值得专门做一步：`cmd | more` 在 agent 里是**纯损害**，一点好处都没有 ——
+ *   · 输出会被 more.com 按 OEM 代码页重编码，UTF-8 的中文和框线全变乱码
+ *     （2026-11-07 实测：`pm2 list | more +0` 回来的是 `鈹?id 鈹?name`）；
+ *   · 它会根据宿主有没有 TTY 决定"要不要停下来等按键"，同一行命令在 CLI 和
+ *     Web 端表现可能完全不同（前端只能干等）；
+ *   · 增量输出（onOutput → SSE）也跟着一起坏掉，用户看不到实时日志。
+ * 模型写它的动机只是"想看清楚点"，而这两个界面本来就有滚动和复制 —— 直接摘掉。
+ *
+ * 保守起见只处理**末尾**一段：`cmd | more | findstr x` 这种分页器在中间的写法不动，
+ * 剥完变空（整条命令只有一个分页器）时也原样返回，交给后面的空命令分支。
+ *
+ * @param {string} command 原始命令
+ * @returns {string} 摘掉分页器后的命令（没命中就是原样，前后空白已去掉）
+ */
+export function stripPagerPipe(command) {
+  const original = String(command || '').trim()
+  let cmd = original
+  // 最多剥两轮：`x | more | pg` 这种东西现实中不会写，但循环比递归好读
+  for (let i = 0; i < 2; i++) {
+    const next = cmd.replace(PAGER_TAIL_RE, '').trim()
+    if (next === cmd || !next) break
+    cmd = next
+  }
+  return cmd
+}
+
 async function toolRunCommand(args, ctx) {
-  const command = String(args.command || '').trim()
+  // 先摘分页器再往下走：安全守卫看到的是真正要执行的那串（分页器在管道**右边**，
+  // 摘掉不会遮住任何危险前缀），提示给模型的 `$ <命令>` 也才与实际执行一致。
+  const command = stripPagerPipe(args.command)
   if (!command) return '错误: command 不能为空'
 
   // 红线检查 — 唯一硬性限制

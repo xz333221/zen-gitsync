@@ -19,7 +19,7 @@ import assert from 'node:assert/strict'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { TOOL_DEFINITIONS, executeTool, resolveCommandTimeout, normalizePlanSteps, isPlanToolName, splitToolOutput, toolMessageContent, detectRepoCreateTargets } from './tools.js'
+import { TOOL_DEFINITIONS, executeTool, resolveCommandTimeout, normalizePlanSteps, isPlanToolName, splitToolOutput, toolMessageContent, detectRepoCreateTargets, stripPagerPipe } from './tools.js'
 
 // 1×1 红色 PNG。用真字节而不是造一个空文件:checkImageFile 只校验扩展名与体积,
 // 但"读出来能还原成原图"这件事值得顺手钉一下(imageToDataUrl 会把内容 base64)。
@@ -318,6 +318,35 @@ test('run_command 执行期间通过 onOutput 增量回传输出(命令结束前
   const result = await pending
   assert.match(result, /live-1/)
   assert.match(result, /live-2/)
+})
+
+// ========== run_command: 末尾的分页器要摘掉(2026-11-07 乱码 + 假死) ==========
+test('stripPagerPipe: 只剥末尾的 more/less/pg', () => {
+  assert.equal(stripPagerPipe('pm2 list --no-color 2>&1 | more +0'), 'pm2 list --no-color 2>&1')
+  assert.equal(stripPagerPipe('git log | more'), 'git log')
+  assert.equal(stripPagerPipe('dir | less -R'), 'dir')
+  assert.equal(stripPagerPipe('  ls | pg  '), 'ls')
+})
+
+test('stripPagerPipe: 有语义的截断与引号内的字样都不动', () => {
+  // head/tail 是截断,不是分页 —— 摘了就改变了命令的意图
+  assert.equal(stripPagerPipe('npm test | head -20'), 'npm test | head -20')
+  assert.equal(stripPagerPipe('npm test | tail -60'), 'npm test | tail -60')
+  // 引号内的字样不是管道
+  assert.equal(stripPagerPipe('echo "a | more"'), 'echo "a | more"')
+  // 分页器在中间(后面还有真正的处理)时不动
+  assert.equal(stripPagerPipe('git log | more | findstr fix'), 'git log | more | findstr fix')
+  // 整条命令只有分页器:原样返回,交给空命令分支报错
+  assert.equal(stripPagerPipe('| more'), '| more')
+})
+
+test('run_command: 实际执行的是摘掉分页器的那条,不是原样照跑', async () => {
+  // 关键点不是"跑通了",而是**执行串里没有 | more** —— 它在 Windows 上会把 UTF-8
+  // 按 OEM 代码页重编码成乱码,在 POSIX 上则可能根本不存在这个命令。
+  const r = await executeTool('run_command', { command: 'node -e "console.log(1)" | more' }, ctx)
+  assert.match(r, /^\$ node -e "console\.log\(1\)"$/m, `回显的命令应已摘掉分页器: ${r.slice(0, 120)}`)
+  assert.doesNotMatch(r.slice(0, 200), /\| more/, '不该带着分页器执行')
+  assert.match(r, /\(exit 0\)/)
 })
 
 test('resolveCommandTimeout: 长耗时命令抬到上限,普通命令保持默认 / 模型给的值', () => {
