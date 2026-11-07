@@ -1,15 +1,17 @@
 /**
  * 智能体对话里的「文件改动」清单（组件库 FileChangeList / utils/fileChange）。
  *
- * 契约（2026-10-29）：
- *   A 一轮里改了文件 → assistant 气泡里出现「文件改动」清单，列出文件与 +/− 行数
- *   B 点一行 → 展开 unified diff（有 + 行、有 − 行，不是把整份参数 JSON 铺出来）
- *   C 反向对照：只读文件（read_file）的那一轮**不能**出现清单 ——
- *     否则"清单在"这件事可能是恒绿的（随便挂块空壳也满足 A）
+ * 契约（2026-11-07 起，改动清单从气泡内挪到会话末尾 + 右侧抽屉）：
+ *   A 一段会话里改过文件 → 消息列表**末尾**出现「文件改动」清单（列出文件与 +/− 行数），
+ *     且它确实是 `.acu-message-list-inner` 的最后一个子节点
+ *   B 点一行 → 右侧抽屉打开，展示 unified diff（有 + 行、有 − 行），
+ *     代码带 shiki 双主题着色（span 上有 --shiki-light）
+ *   C 反向对照：只读文件（read_file）的那一轮不该多出新文件 ——
+ *     清单仍是 1 个文件、不出现第二个文件行
  *   D（--reverse）把 A/C 的期望互换，应当整组报红 —— 证明断言真的在读内容
  *
- * 前置：vite dev server（5544）已启动，且组件库新 dist 已拷进宿主的
- *       node_modules/zen-ai-chat-ui/dist（改完库要重启 vite 的预打包）。
+ * 前置：vite dev server（5544）已启动，且组件库新 dist 已装进宿主的
+ *       node_modules/zen-ai-chat-ui（改完库要重启 vite 的预打包）。
  * 用法：node scripts/verify-agent-file-changes.cjs [--reverse]
  * 退出码：0 全通过，1 有失败项。
  */
@@ -76,13 +78,10 @@ const ROUND_READ = sse([
   { type: 'turn_done', turnIndex: 1, durationMs: 900 }
 ])
 
-/** 最后一条 assistant 气泡里的文件改动块 */
-function lastBubbleFileChanges(page) {
+/** 会话末尾的文件改动清单（整段会话汇总，不再是「最后一条气泡里的」那块） */
+function sessionFileChanges(page) {
   return page.evaluate(() => {
-    const rows = [...document.querySelectorAll('.acu-bubble-row.is-assistant')]
-    const last = rows[rows.length - 1]
-    if (!last) return null
-    const block = last.querySelector('.acu-filechanges')
+    const block = document.querySelector('.acu-session-filechanges')
     if (!block) return null
     const rowEls = [...block.querySelectorAll('.acu-filechanges-row')]
     return {
@@ -90,11 +89,26 @@ function lastBubbleFileChanges(page) {
       count: rowEls.length,
       rows: rowEls.map(el => ({
         text: (el.textContent || '').replace(/\s+/g, ' ').trim(),
-        expanded: el.getAttribute('aria-expanded')
+        hasPopup: el.getAttribute('aria-haspopup')
       })),
-      patch: (block.querySelector('.acu-filechanges-patch')?.textContent || ''),
-      adds: block.querySelectorAll('.acu-filechanges-patch-line.is-add').length,
-      dels: block.querySelectorAll('.acu-filechanges-patch-line.is-del').length
+      isLastChild: block.parentElement?.lastElementChild === block
+    }
+  })
+}
+
+/** 右侧抽屉（点击某一行后出现） */
+function drawerState(page) {
+  return page.evaluate(() => {
+    const drawer = document.querySelector('.acu-drawer')
+    if (!drawer) return null
+    const rows = [...drawer.querySelectorAll('.acu-diff-row')]
+    return {
+      path: (drawer.querySelector('.acu-drawer-path')?.textContent || '').trim(),
+      text: (drawer.textContent || '').replace(/\s+/g, ' ').trim(),
+      adds: rows.filter(r => r.classList.contains('is-add')).length,
+      dels: rows.filter(r => r.classList.contains('is-del')).length,
+      lineNos: drawer.querySelectorAll('.acu-diff-no').length,
+      coloredSpans: drawer.querySelectorAll('.acu-diff-code span[style*="--shiki-light"]').length
     }
   })
 }
@@ -166,46 +180,84 @@ async function main() {
     // 有历史会话时欢迎页不出现，输入框照样在；直接发
     await sendMessage(page, '改一下 demo.ts')
 
-    const appeared = await waitFor(async () => (await lastBubbleFileChanges(page)) !== null)
-    const block = await lastBubbleFileChanges(page)
+    const appeared = await waitFor(async () => (await sessionFileChanges(page)) !== null)
+    const block = await sessionFileChanges(page)
 
-    // ── A 清单出现且内容对得上 ─────────────────────────────────
+    // ── A 清单出现在会话末尾且内容对得上 ───────────────────────
     check(REVERSE ? 'A0（反证）改文件后不该出现清单' : 'A1 改文件后出现「文件改动」清单',
       REVERSE ? !appeared : appeared, `block=${JSON.stringify(block)}`)
     if (block) {
-      const titleOk = block.title.includes('文件改动') && block.count === 1
-      check(REVERSE ? 'A0（反证）标题不该是「文件改动」' : 'A2 标题是「文件改动」、只列 1 个文件',
+      const titleOk = block.title.includes('文件改动') && block.count === 1 && block.isLastChild
+      check(REVERSE ? 'A0（反证）清单不该是会话最后一个节点' : 'A2 标题对、1 个文件、挂在消息列表末尾',
         REVERSE ? !titleOk : titleOk,
-        `title=${block.title} rows=${block.count}`)
+        `title=${block.title} rows=${block.count} last=${block.isLastChild}`)
       const row = block.rows[0]?.text || ''
       const rowOk = row.includes('demo.ts') && row.includes('+3') && row.includes('−2')
       check(REVERSE ? 'A0（反证）行里不该有文件名与增删行数' : 'A3 行里是文件名 + 增删行数（+3 −2）',
         REVERSE ? !rowOk : rowOk,
         `row=${row}`)
+      check(REVERSE ? 'A0（反证）行不该声明打开对话抽屉' : 'A4 行声明 aria-haspopup="dialog"（点开是抽屉）',
+        REVERSE ? block.rows[0]?.hasPopup !== 'dialog' : block.rows[0]?.hasPopup === 'dialog',
+        `hasPopup=${block.rows[0]?.hasPopup}`)
     }
 
-    // ── B 点开展开 diff ───────────────────────────────────────
+    // ── B 点一行 → 右侧抽屉里看 diff ───────────────────────────
     if (block) {
-      await page.locator('.acu-bubble-row.is-assistant').last()
-        .locator('.acu-filechanges-row').first().click()
-      const expanded = await waitFor(async () => {
-        const next = await lastBubbleFileChanges(page)
-        return !!next && next.patch.length > 0
-      })
-      const out = await lastBubbleFileChanges(page)
-      check(REVERSE ? 'B0（反证）展开后不该有 diff' : 'B1 点一行展开出 unified diff（含 + 行与 − 行）',
-        REVERSE
-          ? !(expanded && out.adds > 0 && out.dels > 0)
-          : (expanded && out.adds > 0 && out.dels > 0),
-        `adds=${out?.adds} dels=${out?.dels} patch=${norm(out?.patch).slice(0, 100)}`)
-      check(REVERSE ? 'B0（反证）diff 里不该有内容' : 'B2 diff 里有新写入的那行内容',
-        REVERSE ? !String(out?.patch || '').includes('const c = 5') : String(out?.patch || '').includes('const c = 5'),
-        `patch=${norm(out?.patch).slice(0, 120)}`)
+      await page.locator('.acu-session-filechanges .acu-filechanges-row').first().click()
+      const opened = await waitFor(async () => (await drawerState(page)) !== null)
+      // 高亮是异步的（shiki 单例 + 按需 loadLanguage）：等第一帧着色出来再断言
+      if (!REVERSE) await waitFor(async () => ((await drawerState(page))?.coloredSpans || 0) > 0, 8000)
+      const out = await drawerState(page)
+      check(REVERSE ? 'B0（反证）点击后不该出现抽屉' : 'B1 点一行弹出右侧抽屉',
+        REVERSE ? !opened : opened, `drawer=${JSON.stringify(out && { path: out.path, adds: out.adds, dels: out.dels })}`)
+      if (out) {
+        check(REVERSE ? 'B0（反证）抽屉里不该有 + / − 行' : 'B2 抽屉里有 unified diff（含 + 行与 − 行）',
+          REVERSE ? !(out.adds > 0 && out.dels > 0) : (out.adds > 0 && out.dels > 0),
+          `adds=${out.adds} dels=${out.dels}`)
+        check(REVERSE ? 'B0（反证）diff 里不该有内容' : 'B3 diff 里有新写入的那行内容',
+          REVERSE ? !out.text.includes('const c = 5') : out.text.includes('const c = 5'),
+          `text=${norm(out.text).slice(0, 120)}`)
+        check(REVERSE ? 'B0（反证）diff 不该有着色与行号' : 'B4 diff 带行号与 shiki 语法高亮',
+          REVERSE ? !(out.coloredSpans > 0 && out.lineNos > 0) : (out.coloredSpans > 0 && out.lineNos > 0),
+          `colored=${out.coloredSpans} lineNos=${out.lineNos}`)
+      }
     }
 
+    // 抽屉是滑入 + 淡入的，截图/断言都等它落定，否则会把「半透明动画帧」当成实现问题
+    await sleep(400)
     await page.screenshot({ path: SHOT }).catch(() => {})
 
-    // ── C 反向对照：只读文件的一轮不出清单 ─────────────────────
+    // 关掉抽屉，再做只读对照（否则遮罩盖住整个页面）。
+    // 用右上角的关闭按钮而不是 Esc：宿主的全局热键也会监听 Esc，
+    // 这里要验的是「抽屉能关」，不是宿主的键盘绑定。
+    await page.locator('.acu-drawer-close').click().catch(() => {})
+    await page.waitForSelector('.acu-drawer', { state: 'detached', timeout: 5000 }).catch(() => {})
+    const inputBack = await page
+      .locator('.agent-tabs .acu-input-textarea, .agent-chat-host .acu-input-textarea')
+      .first()
+      .isVisible()
+      .catch(() => false)
+    check('B5 关掉抽屉后输入框还在（没有被遮罩/滚动锁困住）', inputBack, `inputBack=${inputBack}`)
+
+    // ── B6 Esc 只关抽屉，不该把宿主的对话面板一起关掉 ───────────
+    // （宿主的 dock 也监听 Esc；抽屉必须在自己这一层截住）
+    await page.locator('.acu-session-filechanges .acu-filechanges-row').first().click()
+    await page.waitForSelector('.acu-drawer', { timeout: 5000 }).catch(() => {})
+    await page.keyboard.press('Escape')
+    await page.waitForSelector('.acu-drawer', { state: 'detached', timeout: 5000 }).catch(() => {})
+    const escState = await page.evaluate(() => ({
+      drawer: !!document.querySelector('.acu-drawer'),
+      panelVisible: (() => {
+        const el = document.querySelector('.agent-dock__panel')
+        if (!el) return false
+        const r = el.getBoundingClientRect()
+        return getComputedStyle(el).display !== 'none' && r.width > 0 && r.height > 0
+      })()
+    }))
+    check('B6 Esc 关掉抽屉但宿主面板还在', !escState.drawer && escState.panelVisible,
+      `drawer=${escState.drawer} panel=${escState.panelVisible}`)
+
+    // ── C 反向对照：只读文件的一轮不多出文件 ───────────────────
     await sendMessage(page, '再看一眼 demo.ts')
     const readRoundDone = await waitFor(async () => {
       const text = await page.evaluate(() => {
@@ -215,9 +267,10 @@ async function main() {
       })
       return text.includes('读完了')
     })
-    const afterRead = await lastBubbleFileChanges(page)
-    check(REVERSE ? 'C0（反证）只读文件的一轮也该有清单' : 'C1 只读文件的一轮不出文件改动清单',
-      REVERSE ? !!afterRead : !afterRead,
+    const afterRead = await sessionFileChanges(page)
+    const readKept = !!afterRead && afterRead.count === 1 && String(afterRead.rows[0]?.text || '').includes('demo.ts')
+    check(REVERSE ? 'C0（反证）只读的一轮也该多出文件' : 'C1 只读文件的一轮不多出文件（仍是那 1 个）',
+      REVERSE ? !readKept : readKept,
       `readRoundDone=${readRoundDone} block=${JSON.stringify(afterRead)}`)
 
     // 存量 pageerror：库的 MessageRail 在无布局上下文的元素上量 rect（与本功能无关，见 lessons）

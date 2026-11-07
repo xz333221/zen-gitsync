@@ -149,9 +149,9 @@ export function agentQuestionLabels() {
 /**
  * 文件改动清单文案（走 app 的 i18n）。
  *
- * 库从工具调用参数里解析出「这一轮改了哪些文件」，在 assistant 气泡里列成
- * 可展开 diff 的清单。库的默认文案是中文，非中文界面要在这里覆盖 ——
- * 与上面两份一样，一处定义、四个对话入口共用。
+ * 库从工具调用参数里解析出「这段会话改了哪些文件」，默认汇总在消息列表末尾，
+ * 点一行从右侧抽屉看 diff（行号 + 增删底色 + 语法高亮）。
+ * 库的默认文案是中文，非中文界面要在这里覆盖 —— 与上面两份一样，一处定义、四个对话入口共用。
  */
 export function agentFileChangeLabels() {
   return {
@@ -163,6 +163,7 @@ export function agentFileChangeLabels() {
     collapse: $t('@AGENT:收起改动'),
     writeHint: $t('@AGENT:整体写入'),
     empty: $t('@AGENT:无可预览的差异'),
+    close: $t('@AGENT:关闭'),
   }
 }
 

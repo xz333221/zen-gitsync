@@ -2919,7 +2919,7 @@ export default {
   '@AGENT:智能体助手': 'AI Agent',
   '@AGENT:计划': 'Plan',
   '@AGENT:原始参数': 'Raw arguments',
-  // 文件改动清单（这一轮改了哪些文件，见库的 utils/fileChange）
+  // 文件改动清单（这段会话改了哪些文件，见库的 utils/fileChange）
   '@AGENT:文件改动': 'Files changed',
   '@AGENT:个文件': 'files',
   '@AGENT:新增行': 'added',
@@ -2928,6 +2928,8 @@ export default {
   '@AGENT:收起改动': 'Hide diff',
   '@AGENT:整体写入': 'Full rewrite',
   '@AGENT:无可预览的差异': 'No diff to preview',
+  // 文件改动抽屉右上角关闭按钮
+  '@AGENT:关闭': 'Close',
   '@AGENT:我可以帮你阅读代码、执行命令、修改文件。选择下方话题或直接输入你的问题。': 'I can help you read code, run commands, and modify files. Choose a topic below or type your question.',
   '@AGENT:正在生成中...': 'Generating...',
   '@AGENT:输入消息，Enter 发送': 'Type a message, press Enter to send',
