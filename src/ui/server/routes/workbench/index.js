@@ -104,6 +104,7 @@ import {
   projectName,
 } from './projectRegistry.js';
 import { getProjectIcon } from './projectIcon.js';
+import { resumeCwdConflict, MOVE_BREAKS_RESUME_HINT } from './resumeGuard.js';
 import { buildRecommendRoots, scanRecommendedProjects } from './projectRecommend.js';
 import { buildEnvContextBlock } from './envContext.js';
 import { readHiddenProjects, hideProject, filterHiddenProjects } from './hiddenProjects.js';
@@ -415,7 +416,8 @@ export function registerWorkbenchRoutes({
 
     // 先刷磁盘再取快照：别的实例刚起的 job 也要看得到（与 /tasks/:id/run 同一口径）
     await refreshJobsFromDisk();
-    const liveJob = snapshotJobs().find(j => j.taskId === taskId && (j.status === 'running' || j.status === 'pending'));
+    const snapshot = snapshotJobs();
+    const liveJob = snapshot.find(j => j.taskId === taskId && (j.status === 'running' || j.status === 'pending'));
     if (liveJob) throw new HttpError(400, '该任务正在执行,请先停止再移动');
 
     // 幂等：目标就是当前归属时直接回成功（"挪到它已经在的项目"不是错误）
@@ -428,7 +430,11 @@ export function registerWorkbenchRoutes({
     task.updatedAt = now;
     await writeJson(TASKS_FILE, data);
     publish('task:update', task);
-    res.json({ success: true, task });
+    // 移动只改归属，**不迁历史轮次**：它们捕获的 session id 落在旧目录的会话库里，
+    // 换到新 cwd 之后一个都续不上（见 resumeGuard.js）。这个副作用要到下次续聊
+    // 才暴露，所以在动作完成这一刻就提示，而不是让用户去对话区收英文报错。
+    const hasHistory = snapshot.some(j => j.taskId === taskId);
+    res.json({ success: true, task, ...(hasHistory ? { warning: MOVE_BREAKS_RESUME_HINT } : {}) });
   }));
 
   // ════════════════════════════════════════════════════════════════════════
@@ -667,6 +673,12 @@ export function registerWorkbenchRoutes({
     // 续接的这轮在错误的工作区里干活，而 --resume 又把上下文带过来了，症状很隐蔽。
     // 2026-09-30 由 verify:wb-env-context 第 8 组抓到（续聊轮的 prompt 里出现的不是任务的项目）。
     const repoPath = resolveTaskRepoPath(task, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
+    // 工作目录变过就不能续（判据与事故背景见 resumeGuard.js）：
+    // 「移动到其他项目」只改 task.projectPath，历史轮次的会话仍在旧目录的会话库里。
+    // 不拦的话 spawn 到新 cwd 再拿旧 id 去 resume，CLI 回一条英文 error 且退出码 0，
+    // 用户只会看到对话区突然断在一句 No conversation found 上。
+    const cwdConflict = resumeCwdConflict(prevJob.cwd, repoPath);
+    if (cwdConflict) throw new HttpError(400, cwdConflict);
     res.json({ success: true, message: '已加入续接队列' });
     // 执行器必须沿用上一轮 job 的 agent：claude 的 --resume 和 opencode 的 --session
     // 互不认对方的会话 id，串了执行器续接必然失败。

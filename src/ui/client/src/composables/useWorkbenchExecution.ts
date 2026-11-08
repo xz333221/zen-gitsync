@@ -16,6 +16,12 @@ export interface QueuedChat {
   files: SelectedFile[]
 }
 
+/** job 的起始时刻（毫秒）。缺失/非法按 0 —— 刚起跑那条还没有 startedAt */
+function jobStartMs(j: Job): number {
+  const ms = Date.parse(j.startedAt || '')
+  return Number.isNaN(ms) ? 0 : ms
+}
+
 /**
  * 工作台的执行动作。
  *
@@ -72,14 +78,35 @@ export function useWorkbenchExecution(
   }
 
   /**
+   * 这个任务**时间上最新**的一轮。
+   *
+   * ⚠️ 不能写成 `jobs.value.filter(...).slice(-1)[0]` —— 那只在"新 job 追加到数组尾部"
+   * 的前提下成立。运行期确实如此（job:update 走 `jobs.value.push`，见 useWorkbenchData），
+   * 但**重启后**整表从 `GET /jobs` 灌入，而服务端快照是按时间**降序**的
+   * （jobStore.js 的 `sortKey(b).localeCompare(sortKey(a))`），末尾就翻成了最老那条。
+   * 2026-11-08 实测事故：重启后点续聊，续到了首轮那条 cancelled 记录上，拿它的
+   * session id 去 resume → `No conversation found`（那一轮还是移动项目之前跑的）。
+   *
+   * 所以按 startedAt 取最大，与数组顺序解耦。时间缺失（刚起跑的 pending）按 0 算，
+   * 只在没有别的候选时才会被选中。
+   */
+  function newestJobOf(taskId: string): Job | null {
+    let newest: Job | null = null
+    for (const j of jobs.value) {
+      if (j.taskId !== taskId) continue
+      if (!newest || jobStartMs(j) >= jobStartMs(newest)) newest = j
+    }
+    return newest
+  }
+
+  /**
    * 续接一轮对话。返回是否真的发出去了（排队那边靠它决定要不要出队）
    *
    * `parent` 不给时用这个任务最新的一轮 —— 正常续聊就是这个口径。
    * 重试（retryRound）要显式指定：它删掉失败那轮之后，上一轮可能不是数组末尾那条。
    */
   async function continueChat(t: Task, message: string, parent?: Job): Promise<boolean> {
-    const latest = parent
-      ?? jobs.value.filter(j => j.taskId === t.id).slice(-1)[0]
+    const latest = parent ?? newestJobOf(t.id)
     if (!latest) {
       ElMessage.error($t('@WORKBENCH:没有可续接的会话'))
       return false

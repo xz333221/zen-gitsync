@@ -338,3 +338,59 @@ describe('重试失败的那一轮', () => {
     expect(jobs.value.map(j => j.id)).toEqual(['j1', 'j2'])
   })
 })
+
+// 「续聊的上一轮」不能靠数组下标取（2026-11-08 实测事故）。
+//
+// 运行期新 job 是 push 到尾部，末尾 = 最新，`slice(-1)` 侥幸成立；但**重启后**整表
+// 从 GET /jobs 灌入，服务端快照按 endedAt/startedAt **降序**输出（jobStore.js），
+// 末尾翻成最老那条。那次就是续到了首轮已取消的记录上，拿它的 session id 去 resume，
+// codebuddy 回 `No conversation found` —— 而同一任务更晚、更成功的那一轮就在表头。
+describe('续聊取最新一轮（不依赖数组顺序）', () => {
+  test('重启后 job 表按时间降序（最新在前）→ 仍然续到最新那一轮', async () => {
+    const cancelled = makeJob({
+      id: 'j-old',
+      status: 'cancelled',
+      startedAt: '2026-11-07T14:03:18.685Z',
+      claudeSessionId: 'sess-old'
+    })
+    const done = makeJob({
+      id: 'j-new',
+      status: 'done',
+      startedAt: '2026-11-07T14:04:27.082Z',
+      claudeSessionId: 'sess-new'
+    })
+    // 降序：最新在前、最老在尾 —— 正是服务端快照 + 重启后的真实顺序
+    const { api } = setup([done, cancelled])
+
+    expect(await api.continueChat(makeTask(), '接着说')).toBe(true)
+
+    expect(httpCalls.map(c => `${c.method} ${c.url.replace(/^.*\/api/, '/api')}`)).toEqual([
+      'POST /api/workbench/jobs/j-new/continue'
+    ])
+  })
+
+  test('顺序被跨实例合并打乱时，也按时间取最大而不是取尾巴', async () => {
+    const mid = makeJob({ id: 'j-mid', status: 'error', startedAt: '2026-11-07T14:10:00.000Z' })
+    const newest = makeJob({ id: 'j-new', status: 'done', startedAt: '2026-11-07T14:20:00.000Z' })
+    const oldest = makeJob({ id: 'j-old', status: 'cancelled', startedAt: '2026-11-07T14:00:00.000Z' })
+    const { api } = setup([mid, newest, oldest])
+
+    expect(await api.continueChat(makeTask(), '接着说')).toBe(true)
+
+    expect(httpCalls.map(c => `${c.method} ${c.url.replace(/^.*\/api/, '/api')}`)).toEqual([
+      'POST /api/workbench/jobs/j-new/continue'
+    ])
+  })
+
+  test('没有 startedAt 的记录按 0 算，不顶掉有时间的轮次', async () => {
+    const done = makeJob({ id: 'j-done', status: 'done', startedAt: '2026-11-07T14:04:27.082Z' })
+    const noTime = makeJob({ id: 'j-notime', status: 'running', startedAt: null as unknown as string })
+    const { api } = setup([noTime, done])
+
+    expect(await api.continueChat(makeTask(), '接着说')).toBe(true)
+
+    expect(httpCalls.map(c => `${c.method} ${c.url.replace(/^.*\/api/, '/api')}`)).toEqual([
+      'POST /api/workbench/jobs/j-done/continue'
+    ])
+  })
+})

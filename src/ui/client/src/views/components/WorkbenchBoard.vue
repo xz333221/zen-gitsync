@@ -716,7 +716,11 @@ async function moveTask(t: BoardTask, targetPath: string) {
   }
   const name = projects.value.find(p => canonicalProjectPath(p.path) === canonicalProjectPath(targetPath))?.name
     || targetPath
-  ElMessage.success($t('@WORKBENCH:已移动到「{name}」', { name }))
+  // warning = 这个任务已经有历史轮次，而它们是在原项目目录下跑的：工作目录一变，
+  // 那些会话就续不上了（服务端 resumeGuard.js 的判据）。移动本身成功，所以用 warning
+  // 而不是 error，同时把成功文案换成这句更有信息量的 —— 两条一起弹会互相盖掉。
+  if (res.warning) ElMessage.warning(res.warning)
+  else ElMessage.success($t('@WORKBENCH:已移动到「{name}」', { name }))
   await refresh(true)
 }
 

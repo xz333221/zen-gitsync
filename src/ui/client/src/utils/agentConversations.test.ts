@@ -124,7 +124,12 @@ describe('侧边条真的画出来了（真挂库的 ChatContainer）', () => {
     const bars = wrapper.findAll('.acu-rail-bar')
     expect(bars).toHaveLength(2)
     for (const bar of bars) {
-      const w = parseFloat((bar.element as HTMLElement).style.width)
+      // 可见的那根是条里的 `.acu-rail-mark`：`.acu-rail-bar` 自己只带高度（点击热区），
+      // 宽度来自 messageRailConfig，落在 mark 的 inline style 上（库 beta.34 的结构）。
+      // 读外层会拿到 ''，parseFloat → NaN，看着像"没画出来"，其实是量错了元素。
+      const mark = bar.find('.acu-rail-mark')
+      expect(mark.exists()).toBe(true)
+      const w = parseFloat((mark.element as HTMLElement).style.width)
       expect(w).toBeGreaterThanOrEqual(8)
       expect(w).toBeLessThanOrEqual(26)
     }

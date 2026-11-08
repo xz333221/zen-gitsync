@@ -128,6 +128,18 @@ test('projectJob:老 job 没有计时字段时归成 null(不是 undefined,前�
   assert.equal(rec.thinkingEndedAt, null);
 });
 
+// cwd 必须过白名单：续聊要靠它判断"上一轮是在哪个目录下跑的"（resumeGuard.js）。
+// 漏了它 = 本实例知道不能续、重启或换个实例就不知道，用户又收到一句英文报错。
+test('projectJob:保留 spawn 的工作目录 cwd', () => {
+  const rec = projectJob(runningJob('j1', { cwd: 'D:\\workspace\\proj-a' }));
+  assert.equal(rec.cwd, 'D:\\workspace\\proj-a');
+});
+
+test('projectJob:没有 cwd 的老记录归成 null', () => {
+  const rec = projectJob(runningJob('j-old', { cwd: undefined }));
+  assert.equal(rec.cwd, null);
+});
+
 test('toLiveRecord:正文/思考截尾,工具流水只留最近若干条', () => {
   const toolCalls = Array.from({ length: LIVE_TOOL_CALL_LIMIT + 5 }, (_, i) => ({
     id: `c${i}`,

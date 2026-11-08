@@ -73,6 +73,14 @@ export interface Job {
    */
   thinkingStartedAt?: string | null
   thinkingEndedAt?: string | null
+  /**
+   * 这一轮 spawn 时的工作目录（服务端 job.cwd，见 taskRunner / resumeGuard）。
+   *
+   * 五家 CLI 的会话库按 cwd 索引，任务被「移动到其他项目」之后旧会话就续不上了 ——
+   * 服务端据此在 `/continue` 上直接拒绝并说明原因。前端目前只用它做排查参考，
+   * 老 job 没有这个字段（= null，无从判断）。
+   */
+  cwd?: string | null
 }
 
 // ── Workbench 任务相关类型 ──────────────────────────────────────────

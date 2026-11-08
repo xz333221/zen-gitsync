@@ -105,6 +105,10 @@ export function projectJob(j) {
     toolCalls: Array.isArray(j.toolCalls) ? j.toolCalls : [],
     // 续接对话用:claude --output-format stream-json 的 system.init 事件捕获到的 session_id
     claudeSessionId: j.claudeSessionId || null,
+    // 这一轮 spawn 的工作目录。续聊前要拿它比对任务当前的项目（resumeGuard.js）——
+    // 不过白名单就变成"本实例知道能不能续、重启或换个实例就不知道"，于是又会
+    // 把英文的 No conversation found 甩给用户。老 job 没有这个字段，读出来是 null。
+    cwd: j.cwd || null,
     /**
      * 「这条是我判成完成的」（静默看门狗写的，见 stallWatchdog.js）。`{at, reason, silentMs}`，
      * 没判过就是 null。**必须过白名单**：看板卡片靠它显示"为什么它自己跳到已完成列了"——

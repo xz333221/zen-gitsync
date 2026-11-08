@@ -1865,6 +1865,11 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
     // codebuddy 的 session_id / pi 的 session header id 都存这里,
     // 语义是"该执行器的会话续接标识"。
     claudeSessionId: resumeSessionId,
+    // 这一轮**实际 spawn 的工作目录**（与下面 launcher 的入参同一个表达式）。
+    // 续聊时要拿它和"任务现在的工作目录"比对：五家 CLI 的会话库按 cwd 索引，
+    // 任务被「移动到其他项目」后 cwd 变了，旧 session id 在新目录下查无此会话
+    // （CLI 只回一句 No conversation found，退出码还是 0）。判据见 resumeGuard.js。
+    cwd: repoPath || process.cwd(),
     // 工具调用流水（{id,name,argsPreview,arguments,result,status,error}[]）。
     // 先给个空数组，前端拿到的 job:update 就有了稳定形态，不用到处判 undefined。
     toolCalls: [],

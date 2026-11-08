@@ -35,7 +35,12 @@ function mountSelector() {
 test('header g ai button uses the current directory and suppresses duplicate launches', async () => {
   const requests: Array<{ url: string, body: any }> = []
   let finish!: (response: any) => void
-  vi.stubGlobal('fetch', vi.fn((url, options) => {
+  vi.stubGlobal('fetch', vi.fn((url, options: any) => {
+    // setup 期 useAgentIdentity 会发一条 GET /api/agent-identity（没有 body）。
+    // 本用例只关心「g ai」按钮的 POST：无 body 的请求直接放行，既别让 JSON.parse
+    // 在这里崩（b0b71f1c 把身份接进组件后，这个 mock 就再也没考虑过 GET），
+    // 也别让它混进按顺序取值的 requests 数组。
+    if (!options?.body) return Promise.resolve({ ok: true, json: async () => ({ success: false }) })
     requests.push({ url, body: JSON.parse(options.body) })
     return new Promise(resolve => { finish = resolve })
   }))
