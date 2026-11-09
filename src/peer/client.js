@@ -36,13 +36,22 @@ const ASK_TIMEOUT_MS = 10 * 60 * 1000;
 
 /**
  * 打一个 peer 接口，统一超时与错误文案。
+ *
+ * `signal`（可选）是**上游的取消通道**：本机这一轮被停止 / 工具层放弃等待时，
+ * 必须把这一跳一起掐断。只做"本地不等了"是不够的 —— 对端会继续跑完那一轮，
+ * 它的会话闸一直占着（peer 进来固定用 `in:<from>` 这个 key），后续提问全撞
+ * SESSION_BUSY。断开连接后由对端自行中止，见 server.js 的 res close 监听。
+ *
  * @param {string} url
- * @param {{method?:string, token:string, body?:object, timeoutMs?:number}} opts
+ * @param {{method?:string, token:string, body?:object, timeoutMs?:number, signal?:AbortSignal}} opts
  */
-async function callPeer(url, { method = 'GET', token, body, timeoutMs = INFO_TIMEOUT_MS } = {}) {
+async function callPeer(url, { method = 'GET', token, body, timeoutMs = INFO_TIMEOUT_MS, signal } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   timer.unref?.();
+  const onUpstreamAbort = () => { try { controller.abort(); } catch {} };
+  if (signal?.aborted) onUpstreamAbort();
+  else signal?.addEventListener?.('abort', onUpstreamAbort, { once: true });
   try {
     const res = await fetch(url, {
       method,
@@ -64,6 +73,8 @@ async function callPeer(url, { method = 'GET', token, body, timeoutMs = INFO_TIM
     return data;
   } catch (err) {
     if (err?.name === 'AbortError') {
+      // 两种 abort 要分开：上游取消不是"超时"，否则日志/回喂都会被误导成网络问题
+      if (signal?.aborted) throw new Error('提问已取消（本机这一轮已结束或工具层放弃等待）');
       throw new Error(`连 ${url} 超时（${Math.round(timeoutMs / 1000)}s）`);
     }
     if (err instanceof TypeError) {
@@ -72,6 +83,7 @@ async function callPeer(url, { method = 'GET', token, body, timeoutMs = INFO_TIM
     throw err;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener?.('abort', onUpstreamAbort);
   }
 }
 
@@ -90,15 +102,17 @@ export async function fetchPeerInfo(peer, { timeoutMs = INFO_TIMEOUT_MS } = {}) 
  * @param {object} peer peers.json 里的一条
  * @param {object} self 本机身份（把 id 带过去，对端据此保持会话连续性）
  * @param {string} question
- * @param {{timeoutMs?:number}} [opts]
+ * @param {{timeoutMs?:number, signal?:AbortSignal}} [opts]
+ *        signal：上游取消（本轮被停止 / 工具层放弃等待），会掐断这一跳并让对端中止
  * @returns {Promise<{answer:string, sessionId:string, ms:number}>}
  */
-export async function askPeer(peer, self, question, { timeoutMs = ASK_TIMEOUT_MS } = {}) {
+export async function askPeer(peer, self, question, { timeoutMs = ASK_TIMEOUT_MS, signal } = {}) {
   const data = await callPeer(`${peer.url}/api/peer/ask`, {
     method: 'POST',
     token: peer.token,
     body: { question, from: self?.id || '' },
-    timeoutMs
+    timeoutMs,
+    signal
   });
   if (peer.id && data.sessionId) {
     await setSessionId(`out:${peer.id}`, data.sessionId).catch(() => {});
@@ -147,8 +161,9 @@ export async function listPeerStatus({ probe = true } = {}) {
  *
  * @param {string} ref 对端 id 或昵称；空 = 只有一台对端时自动选它
  * @param {string} question
+ * @param {{timeoutMs?:number, signal?:AbortSignal}} [opts] 透传给 askPeer（见上面的取消说明）
  */
-export async function askPeerByRef(ref, question) {
+export async function askPeerByRef(ref, question, opts = {}) {
   const self = (await ensureSelf()).self;
   const key = String(ref || '').trim();
 
@@ -169,7 +184,7 @@ export async function askPeerByRef(ref, question) {
   }
   if (!peer.url || !peer.token) throw new Error(`对端「${peer.name}」缺少地址或令牌，请重新 \`g peer add\``);
 
-  const result = await askPeer(peer, self, question);
+  const result = await askPeer(peer, self, question, opts);
   return { peer, ...result };
 }
 

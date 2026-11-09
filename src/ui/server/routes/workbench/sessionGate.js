@@ -62,8 +62,10 @@ export function getSessionTurn(sessionId) {
  * 两步之间隔着 await 时会漏。
  *
  * @param {string} sessionId
- * @param {{ abort?: () => void, stage?: string }} [options]
+ * @param {{ abort?: () => void, onAbandon?: () => void, stage?: string }} [options]
  *        abort：掐断这一轮的唯一通道（通常是该轮 AbortController 的 abort）
+ *        onAbandon：宽限兜底强制放闸时回调（这一轮再也不会自己收尾了，调用方
+ *                   要在这里停心跳 / 关掉 SSE，否则定时器会跟着泄漏）
  *        stage：当前阶段（给 /api/agent/abort 的回执与前端提示用）
  */
 export function acquireSessionTurn(sessionId, options = {}) {
@@ -73,6 +75,7 @@ export function acquireSessionTurn(sessionId, options = {}) {
     startedAt: Date.now(),
     stage: typeof options.stage === 'string' ? options.stage : '',
     abort: typeof options.abort === 'function' ? options.abort : null,
+    onAbandon: typeof options.onAbandon === 'function' ? options.onAbandon : null,
     abandoned: false,
   };
   activeSessionTurns.add(sessionId);
@@ -108,6 +111,46 @@ export function releaseSession(sessionId, token) {
 }
 
 /**
+ * 给**已经被掐断**的轮次上兜底：宽限期内它自己退出就由它的 finally 放闸；
+ * 到期还没退就标记 abandoned 并强制放闸。
+ *
+ * 单独导出（而不是只藏在 requestSessionAbort 里）是因为"掐断"有两个触发源：
+ *   · 用户点「停止」→ POST /api/agent/abort
+ *   · 客户端断开（关页面、工具层放弃等待、peer 链路断掉）→ req.socket 的 close
+ * 第二条以前只调 abortController.abort() 就完事。一轮若卡在不响应 signal 的
+ * await 上（读配置 / 子进程 / 取快照），finally 永远不会执行，闸就被永久占住 ——
+ * 跨机器 ask_peer 的对端固定用同一个 session key，于是后面每一次提问都回
+ * SESSION_BUSY，而对端界面上根本看不到有对话在跑。
+ *
+ * @param {string} sessionId
+ * @param {number} [token] 传了就只给这一轮上兜底（闸可能已经换人了）
+ * @param {number} [graceMs]
+ * @returns {boolean} 是否真的挂上了（没有持有者 / 已经换人 → false）
+ */
+export function armSessionAbandon(sessionId, token, graceMs = ABORT_GRACE_MS) {
+  const turn = turns.get(sessionId);
+  if (!turn) return false;
+  if (token !== undefined && turn.token !== token) return false;
+  // 同一个轮次只挂一个定时器（abort 与 socket close 可能前后脚到）
+  if (orphanTimers.has(sessionId)) return true;
+
+  const timer = setTimeout(() => {
+    orphanTimers.delete(sessionId);
+    const current = turns.get(sessionId);
+    if (!current || current.token !== turn.token) return;
+    current.abandoned = true;
+    turns.delete(sessionId);
+    activeSessionTurns.delete(sessionId);
+    // 这一轮再也不会走到自己的 finally 了：心跳 / SSE 得由调用方在这里收掉
+    try { current.onAbandon?.(); } catch {}
+  }, graceMs);
+  // 别让一个兜底定时器把进程钉在事件循环里（测试环境尤其明显）
+  timer.unref?.();
+  orphanTimers.set(sessionId, timer);
+  return true;
+}
+
+/**
  * 请求中止某个会话当前这一轮。
  *
  * 返回 hit=false 表示当前没有在跑的轮次（闸本来就是空的，前端可以立刻重发）。
@@ -126,17 +169,7 @@ export function requestSessionAbort(sessionId, options = {}) {
     turn.abort?.();
   } catch {}
 
-  const timer = setTimeout(() => {
-    orphanTimers.delete(sessionId);
-    const current = turns.get(sessionId);
-    if (!current || current.token !== turn.token) return;
-    current.abandoned = true;
-    turns.delete(sessionId);
-    activeSessionTurns.delete(sessionId);
-  }, graceMs);
-  // 别让一个兜底定时器把进程钉在事件循环里（测试环境尤其明显）
-  timer.unref?.();
-  orphanTimers.set(sessionId, timer);
+  armSessionAbandon(sessionId, turn.token, graceMs);
 
   return {
     hit: true,

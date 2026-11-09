@@ -113,11 +113,27 @@ export function createPeerApp({
     const sessionId = await getSession(sessionKey).catch(() => '');
     logger.info?.(`[peer] 收到提问 from=${from} len=${question.length}`);
 
+    // 提问方断开 = 这一轮没人要了：必须把本机那一轮一起掐掉。
+    //
+    // 场景（2026-11-09 实测）：本机工具层 ask_peer 有 150s 上限，到点只是"本地不等了"，
+    // 跨机器那一跳还在跑；对端把这一轮跑到底，会话闸一直占着 `in:<from>` 这个固定 key，
+    // 于是后续每一次提问都在 1~2 秒内回 SESSION_BUSY —— 而对端用户在界面上看不到
+    // 任何正在跑的对话（peer 会话不属于任何项目）。
+    //
+    // 靠"连接断开"这条语义即可，不必新增取消接口：fetch 被 abort → 连接关掉 →
+    // 这里 abort → 环回 /api/agent/chat 的 socket close → 那一轮中止并释放闸。
+    const controller = new AbortController();
+    const onCallerGone = () => {
+      if (res.writableEnded) return;
+      try { controller.abort(); } catch {}
+    };
+    res.once('close', onCallerGone);
+
     try {
       const runner = typeof ask === 'function'
         ? ask
         : (args) => askLocalAgent({ ...args, port: getLocalPort(), timeoutMs });
-      const result = await runner({ question, sessionId, from });
+      const result = await runner({ question, sessionId, from, signal: controller.signal });
       if (result?.sessionId && result.sessionId !== sessionId) {
         await setSession(sessionKey, result.sessionId).catch(() => {});
       }
@@ -129,7 +145,12 @@ export function createPeerApp({
       });
     } catch (err) {
       logger.warn?.(`[peer] 提问处理失败: ${err?.message || err}`);
-      res.status(502).json({ ok: false, error: String(err?.message || err) });
+      // 提问方已经走了：502 谁都收不到，写下去只会在日志里多一条噪声
+      if (!res.writableEnded && !res.destroyed) {
+        res.status(502).json({ ok: false, error: String(err?.message || err) });
+      }
+    } finally {
+      res.removeListener('close', onCallerGone);
     }
   });
 

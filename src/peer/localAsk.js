@@ -37,6 +37,10 @@ const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
  * @param {string} [opts.sessionId] 续聊用的会话 id；空 = 新会话
  * @param {string} [opts.locale] 'zh' | 'en'
  * @param {number} [opts.timeoutMs]
+ * @param {AbortSignal} [opts.signal] 上游取消（提问方断开 / 本机 peer 请求被中止）。
+ *        它必须打到环回那次 /api/agent/chat 上 —— 那个路由靠 socket close 才知道
+ *        "这一轮没人要了"，从而中止并释放会话闸。不接这条线，对端的轮次会继续跑到
+ *        底，期间任何新提问都回 SESSION_BUSY。
  * @param {(text:string)=>void} [opts.onDelta] 正文增量回调（可选，供日志/调试）
  * @returns {Promise<{answer:string, sessionId:string, ms:number}>}
  */
@@ -46,6 +50,7 @@ export async function askLocalAgent({
   sessionId = '',
   locale = 'zh',
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  signal,
   onDelta
 } = {}) {
   const text = String(question || '').trim();
@@ -56,6 +61,13 @@ export async function askLocalAgent({
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   timer.unref?.();
+  const onUpstreamAbort = () => { try { controller.abort(); } catch {} };
+  if (signal?.aborted) onUpstreamAbort();
+  else signal?.addEventListener?.('abort', onUpstreamAbort, { once: true });
+  const stop = () => {
+    clearTimeout(timer);
+    signal?.removeEventListener?.('abort', onUpstreamAbort);
+  };
 
   let res;
   try {
@@ -77,13 +89,16 @@ export async function askLocalAgent({
       signal: controller.signal
     });
   } catch (err) {
-    clearTimeout(timer);
-    if (err?.name === 'AbortError') throw new Error(`本机智能体超时（${Math.round(timeoutMs / 1000)}s）`);
+    stop();
+    if (err?.name === 'AbortError') {
+      if (signal?.aborted) throw new Error('提问方已断开，本轮已取消');
+      throw new Error(`本机智能体超时（${Math.round(timeoutMs / 1000)}s）`);
+    }
     throw new Error(`连不上本机 g ui（127.0.0.1:${port}）：${err?.message || err}`);
   }
 
   if (!res.ok || !res.body) {
-    clearTimeout(timer);
+    stop();
     let detail = '';
     try { detail = (await res.text()).slice(0, 500); } catch {}
     throw new Error(`本机智能体返回 ${res.status}${detail ? `：${detail}` : ''}`);
@@ -124,11 +139,14 @@ export async function askLocalAgent({
       }
     }
   } catch (err) {
-    clearTimeout(timer);
-    if (err?.name === 'AbortError') throw new Error(`本机智能体超时（${Math.round(timeoutMs / 1000)}s）`);
+    stop();
+    if (err?.name === 'AbortError') {
+      if (signal?.aborted) throw new Error('提问方已断开，本轮已取消');
+      throw new Error(`本机智能体超时（${Math.round(timeoutMs / 1000)}s）`);
+    }
     throw new Error(`读取本机智能体输出失败：${err?.message || err}`);
   }
-  clearTimeout(timer);
+  stop();
 
   if (failure) throw new Error(`本机智能体报错：${failure}`);
   if (!answer.trim()) {

@@ -41,6 +41,7 @@ import { resolveChatPromptSection, buildDispatchPolicySection } from './chatProm
 // （见 sessionGate.js —— 拆出去是为了让调度器复用同一份判定口径）。
 import {
   acquireSessionTurn,
+  armSessionAbandon,
   getSessionTurn,
   releaseSession,
   requestSessionAbort,
@@ -611,9 +612,19 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
     // 界面才能说清"上一轮还在收尾（已 12s）"而不是笼统一句"正在生成中"。
     let activeSessionKey = null;
     let acquiredTurn = null;
+    // 心跳在拿到会话之后才起，但 onAbandon 回调可能在那之前就挂到轮次上 ——
+    // 所以先声明成可变变量（null 时 clearInterval 是空操作）。
+    let heartbeat = null;
+    // 这一轮再也不会自己收尾时（宽限兜底强制放闸）的唯一善后：停心跳、关掉 SSE。
+    // 不关的话，一个卡死的轮次会留下一个每 5s 往死 socket 写一次的定时器。
+    const stopTurnStream = () => {
+      if (heartbeat) clearInterval(heartbeat);
+      try { res.end(); } catch {}
+    };
     if (sessionIdInput) {
       acquiredTurn = acquireSessionTurn(sessionIdInput, {
         abort: abortTurn,
+        onAbandon: stopTurnStream,
         stage: 'preparing',
       });
       if (!acquiredTurn) {
@@ -634,14 +645,22 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
     // 心跳只在真的开跑这一轮之后起（上面那条 busy 短路不需要它，也不该背一个 interval）。
     // 出口统一在 finally 里 clearInterval —— 中间那些 return res.end() 全在 try 里，
     // 漏一个就等于给进程留一个一直在写的定时器。
-    const heartbeat = setInterval(() => {
+    heartbeat = setInterval(() => {
       try { res.write(': keep-alive\n\n'); } catch {}
     }, SSE_HEARTBEAT_MS);
 
-    // 客户端断开
+    // 客户端断开（关页面 / 工具层放弃等待后本机中止了那一跳 / peer 对端断开）。
+    //
+    // 这里必须**同时**上宽限兜底：只 abort 不给自愈的话，一轮卡在不响应 signal 的
+    // await 上（读配置、子进程、取工作区快照）时 finally 永远不执行，闸就被永久
+    // 占住。peer 那条链路的 session key 是固定的（in:<from>），一次泄漏等于这台
+    // 机器之后所有 ask_peer 都回 SESSION_BUSY —— 用户在对端界面上却看不到任何
+    // 正在跑的对话（那条会话不属于任何项目）。
     if (req.socket) {
       req.socket.once('close', () => {
-        if (!finished) abortTurn();
+        if (finished) return;
+        abortTurn();
+        if (activeSessionKey) armSessionAbandon(activeSessionKey, acquiredTurn?.token);
       });
     }
 
@@ -739,6 +758,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
       if (!acquiredTurn) {
         acquiredTurn = acquireSessionTurn(session.sessionId, {
           abort: abortTurn,
+          onAbandon: stopTurnStream,
           stage: 'preparing',
         });
         if (!acquiredTurn) {
@@ -747,6 +767,11 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
           return res.end();
         }
         activeSessionKey = session.sessionId;
+        // 新建会话的闸到这一步才占上：如果客户端在这之前就断了（socket close 已经
+        // 触发过 abort），上面那段兜底还挂不上任何 key，这里补一次。
+        if (abortController.signal.aborted) {
+          armSessionAbandon(session.sessionId, acquiredTurn.token);
+        }
       }
 
       // ── 轮次内检查点落盘 ──────────────────────────────────────

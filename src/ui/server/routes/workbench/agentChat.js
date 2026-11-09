@@ -596,9 +596,19 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
       const argsPreview = summarizeArgs(name, args);
       send({ type: 'tool_call_start', toolCallId, name, argsPreview, arguments: rawArgs });
 
+      // 每个工具一份自己的中止通道：父信号（整轮被停止 / 断开）照旧生效，
+      // 额外多一条 —— 下面那个兜底一旦判定"它回不来了"，就把这一份 abort 掉，
+      // 让**真的还在跑的东西**收到取消（最要紧的是 ask_peer：跨机器那一跳必须
+      // 主动掐断，否则对端会继续跑完、会话闸一直占着，后续提问全撞 SESSION_BUSY）。
+      // 只用父信号的话，放弃等待只是"不等了"，对端的轮次毫不知情。
+      const toolAbort = new AbortController();
+      const abortTool = () => { try { toolAbort.abort(); } catch {} };
+      if (signal?.aborted) abortTool();
+      else signal?.addEventListener?.('abort', abortTool, { once: true });
+
       const toolCtx = {
         ...ctx,
-        signal,
+        signal: toolAbort.signal,
         // run_command 执行期间的增量输出 → 前端实时显示。
         // 只用于展示,不进会话历史 —— 历史里存的仍是带 exit code 的最终结果。
         onOutput: (chunk) => {
@@ -630,11 +640,17 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
           : await executeOne(name, args, toolCtx);
       } catch (err) {
         if (err?.code !== TOOL_STALLED) throw err;
+        // 放弃等待 ≠ 什么都不做：先把这一份的中止信号打出去，正在跑的请求 /
+        // 子进程才会真的收手（ask_peer 的跨机器那一跳靠它把对端那一轮掐掉）。
+        abortTool();
         // 放弃等待，但把话说清楚回喂给模型：它还能换个做法继续，用户也不必重开一轮。
         // 被放弃的那个 Promise 由它自己的超时收尾（execCommand 会 taskkill /T）。
         logger.warn(`[agentChat] 工具 ${name} 超过 ${Math.round(guardMs / 1000)}s 未返回，放弃等待并回喂错误`);
         output = `错误: ${err.message}（已放弃继续等待，可能卡在不响应中止的 await 上）。`
           + '请换一种做法、缩小范围或分步重试；原操作可能已在后台完成，先核实再重复执行。';
+      } finally {
+        // 父信号的监听不能挂着（一轮几十个工具调用，会一直累积）
+        signal?.removeEventListener?.('abort', abortTool);
       }
       // read_image 会返回 { text, images }。前端只吃文本(result 是字符串,
       // 直接把对象丢过去会渲染成 "[object Object]"),图片进会话历史里的

@@ -37,7 +37,7 @@ process.env.HOME = sandboxHome;
 await fs.mkdir(path.join(sandboxHome, '.zen-gitsync'), { recursive: true });
 
 const { createPeerApp } = await import('./server.js');
-const { listPeerStatus } = await import('./client.js');
+const { listPeerStatus, askPeer } = await import('./client.js');
 const { writeState } = await import('./store.js');
 const { PEERS_FILE } = await import('../paths.js');
 
@@ -140,5 +140,43 @@ test('listPeerStatus 的返回值里不许出现令牌明文', async () => {
     }
   } finally {
     await remote.close();
+  }
+});
+
+/** 轮询等待条件成立 */
+async function waitUntil(check, timeoutMs = 2000) {
+  const start = Date.now();
+  while (!check()) {
+    if (Date.now() - start > timeoutMs) throw new Error('等待超时');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
+// 回归（2026-11-09 跨机器 ask_peer 一直回 SESSION_BUSY）：
+//
+// 工具层 150s 放弃等待时，跨机器那一跳必须**真的断开**。以前 callPeer 只认自己的
+// 10 分钟超时：本地不等了，请求却还挂着 → 对端继续跑完那一轮 → 它的会话闸一直
+// 占着固定的 `in:<from>` key → 后续提问全部 SESSION_BUSY。
+test('askPeer：上游 abort 必须掐断这一跳（不能让它挂在对端）', async () => {
+  // 一个永不应答的 peer 服务，只记录连接何时被关上
+  let disconnected = false;
+  const server = http.createServer((req, res) => {
+    res.on('close', () => { disconnected = true; });
+    // 故意不回任何东西
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  const url = `http://127.0.0.1:${port}`;
+  const controller = new AbortController();
+  try {
+    const pending = askPeer({ id: REMOTE.id, url, token: REMOTE.token }, { id: 'me' }, '在吗', {
+      signal: controller.signal
+    });
+    setTimeout(() => controller.abort(), 50);
+    await assert.rejects(pending, /已取消/, '上游取消要说清是取消，不能误报成超时');
+    await waitUntil(() => disconnected, 3000);
+  } finally {
+    server.closeAllConnections?.();
+    await new Promise((resolve) => server.close(resolve));
   }
 });

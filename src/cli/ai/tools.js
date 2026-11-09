@@ -1342,7 +1342,10 @@ async function toolAskPeer(args, ctx) {
   }
 
   try {
-    const result = await ctx.askPeer(peer, question)
+    // 把本工具的取消信号带过去：这一轮被停止 / 工具层放弃等待时，跨机器那一跳
+    // 必须一起掐断，否则对端会继续把这一轮跑完、会话闸一直占着（后续提问全撞
+    // SESSION_BUSY，而对端界面上看不到有对话在跑）。
+    const result = await ctx.askPeer(peer, question, { signal: ctx.signal })
     const name = result?.peer?.name || peer || '对端'
     const answer = String(result?.answer || '').trim()
     return answer

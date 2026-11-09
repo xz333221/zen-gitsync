@@ -297,6 +297,106 @@ test('停止(客户端断开)后会话仍要落盘，并带上自动标题与已
   assert.match(output, /"type":"turn_done"/, '收尾要补一条 turn_done，前端靠它给这一轮定格用时');
 });
 
+// 回归（2026-11-09 跨机器 ask_peer 一直回 SESSION_BUSY）：
+//
+// 一轮卡在**不响应 abort** 的 await 上时（peer 提问那一跳、子进程、读配置…），
+// 客户端断开以前只调 abortController.abort()，finally 就永远不会执行 —— 会话闸
+// 被永久占住。peer 对端固定复用 `in:<from>` 这个会话，于是那台机器的后续每次
+// 提问都在 1~2 秒内回 SESSION_BUSY，而在对端界面上看不到任何正在跑的对话。
+//
+// 断言分两段：断开后闸必须在宽限期内自愈放掉；紧接着同一会话的下一次请求
+// 必须真的能跑（不能出现 SESSION_BUSY）。
+test('客户端断开后闸必须自愈：卡死的轮次不能让同一会话永久 SESSION_BUSY', async () => {
+  const { isSessionBusy } = await import('./sessionGate.js');
+  const activeCwd = path.resolve('active-project');
+  let chatHandler;
+  const app = {
+    get() {},
+    delete() {},
+    put() {},
+    post(route, handler) {
+      if (route === '/api/agent/chat') chatHandler = handler;
+    }
+  };
+  registerAgentRoutes({
+    app,
+    getCurrentProjectPath: () => activeCwd,
+    configManager: {
+      readRawConfigFile: async () => ({
+        models: [{ model: 'test', name: 'T', baseURL: 'https://example.invalid/v1', apiKey: 'k', isDefault: true }]
+      })
+    },
+    snapshotter: STUB_SNAPSHOTTER
+  });
+
+  // 第一轮：fetch 挂住不返回，而且**故意不接 signal** —— 模拟"卡在不响应中止的
+  // await 上"。这正是 finally 跑不到的形态（用例结束前再把它放掉，别留悬空 Promise）。
+  // 之后几轮：正常吐一句话收尾（第二轮必须真的能跑起来）。
+  let call = 0;
+  let releaseStuck = null;
+  const reply = text => new Response(new ReadableStream({
+    start(stream) {
+      const bytes = new TextEncoder();
+      stream.enqueue(bytes.encode(event({ choices: [{ delta: { content: text } }] })));
+      stream.enqueue(bytes.encode('data: [DONE]\n\n'));
+      stream.close();
+    }
+  }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    call += 1;
+    if (call === 1) {
+      return new Promise((resolve) => { releaseStuck = () => resolve(reply('迟到的回答')); });
+    }
+    return reply('第二轮的回答');
+  };
+
+  const framesOf = text => text.split('\n')
+    .filter(l => l.trim().startsWith('data:'))
+    .map(l => { try { return JSON.parse(l.trim().slice(5)) } catch { return null } })
+    .filter(Boolean);
+
+  const send = async (body) => {
+    let output = '';
+    let onClose;
+    const req = {
+      body: { cwd: activeCwd, ...body },
+      headers: {},
+      socket: { once(_evt, cb) { onClose = cb; } }
+    };
+    const res = {
+      set() {},
+      flushHeaders() {},
+      write(c) { output += c; },
+      end() {}
+    };
+    const route = chatHandler(req, res);
+    return { route, get output() { return output; }, close: () => onClose?.() };
+  };
+
+  try {
+    const first = await send({ userMessage: '跨机器问一句' });
+    await waitUntil(() => first.output.includes('"type":"meta"'));
+    const sessionId = framesOf(first.output).find(e => e.type === 'meta')?.sessionId;
+    assert.ok(sessionId, '第一轮应推过 meta（这说明闸已经占上了）');
+    assert.equal(isSessionBusy(sessionId), true);
+
+    // 客户端断开（工具层 150s 放弃等待 / 对端连接被掐断，都是这一条）
+    first.close();
+    await waitUntil(() => !isSessionBusy(sessionId), 6000);
+    assert.equal(isSessionBusy(sessionId), false, '断开后闸必须在宽限期内强制放掉，否则会话永久堵死');
+
+    // 紧接着同一会话再来一次：必须真的能跑，不能回 SESSION_BUSY
+    const second = await send({ userMessage: '再问一句', sessionId });
+    await second.route;
+    assert.ok(!second.output.includes('SESSION_BUSY'), `第二轮不该撞闸：${second.output.slice(0, 300)}`);
+    assert.match(second.output, /"type":"done"/, '第二轮应当真的跑完一轮');
+  } finally {
+    releaseStuck?.();  // 让那个卡死的第一轮真正退出，别把悬空 Promise 留给测试进程
+    globalThis.fetch = originalFetch;
+  }
+});
+
 // 每轮用时（session.turnTimings + SSE 的 turn_done）。
 // 这两份必须是**同一个数**：前端自己再算一遍，刷新后从会话文件读出来就会变，
 // 同一轮看着像有两个用时。序号按"第几条 user 消息"往后走，供前端对齐到对应气泡。
