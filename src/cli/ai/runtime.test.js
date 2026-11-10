@@ -37,6 +37,21 @@ test('SSE supports split events, final usage-only events and an unterminated fin
   assert.deepEqual(sent.stream_options, { include_usage: true })
   assert.equal(result.content, '你好')
   assert.equal(result.usage.totalTokens, 13)
+  assert.equal(result.finishReason, 'stop')
+})
+
+// finish_reason 不是"顺手多带一个字段"：空回复到底是撞了输出上限还是上游抖动，
+// 事后只能靠它分辨（2026-11-10 的 GUI 假卡死就分不出来，只能靠推理猜）。
+test('finish_reason=length 会原样带回来（空回复归因）', async () => {
+  const result = await streamChatOnce({ model, messages: [], maxRetries: 0, fetchFn: async () => response([
+    event({ choices: [{ delta: { reasoning_content: '想了很久' } }] }),
+    event({ choices: [{ delta: {}, finish_reason: 'length' }] }),
+    'data: [DONE]',
+  ]) })
+  assert.equal(result.content, '')
+  assert.equal(result.reasoning, '想了很久')
+  assert.deepEqual(result.toolCalls, [])
+  assert.equal(result.finishReason, 'length')
 })
 
 test('cumulative usage events replace snapshots instead of adding them', async () => {

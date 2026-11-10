@@ -561,9 +561,28 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
 
     // 无工具调用：本轮结束
     if (toolCalls.length === 0) {
-      session.messages.push(withReasoning({ role: 'assistant', content: content || null }));
-      send({ type: 'done', content: content || '' });
-      return { aborted: false };
+      // 空回复不是"说完了"。2026-11-10 21:00 真栽过一次：上游只回了 reasoning_content，
+      // 正文和 tool_calls 都是空的，这里照样落一条 content:null 的 assistant + 空 done ——
+      // 前端把这轮当正常收尾，计划卡停在最后一个"进行中"的步骤上，界面看起来像卡死，
+      // 其实请求早返回了 200（同一会话之后 25 分钟没有任何事件）。
+      // CLI 侧一直有这条兜底（turn.js: `if (!content?.trim()) throw ... emptyResponse`），
+      // Web 这条路径漏了。这里补上并说清楚原因：'length' 是撞输出上限，其余多半是上游抖动。
+      const text = String(content || '').trim()
+      if (!text) {
+        const truncated = result.finishReason === 'length'
+        logger.warn(`[agentChat] 模型返回空回复（finish_reason=${result.finishReason || '未知'}, `
+          + `reasoning=${String(result.reasoning || '').length} 字），未落入历史，等用户重试`)
+        send({
+          type: 'error',
+          error: truncated
+            ? '模型输出被截断（达到输出长度上限），这一轮没有产出正文。点「重试」可续跑本轮，或把任务拆小、换个模型再发。'
+            : '模型返回了空回复（只有思考过程，没有正文也没有工具调用）。点「重试」可续跑本轮，或换个模型再发。'
+        })
+        return { aborted: false }
+      }
+      session.messages.push(withReasoning({ role: 'assistant', content: text }))
+      send({ type: 'done', content: text })
+      return { aborted: false }
     }
 
     // 有工具调用：assistant(带 tool_calls)入历史

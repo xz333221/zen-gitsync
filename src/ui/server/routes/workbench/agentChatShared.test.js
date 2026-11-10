@@ -582,3 +582,40 @@ test('后台命令：启动结果带 background 状态、输出实时推送、�
   const killed = events.find(e => e.type === 'tool_result' && e.toolCallId === 'bg_kill')
   assert.equal(killed.endsBackground, bgId, '停止后台任务后要告诉前端是哪一张卡收尾了')
 })
+
+// ── 空回复不能静默收尾（2026-11-10）────────────────────────────
+//
+// 那天 21:00 的一轮：上游只回了 reasoning_content，正文空、tool_calls 空。
+// agentChat 照样落一条 content:null 的 assistant 并发出空 done —— 前端把这轮当正常说完，
+// 计划卡停在最后一个"进行中"的步骤上转了 25 分钟，用户只能来问"是卡住了还是完成了"。
+// CLI 侧一直有 `if (!content?.trim()) throw emptyResponse`，这条路径漏了兜底。
+const reasoningOnly = (finishReason = 'stop') => sse([
+  event({ choices: [{ delta: { reasoning_content: '先看看这台机器上跑着什么。' } }] }),
+  event({ choices: [{ delta: {}, finish_reason: finishReason }] }),
+  'data: [DONE]\n\n',
+])
+
+test('模型只回思考、正文为空时必须报错，且不发空 done', async () => {
+  const session = newSession('ag-sandbox-empty-reply', withSystem())
+
+  const { events } = await runWeb({ session, userMessage: '继续', respond: () => reasoningOnly() })
+
+  const err = events.find(e => e.type === 'error')
+  assert.ok(err, '必须发 error 事件，否则界面会一直停在"进行中"')
+  assert.match(err.error, /空回复/)
+  assert.equal(events.filter(e => e.type === 'done').length, 0, '不能拿空 done 当正常收尾')
+  const tail = session.messages[session.messages.length - 1]
+  assert.equal(tail.role, 'user', '空 assistant 不该入历史 —— 重试要能原样重发这一条')
+  assert.ok(!session.messages.some(m => m.role === 'assistant' && !m.tool_calls?.length && !String(m.content || '').trim()),
+    '历史里不能留 content 为空的 assistant')
+})
+
+test('finish_reason=length 的空回复要说"被截断"，别让用户以为是模型罢工', async () => {
+  const session = newSession('ag-sandbox-empty-reply-length', withSystem())
+
+  const { events } = await runWeb({ session, userMessage: '继续', respond: () => reasoningOnly('length') })
+
+  const err = events.find(e => e.type === 'error')
+  assert.ok(err, '必须发 error 事件')
+  assert.match(err.error, /截断/)
+})

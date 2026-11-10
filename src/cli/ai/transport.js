@@ -122,7 +122,7 @@ export async function streamChatOnce({ model, messages, signal, onToken = () => 
   const body = { model: model.model, messages, tools, temperature: 0.3, stream: true }
   if (!withoutStreamUsage.has(providerKey)) body.stream_options = { include_usage: true }
   const abortedByUser = () => Boolean(signal?.aborted)
-  const emptyResult = () => ({ content: '', reasoning: '', toolCalls: [], usage: null, aborted: true })
+  const emptyResult = () => ({ content: '', reasoning: '', toolCalls: [], usage: null, aborted: true, finishReason: '' })
   const stallError = () => new Error(
     `模型响应超时：连续 ${Math.round(idleTimeoutMs / 1000)} 秒没有收到任何数据，请重试或切换模型。`)
 
@@ -140,7 +140,7 @@ export async function streamChatOnce({ model, messages, signal, onToken = () => 
     const onAbort = () => controller.abort()
     if (signal?.aborted) controller.abort()
     else signal?.addEventListener('abort', onAbort)
-    let content = '', reasoning = '', usage = null, finished = false
+    let content = '', reasoning = '', usage = null, finished = false, finishReason = ''
     const toolCalls = []
 
     const consumeLine = line => {
@@ -156,7 +156,11 @@ export async function streamChatOnce({ model, messages, signal, onToken = () => 
       // Events report snapshots, so replace fields instead of summing snapshots.
       const nextUsage = normalizeUsage(evt.usage)
       if (nextUsage) usage = Object.fromEntries(Object.entries(nextUsage).map(([key, value]) => [key, value ?? usage?.[key] ?? null]))
-      if (evt.choices?.[0]?.finish_reason) finished = true
+      // finish_reason 记下来是给"空回复"诊断用的：'length' 说明输出被上限截断，
+      // 'stop' 才是模型自己说完的。2026-11-10 有一次只回了 reasoning_content、
+      // 正文空、没有工具调用，当时只留了个 finished=true，事后完全分不清是哪种。
+      const reason = evt.choices?.[0]?.finish_reason
+      if (reason) { finished = true; if (!finishReason) finishReason = String(reason) }
       const delta = evt.choices?.[0]?.delta || {}
       const thinking = delta.reasoning_content || delta.reasoning || delta.reasoning_text || ''
       if (thinking) { reasoning += thinking; onToken({ thinking }) }
@@ -210,7 +214,7 @@ export async function streamChatOnce({ model, messages, signal, onToken = () => 
       if (buf.trim()) consumeLine(buf)
       if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError')
       if (!finished) throw new Error('模型响应意外中断，请重试；未执行不完整的工具调用。')
-      return { content, reasoning, toolCalls: toolCalls.filter(Boolean), usage, aborted: false }
+      return { content, reasoning, toolCalls: toolCalls.filter(Boolean), usage, aborted: false, finishReason }
     } catch (err) {
       if (controller.signal.aborted && !timedOut) {
         return { content, reasoning, toolCalls: [], usage, aborted: true }
