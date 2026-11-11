@@ -78,7 +78,18 @@ files.forEach(f => console.log('  - ' + relative(ROOT, f).split(sep).join('/')))
 
 if (listOnly) process.exit(0)
 
-const args = ['--test', ...(watch ? ['--watch'] : []), ...files]
+// node --test 默认并发 = CPU 核数 - 1。这台机器 32 核 → 一次拉起 31 个测试子进程，
+// 每个都要把整张模块图加载一遍、有的还要 spawn 真子进程；实测在高并发下会有个别
+// 文件的**用例全跑完但进程一直不退出**，父进程永远等不到它，npm test 就挂在那儿
+// （2026-11-11：卡在 agentRoutes.test.js，单跑 3.5s 通过、全量挂 300s+）。
+// 压到 4 路后全量 1997/1997 通过、约 91s 正常退出。想临时调大用 ZEN_TEST_CONCURRENCY。
+const CONCURRENCY = String(Math.max(1, Number(process.env.ZEN_TEST_CONCURRENCY) || 4))
+const args = [
+  '--test',
+  `--test-concurrency=${CONCURRENCY}`,
+  ...(watch ? ['--watch'] : []),
+  ...files,
+]
 const child = spawn(process.execPath, args, { stdio: 'inherit' })
 child.on('exit', code => {
   // node --test 退出码 0 = 全过,1 = 有失败。watch 模式被 Ctrl-C 时为 130。
