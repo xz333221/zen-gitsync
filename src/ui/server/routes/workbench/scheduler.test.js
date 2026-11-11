@@ -167,6 +167,13 @@ test('错过补偿:onMissed=skip 只标记不跑;onMissed=run 补跑一次', asy
   try {
     await scheduler.tick();
     await waitRun(runTask.id);
+    // 两个任务的落库是并行分支：run 型写完 lastRun 不代表 skip 型也写完了。
+    // 并发排布一变就会读到 lastRun=null（2026-11-11 全量套件实测），这里按
+    // 本文件既有的 waitUntil 口径等它自己落库，而不是假定顺序。
+    await waitUntil(async () => {
+      const t = await getTask(skipTask.id);
+      return !!(t && t.lastRun);
+    });
 
     const skipped = await getTask(skipTask.id);
     assert.equal(skipped.lastRun.status, 'missed');

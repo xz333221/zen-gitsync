@@ -96,7 +96,10 @@ async function cmdStatus() {
   console.log(`  端口   ${self.host}:${self.port}  ${self.enabled ? chalk.green('已开启') : chalk.gray('未开启（g peer on 开启）')}`);
   console.log(`  令牌   ${self.enabled ? self.token : maskToken(self.token)}`);
 
-  const peers = await listPeers();
+  // 探活要带对端令牌：listPeers() 是**脱敏视图**（不含 token），拿它去请求会
+  // 让 Bearer 为空 → 对端一律 401 → 在线的对端被误判成「离线·令牌无效」。
+  // 与 src/peer/client.js 的 listPeerStatus 保持同一口径：内部读数据用 readState()。
+  const { peers } = await readState();
   console.log('');
   console.log(chalk.bold(`对端（${peers.length}）`));
   if (!peers.length) {
