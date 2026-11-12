@@ -35,6 +35,8 @@ import codebuddyAvatar from '@/assets/icons/svg/codebuddy.svg?inline'
 import piAvatar from '@/assets/icons/svg/pi.svg?inline'
 // 码道官方产品标（2026-10-25 随执行器接入一起补，?inline 同上）
 import codeartsAvatar from '@/assets/icons/svg/codearts.svg?inline'
+// Qoder 官方应用图标（qoder.com/favIcon.svg，2026-11-12 随执行器接入一起补）
+import qoderAvatar from '@/assets/icons/svg/qoder.svg?inline'
 
 /** Claude Code 品牌头像（内联 data URL）。WorkbenchView 任务对话与 JobLogDetails 共用。 */
 export const CLAUDE_AVATAR = resolveAvatar('claude')
@@ -48,6 +50,8 @@ export const CODEBUDDY_AVATAR = codebuddyAvatar
 export const PI_AVATAR = piAvatar
 /** CodeArts 码道品牌头像（自家 SVG 资源，库内置头像里没有它）。 */
 export const CODEARTS_AVATAR = codeartsAvatar
+/** Qoder 品牌头像（自家 SVG 资源，库内置头像里没有它）。 */
+export const QODER_AVATAR = qoderAvatar
 
 /** 按执行器 id 取头像；未知/缺省（老 job 没有 agent 字段）回落 Claude（与标签口径一致）。 */
 export function avatarForExecutor(agent?: string | null): string {
@@ -56,5 +60,6 @@ export function avatarForExecutor(agent?: string | null): string {
   if (agent === 'codebuddy') return CODEBUDDY_AVATAR
   if (agent === 'pi') return PI_AVATAR
   if (agent === 'codearts') return CODEARTS_AVATAR
+  if (agent === 'qoder') return QODER_AVATAR
   return CLAUDE_AVATAR
 }

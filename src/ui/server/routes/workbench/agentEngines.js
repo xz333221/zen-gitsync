@@ -59,6 +59,7 @@ export const ENGINE_LABELS = {
   codebuddy: 'CodeBuddy Code',
   pi: 'Pi Agent',
   codearts: 'CodeArts 码道',
+  qoder: 'Qoder',
 };
 
 export function isAgentEngine(value) {

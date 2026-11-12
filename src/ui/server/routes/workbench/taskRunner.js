@@ -243,7 +243,7 @@ function attachPromptStdin(child, promptText, resolve, reject) {
 // 历史上为此吵过（见 agentEngines.js 文件头）：config.js 那份是"配置/归一化"的
 // 真相源，本文件这份服务"运行时分发"。两边不一致的失效方式是 normalize 放行、
 // 这里查无此人 → 静默回落 claude。加第六家时两处都要改，taskRunner.*.test.js 有钉子。
-export const TASK_EXECUTORS = ['claude', 'opencode', 'codex', 'codebuddy', 'pi', 'codearts'];
+export const TASK_EXECUTORS = ['claude', 'opencode', 'codex', 'codebuddy', 'pi', 'codearts', 'qoder'];
 
 /** 执行器 → launcher。runSingleSubtask 与 runExternalTurn 共用这一张表。 */
 export const EXECUTOR_LAUNCHERS = {
@@ -253,6 +253,7 @@ export const EXECUTOR_LAUNCHERS = {
   codebuddy: launchCodebuddyPrint,
   pi: launchPiPrint,
   codearts: launchCodeArtsRun,
+  qoder: launchQoderPrint,
 };
 
 /** 执行器 → NDJSON 事件处理器工厂。 */
@@ -263,6 +264,7 @@ export const EXECUTOR_HANDLERS = {
   codebuddy: createCodebuddyEventHandler,
   pi: createPiEventHandler,
   codearts: createCodeArtsEventHandler,
+  qoder: createQoderEventHandler,
 };
 
 /** 非法/缺省的 executor 一律回落 'claude'（历史行为的兼容兜底）。
@@ -1582,6 +1584,206 @@ export function createCodeArtsEventHandler(job, appendOutput, appendThinking, to
   };
 }
 
+// ── qoder 执行器（2026-11-12 加入） ────────────────────────────────────
+// 阿里 Qoder CLI。npm 包 @qoder-ai/qodercli 提供两个 bin：
+//   qoder     → 分发器：装了 Qoder IDE 就开 IDE，否则进 TUI（**不能用于无头任务**）
+//   qodercli  → 纯 CLI，无头执行只走这个
+//
+// 事件流是 Anthropic（Claude Code）式 stream-json。2026-11-12 静态核对 1.1.87：
+//   system/init      { session_id, model, tools, permissionMode, … }
+//   assistant        { message:{ content:[{type:'text'|'thinking'|'tool_use'}] } }
+//   user             { message:{ content:[{type:'tool_result', tool_use_id}] } }
+//   result           { is_error, total_cost_usd, total_credits, permission_denials, … }
+// 所以 handler 与 claude 那份同构，只是多了 result/error 的失败分支（未登录时
+// `-p` 会 exit 1 且把错误写 stderr，但协议层的会话/鉴权失败仍可能 exit 0）。
+//
+// 三个必须处理的坑：
+//   1. **headless 默认 ask=deny**（官方文档原文）：不显式传 `--permission-mode`
+//      `bypass_permissions` 时，所有需要批准的工具调用都被自动拒绝。注意是
+//      snake_case，与 claude 的 `bypassPermissions` 不同。
+//   2. `security.folderTrust.enabled` 默认 true —— 不信任的 cwd 直接拒绝启动。
+//      这里用 `--add-dir <cwd>` 给**本次会话**加信任，不动用户全局配置
+//      （codearts 那次是直接关掉 folderTrust，Qoder 先走温和路线）。
+//   3. `general.enableAutoUpdate` 默认 true —— 用 `--settings` 内联关掉本轮自动更新，
+//      不写用户 settings.json：执行器跑到一半换二进制是最坏情况。
+
+/**
+ * 解析 qodercli 可执行文件。
+ *
+ * Windows 上优先原生 exe（官方安装脚本产物），其次 npm 全局 shim：
+ * Node 23+ 拒绝 spawn .cmd，shim 实际是 `node .../bundle/qodercli.js`，
+ * 与 claude 的 cli.js 解析同一条套路。**不解析 `qoder`** —— 那个是分发器，
+ * 装了 IDE 时会去开图形界面，不适合无头任务。
+ *
+ * PATH 兜底是必须的：官方安装脚本只改用户 PATH，已经在跑的 g ui 进程读不到
+ * （codearts 踩过同款，2026-10-25）。
+ * （导出仅为回归测试可见：taskRunner.qoder.test.js）
+ */
+export function resolveQoderExe() {
+  if (process.platform !== 'win32') {
+    return { exe: 'qodercli', prefixArgs: [] };
+  }
+  const home = process.env.USERPROFILE || os.homedir();
+  const candidates = [
+    path.join(home, '.qoder', 'bin', 'qodercli.exe'),
+    path.join(home, '.qoder', 'bin', 'qodercli.cmd'),
+  ];
+  try {
+    const regPath = execFileSync('reg', ['query', 'HKCU\\Environment', '/v', 'Path'], {
+      encoding: 'utf8',
+      windowsHide: true,
+    });
+    const line = regPath.split(/\r?\n/).find(row => /\sPath\s+REG_(?:EXPAND_)?SZ\s+/i.test(row));
+    if (line) {
+      const userPath = line.replace(/^.*?REG_(?:EXPAND_)?SZ\s+/i, '').trim();
+      for (const dir of userPath.split(';').map(v => v.trim()).filter(Boolean)) {
+        candidates.push(path.join(dir, 'qodercli.exe'));
+        candidates.push(path.join(dir, 'qodercli.cmd'));
+      }
+    }
+  } catch { /* 注册表读不到就只试已知位置 */ }
+  for (const candidate of candidates) {
+    try {
+      if (fs.statSync(candidate).isFile()) {
+        if (/\.exe$/i.test(candidate)) return { exe: candidate, prefixArgs: [] };
+        // .cmd 不能直接 spawn，交给下面的 npm 解析分支处理
+      }
+    } catch { /* 不存在 */ }
+  }
+  try {
+    const shim = execFileSync('where', ['qodercli'], { encoding: 'utf8', windowsHide: true })
+      .split(/\r?\n/).map(s => s.trim()).find(s => /\.cmd$/i.test(s));
+    if (shim) {
+      const cliJs = path.join(path.dirname(shim), 'node_modules', '@qoder-ai', 'qodercli', 'bundle', 'qodercli.js');
+      if (fs.existsSync(cliJs)) return { exe: process.execPath, prefixArgs: [cliJs] };
+    }
+  } catch { /* fallback */ }
+  return { exe: 'qodercli.exe', prefixArgs: [] };
+}
+
+/** qodercli 的 spawn argv（纯函数，理由同另几家的 buildXxxArgs）。 */
+export function buildQoderArgs(cwd, resumeSessionId) {
+  const args = [];
+  // --resume 必须放在 -p 前面（与 claude 同一条 CLI 约定）
+  if (resumeSessionId) {
+    args.push('--resume', String(resumeSessionId));
+  }
+  args.push(
+    // -p 不带 query：prompt 从 stdin 读，避开 Windows 命令行 32K 上限
+    '-p',
+    '--output-format', 'stream-json',
+    '--permission-mode', 'bypass_permissions',
+    // 本次会话信任 cwd（见上方坑 2）
+    '--add-dir', cwd,
+    // 本次会话关自动更新（见上方坑 3）
+    '--settings', '{"general":{"enableAutoUpdate":false}}'
+  );
+  return args;
+}
+
+/** qoder 子进程环境：只统一 locale，其余继承（凭据在 ~/.qoder 或 QODER_PERSONAL_ACCESS_TOKEN）。 */
+export function buildQoderEnv() {
+  return { ...process.env, LANG: 'zh_CN.UTF-8' };
+}
+
+/** spawn qodercli 跑一个 prompt（非交互），返回 { pid, child }。 */
+export async function launchQoderPrint(cwd, promptText, resumeSessionId) {
+  const args = buildQoderArgs(cwd, resumeSessionId);
+  const { exe, prefixArgs } = resolveQoderExe();
+  const spawnArgs = [...prefixArgs, ...args];
+  return new Promise((resolve, reject) => {
+    let child;
+    if (process.platform === 'win32') {
+      child = spawn(exe, spawnArgs, {
+        cwd,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: true,
+        env: buildQoderEnv()
+      });
+    } else {
+      child = spawn(exe, spawnArgs, {
+        cwd,
+        detached: true,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: buildQoderEnv()
+      });
+    }
+    attachPromptStdin(child, promptText, resolve, reject);
+  });
+}
+
+/**
+ * qoder stream-json 事件处理器。
+ *
+ * 与 claude 那份同构（协议族相同），但**另写一份**而不是转调：Qoder 是独立发行版，
+ * 协议随时可能被它改（它已经多出 qodercli_version / total_credits 等字段），
+ * 在这里修不会顺带改坏 claude —— 本仓库为"同一份口径两处实现"吃过亏，但那次是
+ * **两份实现悄悄分叉**；这里是"同族不同厂商"，刻意分文件反而更安全。
+ *
+ * 额外处理 claude 那份没有的两种失败形态（unified 到 job.agentError）：
+ *   { type:'error', error:'…' }                  协议层报错（会话找不到 / 鉴权失败）
+ *   { type:'result', is_error:true, errors:[…] } 本轮失败但进程可能 exit 0
+ * （导出仅为回归测试可见：taskRunner.qoder.test.js）
+ */
+export function createQoderEventHandler(job, appendOutput, appendThinking, toolCalls) {
+  const tracker = toolCalls || createToolCallTracker(job);
+  return (evt) => {
+    if (!evt || typeof evt !== 'object') return;
+    if (evt.type === 'system' && evt.subtype === 'init' && typeof evt.session_id === 'string') {
+      // 只认第一条：Qoder 支持子智能体（agents/skills），若子会话的 init 混进同一条
+      // stdout，拿它的 id 去 --resume 会续到错误会话。主会话 init 必定最先到。
+      if (!job.claudeSessionId) {
+        job.claudeSessionId = evt.session_id;
+        publish('job:update', job);
+      }
+      return;
+    }
+    if (evt.type === 'error') {
+      const msg = typeof evt.error === 'string'
+        ? evt.error
+        : (typeof evt.error?.message === 'string' ? evt.error.message : '');
+      if (msg && !job.agentError) job.agentError = msg;
+      return;
+    }
+    if (evt.type === 'result' && evt.is_error) {
+      const detail = Array.isArray(evt.errors) ? evt.errors.filter(Boolean).join('; ') : '';
+      const msg = detail || (typeof evt.result === 'string' ? evt.result : '')
+        || evt.subtype || 'Qoder 执行出错';
+      if (!job.agentError) job.agentError = msg;
+      return;
+    }
+    if (evt.type === 'user') {
+      const ublocks = evt.message?.content;
+      if (Array.isArray(ublocks)) {
+        for (const b of ublocks) {
+          if (b && b.type === 'tool_result' && b.tool_use_id) {
+            const text = extractToolText(b.content);
+            tracker.record({
+              id: b.tool_use_id,
+              status: b.is_error ? 'error' : 'done',
+              output: text,
+              error: b.is_error ? (text || '工具执行失败') : ''
+            });
+          }
+        }
+      }
+      return;
+    }
+    if (evt.type !== 'assistant') return;
+    const blocks = evt.message?.content;
+    if (!Array.isArray(blocks)) return;
+    for (const b of blocks) {
+      if (b.type === 'text' && typeof b.text === 'string') {
+        appendOutput(b.text);
+      } else if (b.type === 'thinking' && typeof b.thinking === 'string') {
+        appendThinking(b.thinking);
+      } else if (b.type === 'tool_use') {
+        tracker.record({ id: b.id, name: b.name, input: b.input, status: 'running' });
+      }
+    }
+  };
+}
+
 /**
  * codex `exec --json` 事件处理器。
  *
@@ -1916,6 +2118,10 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
     job.output = '';
     job.thinking = '';
     const lineBuf = { stdout: '', stderr: '' };
+    // 最后一条 stderr：进程非零退出且协议层没报错时，拿它当失败原因。
+    // Qoder 未登录就是这种形态（stderr 一行 NonInteractiveAuthRequiredError、exit 1），
+    // 不接住就会被下面的 done 分支记成"已完成"。
+    let lastStderrLine = '';
 
     // 追加正文（尾部截断保底 + 增量推送给前端）
     const appendOutput = (text) => {
@@ -1957,6 +2163,7 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
       if (!trimmed) return;
       if (channel === 'stderr' || !trimmed.startsWith('{')) {
         // 非 JSON 行：原样塞进 output（兼容老版本 claude / CLI 的错误信息）
+        if (channel === 'stderr') lastStderrLine = trimmed;
         appendOutput(trimmed + '\n');
         return;
       }
@@ -2005,6 +2212,13 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
       job.status = 'error';
       job.error = job.agentError;
       appendOutput(`\n> [${executor}] ${job.agentError}\n`);
+    } else if (typeof child.exitCode === 'number' && child.exitCode !== 0) {
+      // 进程非零退出、但协议层一句话都没说（Qoder 未登录就是这种：stderr 一行
+      // NonInteractiveAuthRequiredError、exit 1）。不接住会被记成"已完成"。
+      job.exitCode = child.exitCode;
+      job.status = 'error';
+      job.error = lastStderrLine || `执行器退出码 ${child.exitCode}`;
+      appendOutput(`\n> [${executor}] ${job.error}\n`);
     } else {
       job.exitCode = 0;
       job.status = 'done';

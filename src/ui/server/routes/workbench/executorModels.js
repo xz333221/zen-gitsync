@@ -459,6 +459,39 @@ function detectCodeArts(json) {
   return null;
 }
 
+/**
+ * qoder：~/.qoder/settings.json 的 `model.name`（官方 settings reference 的字段）。
+ *
+ * 两处口径：
+ *   - 配置目录可被 QODER_CONFIG_DIR 覆盖（官方环境变量文档），设了要按它读，
+ *     否则会把"配了模型"报成"没配"。
+ *   - `QODER_MODEL` 环境变量优先于文件（官方文档："Specifies the model to use"），
+ *     用户在执行器进程外设了它时，文件里的旧值不是真值。
+ *
+ * Qoder 的 TUI 选模型会写回 settings.json，不存在 opencode 那种"选择躺在 state 里"
+ * 的分裂，所以读一处就够；没配如实报 null。
+ */
+function qoderConfigFile(home, env = process.env) {
+  const override = typeof env.QODER_CONFIG_DIR === 'string' ? env.QODER_CONFIG_DIR.trim() : '';
+  const dir = override ? path.resolve(home, override) : path.join(home, '.qoder');
+  return path.join(dir, 'settings.json');
+}
+
+function detectQoder(json, env = process.env) {
+  const fromEnv = typeof env.QODER_MODEL === 'string' ? env.QODER_MODEL.trim() : '';
+  if (fromEnv) {
+    return { model: fromEnv, display: null, provider: null, source: 'config' };
+  }
+  const raw = json && json.model;
+  const name = typeof raw === 'string'
+    ? raw.trim()
+    : (raw && typeof raw.name === 'string' ? raw.name.trim() : '');
+  if (name) {
+    return { model: name, display: null, provider: null, source: 'config' };
+  }
+  return null;
+}
+
 function escapeRe(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -468,7 +501,7 @@ function escapeRe(s) {
  *
  * @param {object} [opts]
  * @param {string} [opts.homeDir] 测试沙箱用（默认 os.homedir()）
- * @returns {Promise<{ claude: object|null, codex: object|null, opencode: object|null, codebuddy: object|null, pi: object|null, codearts: object|null }>}
+ * @returns {Promise<{ claude: object|null, codex: object|null, opencode: object|null, codebuddy: object|null, pi: object|null, codearts: object|null, qoder: object|null }>}
  *          每项 `{ model, display, provider, source }`；该执行器没配模型时为 null。
  *          source = 'config'（配置文件里写死的）| 'state'（CLI 自己记的"上次用的"）。
  *
@@ -482,7 +515,7 @@ export async function detectExecutorModels({ homeDir } = {}) {
   // 码道的 OPENCODE_CONFIG / OPENCODE_CONFIG_FILE（见 taskRunner.buildCodeArtsEnv）
   const codeArtsDir = path.join(home, '.codeartsdoer');
 
-  const [claudeRaw, codexRaw, opencodeJsonRaw, opencodeJsoncRaw, opencodeStateRaw, codebuddyRaw, piRaw, piState, codeArtsJsonRaw, codeArtsJsoncRaw] = await Promise.all([
+  const [claudeRaw, codexRaw, opencodeJsonRaw, opencodeJsoncRaw, opencodeStateRaw, codebuddyRaw, piRaw, piState, codeArtsJsonRaw, codeArtsJsoncRaw, qoderRaw] = await Promise.all([
     readTextOrNull(path.join(home, '.claude', 'settings.json')),
     readTextOrNull(path.join(home, '.codex', 'config.toml')),
     // .json 优先（标准名），.jsonc 兜底。opencode 两个都认。
@@ -499,6 +532,8 @@ export async function detectExecutorModels({ homeDir } = {}) {
     // 码道 CLI：文件名由 codearts.cmd 的 OPENCODE_CONFIG_FILE 指定（json 优先、jsonc 兜底）
     readTextOrNull(path.join(codeArtsDir, 'codearts_cli.json')),
     readTextOrNull(path.join(codeArtsDir, 'codearts_cli.jsonc')),
+    // Qoder CLI（配置目录可被 QODER_CONFIG_DIR 覆盖，见 detectQoder）
+    readTextOrNull(qoderConfigFile(home)),
   ]);
 
   const pickJson = (raw) => {
@@ -514,6 +549,7 @@ export async function detectExecutorModels({ homeDir } = {}) {
   const codebuddyCfg = pickJson(codebuddyRaw);
   const piCfg = pickJson(piRaw);
   const codeArtsCfg = pickJson(codeArtsJsonRaw) || pickJson(codeArtsJsoncRaw);
+  const qoderCfg = pickJson(qoderRaw);
 
   return {
     claude: claudeCfg && typeof claudeCfg.env === 'object' && claudeCfg.env
@@ -524,6 +560,7 @@ export async function detectExecutorModels({ homeDir } = {}) {
     codebuddy: detectCodebuddy(codebuddyCfg),
     pi: detectPi(piCfg, piState),
     codearts: detectCodeArts(codeArtsCfg),
+    qoder: detectQoder(qoderCfg),
   };
 }
 

@@ -319,6 +319,7 @@ const TOOL_ACTIONS: Record<SimpleToolId, () => void | Promise<void>> = {
   codebuddy: onOpenInCodebuddy,
   pi: onOpenInPi,
   codearts: onOpenInCodeArts,
+  qoder: onOpenInQoder,
   kimi: onOpenInKimi,
   zcode: onOpenInZcode,
   dsh: onOpenInDsh,
@@ -573,6 +574,16 @@ async function onOpenInCodeArts() {
   toastOpenResult(
     await openPathWithTool('codearts', currentDirectory.value),
     '@67CE7:已用 CodeArts 码道打开目录',
+    '@67CE7:打开失败: ',
+  );
+}
+
+// 用 Qoder 打开当前目录（装了 Qoder IDE 走 IDE，否则进 CLI TUI；首开要登录）
+async function onOpenInQoder() {
+  if (warnIfEmptyDirectory()) return;
+  toastOpenResult(
+    await openPathWithTool('qoder', currentDirectory.value),
+    '@67CE7:已用 Qoder 打开目录',
     '@67CE7:打开失败: ',
   );
 }

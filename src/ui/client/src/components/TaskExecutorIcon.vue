@@ -23,6 +23,9 @@ import piIcon from '@/assets/icons/svg/pi.svg?inline'
 // 码道官方产品标（2026-10-25 随执行器接入一起补）。13.5KB 超 vite 默认内联阈值，
 // 与 codebuddy / pi 同一条消费路径：?inline 强制变 data URL，零网络请求。
 import codeartsIcon from '@/assets/icons/svg/codearts.svg?inline'
+// Qoder 官方应用图标（qoder.com/favIcon.svg，2026-11-12 随执行器接入一起补）。
+// 23KB 超内联阈值，与另两家同一条消费路径：?inline 强制 data URL。
+import qoderIcon from '@/assets/icons/svg/qoder.svg?inline'
 import type { TaskExecutorId } from '@/utils/taskExecutor'
 
 const props = defineProps<{ executor: TaskExecutorId }>()
@@ -34,6 +37,7 @@ const ICONS: Record<TaskExecutorId, string> = {
   codebuddy: codebuddyIcon,
   pi: piIcon,
   codearts: codeartsIcon,
+  qoder: qoderIcon,
 }
 
 const src = computed(() => ICONS[props.executor])

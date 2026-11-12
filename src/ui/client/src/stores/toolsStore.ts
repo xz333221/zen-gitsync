@@ -1,4 +1,4 @@
-// 本地工具检测 store — vscode / claude / codex / opencode / codebuddy / pi / codearts 是否安装
+// 本地工具检测 store — vscode / claude / codex / opencode / codebuddy / pi / codearts / qoder 是否安装
 // 调用 /api/check-tools,启动时一次 + 每 10 分钟刷新
 // 组件始终显示工具按钮；available 决定点击后是直接打开还是展示安装引导
 //
@@ -19,7 +19,7 @@ import {
 
 const POLL_INTERVAL_MS = 10 * 60 * 1000 // 10 分钟
 
-export type ToolId = 'vscode' | 'claude' | 'codex' | 'opencode' | 'codebuddy' | 'pi' | 'codearts' | 'kimi' | 'zcode' | 'dsh'
+export type ToolId = 'vscode' | 'claude' | 'codex' | 'opencode' | 'codebuddy' | 'pi' | 'codearts' | 'qoder' | 'kimi' | 'zcode' | 'dsh'
 
 export interface ToolInstallerInfo {
   supported: boolean
@@ -69,6 +69,7 @@ export const useToolsStore = defineStore('tools', () => {
   const codebuddyAvailable = ref(false)
   const piAvailable = ref(false)
   const codeartsAvailable = ref(false)
+  const qoderAvailable = ref(false)
   const kimiAvailable = ref(false)
   const zcodeAvailable = ref(false)
   const dshAvailable = ref(false)
@@ -130,6 +131,7 @@ export const useToolsStore = defineStore('tools', () => {
           codebuddyAvailable.value = !!data.codebuddy
           piAvailable.value = !!data.pi
           codeartsAvailable.value = !!data.codearts
+          qoderAvailable.value = !!data.qoder
           kimiAvailable.value = !!data.kimi
           zcodeAvailable.value = !!data.zcode
           dshAvailable.value = !!data.dsh
@@ -164,6 +166,7 @@ export const useToolsStore = defineStore('tools', () => {
       case 'codebuddy': return codebuddyAvailable.value
       case 'pi': return piAvailable.value
       case 'codearts': return codeartsAvailable.value
+      case 'qoder': return qoderAvailable.value
       case 'kimi': return kimiAvailable.value
       case 'zcode': return zcodeAvailable.value
       case 'dsh': return dshAvailable.value
@@ -292,6 +295,7 @@ export const useToolsStore = defineStore('tools', () => {
     codebuddyAvailable,
     piAvailable,
     codeartsAvailable,
+    qoderAvailable,
     kimiAvailable,
     zcodeAvailable,
     dshAvailable,

@@ -78,12 +78,13 @@ function normalizeAiMaxToolIterations(value) {
 }
 
 // 工作台任务执行器白名单。'claude' 是历史默认；'opencode' / 'codex' / 'codebuddy' /
-// 'pi' / 'codearts' 为可选执行器（opencode run --format json / codex exec --json /
+// 'pi' / 'codearts' / 'qoder' 为可选执行器（opencode run --format json / codex exec --json /
 // codebuddy -p --output-format stream-json -y --port 0 /
-// pi --mode json -a / codearts run --format json --auto，
+// pi --mode json -a / codearts run --format json --auto /
+// qodercli -p --output-format stream-json --permission-mode bypass_permissions，
 // 模型都跟随各自 CLI 的配置）。
 // ⚠️ taskRunner.js 里有一份同名单用于运行时分发（见那里的注释），加执行器两处都要改。
-export const TASK_EXECUTORS = ['claude', 'opencode', 'codex', 'codebuddy', 'pi', 'codearts'];
+export const TASK_EXECUTORS = ['claude', 'opencode', 'codex', 'codebuddy', 'pi', 'codearts', 'qoder'];
 
 /**
  * 规范化任务执行器。非法值返回 null（交给调用方取默认），不抛错 ——

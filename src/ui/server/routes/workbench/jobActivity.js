@@ -227,7 +227,7 @@ export function jobDurationMs(job) {
  * 运行时模块，而本模块被 projectRegistry（5s 轮询的看板）直接引用，没必要为了五个
  * 字符串把整条执行链拖进来。新增执行器时这里和 taskRunner 一起改。
  */
-const KNOWN_EXECUTORS = ['claude', 'opencode', 'codex', 'codebuddy', 'pi', 'codearts'];
+const KNOWN_EXECUTORS = ['claude', 'opencode', 'codex', 'codebuddy', 'pi', 'codearts', 'qoder'];
 
 export function jobAgent(job) {
   const v = job && typeof job.agent === 'string' ? job.agent.trim().toLowerCase() : '';

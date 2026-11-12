@@ -125,8 +125,10 @@ const CODEBUDDY_JSON = JSON.stringify({ model: 'deepseek-v4-1-flash-260910' })
 const PI_JSON = JSON.stringify({ defaultModel: 'deepseek/deepseek-v4-flash' })
 // 码道的配置文件由它自己 shim 的 OPENCODE_CONFIG_FILE 指定：codearts_cli.json（json 优先）
 const CODEARTS_JSON = JSON.stringify({ model: 'huaweicloud-maas/GLM-5.3' })
+// Qoder 的 settings.json：model 是对象，模型名在 model.name（官方 settings reference）
+const QODER_JSON = JSON.stringify({ model: { name: 'performance', reasoningEffort: 'high' } })
 
-test('detectExecutorModels: 六家配置齐全时各自读出模型', async () => {
+test('detectExecutorModels: 七家配置齐全时各自读出模型', async () => {
   const home = await makeHome({
     '.claude/settings.json': CLAUDE_JSON,
     '.codex/config.toml': CODEX_TOML,
@@ -134,6 +136,7 @@ test('detectExecutorModels: 六家配置齐全时各自读出模型', async () =
     '.codebuddy/settings.json': CODEBUDDY_JSON,
     '.pi/agent/settings.json': PI_JSON,
     '.codeartsdoer/codearts_cli.json': CODEARTS_JSON,
+    '.qoder/settings.json': QODER_JSON,
   })
   const out = await detectExecutorModels({ homeDir: home })
 
@@ -161,6 +164,24 @@ test('detectExecutorModels: 六家配置齐全时各自读出模型', async () =
   assert.deepEqual(out.codearts, {
     model: 'huaweicloud-maas/GLM-5.3', display: null, provider: null, source: 'config',
   })
+  // qoder：settings.json 的 model.name（对象形态，不是字符串）
+  assert.deepEqual(out.qoder, {
+    model: 'performance', display: null, provider: null, source: 'config',
+  })
+})
+
+test('detectExecutorModels: qoder 的 QODER_MODEL 环境变量优先于 settings.json', async () => {
+  const home = await makeHome({
+    '.qoder/settings.json': JSON.stringify({ model: { name: 'from-file' } }),
+  })
+  const prev = process.env.QODER_MODEL
+  process.env.QODER_MODEL = 'from-env'
+  try {
+    assert.equal((await detectExecutorModels({ homeDir: home })).qoder?.model, 'from-env')
+  } finally {
+    if (prev === undefined) delete process.env.QODER_MODEL;
+    else process.env.QODER_MODEL = prev;
+  }
 })
 
 test('detectExecutorModels: codearts 只有 .jsonc 时也读（OPENCODE_CONFIG_FILE 两个名都认）', async () => {
@@ -486,7 +507,7 @@ test('detectExecutorModels: claude 显式 ANTHROPIC_MODEL 优先于档位别名'
 test('detectExecutorModels: 一个配置文件都没有时六项全 null 且不抛', async () => {
   const home = await makeHome()
   const out = await detectExecutorModels({ homeDir: home })
-  assert.deepEqual(out, { claude: null, codex: null, opencode: null, codebuddy: null, pi: null, codearts: null })
+  assert.deepEqual(out, { claude: null, codex: null, opencode: null, codebuddy: null, pi: null, codearts: null, qoder: null })
 })
 
 test('detectExecutorModels: 配置残缺/是目录/内容不是 JSON 时只让自己变 null', async () => {
@@ -498,7 +519,7 @@ test('detectExecutorModels: 配置残缺/是目录/内容不是 JSON 时只让�
     '.pi/agent/settings.json': '{ 也不是 JSON', // 解析失败 → null
   })
   const out = await detectExecutorModels({ homeDir: home })
-  assert.deepEqual(out, { claude: null, codex: null, opencode: null, codebuddy: null, pi: null, codearts: null })
+  assert.deepEqual(out, { claude: null, codex: null, opencode: null, codebuddy: null, pi: null, codearts: null, qoder: null })
 })
 
 test('detectExecutorModels: 返回值里绝不出现任何密钥', async () => {

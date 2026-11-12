@@ -34,6 +34,10 @@ const TOOL_INSTALL_PACKAGES = Object.freeze({
   // `npm install -g` 原样命令，不为它单开一个变体 —— 多一个变体多一条要维护的路。
   pi: '@earendil-works/pi-coding-agent',
   dsh: '@deepseek-ai/dsh',
+  // Qoder CLI（阿里，2026-11-12 随执行器接入一起补）。官方推荐安装脚本，
+  // 但 npm 包是一等公民（`npm install -g @qoder-ai/qodercli`，提供 qoder / qodercli
+  // 两个 bin），所以走一键 npm 安装；文档里把脚本列为推荐只是启动性能更好。
+  qoder: '@qoder-ai/qodercli',
 });
 
 const TOOL_DOCS_URLS = Object.freeze({
@@ -49,6 +53,7 @@ const TOOL_DOCS_URLS = Object.freeze({
   kimi: 'https://moonshotai.github.io/kimi-code/en/guides/getting-started',
   zcode: 'https://zcode.z.ai/',
   dsh: 'https://github.com/deepseek-ai/deepseek-harness',
+  qoder: 'https://docs.qoder.com/cli/installation',
   // 远程仓库列表页(RemoteReposList)用到的两个托管平台 CLI。它们不是"AI 工具",
   // 不参与 /api/check-tools 的 open-with 菜单,只借这里的白名单走 /api/install-tool。
   gh: 'https://cli.github.com/',
@@ -768,6 +773,85 @@ export async function findCodeArtsExecutable() {
     } catch {}
   }
   return commandExists('codearts') ? 'codearts' : null;
+}
+
+/**
+ * Qoder 的候选目录：已知安装位置 + 用户级 PATH（HKCU\Environment）。
+ *
+ * 与 codearts 同一个理由：官方安装脚本只改**用户 PATH**，已经在跑的 g ui
+ * 读不到；靠 `where` 会把"明明装了"报成未安装。Qoder 的 npm 全局安装另外
+ * 落在 Node 的 prefix 目录（本机是 C:\nvm4w\nodejs），那条由 commandExists 兜底。
+ */
+function qoderCandidateDirs() {
+  const home = process.env.USERPROFILE || '';
+  const dirs = [path.join(home, '.qoder', 'bin')];
+  if (process.platform !== 'win32') return dirs;
+  const registryPath = spawnSync('reg.exe', ['query', 'HKCU\\Environment', '/v', 'Path'], {
+    encoding: 'utf8',
+    windowsHide: true,
+  }).stdout || '';
+  const pathLine = registryPath.split(/\r?\n/).find(line => /\sPath\s+REG_(?:EXPAND_)?SZ\s+/i.test(line));
+  if (pathLine) {
+    const userPath = pathLine.replace(/^.*?REG_(?:EXPAND_)?SZ\s+/i, '').trim();
+    for (const dir of userPath.split(';').map(v => v.trim()).filter(Boolean)) dirs.push(dir);
+  }
+  return dirs;
+}
+
+async function firstFileInDirs(dirs, names) {
+  for (const dir of dirs) {
+    for (const name of names) {
+      const candidate = path.join(dir, name);
+      try {
+        const stat = await fs.stat(candidate);
+        if (stat.isFile()) return candidate;
+      } catch {}
+    }
+  }
+  return null;
+}
+
+/**
+ * 找 qodercli（**无头执行**用的纯 CLI）。`qoder` 是分发器，装了 IDE 会开图形界面，
+ * 不能拿来跑任务 —— 两个 bin 别混。
+ */
+export async function findQoderExecutable() {
+  if (process.platform !== 'win32') {
+    return commandExists('qodercli') ? 'qodercli' : null;
+  }
+  const direct = await firstFileInDirs(qoderCandidateDirs(), ['qodercli.exe', 'qodercli.cmd']);
+  if (direct) return direct;
+  return commandExists('qodercli') ? 'qodercli' : null;
+}
+
+/** 找 `qoder` 分发器（**打开目录**用：装了 Qoder IDE 就开 IDE，否则进 TUI）。 */
+async function findQoderLauncher() {
+  if (process.platform !== 'win32') {
+    return commandExists('qoder') ? 'qoder' : null;
+  }
+  const direct = await firstFileInDirs(qoderCandidateDirs(), ['qoder.exe', 'qoder.cmd']);
+  if (direct) return direct;
+  return commandExists('qoder') ? 'qoder' : null;
+}
+
+/**
+ * 用 Qoder 打开目录（交互式）。
+ *
+ * 走 `qoder` 而不是 `qodercli`：前者是官方分发器 —— 用户装了 Qoder IDE 就打开 IDE，
+ * 只有 CLI 时进 TUI。必须用绝对路径（理由同 codearts：安装脚本改的是用户 PATH，
+ * 已运行进程看不到，`start "" qoder` 会弹「找不到文件」）。
+ */
+async function launchQoder(dirPath) {
+  if (process.platform === 'win32') {
+    const exe = await findQoderLauncher();
+    if (!exe) {
+      throw new Error('未检测到 qoder，请先安装（或重启 ZenGitSync 让其刷新 PATH）');
+    }
+    return spawnDetached('cmd.exe', ['/c', 'start', '""', exe, dirPath], {
+      cwd: dirPath
+    });
+  }
+  return launchInTerminal(dirPath, 'qoder', [dirPath]);
 }
 
 // Run the CLI shipped with this server, even when `g` is not in PATH or points
@@ -1595,6 +1679,34 @@ export function registerFileOpenRoutes({
       }
     }));
 
+  // 用 Qoder 打开目录
+  app.post('/api/open-directory-with-qoder', asyncRoute(async (req, res) => {
+      try {
+        const { path: dirPath } = req.body || {};
+        if (!dirPath) {
+          throw new HttpError(400, '目录路径不能为空');
+        }
+
+        try {
+          await fs.access(dirPath);
+        } catch (error) {
+          throw new HttpError(400, `目录不存在或不可访问: ${dirPath}`);
+        }
+
+        try {
+          await launchQoder(dirPath);
+          res.json({ success: true, message: '已用 Qoder 打开目录' });
+        } catch (error) {
+          res.status(400).json({
+            success: false,
+            error: error.message || '未检测到 qoder，请先安装并确保可以在终端中直接运行 qoder'
+          });
+        }
+      } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    }));
+
   // 用 Kimi Code 打开目录
   app.post('/api/open-directory-with-kimi', asyncRoute(async (req, res) => {
     const { path: dirPath, permissionMode } = req.body || {};
@@ -1786,7 +1898,7 @@ export function registerFileOpenRoutes({
       // (find 会跑两次——一次拿路径一次链版本——都是纯 fs/注册表查询,开销可忽略)
       // ⚠️ codebuddy 的 --version 是安全的:实测它只打印版本号就退出,不起引擎服务器
       // (裸跑 codebuddy 才会占 62443,与 checkCmd 的 --version 用法无关)。
-      const [vscodeRes, claudeRes, codexRes, opencodeRes, codebuddyRes, piRes, codeArtsExecutable, kimiExecutable, zcodeExecutable, dshExecutable, kimiVersion, dshVersion, codeArtsVersion] = await Promise.all([
+      const [vscodeRes, claudeRes, codexRes, opencodeRes, codebuddyRes, piRes, codeArtsExecutable, kimiExecutable, zcodeExecutable, dshExecutable, kimiVersion, dshVersion, codeArtsVersion, qoderRes, qoderExecutable] = await Promise.all([
         checkCmd('code'),
         checkCmd('claude'),
         checkCmd('codex'),
@@ -1800,7 +1912,16 @@ export function registerFileOpenRoutes({
         findKimiExecutable().then(versionOfExecutable),
         findDshExecutable().then(versionOfExecutable),
         findCodeArtsExecutable().then(versionOfExecutable),
+        checkCmd('qodercli'),
+        findQoderExecutable(),
       ]);
+
+      // qoder 的版本：npm 全局 shim 能直接 --version（有 shell），
+      // 只有 PATH 里还没有、但已知位置找到了原生 exe 时，才补一次直接 spawn。
+      const qoderVersion = qoderRes.version
+        || (qoderExecutable && /\.exe$/i.test(qoderExecutable)
+          ? await versionOfExecutable(qoderExecutable)
+          : null);
 
       const installers = getToolInstallers();
       // 官方桌面应用探测：与 CLI 检测并行跑（各自只做 fs / 注册表查询，不起进程）。
@@ -1831,6 +1952,7 @@ export function registerFileOpenRoutes({
         codebuddy: codebuddyRes.installed,
         pi: piRes.installed,
         codearts: !!codeArtsExecutable,
+        qoder: qoderRes.installed || !!qoderExecutable,
         kimi: !!kimiExecutable,
         zcode: !!zcodeExecutable,
         dsh: !!dshExecutable,
@@ -1842,6 +1964,7 @@ export function registerFileOpenRoutes({
           codebuddy: codebuddyRes.version,
           pi: piRes.version,
           codearts: codeArtsVersion,
+          qoder: qoderVersion,
           kimi: kimiExecutable ? kimiVersion : null,
           zcode: null, // 桌面应用,无 CLI 版本通道
           dsh: dshExecutable ? dshVersion : null,

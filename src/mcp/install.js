@@ -128,6 +128,21 @@ function codeArtsConfigPath() {
 }
 
 /**
+ * Qoder CLI 的 MCP 配置：~/.qoder/settings.json 的 `mcpServers` 段。
+ *
+ * 配置目录可被 QODER_CONFIG_DIR 覆盖（官方环境变量文档），与 executorModels.js
+ * 读同一个文件时同一口径。stdio 条目形状与 Claude 系一致
+ * （{ command, args, env }），官方示例见 docs.qoder.com/cli/mcp-reference。
+ */
+function qoderConfigPath() {
+  const override = typeof process.env.QODER_CONFIG_DIR === 'string'
+    ? process.env.QODER_CONFIG_DIR.trim()
+    : '';
+  const dir = override ? path.resolve(override) : path.join(homeDir(), '.qoder');
+  return path.join(dir, 'settings.json');
+}
+
+/**
  * Pi Agent 的全局 MCP 配置:<agentDir>/mcp.json。agentDir 默认 ~/.pi/agent,
  * 可被官方环境变量 PI_CODING_AGENT_DIR 覆盖(executorModels.js 读 settings.json
  * 用的就是同一个口径,两处不能分叉)。
@@ -225,6 +240,13 @@ export const TARGETS = [
     jsonPath: ['mcp'],
     entry: { type: 'local', command: [COMMAND, ...ARGS], enabled: true },
     note: '写进 codearts_cli.json（码道是 opencode 的 fork，段形状同 OpenCode）',
+  },
+  {
+    id: 'qoder',
+    label: 'Qoder',
+    kind: 'json',
+    file: qoderConfigPath,
+    note: '写进 ~/.qoder/settings.json 的 mcpServers（重开 qoder 会话生效）',
   },
   {
     id: 'codex',

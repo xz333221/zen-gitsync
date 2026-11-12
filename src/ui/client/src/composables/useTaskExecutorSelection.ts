@@ -59,6 +59,7 @@ export function useTaskExecutorSelection() {
     codebuddy: toolsStore.codebuddyAvailable,
     pi: toolsStore.piAvailable,
     codearts: toolsStore.codeartsAvailable,
+    qoder: toolsStore.qoderAvailable,
   }))
 
   /** 有没有一个能跑的 —— 决定「执行任务」按钮显不显示 */

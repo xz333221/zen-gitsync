@@ -34,6 +34,7 @@ const toolNames: Record<ToolId, string> = {
   codebuddy: 'CodeBuddy Code',
   pi: 'Pi Agent',
   codearts: 'CodeArts 码道',
+  qoder: 'Qoder',
   kimi: 'Kimi Code',
   zcode: 'ZCode',
   dsh: 'DeepSeek Harness',

@@ -105,7 +105,7 @@ function makeHarness() {
 }
 
 test('normalizeTaskExecutor：codearts 在白名单里，非法值回落 claude', () => {
-  assert.deepEqual(TASK_EXECUTORS, ['claude', 'opencode', 'codex', 'codebuddy', 'pi', 'codearts']);
+  assert.deepEqual(TASK_EXECUTORS, ['claude', 'opencode', 'codex', 'codebuddy', 'pi', 'codearts', 'qoder']);
   assert.equal(normalizeTaskExecutor('codearts'), 'codearts');
   assert.equal(normalizeTaskExecutor('CodeArts'), 'codearts');
   assert.equal(normalizeTaskExecutor(' codearts '), 'codearts');

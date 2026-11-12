@@ -102,7 +102,7 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
    * @param {string} [payload.projectPath]       显式指定的落点；缺省交给 targetResolver 判断
    * @param {boolean} [payload.autoRun]          默认 true；false = 只建任务不执行
    * @param {boolean} [payload.useDefaultPrompt] 默认 true；false = 本次不附加预设提示词
-   * @param {string} [payload.executor]          claude | opencode | codex；缺省走配置默认
+   * @param {string} [payload.executor]          claude | opencode | codex | codebuddy | pi | codearts | qoder；缺省走配置默认
    * @param {boolean} [payload.imageText]        本次派发是否把图片先转成文字描述。
    *        不传 = 不记（执行时按执行器兜底：codearts 开、别家关，见 taskRunner 的
    *        shouldDescribeImages）。显式传 true/false 会记在任务上，重跑沿用。

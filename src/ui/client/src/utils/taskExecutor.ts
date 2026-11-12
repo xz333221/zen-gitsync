@@ -13,7 +13,7 @@
 //   - 任务续聊不走这里：续哪个执行器由上一轮 job.agent 决定（服务端强制），
 //     否则 claude 的 --resume、opencode 的 --session、codex 的 exec resume、
 //     codebuddy 的 --resume、pi / codearts 的 --session 会互不认对方的会话 id
-export type TaskExecutorId = 'claude' | 'opencode' | 'codex' | 'codebuddy' | 'pi' | 'codearts'
+export type TaskExecutorId = 'claude' | 'opencode' | 'codex' | 'codebuddy' | 'pi' | 'codearts' | 'qoder'
 
 export interface TaskExecutorOption {
   id: TaskExecutorId
@@ -34,6 +34,9 @@ export const TASK_EXECUTOR_OPTIONS: TaskExecutorOption[] = [
   // CodeArts 码道 = 华为云码道代码智能体 CLI（codearts run --format json --auto；
   // 2026-10-25 接入）。它是 opencode 的 fork，事件流与 OpenCode 同构
   { id: 'codearts', name: 'CodeArts 码道' },
+  // Qoder = 阿里 Qoder CLI（qodercli -p --output-format stream-json；
+  // 2026-11-12 接入）。事件流与 Claude Code 同构，续聊走 --resume
+  { id: 'qoder', name: 'Qoder' },
 ]
 
 // ── 执行器当前配置的模型（展示口径）─────────────────────────────────────────

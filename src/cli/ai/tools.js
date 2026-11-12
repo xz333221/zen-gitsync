@@ -406,7 +406,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'dispatch_task',
-      description: '把一条任务派发到本机某个项目，由本地 CLI 执行器（claude / opencode / codex / codebuddy / pi / codearts）去跑。'
+      description: '把一条任务派发到本机某个项目，由本地 CLI 执行器（claude / opencode / codex / codebuddy / pi / codearts / qoder）去跑。'
         + '这是"让别的 agent 替我干活"的唯一入口：工作台里的一条任务 = 一次独立会话，派出去之后它在自己的进程里跑，'
         + '不占本次对话，也不阻塞你继续回答用户。'
         + '只在 g ui 右下角的 g ai 悬浮面板里可用；其它入口调用会拿到一句 unavailable，那时直接回答用户即可。'
@@ -429,7 +429,7 @@ export const TOOL_DEFINITIONS = [
           },
           executor: {
             type: 'string',
-            enum: ['claude', 'opencode', 'codex', 'codebuddy', 'pi', 'codearts'],
+            enum: ['claude', 'opencode', 'codex', 'codebuddy', 'pi', 'codearts', 'qoder'],
             description: '用哪个本地 CLI 执行这条任务。**不要传** —— 不传就按用户配置的派发优先级'
               + '（第一个本机已安装的）决定，再退到设置里的默认执行器。'
               + '用户配了优先级时这里传什么都会被忽略（要换执行器请用户去设置里调顺序）。',
