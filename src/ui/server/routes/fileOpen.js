@@ -128,6 +128,21 @@ const TOOL_DESKTOP_APPS = Object.freeze({
     macApp: 'Kimi.app',
     linuxPaths: [], // Kimi 桌面端只有 Windows / macOS(Apple 芯片)
   },
+  qoder: {
+    // Qoder IDE（桌面端）。2026-11-12 随 CLI 接入一起补：右键菜单的
+    // 「下载 Qoder 桌面端」入口靠这条登记（没有它 desktopAppOf 为 undefined，
+    // 菜单里只剩「更新」）。
+    // 安装路径取官方排障文档：%LOCALAPPDATA%\Programs\Qoder\Qoder.exe；
+    // macOS /Applications/Qoder.app；Linux 走 /usr/bin/qoder。
+    name: 'Qoder IDE',
+    downloadUrl: 'https://qoder.com/download',
+    winExeName: 'Qoder.exe',
+    winExeRe: /Qoder\.exe$/i,
+    winPaths: ['Programs/Qoder/Qoder.exe', 'Qoder/Qoder.exe'],
+    winLnkRe: /^Qoder( IDE)?\.lnk$/i,
+    macApp: 'Qoder.app',
+    linuxPaths: ['/usr/bin/qoder', '/usr/local/bin/qoder'],
+  },
   dsh: {
     name: 'DeepSeek Harness 桌面版',
     // 官方固定下载地址（apps/desktop/publishing/README：upload:latest:* 传到
