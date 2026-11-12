@@ -1683,7 +1683,14 @@ export function buildQoderArgs(cwd, resumeSessionId) {
 
 /** qoder 子进程环境：只统一 locale，其余继承（凭据在 ~/.qoder 或 QODER_PERSONAL_ACCESS_TOKEN）。 */
 export function buildQoderEnv() {
-  return { ...process.env, LANG: 'zh_CN.UTF-8' };
+  const env = { ...process.env, LANG: 'zh_CN.UTF-8' };
+  // 凭据兜底：用户常常是「刚 setx 完 PAT，g ui 还开着」——Windows 的用户级环境变量
+  // 只对新进程生效，当前进程读不到就会以「认证失败」静默跑空（codearts 同款坑）。
+  if (!env.QODER_PERSONAL_ACCESS_TOKEN) {
+    const fromUserEnv = readWindowsUserEnv('QODER_PERSONAL_ACCESS_TOKEN');
+    if (fromUserEnv) env.QODER_PERSONAL_ACCESS_TOKEN = fromUserEnv;
+  }
+  return env;
 }
 
 /** spawn qodercli 跑一个 prompt（非交互），返回 { pid, child }。 */
