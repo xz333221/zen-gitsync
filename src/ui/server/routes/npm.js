@@ -123,7 +123,10 @@ export function resolveUpgradeCommand(pkgArgs, opts) {
 
 export function registerNpmRoutes({
   app,
-  getCurrentProjectPath
+  getCurrentProjectPath,
+  httpServer,
+  stopPeer,
+  startPeer
 }) {
   // 标记是否有升级任务在跑（防并发）
   let activeUpgrade = false;
@@ -428,6 +431,42 @@ export function registerNpmRoutes({
       return;
     }
 
+    // 固定端口死锁：旧进程占着端口等子进程就绪，而固定端口模式（hub --port）的
+    // 子进程撞 EADDRINUSE 会直接退出，两边互等。所以 spawn 前先释放主监听和
+    // peer 端口（close 只关监听 socket，本 NDJSON 响应是活跃连接，不受影响）；
+    // 失败分支再绑回原端口恢复服务，保住"旧进程不退出、可手动刷新"的兜底。
+    const savedAddr = httpServer.address();
+    let listenerClosed = false;
+    if (savedAddr) {
+      listenerClosed = true;
+      stopPeer();
+      try { httpServer.close(); } catch (_) {}
+      httpServer.closeIdleConnections?.();
+    }
+
+    let restored = false;
+    const restoreListener = () => {
+      if (!listenerClosed || restored) return;
+      restored = true;
+      const attempt = (tries) => {
+        const onErr = () => {
+          if (tries > 0) setTimeout(() => attempt(tries - 1), 300);
+          else logger.warn('[app-restart] 恢复旧进程监听失败，请手动重启');
+        };
+        httpServer.once('error', onErr);
+        try {
+          httpServer.listen(savedAddr.port, savedAddr.address, () => {
+            httpServer.removeListener('error', onErr);
+            startPeer(savedAddr.port);
+          });
+        } catch (_) {
+          httpServer.removeListener('error', onErr);
+          onErr();
+        }
+      };
+      attempt(10);
+    };
+
     let child;
     try {
       // spawn 当前进程当时是怎么被 node 启的同一个入口（开发态 server.js / 生产态 gitCommit.js）
@@ -441,6 +480,7 @@ export function registerNpmRoutes({
       child.unref();
     } catch (err) {
       send({ type: 'error', message: `拉起子进程失败: ${err?.message || err}` });
+      restoreListener();
       try { fsSync.closeSync(childLogFd) } catch (_) {}
       try { fsSync.unlinkSync(notifyPath) } catch (_) {}
       try { fsSync.unlinkSync(childLogFile) } catch (_) {}
@@ -458,6 +498,7 @@ export function registerNpmRoutes({
       if (childDead) return;
       childDead = true;
       send({ type: 'error', message: `子进程 spawn 失败: ${err?.message || err}` });
+      restoreListener();
       try { fsSync.closeSync(childLogFd) } catch (_) {}
       try { fsSync.unlinkSync(notifyPath) } catch (_) {}
       finish();
@@ -476,6 +517,7 @@ export function registerNpmRoutes({
         type: 'error',
         message: `子进程提前退出 (code=${code} signal=${signal})${tail ? `\n--- 子进程日志尾部 ---\n${tail}` : ''}`
       });
+      restoreListener();
       try { fsSync.closeSync(childLogFd) } catch (_) {}
       try { fsSync.unlinkSync(notifyPath) } catch (_) {}
       finish();
@@ -487,6 +529,7 @@ export function registerNpmRoutes({
         clearInterval(poll);
         childDead = true;  // 阻止 exit 监听器再发一次 error，避免和 timeout 重复
         try { child.kill('SIGTERM') } catch (_) {}
+        restoreListener();
         // 读子进程日志尾部，帮助诊断为啥超时
         let tail = '';
         try { tail = fsSync.readFileSync(childLogFile, 'utf8').slice(-2000) } catch (_) {}

@@ -129,6 +129,7 @@ export async function startServerOnAvailablePort({
   };
 
   let lastErrorCode = null;
+  let restartPortRetries = 0;
 
   while (currentPort < maxPort) {
     try {
@@ -232,6 +233,13 @@ export async function startServerOnAvailablePort({
       lastErrorCode = err?.code || null;
 
       if (err.code === 'EADDRINUSE') {
+        // 自拉起重启 + 固定端口：旧进程释放端口可能略晚于子进程首次 listen，
+        // 限时同端口重试（20 次 × 500ms = 10s，小于父进程 15s 就绪超时）
+        if (maxTries <= 1 && process.env.ZEN_RESTART_NOTIFY_PATH && restartPortRetries < 20) {
+          restartPortRetries++;
+          await new Promise(resolve => setTimeout(resolve, 500));
+          continue;
+        }
         logger.info(`端口 ${currentPort} 被占用，尝试下一个端口...`);
         currentPort++;
       } else if (err.code === 'EACCES') {

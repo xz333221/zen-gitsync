@@ -486,7 +486,10 @@ async function startUIServer(noOpen = false, savePort = false, options = {}) {
 
   registerNpmRoutes({
     app,
-    getCurrentProjectPath: () => currentProjectPath
+    getCurrentProjectPath: () => currentProjectPath,
+    httpServer,
+    stopPeer: () => stopPeerRuntime().catch(() => {}),
+    startPeer: (port) => startPeerIfEnabled(port).catch(() => {})
   });
 
   // 「AI 启动建议」面板(Git 视图左栏,NPM 脚本面板上方):
