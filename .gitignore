@@ -131,3 +131,6 @@ test/pty-repro*.py
 test/pty-repro*.log
 
 .npmrc
+
+# WorkBuddy 本地 app 注册文件（每次生成文件名带随机 id，本机数据，不入库）
+*.genie
