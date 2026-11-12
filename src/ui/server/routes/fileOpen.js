@@ -812,8 +812,8 @@ async function firstFileInDirs(dirs, names) {
 }
 
 /**
- * 找 qodercli（**无头执行**用的纯 CLI）。`qoder` 是分发器，装了 IDE 会开图形界面，
- * 不能拿来跑任务 —— 两个 bin 别混。
+ * 找 qodercli（**无头执行 + 交互 TUI** 用的纯 CLI）。`qoder` 是 IDE 分发器，
+ * 没装 IDE 时只打印一行提示就退出（2026-11-12 实测），两个 bin 别混。
  */
 export async function findQoderExecutable() {
   if (process.platform !== 'win32') {
@@ -824,34 +824,27 @@ export async function findQoderExecutable() {
   return commandExists('qodercli') ? 'qodercli' : null;
 }
 
-/** 找 `qoder` 分发器（**打开目录**用：装了 Qoder IDE 就开 IDE，否则进 TUI）。 */
-async function findQoderLauncher() {
-  if (process.platform !== 'win32') {
-    return commandExists('qoder') ? 'qoder' : null;
-  }
-  const direct = await firstFileInDirs(qoderCandidateDirs(), ['qoder.exe', 'qoder.cmd']);
-  if (direct) return direct;
-  return commandExists('qoder') ? 'qoder' : null;
-}
-
 /**
- * 用 Qoder 打开目录（交互式）。
+ * 用 Qoder 打开目录（交互式 TUI）。
  *
- * 走 `qoder` 而不是 `qodercli`：前者是官方分发器 —— 用户装了 Qoder IDE 就打开 IDE，
- * 只有 CLI 时进 TUI。必须用绝对路径（理由同 codearts：安装脚本改的是用户 PATH，
- * 已运行进程看不到，`start "" qoder` 会弹「找不到文件」）。
+ * **走 `qodercli`，不走 `qoder`**（2026-11-12 用户实测截图）：`qoder` 是 IDE 分发器，
+ * 没装 Qoder IDE 时它只打印一行 `Qoder IDE is not installed. Download: ...` 就退出，
+ * **不会回落进 CLI TUI** —— 点「用 Qoder 打开」只会得到一个空终端。
+ * `qodercli` 无参数时才是"在 cwd 进 TUI"，与 codearts 的 `codearts <dir>` 同效，
+ * 但目录靠 spawn 的 cwd 传（不能当位置参数，那会被当成初始 prompt）。
+ * 必须用绝对路径（理由同 codearts：安装脚本改的是用户 PATH，已运行进程看不到）。
  */
 async function launchQoder(dirPath) {
   if (process.platform === 'win32') {
-    const exe = await findQoderLauncher();
+    const exe = await findQoderExecutable();
     if (!exe) {
-      throw new Error('未检测到 qoder，请先安装（或重启 ZenGitSync 让其刷新 PATH）');
+      throw new Error('未检测到 qodercli，请先安装（或重启 ZenGitSync 让其刷新 PATH）');
     }
-    return spawnDetached('cmd.exe', ['/c', 'start', '""', exe, dirPath], {
+    return spawnDetached('cmd.exe', ['/c', 'start', '""', exe], {
       cwd: dirPath
     });
   }
-  return launchInTerminal(dirPath, 'qoder', [dirPath]);
+  return launchInTerminal(dirPath, 'qodercli', []);
 }
 
 // Run the CLI shipped with this server, even when `g` is not in PATH or points
@@ -1699,7 +1692,7 @@ export function registerFileOpenRoutes({
         } catch (error) {
           res.status(400).json({
             success: false,
-            error: error.message || '未检测到 qoder，请先安装并确保可以在终端中直接运行 qoder'
+            error: error.message || '未检测到 qodercli，请先安装并确保可以在终端中直接运行 qodercli'
           });
         }
       } catch (error) {
