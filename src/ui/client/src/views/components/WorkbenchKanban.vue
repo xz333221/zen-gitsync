@@ -185,11 +185,29 @@ const doneLimit = ref(DONE_PAGE)
    跟着它重置会让用户点开的「显示更早的」在 5 秒内自己缩回去。 */
 watch(() => props.search, () => { doneLimit.value = DONE_PAGE })
 
+/**
+ * 已完成列「等你回话」聚合过滤。
+ *
+ * 这一列混着真做完的和模型收尾在反问的（卡上那枚琥珀标说的就是后者）。列头一枚
+ * 计数 chip 把"有几条在等你"直接报出来，点一下只留那些卡、再点还原 —— 两三百张
+ * 已完成里把该回话的那几条挑出来，不用逐张读收尾。默认**关**：不改变既有渲染，
+ * 探针（verify-wb-awaiting-reply 的 A–E）照旧看到整列。
+ */
+const awaitingOnly = ref(false)
+/** chip 上的数：已完成列里（搜索过滤后）等你回话的总数，与开关状态无关 */
+const awaitingCount = computed(
+  () => filtered.value.filter(t => t.column === 'done' && t.awaitingReply).length,
+)
+/* 等你回话的卡都被回完 / 删掉时把开关复位：否则列会一直空着，像坏了 */
+watch(awaitingCount, (n) => { if (n === 0) awaitingOnly.value = false })
+
 const columns = computed(() => {
   const raw = COLUMNS.map(c => {
-    const all = c.key === 'done'
+    let all = c.key === 'done'
       ? filtered.value.filter(t => t.column === c.key).sort(byDoneAtDesc)
       : filtered.value.filter(t => t.column === c.key)
+    /* 「等你回话」过滤在 slice 之前：先挑出该回话的，再按最近 30 条铺 */
+    if (c.key === 'done' && awaitingOnly.value) all = all.filter(t => t.awaitingReply)
     return { ...c, all }
   })
   /* 空列**宽度归零、整个不展示**，有内容了再展开。
@@ -413,6 +431,70 @@ function cardPercent(t: BoardTask): number | null {
   return typeof v === 'number' ? v : null
 }
 
+/* ── 实时流单行化 + 展开态 ──────────────────────────────────────────────
+ * 思考 / 回复默认各占一行（全文在 title 里），工具行的参数段等宽字体、从左侧截断。
+ * 运行卡要回答的是"它此刻在干嘛"，一眼扫过去就该读到；两三行长文会把同列的卡片
+ * 往下顶出好几行，扫读节奏就断了。想读全文点元信息行末尾那枚「展开」。
+ * 这与右栏进度报告"默认展开"是两回事：那边是一份要细读的报告，这边是扫读的实时流。
+ */
+
+/**
+ * 展开态按任务 id 各记各的：看板上同时跑着好几张卡，展开这张不该连带展开那张。
+ * 用 Set 而不是单个布尔；每次换一个新 Set 触发响应式（就地 add Vue 收不到）。
+ */
+const liveExpanded = ref<Set<string>>(new Set())
+
+function toggleLiveExpanded(id: string) {
+  const next = new Set(liveExpanded.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  liveExpanded.value = next
+}
+
+/**
+ * 工具行拆两段：第一个词是工具名（Edit / Bash / Read…），其余是参数预览。
+ * 与服务端 describeLastTool 的 `${name} ${args}` 拼法逐字对应 —— 那边用第一个空格
+ * 分隔，这边就按第一个空格拆，两处口径一致。没有空格（只有工具名）时参数段为空。
+ */
+function toolVerb(text: string): string {
+  const i = text.indexOf(' ')
+  return i === -1 ? text : text.slice(0, i)
+}
+function toolTarget(text: string): string {
+  const i = text.indexOf(' ')
+  return i === -1 ? '' : text.slice(i + 1)
+}
+
+/**
+ * 工具参数（通常是路径）从**左**截断：留尾巴、切头部。
+ * 认出文件的是尾巴上的文件名，不是头部那串公共前缀（D:\workspace\…）——
+ * 从右截断留下的恰恰是最没信息量的那段。截的时候落在路径分隔符上，
+ * 不把目录名拦腰切断；没有分隔符（长命令 / 超长单文件名）就原样留尾。
+ * 全文始终在 title 与展开态里，这里只是扫读用的摘要，不丢信息。
+ */
+const TOOL_TARGET_MAX = 36
+function toolTargetDisplay(text: string): string {
+  const target = toolTarget(text)
+  if (target.length <= TOOL_TARGET_MAX) return target
+  let tail = target.slice(target.length - (TOOL_TARGET_MAX - 1))
+  const sep = tail.search(/[/\\]/)
+  if (sep > 0) tail = tail.slice(sep + 1)
+  return '…' + tail
+}
+
+/**
+ * 这张卡的实时流有没有值得展开的内容：工具参数被左截断了，或思考 / 回复长到
+ * 一行放不下。短到一行就装下的不挂展开钮 —— 点了也不变，白占一个常驻装饰。
+ * 阈值按卡片窄列一行约容 28 个汉字估；估不准的边界（略超阈值的纯英文）全文仍在 title。
+ */
+const LIVE_OVERFLOW_CHARS = 28
+function liveHasOverflow(t: BoardTask): boolean {
+  const live = t.live
+  if (!live) return false
+  if (live.lastTool && toolTargetDisplay(live.lastTool) !== toolTarget(live.lastTool)) return true
+  return [live.lastThought, live.lastLine].some(s => (s || '').length > LIVE_OVERFLOW_CHARS)
+}
+
 /**
  * 列表视图那一行状态摘要（看板视图是分行显示，这里只放得下一行）。
  * 优先级与卡片相反：列表行窄，先给**最新的回复**——"它刚说了什么"最能回答
@@ -531,6 +613,20 @@ function coverTitle(img: BoardImage): string {
           <!-- 计数报**总数**而不是当前渲染条数：已完成列默认只铺最近 30 条，
                写 30 会让"一共完成了多少"这件事从界面上消失 -->
           <span class="kb-col__count">{{ col.total }}</span>
+          <!--
+            「等你回话」聚合 chip（只挂在已完成列、且有等回话的卡时）。
+            琥珀色与卡上那枚标同一族（--color-warning）：列头报总数、卡上标个体，
+            两处说的是同一件事。点一下只留等回话的卡（aria-pressed 同步开关态）。
+          -->
+          <button
+            v-if="col.key === 'done' && awaitingCount > 0"
+            type="button"
+            class="kb-col__awaiting-chip"
+            :class="{ 'is-on': awaitingOnly }"
+            :aria-pressed="awaitingOnly"
+            :title="awaitingOnly ? $t('@WORKBENCH:显示全部已完成') : $t('@WORKBENCH:只看等你回话的任务')"
+            @click="awaitingOnly = !awaitingOnly"
+          >{{ $t('@WORKBENCH:{n} 等你回话', { n: awaitingCount }) }}</button>
         </header>
 
         <!-- 列表**始终渲染**（空列也渲染）：塌缩是靠轨道宽度 + overflow 裁的，
@@ -685,7 +781,7 @@ function coverTitle(img: BoardImage): string {
               证据顺序沿用进度报告面板：工具调用（正在做什么）→ 思考（为什么）
               → 最新回复；每一行没有内容就整行不渲染，不写"暂无"。
             -->
-            <div v-if="t.live" class="kb-card__live">
+            <div v-if="t.live" class="kb-card__live" :class="{ 'is-expanded': liveExpanded.has(t.id) }">
               <p class="kb-card__live-meta">
                 <!-- 执行器只留图标 + 悬停提示：卡片这一行本来就窄（已运行 x 分 y 秒 · 工具 n 次），
                      再钉一个 "Claude Code" 文本会把工具次数挤到第二行去。
@@ -714,6 +810,21 @@ function coverTitle(img: BoardImage): string {
                 <span v-if="reportSilentMs(t.live.silentMs) !== null" class="kb-card__live-silent">
                   {{ $t('@WORKBENCH:静默 {elapsed}', { elapsed: formatDurationMs(reportSilentMs(t.live.silentMs)) }) }}
                 </span>
+                <!--
+                  展开 / 收起实时流。挂在元信息行末尾（而不是活动区最后一个孩子）：
+                  卡片 hover 渐隐遮罩锚定 `.kb-card__live > :last-child`（见下方 CSS），
+                  把按钮塞成最后一个孩子会顶掉被遮的那行证据。margin-left:auto 推到行尾。
+                  @click.stop / @keydown.stop：卡片整块是"打开任务"，这枚钮得把自己摘出来。
+                -->
+                <button
+                  v-if="liveHasOverflow(t)"
+                  type="button"
+                  class="kb-card__live-toggle"
+                  :aria-expanded="liveExpanded.has(t.id)"
+                  :title="liveExpanded.has(t.id) ? $t('@WORKBENCH:收起') : $t('@WORKBENCH:展开')"
+                  @click.stop="toggleLiveExpanded(t.id)"
+                  @keydown.stop
+                >{{ liveExpanded.has(t.id) ? $t('@WORKBENCH:收起') : $t('@WORKBENCH:展开') }}</button>
               </p>
               <!--
                 这条任务现在几成（主 Agent 估的）。2026-10-14 从右栏「任务事实」搬过来：
@@ -751,7 +862,10 @@ function coverTitle(img: BoardImage): string {
                 </span>
               </p>
               <p v-if="t.live.lastTool" class="kb-card__live-line is-tool" :title="t.live.lastTool">
-                {{ t.live.lastTool }}
+                <span class="kb-card__tool-verb">{{ toolVerb(t.live.lastTool) }}</span><span
+                  v-if="toolTarget(t.live.lastTool)"
+                  class="kb-card__tool-target"
+                >{{ liveExpanded.has(t.id) ? toolTarget(t.live.lastTool) : toolTargetDisplay(t.live.lastTool) }}</span>
               </p>
               <p v-if="t.live.lastThought" class="kb-card__live-line is-thought" :title="t.live.lastThought">
                 <span class="kb-card__live-tag">{{ $t('@WORKBENCH:最近思考') }}</span>{{ t.live.lastThought }}
@@ -1202,6 +1316,33 @@ function coverTitle(img: BoardImage): string {
   padding: 1px 7px;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--col-ink) 10%, transparent);
+}
+/* 「等你回话」聚合 chip：形状沿用卡上那枚琥珀标（圆角矩形 + 极淡底 + 同色描边），
+   只是放大成列头的一枚可点按钮。色相走 --color-warning（与卡标同一族），不吃列的
+   --col-ink —— 已完成列的角色色是成功绿，而这枚 chip 说的是"还得你一句话"，是另一件事。
+   is-on（过滤生效）时底色加深一档，让"现在只看着这些"有个明确的按下态。 */
+.kb-col__awaiting-chip {
+  flex: none;
+  padding: 1px 8px;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, var(--surface-elevated));
+  border-radius: var(--radius-base);
+  background: color-mix(in srgb, var(--color-warning) 10%, var(--surface-elevated));
+  color: color-mix(in srgb, var(--color-warning) 72%, var(--text-primary));
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  font-family: inherit;
+  line-height: 1.6;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--transition-fast) var(--ease-custom),
+              border-color var(--transition-fast) var(--ease-custom);
+}
+.kb-col__awaiting-chip:hover {
+  background: color-mix(in srgb, var(--color-warning) 18%, var(--surface-elevated));
+}
+.kb-col__awaiting-chip.is-on {
+  background: color-mix(in srgb, var(--color-warning) 26%, var(--surface-elevated));
+  border-color: color-mix(in srgb, var(--color-warning) 52%, var(--surface-elevated));
 }
 .kb-col__list {
   list-style: none;
@@ -1688,18 +1829,35 @@ function coverTitle(img: BoardImage): string {
   color: var(--text-meta);
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  /* 2026-11-13：2 → 1。实时流是扫读的（"它此刻在干嘛"），思考 / 回复各占一行、
+     尾巴省略号，全文在 title；想细读点元信息行那枚「展开」（.is-expanded 解开 clamp）。
+     两行长文会把同列卡片往下顶出好几行，扫读节奏就断了。 */
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
   -webkit-box-orient: vertical;
   word-break: break-word;
 }
-/* 工具行只给一行：它是"正在做什么"的标签（`Edit src/App.vue`），
-   折成两行会被读成一句内容，而它本来不是 */
+/* 工具行：工具名（Edit / Bash）+ 参数段（通常是路径）。参数段等宽字体、从左截断
+   （toolTargetDisplay 在 JS 里留尾切头），单行。拆两个 span 是为了让路径单独吃等宽字体，
+   工具名仍走正文字体 —— 一行的"在做什么"里，名字是动词、路径是宾语，读法不同。 */
 .kb-card__live-line.is-tool {
   -webkit-line-clamp: 1;
   line-clamp: 1;
 }
-/* 思考那行比工具行**亮一档**并带左侧竖线 —— 多数任务一句正文都不写，
+.kb-card__tool-verb { margin-right: 4px; }
+.kb-card__tool-target {
+  font-family: var(--font-mono);
+  /* 展开态下长路径要能折行（没有空格可断，只能按字符断）；收起态被 clamp:1 压成一行 */
+  word-break: break-all;
+}
+/* 展开态：解开所有行的 clamp，让思考 / 回复 / 工具参数整段折行显示。
+   display 回到 block（-webkit-box 与 line-clamp 绑定，解开时一并撤掉）。 */
+.kb-card__live.is-expanded .kb-card__live-line {
+  display: block;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
+/* 思考那行比工具行**亮一档** —— 多数任务一句正文都不写，
    它是"它在干嘛"最直接的证据，不该和工具名一样灰 */
 .kb-card__live-line.is-thought {
   color: var(--text-secondary);
@@ -1713,6 +1871,24 @@ function coverTitle(img: BoardImage): string {
   margin-right: 4px;
   color: var(--text-meta);
 }
+/* 展开 / 收起钮：元信息行末尾一枚小字钮，margin-left:auto 推到行尾。
+   不抢色（text-meta），hover 才提亮到 primary —— 它是辅助动作，不是这张卡的主角。 */
+.kb-card__live-toggle {
+  margin-left: auto;
+  flex: none;
+  padding: 0 4px;
+  border: none;
+  border-radius: var(--radius-base);
+  background: transparent;
+  color: var(--text-meta);
+  font-size: var(--font-size-xs);
+  font-family: inherit;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: color var(--transition-fast) var(--ease-custom),
+              background var(--transition-fast) var(--ease-custom);
+}
+.kb-card__live-toggle:hover { color: var(--color-primary); background: var(--bg-subtle-hover); }
 
 /* ── 跑完之后留下的「最后说了什么」（只在没有 job 在跑时出现） ──
    与 .kb-card__live 的分工：那个答"现在在干嘛"（实时，跑完就消失），这个答"它最后

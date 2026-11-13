@@ -15,7 +15,9 @@
  *   E 列表视图也挂在**状态列**（与卡片同一口径），回复那行的文字不动（G1 的契约）
  *   F 服务端：判定只在自己那一轮 job 上有效（jobId 记账），手动完成 / 不在已完成列都不挂标
  *   G 页面无 console / page 错误
- *   R 负控（--reverse）：夹具里把这枚标抹掉 —— A/E 必须变红
+ *   H 已完成列头「等你回话」聚合 chip：计数对、默认关（不改变既有渲染）、点一下只留
+ *     等回话的卡、再点还原（2026-11-13）
+ *   R 负控（--reverse）：夹具里把这枚标抹掉、把聚合 chip 藏掉 —— A/E/H 必须变红
  *
  * 注意：**判定本身（模型读句子）不在这里验**。它是异步的、要真实模型往返，
  * 而且是"读懂一句话"，不是可以离线复现的纯函数 —— prompt / 解析 / 缓存边界的
@@ -239,6 +241,12 @@ async function main() {
     await page.locator('.proj-item--all').first().click()
     await sleep(1200)
 
+    if (REVERSE) {
+      // 负控（H 组）：把聚合 chip 藏掉。真实数据里可能仍有等回话的卡（chip 会被渲染），
+      // 所以不能只靠夹具抹 awaitingReply —— 注入样式确保 chip 不可见，H1 反证才稳定。
+      await page.addStyleTag({ content: '.kb-col__awaiting-chip { display: none !important; }' })
+    }
+
     /**
      * 已完成列默认只铺最近 30 张（DONE_PAGE）。合成任务的时刻都造在"几分钟前"，
      * 正常都在第一屏；真实数据哪天多到把它们挤下去，这里按「显示更早的」翻出来。
@@ -316,6 +324,56 @@ async function main() {
     await page.locator('.kb-col--done').first().screenshot({
       path: path.join(shotsDir, REVERSE ? 'wb-awaiting-reply-reverse.png' : 'wb-awaiting-reply.png'),
     })
+
+    // ── H 「等你回话」聚合 chip + 过滤（2026-11-13）─────────────────────
+    // 列头一枚琥珀 chip 报"有几条在等你"，点一下只留那些卡、再点还原。默认关。
+    const chipSel = '.kb-col--done .kb-col__awaiting-chip'
+    if (REVERSE) {
+      const chipVisible = await page.evaluate(() => {
+        const el = document.querySelector('.kb-col--done .kb-col__awaiting-chip')
+        if (!el) return false
+        const r = el.getBoundingClientRect()
+        return r.width > 0 && r.height > 0
+      })
+      check('H1 反证：聚合 chip 被藏掉（负控，证明下面的断言真在守它）', chipVisible === false, String(chipVisible))
+    } else {
+      const expectedAwaiting = tasks.filter(t => t.column === 'done' && t.awaitingReply).length
+      const chipInfo = await page.evaluate(() => {
+        const el = document.querySelector('.kb-col--done .kb-col__awaiting-chip')
+        if (!el) return { found: false }
+        const r = el.getBoundingClientRect()
+        return {
+          found: true,
+          text: el.textContent.replace(/\s+/g, ' ').trim(),
+          visible: r.width > 0 && r.height > 0,
+          pressed: el.getAttribute('aria-pressed'),
+        }
+      })
+      check('H1 已完成列头有「等你回话」chip，计数 = 等回话的已完成卡数，默认未按',
+        chipInfo.found && chipInfo.visible && chipInfo.text.includes(String(expectedAwaiting)) && chipInfo.pressed === 'false',
+        `${chipInfo.text}（期望含 ${expectedAwaiting}）pressed=${chipInfo.pressed}`)
+      const plainVisibleDefault = await page.evaluate((t) => Array.from(document.querySelectorAll('.kb-col--done .kb-card'))
+        .some(c => (c.querySelector('.kb-card__title')?.textContent || '').trim() === t), PLAIN_TITLE)
+      check('H2 默认关：普通完成卡仍在列里（不改变既有渲染，A–E 不受影响）', plainVisibleDefault === true)
+      await page.locator(chipSel).click()
+      await sleep(300)
+      const afterFilter = await page.evaluate(() => {
+        const cards = Array.from(document.querySelectorAll('.kb-col--done .kb-card'))
+        return {
+          count: cards.length,
+          allAwaiting: cards.every(c => !!c.querySelector('.kb-card__awaiting')),
+          titles: cards.map(c => (c.querySelector('.kb-card__title')?.textContent || '').trim()),
+          pressed: document.querySelector('.kb-col--done .kb-col__awaiting-chip')?.getAttribute('aria-pressed'),
+        }
+      })
+      check('H3 点一下只留等回话的卡（每张都带标、普通卡被滤掉、aria-pressed=true）',
+        afterFilter.count > 0 && afterFilter.allAwaiting && !afterFilter.titles.includes(PLAIN_TITLE) && afterFilter.pressed === 'true',
+        `${afterFilter.count} 张 allAwaiting=${afterFilter.allAwaiting} pressed=${afterFilter.pressed}`)
+      await page.locator(chipSel).click()
+      await sleep(300)
+      const plainBack = await revealDoneCard(PLAIN_TITLE)
+      check('H4 再点一下清除过滤，普通完成卡回到列里', plainBack === true)
+    }
 
     // ── E 列表视图：同一口径挂在状态列，回复行文字不动 ────────────────
     await page.getByRole('tab', { name: /列表视图|List/ }).first().click()

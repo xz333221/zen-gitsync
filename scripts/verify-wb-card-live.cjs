@@ -99,6 +99,14 @@ function syntheticTasks({ decorate, pickLive, now }) {
   const bareJob = {
     id: 'synth-bare-job', taskId: 'synth-bare', status: 'running', agent: 'claude', startedAt,
   }
+  // 长路径分支：参数远超一行容量，验"从左截断（留尾切头）+ 展开还原全文"。
+  // 思考也给一句长的，让展开钮（liveHasOverflow）一定出现。
+  const longToolJob = {
+    id: 'synth-longtool-job', taskId: 'synth-longtool', status: 'running', agent: 'claude', startedAt,
+    thinking: '要把运行卡的实时流改成单行显示，路径从左截断，再加一个展开态看全文',
+    output: '',
+    toolCalls: [{ name: 'Edit', argsPreview: 'D:\\workspace\\github_workspace\\xz333221\\zen-gitsync\\src\\ui\\client\\src\\views\\components\\WorkbenchKanban.vue' }],
+  }
   const mk = (id, title, job) => {
     const card = decorate({ id, title, desc: '', projectPath: 'D:\\ws\\zen-gitsync', createdAt: startedAt }, job ? [job] : [])
     return { ...card, _synthetic: true }
@@ -106,6 +114,7 @@ function syntheticTasks({ decorate, pickLive, now }) {
   return [
     mk('synth-silent', '【合成】静默分支：四行齐全 + 静默告警', silentJob),
     mk('synth-bare', '【合成】只有元信息：刚起来还没吐字', bareJob),
+    mk('synth-longtool', '【合成】长路径：左截断 + 展开态', longToolJob),
     mk('synth-idle', '【合成】没在跑的任务不该有活动区', null),
   ]
   // 注：pickLive 由 decorate 内部调用（decorateTaskForBoard 的 live 字段），
@@ -151,6 +160,7 @@ async function main() {
   const target = running[0]                      // 真实的那条：断言"新后端给的事实 → DOM"
   const silent = tasks.find(t => t.id === 'synth-silent')
   const bare = tasks.find(t => t.id === 'synth-bare')
+  const longtool = tasks.find(t => t.id === 'synth-longtool')
   const idle = tasks.find(t => t.id === 'synth-idle')
 
   const browser = await chromium.launch({
@@ -208,6 +218,11 @@ async function main() {
           thought: el.classList.contains('is-thought'),
           tag: el.querySelector('.kb-card__live-tag')?.textContent || '',
           text: el.textContent,
+          /* 单行化后工具行的可见文本是"工具名 + 左截断的参数"，不再与 lastTool 逐字相等；
+             全文改挂在 title 上。A4 的契约随之改成"title 逐字 + 可见参数是真后缀"。 */
+          title: el.getAttribute('title'),
+          verb: el.querySelector('.kb-card__tool-verb')?.textContent || '',
+          target: el.querySelector('.kb-card__tool-target')?.textContent || '',
         })),
         silent: silentEl ? silentEl.textContent : null,
         silentColor: silentEl ? getComputedStyle(silentEl).color : null,
@@ -238,8 +253,18 @@ async function main() {
     const thoughtLine = card.lines.find(l => l.thought)
     const replyLine = card.lines.find(l => !l.tool && !l.thought)
     if (target.live.lastTool) {
-      check('A4 最近一次工具调用逐字一致', norm(toolLine && toolLine.text) === norm(target.live.lastTool),
-        `${norm(toolLine && toolLine.text)} ≠ ${target.live.lastTool}`)
+      // 单行化（2026-11-13）：工具行可见文本 = 工具名 + 左截断的参数，全文挂在 title。
+      // 契约从"逐字相等"改为"title 逐字 + 工具名对 + 可见参数是全文或真后缀（…开头）"。
+      const sp = target.live.lastTool.indexOf(' ')
+      const realVerb = sp === -1 ? target.live.lastTool : target.live.lastTool.slice(0, sp)
+      const realTarget = sp === -1 ? '' : target.live.lastTool.slice(sp + 1)
+      const shown = toolLine ? toolLine.target : ''
+      const targetOk = shown === realTarget
+        || (shown.startsWith('…') && realTarget.endsWith(shown.slice(1)))
+      check('A4 工具行：title 逐字保留全文，工具名对，可见参数为全文或左截断真后缀',
+        !!toolLine && norm(toolLine.title) === norm(target.live.lastTool)
+        && norm(toolLine.verb) === norm(realVerb) && targetOk,
+        `title=${toolLine && toolLine.title} verb=${toolLine && toolLine.verb} target=${shown}（实际 ${realTarget}）`)
     } else check('A4 没有工具调用时该行不渲染', !toolLine)
     if (target.live.lastThought) {
       check('A5 最近思考逐字一致（带「思考」标签）',
@@ -282,6 +307,32 @@ async function main() {
     check('D2 静默用告警色（文字档 --color-warning-dark）', silentCard.silentColor === warn, `${silentCard.silentColor} vs ${warn}`)
     check('D3 合成任务四行齐全（工具 / 思考 / 回复）',
       silentCard.lines.length >= 3, `lines=${silentCard.lines.length}`)
+
+    // ── T 长路径左截断 + 展开态（2026-11-13 单行化）─────────────────────
+    const longCard = await readCard(longtool.title)
+    const longToolLine = longCard.lines.find(l => l.tool)
+    const longSp = longtool.live.lastTool.indexOf(' ')
+    const longRealTarget = longtool.live.lastTool.slice(longSp + 1)
+    check('T1 长参数从左截断：… 开头，余下是全文的真后缀（留尾切头）',
+      !!longToolLine && longToolLine.target.startsWith('…') && longRealTarget.endsWith(longToolLine.target.slice(1)),
+      `${longToolLine && longToolLine.target}（实际 ${longRealTarget}）`)
+    check('T2 全文仍逐字保留在 title（截断不丢信息）',
+      norm(longToolLine && longToolLine.title) === norm(longtool.live.lastTool),
+      `${longToolLine && longToolLine.title}`)
+    const toggleSel = '.kb-card[data-task-id="synth-longtool"] .kb-card__live-toggle'
+    check('T3 有被截断的内容 → 元信息行挂出「展开」钮', await page.locator(toggleSel).count() === 1)
+    await page.locator(toggleSel).click()
+    await sleep(250)
+    const expandedTool = (await readCard(longtool.title)).lines.find(l => l.tool)
+    check('T4 展开后参数还原为全文（不再截断）',
+      !!expandedTool && norm(expandedTool.target) === norm(longRealTarget),
+      `${expandedTool && expandedTool.target}`)
+    // 点收回（同一枚钮），确认开关是双向的、且收起后回到截断态
+    await page.locator(toggleSel).click()
+    await sleep(250)
+    const recollapsedTool = (await readCard(longtool.title)).lines.find(l => l.tool)
+    check('T5 再点一下收起，参数回到左截断态',
+      !!recollapsedTool && recollapsedTool.target.startsWith('…'), `${recollapsedTool && recollapsedTool.target}`)
 
     // ── E 没在跑的任务没有活动区 ────────────────────────────────────
     const idleCard = await readCard(idle.title)

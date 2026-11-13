@@ -20,7 +20,7 @@
  *   C 纵向过渡带终点 ≥ 操作组盒顶（整组按钮落在全透明带里）、且 ≤ 末行行盒上沿
  *     （末行右侧仍被完整遮住，上一行完全不受影响）
  *   D guard：那三行的引文**确实**折到了 ≥2 行 —— 否则 B/C 是条空断言
- *   E 两行活动区（live 那行 line-clamp: 2）与单行卡走同一套条带
+ *   E 活动区正文默认单行（E0）；点「展开」折回 ≥2 行后与单行卡走同一套条带（E1/E2）
  *   P **数像素**：倒数第二行右端（横向完全透明区之内）必须还有墨。
  *     这一条才是用户诉求本身；几何判据全绿也可能因为合成方式写错而什么都没遮住。
  *   H 页面无 console / page 错误
@@ -118,6 +118,25 @@ function readBox(page, id) {
     if (!el) return null
     const r = el.getBoundingClientRect()
     return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+  }, id)
+}
+
+/**
+ * 不 hover 也能量活动区最后一行的**可见**行数（readMask 要有 mask 才返回行数，收起态没 mask）。
+ * 单行化（2026-11-13）后默认 clamp:1，E0 用它钉"收起态确实只有一行"。
+ *
+ * ⚠️ 不能用 Range.getClientRects 数行盒：line-clamp 是"画的时候截断"，被截掉的行
+ * 仍然有行盒，Range 会把它们一并返回（实测 clamp:1 仍数出 3 行）。可见行数要看
+ * **盒子高度** —— clientHeight 被 clamp 限住，除以行高就是真正露出来的行数。
+ * （readMask 那侧量的是**展开态**，display:block 无 clamp，行盒口径才成立。）
+ */
+function readLiveRowCount(page, id) {
+  return page.evaluate((taskId) => {
+    const el = document.querySelector(`.kb-card[data-task-id="${taskId}"] .kb-card__live > :last-child`)
+    if (!el) return 0
+    const lh = parseFloat(getComputedStyle(el).lineHeight) || 0
+    if (!lh) return 0
+    return Math.round(el.clientHeight / lh)
   }, id)
 }
 
@@ -367,7 +386,14 @@ async function main() {
         `bandEnd=${reply.bandEnd}px ≤ 行高 ${reply.lineHeight}px`)
     }
 
-    // ── E 活动区那行（line-clamp: 2）走同一套条带 ────────────────────
+    // ── E 活动区那行走同一套条带 ──────────────────────────────────────
+    // 单行化（2026-11-13）后活动区正文默认 clamp:1。先钉"收起态只有一行"（E0），
+    // 再点「展开」让它折回 ≥2 行 —— E2 的条带判据要 ≥2 行才有意义（上一行不透明）。
+    // 展开不改条带几何：纵向层锚在被遮元素下边缘，它离卡片底的距离不随行数变。
+    const collapsedRows = await readLiveRowCount(page, 'syn-live')
+    check('E0 默认单行：活动区正文收起态被 clamp 成 1 行', collapsedRows === 1, `行数=${collapsedRows}`)
+    await page.locator('.kb-card[data-task-id="syn-live"] .kb-card__live-toggle').click()
+    await sleep(250)
     const live = await hover('syn-live')
     check('E1 活动区最后一行被遮，操作组左边缘落在它的透明区里',
       /kb-card__live/.test(live.masked || '') && live.gapToMask <= live.hTransparent,
