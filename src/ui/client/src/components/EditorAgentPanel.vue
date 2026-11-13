@@ -686,7 +686,7 @@ onBeforeUnmount(() => {
   background: linear-gradient(to top, var(--acu-bg) 70%, transparent);
 }
 
-/* 排队条带换成本项目「待处理」档的语义色 —— 与任务对话里那条 .wb-chat-queue 同一副面孔。
+/* 排队条带换成本项目「待处理」档的语义色 —— 与任务执行页那条（.wb-simple-chat__footer）同一副面孔。
    库给 --acu-queue-* 四个变量就是留给宿主做这件事的，所以这里只映射颜色，不碰它的 class。 */
 .agent-panel-composer :deep(.acu-input-queue) {
   --acu-queue-edge: var(--role-pending-edge);

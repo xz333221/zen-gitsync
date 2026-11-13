@@ -78,6 +78,8 @@
     "verify:wb-card-opened:reverse": "node scripts/verify-wb-card-opened.cjs --reverse",
     "verify:wb-card-stop": "node scripts/verify-wb-card-stop.cjs",
     "verify:wb-card-stop:reverse": "node scripts/verify-wb-card-stop.cjs --reverse",
+    "verify:wb-chat-queue": "node scripts/verify-wb-chat-queue.cjs",
+    "verify:wb-chat-queue:reverse": "node scripts/verify-wb-chat-queue.cjs --reverse",
     "verify:wb-card-fade-band": "node scripts/verify-wb-card-fade-band.cjs",
     "verify:wb-card-fade-band:reverse": "node scripts/verify-wb-card-fade-band.cjs --reverse",
     "verify:wb-card-done": "node scripts/verify-wb-card-done.cjs",

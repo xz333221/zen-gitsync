@@ -35,7 +35,7 @@ import { ChatInput, ChatContainer } from 'zen-ai-chat-ui'
 import type { ChatMessage } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { avatarForExecutor } from '@/utils/agentAvatar'
-import { MESSAGE_RAIL_CONFIG, agentFileChangeLabels } from '@/utils/agentConversations'
+import { MESSAGE_RAIL_CONFIG, agentFileChangeLabels, agentQueueLabels } from '@/utils/agentConversations'
 import { useConfigStore } from '@/stores/configStore'
 import { useToolsStore } from '@/stores/toolsStore'
 const configStore = useConfigStore()
@@ -1177,6 +1177,15 @@ const lastRunExecutorTitle = computed(() => {
 const selectedTaskQueue = computed(() =>
   selectedTask.value ? queuedChatsOf(selectedTask.value.id) : []
 )
+// 条带由 ChatInput 自己渲染（与四个 g ai 入口同一份），这里只把队列翻译成它要的形状。
+const selectedTaskQueuedMessages = computed(() =>
+  selectedTaskQueue.value.map(item => ({
+    id: item.id,
+    text: item.text,
+    attachmentNames: item.files.map(f => f.file.name)
+  }))
+)
+const queueLabels = agentQueueLabels()
 </script>
 
 <template>
@@ -1635,49 +1644,14 @@ const selectedTaskQueue = computed(() =>
                        - 执行中：发送 = 排队，等这一轮 job 进终态自动接上（见 useWorkbenchExecution）
                        停止按钮不在这里 —— 它一直在上方「提示词」那一行的右侧。 -->
                   <div class="wb-simple-chat__footer">
-                    <div v-if="selectedTaskQueue.length" class="wb-chat-queue">
-                      <div class="wb-chat-queue__head">
-                        <span class="wb-chat-queue__label">{{ $t('@WORKBENCH:排队中') }}</span>
-                        <span class="wb-chat-queue__count">{{ selectedTaskQueue.length }}</span>
-                        <span class="wb-chat-queue__hint">
-                          {{ selectedTaskRunning
-                            ? $t('@WORKBENCH:等这一轮跑完自动发送')
-                            : $t('@WORKBENCH:当前没有在跑的轮次') }}
-                        </span>
-                      </div>
-                      <div
-                        v-for="(item, qi) in selectedTaskQueue"
-                        :key="item.id"
-                        class="wb-chat-queue__item"
-                      >
-                        <span class="wb-chat-queue__index">{{ qi + 1 }}</span>
-                        <span class="wb-chat-queue__text" :title="item.text">{{ item.text }}</span>
-                        <span v-if="item.files.length" class="wb-chat-queue__atts">
-                          <span aria-hidden="true">📎</span>
-                          {{ item.files.map(f => f.file.name).join('、') }}
-                        </span>
-                        <!-- 队首 + 没在跑 = 上一笔发失败了（正常情况终态一到就自动发了），
-                             给个手动重试；其余情况点它没意义，所以只在队首出现 -->
-                        <button
-                          v-if="qi === 0 && !selectedTaskRunning"
-                          type="button"
-                          class="wb-chat-queue__btn"
-                          @click="flushNextQueued(selectedTask.id)"
-                        >{{ $t('@WORKBENCH:立即发送') }}</button>
-                        <button
-                          type="button"
-                          class="wb-chat-queue__btn is-remove"
-                          :title="$t('@WORKBENCH:移出队列')"
-                          :aria-label="$t('@WORKBENCH:移出队列')"
-                          @click="removeQueuedChat(selectedTask.id, item.id)"
-                        >✕</button>
-                      </div>
-                    </div>
                     <ChatInput
                       :key="'input-' + selectedTask.id"
                       :placeholder="selectedTaskRunning
                         ? $t('@WORKBENCH:执行中，发送后会排队，等这一轮跑完自动接上…')
                         : $t('@WORKBENCH:输入后续问题继续对话…(Ctrl+Enter 发送)')"
+                      :queued="selectedTaskQueuedMessages"
+                      :queue-paused="!selectedTaskRunning"
+                      :queue-labels="queueLabels"
                       :upload-config="{
                         enabled: true,
                         accept: ALLOWED_EXT_HINT,
@@ -1689,6 +1663,8 @@ const selectedTaskQueue = computed(() =>
                       }"
                       class="wb-simple-chat__input"
                       @send="onContinueSendFromChat(selectedTask, $event)"
+                      @unqueue="removeQueuedChat(selectedTask.id, $event)"
+                      @flush-queued="flushNextQueued(selectedTask.id)"
                     />
                   </div>
                 </div>
@@ -3189,96 +3165,15 @@ const selectedTaskQueue = computed(() =>
 }
 .wb-simple-chat__input { width: 100%; }
 
-/* 排队续聊条：任务在跑时发出去的内容先落这儿，等这一轮 job 进终态自动接上。
-   用 --role-pending-* 这套语义色，跟看板「待处理」列是同一个视觉口径 ——
-   「排队中」本来就是 pending。 */
-.wb-chat-queue {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0 0 6px;
-  padding: 8px 10px;
-  border: 1px solid var(--role-pending-edge);
-  border-radius: var(--radius-md);
-  background: var(--role-pending-surface);
-}
-.wb-chat-queue__head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--font-size-xs);
-  color: var(--role-pending-ink);
-}
-.wb-chat-queue__label { font-weight: 600; }
-.wb-chat-queue__count {
-  min-width: 18px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: var(--role-pending-wash);
-  font-weight: 600;
-  text-align: center;
-}
-.wb-chat-queue__hint { color: var(--text-secondary); }
-.wb-chat-queue__item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--font-size-sm);
-}
-.wb-chat-queue__index {
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  background: var(--role-pending-wash);
-  color: var(--role-pending-ink);
-  font-size: var(--font-size-xs);
-  line-height: 16px;
-  text-align: center;
-}
-.wb-chat-queue__text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-primary);
-}
-.wb-chat-queue__atts {
-  flex-shrink: 0;
-  max-width: 36%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-}
-.wb-chat-queue__btn {
-  flex-shrink: 0;
-  padding: 2px 8px;
-  border: 1px solid var(--role-pending-edge);
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--role-pending-ink);
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-  transition: background var(--transition-fast) var(--ease-custom),
-              border-color var(--transition-fast) var(--ease-custom);
-}
-.wb-chat-queue__btn:hover {
-  background: var(--role-pending-wash);
-  border-color: var(--role-pending-ink);
-}
-.wb-chat-queue__btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
-.wb-chat-queue__btn.is-remove {
-  padding: 2px 6px;
-  border-color: transparent;
-  color: var(--text-secondary);
-}
-.wb-chat-queue__btn.is-remove:hover {
-  border-color: var(--border-card-hover);
-  background: transparent;
-  color: var(--text-primary);
+/* 排队续聊条：由 ChatInput 自带的条带渲染（与四个 g ai 入口同一份），这里只把它的
+   四个变量映射到本项目「待处理」档的语义色 —— 跟看板「待处理」列同一个视觉口径，
+   「排队中」本来就是 pending。变量挂在自己的 footer 上而不是 ChatInput 的 class 上：
+   传给库组件的 class 在生产构建里不落到根节点（见上面 wb-simple-chat 那段）。 */
+.wb-simple-chat__footer :deep(.acu-input-queue) {
+  --acu-queue-edge: var(--role-pending-edge);
+  --acu-queue-surface: var(--role-pending-surface);
+  --acu-queue-ink: var(--role-pending-ink);
+  --acu-queue-wash: var(--role-pending-wash);
 }
 
 .wb-form-item {
