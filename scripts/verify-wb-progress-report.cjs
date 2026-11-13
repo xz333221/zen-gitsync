@@ -41,6 +41,9 @@
  *       反证：接口返 500 时不当成功（服务端没被改 + 弹错误），重开弹窗显示回到旧档
  *   P16 报告块与头部两个控件都是**平铺**的（无 1px 描边 / 无常驻圆角 / 无静息阴影）——
  *       2026-10-25 用户第二次点同一件事，口径同看板卡 .kb-card
+ *   P17 结构化正文（每任务一条 `- **任务名**：…`）走 Markdown 渲染（li/strong 真的渲染出来、
+ *       裸 ** 被吃掉、仍默认展开）；纯文本 / 历史报告仍按 pre-wrap 原样显示。
+ *       结构化桩与纯文本桩互为反证（2026-11-13）
  *
  * 前置：dev server 已启动（npm run dev，后端 5545 / 前端 5544）。
  * 用法：node scripts/verify-wb-progress-report.cjs
@@ -1024,6 +1027,73 @@ async function main() {
         && flat.interval.borderTopWidth === '0px' && flat.run.borderTopWidth === '0px'
         && parseFloat(flat.interval.borderRadius) <= 6 && parseFloat(flat.run.borderRadius) <= 6,
       `interval=${JSON.stringify(flat.interval)} run=${JSON.stringify(flat.run)}`)
+
+    /* ══ P17 结构化报告走 Markdown，纯文本 / 历史报告仍按原样（2026-11-13）══
+       正文从"一段纯文本"改成"每任务一条 `- **任务名**：…` 列表"（服务端 buildReportPrompt）。
+       但面板读的是盘上的历史报告 —— 老记录仍是纯文本，模型偶尔也不照模板写。
+       所以渲染分两条路（utils/progressReport.ts 的 reportIsStructured）：
+       看着像结构化的走 MarkdownPreview，其余仍 pre-wrap 原样显示。
+       这一组用"结构化桩 vs 纯文本桩"一对互为反证：
+         · 若判据写成"永远 Markdown"，纯文本桩会被套上列表/加粗 → P17d 红；
+         · 若判据写成"永远纯文本"，结构化桩的 `**` 会原样印出来 → P17a/c 红。 */
+    const readReportBody = () => page.evaluate(() => {
+      const t = document.querySelector('.rp__text')
+      return {
+        tag: t ? t.tagName : '',
+        isMd: !!document.querySelector('.rp__text--md'),
+        mdPreview: document.querySelectorAll('.rp__text .md-preview').length,
+        liCount: document.querySelectorAll('.rp__text .md-preview li').length,
+        strongCount: document.querySelectorAll('.rp__text .md-preview strong').length,
+        rawStars: (t?.textContent || '').includes('**'),
+        text: (t?.textContent || '').trim(),
+        expanded: !!document.querySelector('.rp__text.is-expanded'),
+        more: (document.querySelector('.rp__more')?.textContent || '').trim(),
+      }
+    })
+
+    const MD_TEXT = '- **任务一**：正在改登录模块（工具 12 次）；下一步：跑测试\n'
+      + '- **任务二**：在收尾提交（工具 3 次）；下一步：写提交说明'
+    // P13f 从历史里点开过一份（选中态优先于"跟随最新"），且 P13 收尾把 orchestrator
+    // 的桩撤了（running 回到真实的 0）—— 不重置的话：新插进来的这份既不会被选中、
+    // 也因"它讲的任务不在跑"而不挂主位，面板一直停在 P13 那份上（与 P7 开头同一个坑）。
+    // 重新钉住 running=[PROBE_JOB]（桩报告 tasks[0].taskId=probe-0 才对得上），再 reload 清选中态。
+    await installRunningStub(page)
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await openCommandMode(page)
+    await stubOnce(stubReport(STUB_PERCENT, [70, 30], MD_TEXT))
+    await page.waitForSelector('.rp__text--md .md-preview', { timeout: 8000 }).catch(() => {})
+    let mb = await readReportBody()
+    check('P17a 结构化正文走 Markdown 渲染（.rp__text--md + .md-preview，不再是裸 <p>）',
+      mb.isMd && mb.mdPreview >= 1 && mb.tag === 'DIV',
+      `tag=${mb.tag} isMd=${mb.isMd} mdPreview=${mb.mdPreview}`)
+    check('P17b 渲染成真正的列表：两条 li、两个加粗任务名（不是把符号当文字印）',
+      mb.liCount === 2 && mb.strongCount === 2,
+      `li=${mb.liCount} strong=${mb.strongCount}`)
+    check('P17c 加粗标记被吃掉（正文里没有裸 **），任务名读得到',
+      mb.rawStars === false && /任务一/.test(mb.text) && /任务二/.test(mb.text),
+      `rawStars=${mb.rawStars} text="${mb.text.slice(0, 40)}"`)
+    check('P17d 结构化正文也默认展开（与 P14 同一口径，按钮是「收起」）',
+      mb.expanded === true && mb.more === '收起',
+      `expanded=${mb.expanded} more="${mb.more}"`)
+    // 历史行是单行预览：排版标记（- / **）不该原样印出来（正文那侧已交给 Markdown渲染）
+    await expandSect(page, '.oc__history')
+    const firstHistSum = await page.evaluate(() =>
+      (document.querySelector('.oc__history-item .oc__history-sum')?.textContent || '').trim())
+    check('P17f 历史单行预览剥掉排版标记（没有裸 ** / 行首 - ，只留字）',
+      firstHistSum.length > 0 && !firstHistSum.includes('**')
+        && !/^[-*•]\s/.test(firstHistSum) && /任务一/.test(firstHistSum),
+      `sum="${firstHistSum.slice(0, 40)}"`)
+    await page.locator('.oc').screenshot({ path: path.resolve(__dirname, '../.tmp/verify-wb-progress-report-md.png') }).catch(() => {})
+
+    // 反证那一半：纯文本（历史报告 / 不照模板写的模型）不许被凭空套上 Markdown 排版
+    const PLAIN_TEXT = '桩：任务一在改代码，任务二在跑测试，整体约六成。'
+    await stubOnce(stubReport(STUB_PERCENT, [70, 30], PLAIN_TEXT))
+    await sleep(500)
+    mb = await readReportBody()
+    check('P17e 纯文本仍按原样显示（裸 <p>、无 .md-preview、文字逐字不变）',
+      mb.tag === 'P' && mb.isMd === false && mb.mdPreview === 0 && mb.text === PLAIN_TEXT,
+      `tag=${mb.tag} isMd=${mb.isMd} mdPreview=${mb.mdPreview} text="${mb.text.slice(0, 40)}"`)
+    await page.unroute('**/api/workbench/orchestrator/report')
 
     /* ══ P8 无异常 ══ */
     check('P8a 无 JS 运行时异常', pageErrors.length === 0, pageErrors.join(' | ').slice(0, 300))

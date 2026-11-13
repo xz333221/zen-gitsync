@@ -169,3 +169,29 @@ export const REPORT_PERCENT_LABEL_KEY = '@WORKBENCH:AI 估计'
 /** 悬停说明：说清这个数字是怎么来的，免得被当成实测进度 */
 export const REPORT_PERCENT_HINT_KEY =
   '@WORKBENCH:百分比是主 Agent 根据任务思考与工具调用推测的大致估计，不是精确进度'
+
+// ── 正文是不是结构化 Markdown ──────────────────────────────────────────
+//
+// 2026-11-13：报告正文从"一段纯文本"改成"每任务一条 `- **任务名**：…` 列表"
+// （见服务端 buildReportPrompt）。但面板读的是**盘上的历史报告** —— 老版本写的、
+// 别的 g ui 实例写进同一份文件的记录，仍是纯文本；模型偶尔也不照模板写。
+// 所以渲染分两条路：看着像结构化的走 Markdown，其余仍按 pre-wrap 原样显示，
+// 不给一段普通汇报凭空套上列表/加粗的排版。
+//
+// 判据刻意宽松（行首列表符 **或** 行内加粗任一命中即可）：宁可把一段恰好带了
+// `- ` 的纯文本也当 Markdown（渲染结果几乎一样），也不要把真正的列表漏判成纯文本
+// （那样 `**任务名**` 的星号会原样印在界面上）。
+
+/** 行首列表符：`- ` / `* ` / `• ` / `1. ` / `1) `，后面必须跟非空白内容 */
+const MD_BULLET_RE = /(?:^|\n)[ \t]*(?:[-*•]|\d+[.)])[ \t]+\S/
+/** 行内加粗：`**…**` 或 `__…__`，中间不跨行、不为空 */
+const MD_BOLD_RE = /\*\*[^*\n]+\*\*|__[^_\n]+__/
+
+/**
+ * 正文是否按结构化 Markdown 渲染。空串 / 非字符串一律 false（走纯文本那条路，
+ * 与"没有正文"时的 .rp__notice 不冲突 —— 那个分支根本不渲染 .rp__text）。
+ */
+export function reportIsStructured(text: unknown): boolean {
+  if (typeof text !== 'string' || !text) return false
+  return MD_BULLET_RE.test(text) || MD_BOLD_RE.test(text)
+}

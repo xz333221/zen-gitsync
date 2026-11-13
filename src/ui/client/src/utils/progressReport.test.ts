@@ -31,6 +31,7 @@ import {
   reportIntervalLabelKey,
   reportIntervalLabelParams,
   reportErrorKey,
+  reportIsStructured,
   reportPercent,
   reportSilentMs,
   taskPercentIndex,
@@ -194,5 +195,46 @@ describe('卡片进度查表（报告 ↔ 任务）', () => {
     expect(taskPercentIndex(undefined, [task('t1', 'j1')])).toEqual({})
     expect(taskPercentIndex(report([fact({ taskId: 't1', jobId: 'j1', percent: 50 })]), undefined)).toEqual({})
     expect(taskPercentIndex(report([]), [task('t1', 'j1')])).toEqual({})
+  })
+})
+
+/**
+ * 正文走 Markdown 还是 pre-wrap 的唯一判据。
+ *
+ * 判据偏宽松（行首列表符 **或** 行内加粗任一命中）：把一段恰好带 `- ` 的纯文本
+ * 也当 Markdown 几乎无害，但把真正的列表漏判成纯文本会让 `**任务名**` 的星号
+ * 原样印在界面上。所以"该认的必须认下来"这一侧钉得比"不该认的"更紧。
+ */
+describe('报告正文是不是结构化 Markdown', () => {
+  it('每任务一条的列表（服务端模板的产物）认下来', () => {
+    expect(reportIsStructured('- **任务一**：正在改代码（工具 12 次）；下一步：跑测试')).toBe(true)
+    expect(reportIsStructured('前一句导语\n- **任务一**：…\n- **任务二**：…')).toBe(true)
+    // 其它列表符 / 有序列表也算结构化
+    expect(reportIsStructured('* 任务一：正在探路')).toBe(true)
+    expect(reportIsStructured('• 任务一：正在探路')).toBe(true)
+    expect(reportIsStructured('1. 任务一：正在探路')).toBe(true)
+    expect(reportIsStructured('2) 任务二：收尾')).toBe(true)
+  })
+
+  it('只有行内加粗（没有列表）也认下来', () => {
+    expect(reportIsStructured('整体进度 **六成**，主要在收尾。')).toBe(true)
+    expect(reportIsStructured('整体进度 __六成__，主要在收尾。')).toBe(true)
+  })
+
+  it('纯文本 / 历史报告不认（仍按 pre-wrap 原样显示）', () => {
+    expect(reportIsStructured('桩：正在核对 zen-gitsync 的收尾验证。')).toBe(false)
+    expect(reportIsStructured('任务一在改代码，任务二在跑测试，整体约六成。')).toBe(false)
+    // 行中的连字符不是列表符（前面没有行首位置）
+    expect(reportIsStructured('改动涉及 a - b 两个模块')).toBe(false)
+    // 落单的星号 / 空加粗不算
+    expect(reportIsStructured(' rated 5 * 3 ')).toBe(false)
+    expect(reportIsStructured('****')).toBe(false)
+  })
+
+  it('空串 / 非字符串一律 false（没有正文时根本不渲染 .rp__text）', () => {
+    expect(reportIsStructured('')).toBe(false)
+    expect(reportIsStructured(null)).toBe(false)
+    expect(reportIsStructured(undefined)).toBe(false)
+    expect(reportIsStructured(62)).toBe(false)
   })
 })

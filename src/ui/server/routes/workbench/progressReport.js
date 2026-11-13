@@ -379,8 +379,10 @@ ${list.join('\n\n')}
 这两个数字会被画成用户眼前的**进度条**，所以估不准就写 ? —— 编一个漂亮数字比说"判断不出来"更糟。
 口径是"离做完还有多远"：还在探路给 10~30，主要改动做完但还没验证给 40~70，只剩跑测试、写提交这类收尾给 70~90；**不要给 100**（没跑完就不算完）。
 
-然后写**一段中文进度汇报**：
-1. 3~6 句，总长不超过 220 字，纯文本 —— 不要标题、不要列表符号、不要 Markdown
+然后写**一段中文进度汇报**（界面按 Markdown 渲染）：
+1. 用 Markdown 无序列表，**每个任务一条**（每条以 \`- \` 开头），格式固定为：
+   \`- **<任务名>**：<正在做什么、走到哪一步>（工具 <n> 次）；下一步：<下一步>\`
+   任务名用上面事实里的标题原文；总长不超过 400 字。不要标题（#）、不要代码块、不要嵌套列表、不要表格 —— 只有这一层 \`- \` 列表和行内 **加粗**
 2. 逐个说清每个任务**正在做什么、走到哪一步了**。依据按可靠程度排：最近思考 > 工具分布与最近一次工具调用 > 最近输出。很多任务一句正文都不写（输出是「（暂无）」），**别就此说看不出来 —— 先看它的思考**
 3. 判断"是不是卡住了"必须给依据：看「静默」多久、看工具分布是不是在原地打转（例如最近 20 次里 18 次都在读文件）。这两条都没有时不要下这个结论，也不要因为它调用次数多就暗示卡住
 4. 确实没有任何依据时才写"从输出看不出具体进度"，**不要编造**
@@ -401,8 +403,10 @@ From line 3: the report itself
 Those two lines are drawn as a **progress bar** in front of the user, so write ? rather than guessing prettily — a made-up number is worse than admitting you cannot tell.
 Judge by how far the task is from being finished: 10-30 while it is still exploring, 40-70 once the main change is in but unverified, 70-90 when only wrap-up (tests, commit) is left. **Never 100** — nothing is finished until it has finished.
 
-Then write **one English progress report**:
-1. 3-6 sentences, at most 130 words, plain text — no heading, no bullet points, no Markdown
+Then write **one English progress report** (the UI renders it as Markdown):
+1. Use a Markdown bullet list, **one bullet per task** (each starts with \`- \`), in this fixed shape:
+   \`- **<task name>**: <what it is doing and how far it has got> (<n> tool calls); next: <next step>\`
+   Use the task title verbatim from the facts above; at most 180 words total. No heading (#), no code block, no nested list, no table — only this one level of \`- \` bullets and inline **bold**
 2. Say what each task is **doing right now and how far it has got**. Rank your evidence: latest thinking > tool mix and most recent tool call > latest output. Many tasks never write a single line of prose (their output is "(none yet)") — do **not** conclude you cannot tell; read their thinking first
 3. To call a task stuck you must show evidence: how long it has been silent, and whether the tool mix is going in circles (e.g. 18 of the last 20 calls were file reads). Without either, do not say it, and do not imply it just because the call count is high
 4. Only when there really is no evidence, write "the output does not show the exact progress" — **do not make things up**

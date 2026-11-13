@@ -45,12 +45,16 @@ import {
   reportErrorKey,
   reportIntervalLabelKey,
   reportIntervalLabelParams,
+  reportIsStructured,
   reportPercent,
 } from '@/utils/progressReport'
 import AttachmentZone from '@/components/AttachmentZone.vue'
+import MarkdownPreview from '@/components/MarkdownPreview.vue'
 import TaskExecutorPicker from '@/components/TaskExecutorPicker.vue'
 import { useWorkbenchAttachments, type AttachmentTarget } from '@/composables/useWorkbenchAttachments'
 import { useTaskExecutorSelection } from '@/composables/useTaskExecutorSelection'
+import { useThemeObserver } from '@/composables/useThemeObserver'
+import { APP_MARKDOWN_THEME } from '@/utils/markdownTheme'
 import type { TaskExecutorId } from '@/utils/taskExecutor'
 
 const props = defineProps<{
@@ -558,6 +562,16 @@ const textEl = ref<HTMLElement | null>(null)
 const textExpanded = ref(true)
 const textClamped = ref(false)
 
+/**
+ * 正文渲染分两条路（见 utils/progressReport.ts 的 reportIsStructured）：
+ * 结构化 Markdown 走 MarkdownPreview，纯文本 / 盘上的历史报告仍按 pre-wrap 原样显示。
+ * 配色跟**应用亮暗**走（与 AiDiffSummary 同一口径）—— 全局 markdown 主题默认白底，
+ * 深色面板里嵌一块白会非常突兀。
+ */
+const { theme: appTheme } = useThemeObserver()
+const reportMarkdownTheme = computed(() => APP_MARKDOWN_THEME[appTheme.value])
+const reportIsMarkdown = computed(() => reportIsStructured(currentReport.value?.text))
+
 function measureText() {
   const el = textEl.value
   // 展开时不再量：解开上限后高度本就等于内容高度，一量就会把「收起」这个按钮自己收掉
@@ -614,7 +628,17 @@ const currentPercent = computed(() => reportPercent(currentReport.value?.percent
 
 /** 历史列表里那一行摘要：有正文就取开头，没有就说清为什么没有 */
 function reportBrief(r: ProgressReport): string {
-  const text = String(r.text || '').replace(/\s+/g, ' ').trim()
+  // 历史行是**单行预览**：结构化报告的 `- ` / `**` 是排版标记，不是内容，
+  // 原样印出来会是一行怪符号（正文那侧已经交给 MarkdownPreview 渲染了）。
+  // 这里把标记剥掉只留字；纯文本 / 老报告没有这些标记，下面的替换全是空操作。
+  const text = String(r.text || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/^\s*(?:[-*•]|\d+[.)])\s+/gm, '')
+    .replace(/\*\*([^*\n]+)\*\*/g, '$1')
+    .replace(/__([^_\n]+)__/g, '$1')
+    .replace(/^\s*#{1,6}\s+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim()
   if (text) return text.length > 42 ? text.slice(0, 42) + '…' : text
   if (r.errorCode) return $t(reportErrorKey(r.errorCode))
   // 服务端已经不再产生"当时没有任务在跑"的空报告了（runProgressReport 不生成、
@@ -866,7 +890,24 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
                折起来时底下压一层渐隐（不是硬切），配一个「展开全文」，
                不用拖滚动条去找结尾。 -->
           <div v-if="currentReport.text" class="rp__body">
+            <!-- 结构化报告（每任务一条 `- **任务名**：…`）走 Markdown 渲染；
+                 纯文本 / 盘上的历史报告仍按 pre-wrap 原样显示（见 reportIsStructured）。
+                 两条路共用 .rp__text 的高度上限 / 渐隐 / 展开口径，ref 也共用 textEl，
+                 所以 measureText / ResizeObserver 不用各写一套。 -->
+            <div
+              v-if="reportIsMarkdown"
+              ref="textEl"
+              class="rp__text rp__text--md"
+              :class="{ 'is-clamped': textClamped && !textExpanded, 'is-expanded': textExpanded }"
+            >
+              <MarkdownPreview
+                :content="currentReport.text"
+                :allow-html="false"
+                :theme="reportMarkdownTheme"
+              />
+            </div>
             <p
+              v-else
               ref="textEl"
               class="rp__text"
               :class="{ 'is-clamped': textClamped && !textExpanded, 'is-expanded': textExpanded }"
@@ -1470,6 +1511,33 @@ const gitBrief = computed(() => gitSummary.value.slice(0, 2).map(r => r.value).j
   overflow: hidden;
 }
 .rp__text.is-expanded { max-height: none; }
+/* 结构化报告：MarkdownPreview 把正文渲染成 HTML，容器不能再 pre-wrap（否则 HTML
+   源码里的换行/缩进会变成可见空白）。配色与排版交给实例级主题（跟应用亮暗走，
+   见 reportMarkdownTheme），这里只把预览自带的内边距与底色抹平 —— 它嵌在报告卡里，
+   不该自带一块文档式的白底/留白（与 AiDiffSummary 同一处理）。字号压到与纯文本正文
+   同一档（--font-size-mid），行高 1.6 与上面 6 行上限的 em 口径保持一致。 */
+.rp__text--md { white-space: normal; }
+.rp__text--md :deep(.md-preview) {
+  padding: 0;
+  background: transparent;
+  font-size: var(--font-size-mid);
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+/* 列表是报告正文的主体：收掉主题给 ul 的默认外边距、缩进收一档，每条之间留一点呼吸
+   （任务多时不至于糊成一团）。加粗的任务名跟正文同色，只靠字重区分，不另引入装饰色。 */
+.rp__text--md :deep(.md-preview ul) {
+  margin: 0;
+  padding-left: 1.2em;
+}
+.rp__text--md :deep(.md-preview li) { margin: 0 0 6px; }
+.rp__text--md :deep(.md-preview li:last-child) { margin-bottom: 0; }
+.rp__text--md :deep(.md-preview p) { margin: 0 0 6px; }
+.rp__text--md :deep(.md-preview p:last-child) { margin-bottom: 0; }
+.rp__text--md :deep(.md-preview strong) {
+  color: var(--text-primary);
+  font-weight: 600;
+}
 /* 渐隐用 mask 而不是"渐变到卡片底色"的伪元素：卡片底色是半透明的 --bg-subtle
    压在栏底 --bg-panel 上，合成出来的实际颜色浅色/深色两套主题各不相同，
    按变量渐变过去会露一道异色的边。mask 是把字自己淡到透明，与底色无关。 */
