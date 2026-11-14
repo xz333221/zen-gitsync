@@ -25,6 +25,7 @@ import { workbenchTools } from './workbench.js';
 import { scheduleTools } from './schedules.js';
 import { mindmapTools } from './mindmap.js';
 import { memoryTools } from './memory.js';
+import { peerTools } from './peers.js';
 
 /** 全部工具,顺序即 tools/list 里的顺序(把"先看这个"的放前面)。 */
 export const ALL_TOOLS = [
@@ -36,6 +37,7 @@ export const ALL_TOOLS = [
   ...agentTools,
   ...mindmapTools,
   ...memoryTools,
+  ...peerTools,
 ];
 
 /** 工具名清单(诊断 / 帮助文本用)。 */

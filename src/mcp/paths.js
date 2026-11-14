@@ -38,6 +38,7 @@ export {
   AGENT_SESSIONS_DIR,
   SCHEDULES_FILE,
   INSTANCES_DIR,
+  PEERS_FILE,
   WORKBENCH_IMAGES_DIR,
   projectAiDir,
   projectSkillsDir,

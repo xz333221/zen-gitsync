@@ -634,6 +634,146 @@ async function inProcess() {
     mustInclude(detail.note, 'runtime_status', '读盘时该指引去看运行中的')
     return '内存态含在跑那次 · 读盘时如实标注并指引'
   })
+
+  // ── H. 跨机器对端（peer）──────────────────────────────────
+  // 起一个**真的** peer 服务（createPeerApp + 随机端口 + 注入 ask），这样"在线 / 关机 /
+  // 令牌错"三种状态都是真打出来的。与 src/peer/client.test.js 同一个思路：
+  // 只有真走一遍鉴权，才守得住"探活必须带令牌"这条（2026-11-01 的故障就是拿脱敏清单去探活，
+  // 结果每台都显示离线）。下面 H1 的 online_count 断言正是那个回归的守卫。
+  const { createPeerApp } = await import(pathToFileURL(path.join(ROOT, 'src/peer/server.js')).href)
+  const http = await import('node:http')
+  const PEER_TOKEN = 'PEER_SECRET_TOKEN_MARKER'
+  const SELF_TOKEN = 'SELF_SECRET_TOKEN_MARKER'
+  const askCalls = []
+  const peerApp = createPeerApp({
+    self: { id: 'node-remote1', name: '探针服务器', avatar: '', token: PEER_TOKEN },
+    getLocalPort: () => 1234,
+    getVersion: () => '9.9.9',
+    ask: async ({ question, sessionId }) => {
+      askCalls.push({ question, sessionId })
+      return { answer: `PEER_ANSWER_MARKER:${question}`, sessionId: 'remote-sess-1', ms: 12 }
+    },
+  })
+  const peerServer = http.createServer(peerApp)
+  await new Promise(resolve => peerServer.listen(0, '127.0.0.1', resolve))
+  const peerUrl = `http://127.0.0.1:${peerServer.address().port}`
+  const SELF_NODE = { id: 'node-local1', name: '探针本机', port: 5600, host: '0.0.0.0', enabled: false, token: SELF_TOKEN }
+  write('peers.json', {
+    version: 1,
+    self: SELF_NODE,
+    peers: [
+      { id: 'node-remote1', name: '探针服务器', url: peerUrl, token: PEER_TOKEN },
+      { id: 'node-dead', name: '关机的机器', url: `http://127.0.0.1:${DEAD_PORT}`, token: 'DEAD_TOKEN_MARKER' },
+      { id: 'node-badtoken', name: '令牌过期', url: peerUrl, token: 'WRONG_TOKEN_MARKER' },
+    ],
+    sessions: {},
+  })
+
+  await t('H1 peers_list：真探活分出在线/关机/令牌错，且**一个令牌字节都不出去**', async () => {
+    const r = await call('peers_list')
+    assert(r.total === 3, `应该 3 台对端，实际 ${r.total}`)
+    // ⚠️ 这一条是 2026-11-01 故障的守卫：探活若用了脱敏清单（不含令牌），三台会全离线
+    assert(r.online_count === 1, `在线应该恰好 1 台，实际 ${r.online_count}（探活没带令牌？）`)
+    const byName = Object.fromEntries(r.peers.map(p => [p.name, p]))
+    assert(byName['探针服务器'].online === true, '真开着的那台应该在线')
+    assert(byName['探针服务器'].version === '9.9.9', `应该带出对端版本，实际 ${byName['探针服务器'].version}`)
+    assert(byName['探针服务器'].has_token === true, '应该告诉调用方这台配了令牌')
+    assert(byName['关机的机器'].online === false && byName['关机的机器'].error, '关机的那台要离线并给出原因')
+    assert(byName['令牌过期'].online === false, '令牌错的那台必须离线')
+    mustInclude(byName['令牌过期'].error, '令牌无效', '令牌错的错误文案（别让用户去查网络）')
+    assert(r.self.enabled === false && r.self.id === 'node-local1', '本机身份要带出来')
+    mustInclude(r.hint, 'g peer on', '本机 peer 没开时该给开启指引')
+    for (const secret of [PEER_TOKEN, SELF_TOKEN, 'WRONG_TOKEN_MARKER', 'DEAD_TOKEN_MARKER']) {
+      mustExclude(r, secret, 'peers_list 结果')
+    }
+    return '1 在线 / 1 关机 / 1 令牌错 · 四种令牌均未泄露'
+  })
+
+  await t('H2 peers_list probe=false：不联网，且明说 online=false 不代表离线', async () => {
+    const r = await call('peers_list', { probe: false })
+    assert(r.source === 'file', `不探活时应该标 file，实际 ${r.source}`)
+    assert(r.online_count === 0 && r.peers.every(p => p.online === false), '不探活就不该有在线结论')
+    assert(r.peers.every(p => p.error === null), '没探活哪来的错误原因')
+    assert(r.peers.every(p => p.has_token === true), '不探活也要能看出配没配令牌')
+    mustInclude(r.note, '不代表', '必须提醒调用方这不是离线结论')
+    return '只读清单 · 如实标注未探活'
+  })
+
+  await t('H3 peer_ask：真拿到对端回答，带会话 id 与耗时，不回令牌', async () => {
+    const r = await call('peer_ask', { peer: '探针服务器', question: '你那边有哪些项目' })
+    assert(r.ran === true, `应该真跑完了：${r.error}`)
+    mustInclude(r.answer, 'PEER_ANSWER_MARKER', '对端回答')
+    mustInclude(r.answer, '你那边有哪些项目', '问题原文（确认问的是这一句）')
+    assert(r.session_id === 'remote-sess-1', `应该带回对端会话 id，实际 ${r.session_id}`)
+    assert(r.elapsed_ms === 12, `耗时应该用对端报的 ms，实际 ${r.elapsed_ms}`)
+    assert(r.peer.url === peerUrl && r.peer.name === '探针服务器', 'peer 摘要不对')
+    mustExclude(r, PEER_TOKEN, 'peer_ask 结果')
+    mustExclude(r, SELF_TOKEN, 'peer_ask 结果')
+    return `ran=true · 会话 ${r.session_id} · ${r.elapsed_ms}ms`
+  })
+
+  await t('H4 peer_ask 续接会话：第二问带上对端上一轮的 sessionId（按 id 指名也认）', async () => {
+    const r = await call('peer_ask', { peer: 'node-remote1', question: '第二问' })
+    assert(r.ran === true, `第二问也该成功：${r.error}`)
+    assert(askCalls.length === 2, `对端应该被问了 2 次，实际 ${askCalls.length}`)
+    assert(askCalls[1].sessionId === 'remote-sess-1', `第二问该续接上一轮会话，实际 ${askCalls[1].sessionId}`)
+    return '按 id 指名可用 · 会话已续接'
+  })
+
+  await t('H5 peer_ask 多台对端时不指定 peer → 要求指定，不随便挑一台', async () => {
+    const r = await call('peer_ask', { question: '随便问一句' })
+    assert(r.ran === false, '不该擅自挑一台问出去')
+    mustInclude(r.error, '有多台对端', '错误信息')
+    mustInclude(r.error, '探针服务器', '该把现有对端列出来')
+    return '如实要求指定 peer'
+  })
+
+  await t('H6 peer_ask 对端关机 → ran=false，不得假装拿到了回答', async () => {
+    const r = await call('peer_ask', { peer: '关机的机器', question: '在吗' })
+    assert(r.ran === false, '绝不能返回 ran:true —— 它其实没问到')
+    assert(r.answer === '', '失败时 answer 必须是空的')
+    assert(r.error, '应该给出失败原因')
+    mustInclude(r.note, '没有拿到回答', '必须提醒调用方别当成已答复')
+    return `如实失败：${r.error}`
+  })
+
+  await t('H7 peer_ask 令牌不匹配 → ran=false 且点名令牌问题', async () => {
+    const r = await call('peer_ask', { peer: '令牌过期', question: '在吗' })
+    assert(r.ran === false, '令牌错时不该声称跑过了')
+    mustInclude(r.error, '令牌无效', '错误信息')
+    mustExclude(r, PEER_TOKEN, '失败结果')
+    return `如实失败：${r.error}`
+  })
+
+  await t('H8 peer_ask 不存在的昵称 → 明确报错并列出现有对端', async () => {
+    const r = await call('peer_ask', { peer: '没有这台', question: 'x' })
+    assert(r.ran === false, '不该静默成功')
+    mustInclude(r.error, '没有名为', '错误信息')
+    mustInclude(r.error, '探针服务器', '现有对端清单')
+    return '报错并给出可选对端'
+  })
+
+  await t('H9 peer_ask 缺 question → 直接拒绝，不打扰对端', async () => {
+    const before = askCalls.length
+    const r = await call('peer_ask', {})
+    assert(r.error, '缺 question 必须报错')
+    mustInclude(r.error, 'question', '错误信息')
+    assert(askCalls.length === before, '参数不全时不该真发出去')
+    return '参数校验先行'
+  })
+
+  await t('H10 一台对端都没登记 → 清单给出登记步骤，提问也如实失败', async () => {
+    write('peers.json', { version: 1, self: SELF_NODE, peers: [], sessions: {} })
+    const list = await call('peers_list')
+    assert(list.total === 0 && list.online_count === 0, '应该是空清单')
+    mustInclude(list.hint, 'g peer add', '空清单该告诉用户怎么登记')
+    const r = await call('peer_ask', { question: '有人吗' })
+    assert(r.ran === false, '没有对端时不该声称跑过了')
+    mustInclude(r.error, 'g peer on', '该给出在对端开启的步骤')
+    return '空清单有指引 · 提问如实失败'
+  })
+
+  await new Promise(resolve => peerServer.close(resolve))
 }
 
 // ── Phase C：stdio 端到端 ───────────────────────────────────────
