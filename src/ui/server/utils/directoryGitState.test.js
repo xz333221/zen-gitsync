@@ -29,6 +29,7 @@ import {
   probeDirectoryOrigin,
   probeDirectoryOrigins,
   probeHasRemote,
+  getGitStateCacheSize,
   clearGitStateCache,
 } from './directoryGitState.js';
 
@@ -430,5 +431,62 @@ test('probeDirectoryGitStates: 命中缓存时不重新扫盘,useCache:false 可
     assert.equal(fresh[dir].changed, 1, 'useCache:false 必须重新探测');
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+// ── 同拍合并 / 目录别名 / 缓存容量 ─────────────────────────────────────────
+// 这三条都指向同一个症状：轮询环境下 git 进程（以及每个进程带的 conhost）被无谓地放大。
+
+test('probeDirectoryGitState: 并发同目录调用复用同一次探测(结果同一个对象)', async () => {
+  clearGitStateCache();
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'zen-inflight-'));
+  try {
+    await git(['init', '-q'], dir);
+    await fs.writeFile(path.join(dir, 'x.txt'), 'x\n');
+    // 5 个并发调用 = 一次探测。没有单飞时每个都会自己 spawn 一个 git，
+    // 各自算出一份**新对象**；合并后大家等的是同一个 Promise，
+    // 所以能按引用相等来判定（这是比"结果相等"更强的断言）。
+    const all = await Promise.all(Array.from({ length: 5 }, () => probeDirectoryGitState(dir)));
+    for (const state of all) assert.equal(state.changed, 1);
+    assert.ok(all.every(state => state === all[0]), '并发调用应共享同一次探测的结果');
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('probeDirectoryGitStates: 同一目录的不同写法合并成一次探测', async () => {
+  clearGitStateCache();
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'zen-alias-'));
+  try {
+    await git(['init', '-q'], dir);
+    await fs.writeFile(path.join(dir, 'a.txt'), 'x\n');
+    // 同一个目录的三种写法：原样 / 一个尾分隔符 / 两个尾分隔符。
+    // normalizeDirKey 会归一成同一个 key，于是只该 spawn 一次 git。
+    const variants = [...new Set([dir, `${dir}${path.sep}`, `${dir}${path.sep}${path.sep}`])];
+    assert.ok(variants.length > 1, '样例必须覆盖到多种写法');
+    const results = await probeDirectoryGitStates(variants, { useCache: false });
+    assert.equal(Object.keys(results).length, variants.length, '键仍是调用方传入的原始串');
+    for (const v of variants) assert.equal(results[v].changed, 1, `${v} 应拿到同一份结果`);
+    assert.equal(getGitStateCacheSize(), 1, '归一后是同一个目录，缓存只占一条');
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('probeDirectoryGitStates: 缓存有上限,不随见过的目录数量无界增长', async () => {
+  clearGitStateCache();
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'zen-caplimit-'));
+  try {
+    // 普通目录也是"确定的结果"(isGitRepo=false)，同样会进缓存
+    const dirs = [];
+    for (let i = 0; i < 6; i += 1) {
+      const d = path.join(root, `d${i}`);
+      await fs.mkdir(d);
+      dirs.push(d);
+    }
+    await probeDirectoryGitStates(dirs, { useCache: false, maxCacheEntries: 3 });
+    assert.equal(getGitStateCacheSize(), 3, '超过上限时按最久未写入淘汰');
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
   }
 });

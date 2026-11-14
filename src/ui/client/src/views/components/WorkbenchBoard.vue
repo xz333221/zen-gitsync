@@ -35,7 +35,7 @@
   2026-10-27 连顶栏本身（标题 + 四项统计）也整块移除了，见模板里的说明。
 -->
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { Attachment, BoardTask, ProjectSummary } from '@/types/workbench'
@@ -88,7 +88,7 @@ const emit = defineEmits<{
 }>()
 
 const {
-  projects, boardTasks, currentProjectPath, loading,
+  projects, boardTasks, currentProjectPath, loading, loaded,
   loadProjects, removeProject,
 } = useWorkbenchProjects()
 
@@ -293,11 +293,21 @@ function onVisibilityChange() {
   }
 }
 
-onMounted(async () => {
-  window.addEventListener('resize', onWindowResize)
-  await refresh(false)
-  loadReports(true)
-  applyDefaultSelection()
+/**
+ * 轮询的启停。
+ *
+ * 为什么不是"挂载起一个定时器、卸载清掉"就完事：这个组件被 App.vue 包在
+ * <KeepAlive> 里（v-if 控制挂载），切到别的视图时触发的是 **deactivated**，
+ * 不是 unmounted —— onBeforeUnmount 根本不会跑。只按老写法挂定时器的话，
+ * 用户点开过一次工作台，这两个轮询就跟着页面跑到关窗口为止，哪怕人一直在
+ * 编辑器里写代码：5s 一轮打 /api/workbench/projects，服务端为每个项目
+ * spawn 一个 git（Windows 上各带一个 conhost），进程 churn 就这么来的。
+ *
+ * startPolling 先停后起，靠这个做到幂等 —— 首次挂载时 onMounted 和 onActivated
+ * 都会走到这里，不需要额外判断谁先谁后。
+ */
+function startPolling() {
+  stopPolling()
   pollTimer = setInterval(() => {
     if (document.hidden) return
     refresh(true)
@@ -306,13 +316,38 @@ onMounted(async () => {
     if (document.hidden) return
     loadReports(true)
   }, REPORT_POLL_MS)
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+  if (reportPollTimer) { clearInterval(reportPollTimer); reportPollTimer = null }
+}
+
+onMounted(async () => {
+  window.addEventListener('resize', onWindowResize)
+  await refresh(false)
+  loadReports(true)
+  applyDefaultSelection()
+  startPolling()
   document.addEventListener('visibilitychange', onVisibilityChange)
 })
 
+onActivated(() => {
+  // KeepAlive 缓存命中切回工作台：离开这段时间服务端可能已经跑完任务，
+  // 先静默补一次再恢复轮询。首次挂载时 loaded 还是 false（refresh 尚未返回），
+  // 不会和 onMounted 的那次非静默请求重复。
+  if (loaded.value) {
+    refresh(true)
+    loadReports(true)
+  }
+  startPolling()
+})
+
+onDeactivated(stopPolling)
+
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onWindowResize)
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
-  if (reportPollTimer) { clearInterval(reportPollTimer); reportPollTimer = null }
+  stopPolling()
   document.removeEventListener('visibilitychange', onVisibilityChange)
 })
 

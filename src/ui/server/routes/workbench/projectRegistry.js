@@ -43,6 +43,20 @@ import { IMAGE_EXTS } from './attachmentUtils.js';
 /** 看板列，数组顺序即列顺序 */
 export const TASK_COLUMNS = ['todo', 'doing', 'done'];
 
+/**
+ * 项目清单里 Git 状态探测的缓存 TTL，比 directoryGitState 的默认值（15s）宽一倍。
+ *
+ * 这个接口是**被轮询的**：工作台看板 5s 一轮、项目管理 10s 一轮，两者独立运行，
+ * 而卡片上的 Git 徽标（未提交数 / ahead / behind）根本不需要 15s 就刷新一次 ——
+ * 它变的原因是用户在别处提交了代码，晚半分钟看到没有任何代价。
+ * 但每次未命中都要为**每个**项目 spawn 一个 git（Windows 上各带一个 conhost），
+ * 于是轮询频率直接放大成进程 churn。
+ *
+ * 15s → 30s 后，5s 轮询的 6 拍里只有 1 拍真的扫盘，spawn 频率降到 1/6。
+ * 不想再往上调：再宽就和"我明明刚提交完，卡片还显示有改动"的体感冲突了。
+ */
+export const PROJECT_GIT_CACHE_TTL_MS = 30000;
+
 /** 没有关联任何项目的任务归到这个 key（与前端 useWorkbenchProjectGroups 一致） */
 export const NO_PROJECT_KEY = '__no_project__';
 
@@ -326,7 +340,11 @@ export async function listProjects({
 
   let states = {};
   if (withGit && entries.length > 0) {
-    states = await probeDirectoryGitStates(entries.map(e => e.path), probeOptions);
+    // 调用方显式传 ttlMs 时优先（探测类接口要强制新鲜度）
+    states = await probeDirectoryGitStates(entries.map(e => e.path), {
+      ttlMs: PROJECT_GIT_CACHE_TTL_MS,
+      ...probeOptions,
+    });
   }
   // 图标探测自带 5 分钟 TTL 缓存，5s 轮询里绝大多数轮次只是一次 Map 查表
   const icons = withIcons && entries.length > 0

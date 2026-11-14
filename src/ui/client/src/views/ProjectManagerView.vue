@@ -26,10 +26,15 @@
     · 挂载拉一次；
     · 10s 静默轮询兜底（别的 g ui 实例增删项目、任务路径带来的新项目都能看到）——
       比工作台的 5s 松一档：这里不显示实时任务进度，没必要跟得那么紧；
+    · **轮询只在本视图处于前台时跑**（onActivated 起 / onDeactivated 停）。
+      这个视图被 App.vue 包在 <KeepAlive> 里，v-if 切走触发的是 deactivated 而不是
+      unmounted，只挂 onBeforeUnmount 的话定时器永远清不掉 —— 用户点开过一次
+      「项目管理」，这个 10s 轮询就会跟着页面跑到关窗口，而它每轮都会让服务端
+      为每个项目 spawn 一个 git（Windows 上还各带一个 conhost）；
     · 添加 / 删除成功后就地刷一次，用户不用等下一个轮询周期。
 -->
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { $t } from '@/lang/static'
@@ -39,7 +44,7 @@ import AddProjectDialog from '@views/components/AddProjectDialog.vue'
 import { useWorkbenchProjects } from '@/composables/useWorkbenchProjects'
 import type { ProjectSummary } from '@/types/workbench'
 
-const { projects, loading, loadProjects, removeProject, addProject } = useWorkbenchProjects()
+const { projects, loading, loaded, loadProjects, removeProject, addProject } = useWorkbenchProjects()
 
 /** 正在删除的项目 key（行内转圈 + 防重复点） */
 const removingKey = ref('')
@@ -47,14 +52,32 @@ const addVisible = ref(false)
 const addSubmitting = ref(false)
 const recommendedRef = ref<InstanceType<typeof RecommendedProjects> | null>(null)
 
+const POLL_MS = 10000
 let pollTimer: number | null = null
-onMounted(() => {
-  void loadProjects()
-  pollTimer = window.setInterval(() => { void loadProjects(true) }, 10000)
+
+/** 先停后起，做到幂等：onMounted 与 onActivated 在首次挂载时都会走到这里 */
+function startPoll() {
+  stopPoll()
+  pollTimer = window.setInterval(() => {
+    // 整页不可见（最小化 / 切到别的标签页）时扫盘没有意义
+    if (document.hidden) return
+    void loadProjects(true)
+  }, POLL_MS)
+}
+
+function stopPoll() {
+  if (pollTimer !== null) { window.clearInterval(pollTimer); pollTimer = null }
+}
+
+onMounted(() => { void loadProjects() })
+onActivated(() => {
+  // 切回来时数据可能已经旧了：先静默补一次再起轮询。
+  // 首次挂载时 loaded 仍为 false（onMounted 的请求还没回来），不会重复拉。
+  if (loaded.value) void loadProjects(true)
+  startPoll()
 })
-onBeforeUnmount(() => {
-  if (pollTimer !== null) window.clearInterval(pollTimer)
-})
+onDeactivated(stopPoll)
+onBeforeUnmount(stopPoll)
 
 /**
  * 添加一个目录。不切当前项目 —— 添加 ≠ 切过去看（切目录会改全局状态、波及其他实例）。

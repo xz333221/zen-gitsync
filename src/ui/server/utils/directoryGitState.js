@@ -36,9 +36,27 @@ export const DEFAULT_PROBE_TIMEOUT_MS = 5000;
 export const DEFAULT_CACHE_TTL_MS = 15000;
 /** 并发上限:并发开满会在慢盘/大仓库上互相抢 IO,4 是实测比较稳的值 */
 export const DEFAULT_CONCURRENCY = 4;
+/**
+ * 缓存条目上限。目录数量本身不多,但路径写法、临时目录、已删项目会一直累积,
+ * 而这份缓存的失效只靠 TTL —— TTL 只影响"读不算旧",不负责清理。
+ * 给个硬上限 + 插入序淘汰(Map 保持插入顺序,set 前先 delete 就是 LRU 序),
+ * 让它有界。
+ */
+export const MAX_CACHE_ENTRIES = 512;
 
 const MAX_BUFFER = 8 * 1024 * 1024;
 const cache = new Map(); // key: normalizeDirKey(path) → { ts, state }
+/**
+ * 正在探测中的目录:key → Promise<state>。
+ *
+ * 为什么需要它:同一次扫描可能被多个轮询器**同拍**触发 ——
+ * 工作台 5s、项目管理 10s 打的是同一个 `/api/workbench/projects`,
+ * 两者都落到 listProjects → probeDirectoryGitStates。没有这一层时,
+ * 缓存未命中的那一拍会各自 spawn 一整套 git(每个目录一个进程 + 一个 conhost),
+ * 明明是同一个目录、同一瞬间,却把进程 churn 翻倍。
+ * 有了它,后到的调用直接复用前一个的 Promise,一个目录同一时刻只跑一个 git。
+ */
+const inflight = new Map();
 
 /**
  * 路径缓存键。Windows 上同一目录可能以 `D:/x`、`d:\x`、`d:\x\` 多种写法出现,
@@ -174,11 +192,11 @@ function execFileAsync(file, args, options) {
 }
 
 /**
- * 探测单个目录。
+ * 探测单个目录的实际实现(不做单飞合并,只由 probeDirectoryGitState 调用)。
  * 返回 isGitRepo:true|false|null  —— null 表示"没探到"(超时/权限等),
  * 前端对 null 不显示任何 Git 标记,避免把未知谎报成"非仓库"。
  */
-export async function probeDirectoryGitState(dirPath, { timeoutMs = DEFAULT_PROBE_TIMEOUT_MS } = {}) {
+async function probeDirectoryGitStateUncoalesced(dirPath, { timeoutMs = DEFAULT_PROBE_TIMEOUT_MS } = {}) {
   try {
     const stat = await fs.stat(dirPath);
     if (!stat.isDirectory()) return emptyState({ exists: false });
@@ -218,7 +236,9 @@ export async function probeDirectoryGitState(dirPath, { timeoutMs = DEFAULT_PROB
     // 「有没有配远程仓库」:有上游(`origin/main` 这种)就说明 remote 一定在,
     // 不必再起进程;没有上游时才补跑一次 `git remote` —— 列表里十个仓库
     // 九个都有上游,这一条因此不在常见路径上。
-    const hasRemote = tracking.hasUpstream ? true : await probeHasRemote(dirPath, timeoutMs);
+    // 注意第二个参数是**选项对象**不是数字:早先这里直接传了 `timeoutMs`,
+    // 被 `{ timeoutMs = DEFAULT } = {}` 解构后拿到 undefined,自定义超时静默失效。
+    const hasRemote = tracking.hasUpstream ? true : await probeHasRemote(dirPath, { timeoutMs });
     return {
       exists: true,
       isGitRepo: true,
@@ -234,6 +254,33 @@ export async function probeDirectoryGitState(dirPath, { timeoutMs = DEFAULT_PROB
     }
     // 超时 / 权限 / git 不存在等 —— 状态未知
     return emptyState({ isGitRepo: null, error: String(error?.message || error).split('\n')[0] });
+  }
+}
+
+/**
+ * 探测单个目录(带同拍合并)。
+ *
+ * 同一目录在同一时刻只会有一个 git 进程在跑:并发调用方拿到的是**同一个 Promise**,
+ * 而不是各自去 spawn。缓存未命中的那一拍常有两三个轮询器同时到达(5s / 10s 的拍点
+ * 在 10 的倍数上重合),不合并就是白白多出几倍进程 —— 这些进程每个都带一个 conhost,
+ * 也是任务管理器里 conhost 数量不断堆积的来源。
+ *
+ * 复用 inflight 不会让调用方拿到"旧数据":条目只在这一个探测的生命周期内存在
+ * (最长 timeoutMs,默认 5s),结束即删。所以 `useCache:false` 的强制刷新也一样可以
+ * 走合并 —— 它要的是"现在这一刻的真实状态",而正在跑的那次探测给出的正是这个。
+ */
+export async function probeDirectoryGitState(dirPath, options = {}) {
+  const key = normalizeDirKey(dirPath);
+  const running = inflight.get(key);
+  if (running) return running;
+
+  const task = probeDirectoryGitStateUncoalesced(dirPath, options);
+  inflight.set(key, task);
+  try {
+    return await task;
+  } finally {
+    // 只删自己那一条:理论上不会有人覆盖,但判断一下免得未来改动踩到
+    if (inflight.get(key) === task) inflight.delete(key);
   }
 }
 
@@ -282,11 +329,29 @@ async function runWithConcurrency(items, limit, worker) {
 }
 
 /**
+ * 写缓存:先 delete 再 set,让 Map 的插入顺序始终等于"最近使用顺序",
+ * 超上限时从头部(最久没被写入的)淘汰。
+ *
+ * 只用 TTL 管理这份缓存是不够的:TTL 决定"读到的算不算旧",不负责回收,
+ * 于是一年内见过的每个目录都会留一条记录。条目本身不大,但它是**常驻**的,
+ * 配合前端 5s 轮询看起来就是"内存慢慢往上爬"。
+ */
+function writeCache(key, state, limit = MAX_CACHE_ENTRIES) {
+  cache.delete(key);
+  cache.set(key, { ts: Date.now(), state });
+  while (cache.size > limit) {
+    const oldest = cache.keys().next().value;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
+}
+
+/**
  * 批量探测。返回 `{ [原始路径]: state }` —— 键用调用方传入的原始字符串,
  * 前端可以直接 `states[item.path]` 取,不必关心后端的归一化规则。
  *
  * @param {string[]} paths
- * @param {{ timeoutMs?: number, ttlMs?: number, concurrency?: number, useCache?: boolean }} [options]
+ * @param {{ timeoutMs?: number, ttlMs?: number, concurrency?: number, useCache?: boolean, maxCacheEntries?: number }} [options]
  */
 export async function probeDirectoryGitStates(paths, options = {}) {
   const {
@@ -294,35 +359,46 @@ export async function probeDirectoryGitStates(paths, options = {}) {
     ttlMs = DEFAULT_CACHE_TTL_MS,
     concurrency = DEFAULT_CONCURRENCY,
     useCache = true,
+    maxCacheEntries = MAX_CACHE_ENTRIES,
   } = options;
 
   const list = Array.isArray(paths) ? paths.filter(p => typeof p === 'string' && p.trim()) : [];
   const results = {};
   const pending = [];
+  /** key → 已排队的探测条目。同一目录的不同写法(`D:/x` 与 `d:\x\`)合并成一次 spawn */
+  const queued = new Map();
   const now = Date.now();
 
   for (const original of list) {
     if (Object.prototype.hasOwnProperty.call(results, original)) continue; // 重复路径只探一次
     const key = normalizeDirKey(original);
-    const hit = useCache ? cache.get(key) : undefined;
-    if (hit && now - hit.ts < ttlMs) {
-      results[original] = hit.state;
+    if (useCache) {
+      const hit = cache.get(key);
+      if (hit && now - hit.ts < ttlMs) {
+        results[original] = hit.state;
+        continue;
+      }
+    }
+    const existing = queued.get(key);
+    if (existing) {
+      existing.originals.push(original);
       continue;
     }
-    pending.push({ key, original });
+    const entry = { key, original, originals: [original] };
+    queued.set(key, entry);
+    pending.push(entry);
   }
 
-  const probed = await runWithConcurrency(pending, concurrency, async ({ key, original }) => {
-    const state = await probeDirectoryGitState(original, { timeoutMs });
-    return { key, original, state };
+  const probed = await runWithConcurrency(pending, concurrency, async (entry) => {
+    const state = await probeDirectoryGitState(entry.original, { timeoutMs });
+    return { ...entry, state };
   });
 
-  for (const { key, original, state } of probed) {
-    if (state.isGitRepo !== null) {
-      // 只有确定的结果才缓存:超时/未知下次还要再试
-      cache.set(key, { ts: Date.now(), state });
-    }
-    results[original] = state;
+  for (const { key, originals, state } of probed) {
+    // 只有确定的结果才缓存:超时/未知下次还要再试
+    if (state.isGitRepo !== null) writeCache(key, state, maxCacheEntries);
+    // 同一目录的各种写法都拿到同一份结果(前端按原始串取)
+    for (const original of originals) results[original] = state;
   }
 
   return results;
@@ -377,7 +453,13 @@ export async function probeDirectoryOrigins(paths, options = {}) {
   return results;
 }
 
-/** 仅供测试:清空缓存 */
+/** 当前缓存条数。诊断与单测用:这份缓存是常驻的,有界才敢说"不会慢慢涨" */
+export function getGitStateCacheSize() {
+  return cache.size;
+}
+
+/** 仅供测试:清空缓存与在途记录 */
 export function clearGitStateCache() {
   cache.clear();
+  inflight.clear();
 }
