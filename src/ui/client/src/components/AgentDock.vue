@@ -88,7 +88,7 @@ const runningText = computed(() => `${agentStatus.runningCount} ${$t('@ACTBAR:�
 const runningBadge = computed(() => (agentStatus.runningCount > 99 ? '99+' : String(agentStatus.runningCount)))
 // 提示里用昵称而不是"智能体"：这个圆点是**那一个**智能体（用户给它起了名字），
 // 而不是一个叫"智能体"的功能入口。
-const { name: agentName, avatar: agentAvatar } = useAgentIdentity()
+const { name: agentName, avatar: agentAvatar, hasCustomAvatar } = useAgentIdentity()
 
 const mascotLabel = computed(() =>
   agentStatus.hasRunning ? `${agentName.value} · ${runningText.value}` : agentName.value,
@@ -220,12 +220,19 @@ onBeforeUnmount(() => {
         ref="mascotRef"
         type="button"
         class="agent-dock__mascot"
-        :class="{ 'is-open': opened }"
+        :class="{ 'is-open': opened, 'has-photo': hasCustomAvatar }"
         :aria-label="mascotLabel"
         :aria-pressed="opened ? 'true' : 'false'"
         @click="toggle"
       >
-        <img class="agent-dock__avatar" :src="agentAvatar" :alt="agentName" width="30" height="30" />
+        <img
+          class="agent-dock__avatar"
+          :class="{ 'is-photo': hasCustomAvatar }"
+          :src="agentAvatar"
+          :alt="agentName"
+          width="30"
+          height="30"
+        />
         <!-- 正在生成的对话数：切走视图 / 关上面板后仍在跑的轮次，这是唯一可见的信号 -->
         <span
           v-if="agentStatus.hasRunning"
@@ -352,11 +359,25 @@ onBeforeUnmount(() => {
   &.is-open {
     box-shadow: var(--shadow-hover);
   }
+
+  /* 自定义头像本身就是一张带底色的整圆图：按钮再铺一层 --role-ai-surface 就会变成
+     「大圆套小圆」（30px 头像外面的那圈淡紫 + 图片自带的底色），用户反馈「显得又小又像套了一圈」。
+     有头像时把底板让出来，让图铺满 48px，只留一层圆。 */
+  &.has-photo {
+    background: transparent;
+  }
 }
 
 .agent-dock__avatar {
   display: block;
   pointer-events: none;
+
+  &.is-photo {
+    width: 100%;
+    height: 100%;
+    border-radius: var(--radius-full);
+    object-fit: cover;
+  }
 }
 
 /* 徽标：几何与配色从 ActivityBar 的 .agent-running-badge 原样搬来

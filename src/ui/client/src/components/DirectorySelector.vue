@@ -2016,10 +2016,12 @@ function onBrowserSelect(path: string) {
   }
 }
 
-/* 自定义头像时，顶栏那个 g ai 按钮显示圆形小头像（没设头像时仍走 icon-class="g-ai" 的 svg） */
+/* 自定义头像时，顶栏那个 g ai 按钮显示圆形小头像（没设头像时仍走 icon-class="g-ai" 的 svg）。
+   尺寸跟邻居工具图标（--icon-glyph-size-lg = 24px）同一个光学档位：
+   18px 放在 44px 的按钮里显得又小又空，用户反馈「像是里边又套了一圈」。 */
 .g-ai-launch-avatar {
-  width: 18px;
-  height: 18px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   object-fit: cover;
   display: block;
