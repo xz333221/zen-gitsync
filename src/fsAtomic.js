@@ -22,13 +22,20 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import chalk from 'chalk';
 
-// Windows 上 rename / 覆盖写会撞上"目标此刻被别的句柄占着"(并发读者、杀毒软件
-// 实时扫描、索引器),libuv 报 EPERM / EACCES / EBUSY。这类占用都是毫秒级的,
-// 重试几次就能穿过,不该立刻降级 —— 实测并发读写时降级路径自己也会因目标被占用
-// 抛 EBUSY,把"慢一点的成功写"变成前端看到的 500。
+// Windows 上 rename / 覆盖写会撞上"目标此刻被别的句柄占着",libuv 报 EPERM / EACCES / EBUSY。
+// 这类占用都是毫秒级的,重试几次就能穿过,不该立刻降级 —— 实测并发读写时降级路径自己也会
+// 因目标被占用抛 EBUSY,把"慢一点的成功写"变成前端看到的 500。
+//
+// ⚠️ 最典型的占用来源就是**本进程/别的实例的 Node 读者**:libuv 在 Windows 上打开文件
+// 用的是 FILE_SHARE_READ|FILE_SHARE_WRITE,**没带 FILE_SHARE_DELETE**(nodejs/node#16423),
+// 于是只要有人正在 readFile,对同一路径的 rename 就必然 EPERM。实测:并发读一份 70MB 的
+// jobs.json 期间裸 rename 6/6 全 EPERM;而同一份文件 readFile 本身只要 ~170ms。
+// 所以重试预算必须覆盖"一次大文件读取",否则每次 5s 轮询读 jobs.json 都会顺手打死
+// 一次落盘(本机 hub.log 里攒了 400+ 条 `EPERM: ... rename 'tasks.json.tmp'`)。
 export const BUSY_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
 
-export async function retryOnBusy(fn, { attempts = 6, baseDelayMs = 15 } = {}) {
+// 默认 10 次 × 40ms 递增 ≈ 1.8s,够覆盖一次 70MB 读取(≈170ms)加排队
+export async function retryOnBusy(fn, { attempts = 10, baseDelayMs = 40 } = {}) {
   let lastErr;
   for (let i = 0; i < attempts; i++) {
     try {
@@ -58,22 +65,24 @@ let _tmpSeq = 0;
  * - ⚠️ **降级写成功就算成功,不能把 rename 的错误再抛出去**:原实现 throw err,
  *   于是数据其实已经落盘、调用方却收到异常,前端表现为"保存失败 500"。
  * - 失败时清理孤儿 tmp,避免 `.zen-gitsync/` 里堆积 `*.tmp`。
+ * - `opts.fsMod` 只给**单测注入 mock fs** 用(instanceRegistry 那几个用例要跨平台
+ *   伪造路径)。传了就全程走它,别混用真 fs —— 混用会让 mock 的路径跑到真实磁盘上。
  */
-export async function atomicWriteText(filePath, text) {
+export async function atomicWriteText(filePath, text, { fsMod = fs } = {}) {
   const tmpPath = `${filePath}.${process.pid}.${Date.now()}.${++_tmpSeq}.tmp`;
   try {
-    await fs.writeFile(tmpPath, text, 'utf-8');
+    await fsMod.writeFile(tmpPath, text, 'utf-8');
     try {
-      await retryOnBusy(() => fs.rename(tmpPath, filePath));
+      await retryOnBusy(() => fsMod.rename(tmpPath, filePath));
     } catch (err) {
       console.warn(chalk.yellow(
         `[fsAtomic] 原子写降级为覆盖写(${path.basename(filePath)} rename 失败: ${err?.code || err?.message || err})`
       ));
-      try { await fs.unlink(tmpPath); } catch (_) { /* ignore */ }
-      await retryOnBusy(() => fs.writeFile(filePath, text, 'utf-8'));
+      try { await fsMod.unlink(tmpPath); } catch (_) { /* ignore */ }
+      await retryOnBusy(() => fsMod.writeFile(filePath, text, 'utf-8'));
     }
   } catch (err) {
-    try { await fs.unlink(tmpPath); } catch (_) { /* ignore */ }
+    try { await fsMod.unlink(tmpPath); } catch (_) { /* ignore */ }
     throw err;
   }
 }

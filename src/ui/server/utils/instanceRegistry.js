@@ -27,6 +27,7 @@
 
 import logger from './logger.js';
 import { INSTANCES_DIR, LEGACY_INSTANCES_FILE } from '../../../paths.js';
+import { atomicWriteText } from '../../../fsAtomic.js';
 
 const STALE_MS = 30_000;              // 心跳超时阈值（毫秒）
 const WATCH_DEBOUNCE_MS = 100;        // fs.watch 防抖时间
@@ -185,12 +186,12 @@ export function createInstanceRegistry({
     }
   }
 
-  // 原子写单个 entry 文件：tmp + rename
+  // 原子写单个 entry 文件。走 fsAtomic：唯一 tmp 名 + EPERM/EACCES/EBUSY 退避重试
+  // —— 别的实例每 5s 会 readFile 扫一遍这些文件，而 Windows 上 Node 的读句柄不带
+  // FILE_SHARE_DELETE，裸 rename 会一直 EPERM（日志里就是一串「心跳失败」）。
+  // fsMod 要一起传进去：这些用例靠注入 mock fs 伪造跨平台路径，绕过去就写到真实磁盘了。
   async function writeEntry(entry) {
-    const fp = entryFilePath(entry.pid);
-    const tmpFp = `${fp}.tmp`;
-    await fsMod.writeFile(tmpFp, JSON.stringify(entry, null, 2), 'utf-8');
-    await fsMod.rename(tmpFp, fp);
+    await atomicWriteText(entryFilePath(entry.pid), JSON.stringify(entry, null, 2), { fsMod });
   }
 
   // 删除单个 entry 文件

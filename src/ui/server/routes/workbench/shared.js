@@ -26,6 +26,7 @@ import path from 'path';
 import os from 'os';
 import logger from '../../utils/logger.js';
 import { DATA_DIR } from '../../../../paths.js';
+import { atomicWriteText } from '../../../../fsAtomic.js';
 
 // ── 数据目录与持久化文件路径 ─────────────────────────────────
 // 全部存在用户主目录 ~/.zen-gitsync/ 下，跨项目共享。
@@ -211,11 +212,17 @@ export async function readJson(file, fallback) {
 }
 
 // 原子写：tmp + rename。避免半写状态被读到（与 jobStore 一致）
+//
+// ⚠️ 不要退回"自己拼 `${file}.tmp` + 裸 rename"的写法。Windows 上 rename 覆盖
+// **目标此刻被别的句柄占着**（Defender 实时扫描、索引器、另一个 g ui 实例刚读完
+// 85MB 的 jobs.json）会直接抛 EPERM，而且固定 tmp 名在并发写时会互相把对方的
+// tmp 搬走。本机实测 hub.log 里因此攒了 400+ 条 `EPERM: ... rename
+// 'tasks.json.tmp' -> 'tasks.json'`，表现出来就是「移动到其他项目」弹报错、
+// 心跳/执行记录偶发写不进去。唯一正确的落盘路径是 fsAtomic.atomicWriteText：
+// 唯一 tmp 名 + EPERM/EACCES/EBUSY 指数退避重试 + 重试仍失败才降级覆盖写。
 export async function writeJson(file, data) {
   await ensureDataDir();
-  const tmp = `${file}.tmp`;
-  await fsp.writeFile(tmp, JSON.stringify(data, null, 2), 'utf-8');
-  await fsp.rename(tmp, file);
+  await atomicWriteText(file, JSON.stringify(data, null, 2));
 }
 
 // 简单 Mustache 风格变量插值：{{task.title}} / {{task.desc}} / {{repo.path}} / {{branch}}

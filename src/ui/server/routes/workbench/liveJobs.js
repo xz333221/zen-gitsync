@@ -48,6 +48,7 @@
 import fsp from 'fs/promises';
 import path from 'path';
 import { logger, LIVE_JOBS_DIR } from './shared.js';
+import { atomicWriteText } from '../../../../fsAtomic.js';
 
 /** 远端可见的输出尾巴长度。整份日志动辄几十万字符，跨实例只需要"跑到哪了" */
 export const LIVE_OUTPUT_TAIL_CHARS = 32 * 1024;
@@ -152,16 +153,15 @@ export async function writeLiveJobsFile(ownerPid, records) {
   if (list.length === 0) return removeLiveJobsFile(ownerPid);
   await fsp.mkdir(LIVE_JOBS_DIR, { recursive: true });
   const file = liveJobsFilePath(ownerPid);
-  const tmp = `${file}.tmp`;
-  // 原子写：tmp + rename（与 readJson/writeJson 同口径）。tmp 文件名带 pid 后缀
-  // 天然不撞车，读者按 /^\d+\.json$/ 过滤也就不会读到半截文件。
-  await fsp.writeFile(tmp, JSON.stringify({
+  // 原子写走 fsAtomic：唯一 tmp 名 + EPERM/EACCES/EBUSY 退避重试。
+  // 别退回自己拼 `${file}.tmp` + 裸 rename —— 目标被 Defender/索引器占着时
+  // Windows 直接抛 EPERM，而这里每几秒就要写一次，报错会刷满日志。
+  await atomicWriteText(file, JSON.stringify({
     version: 1,
     ownerPid,
     updatedAt: Date.now(),
     jobs: list
-  }), 'utf-8');
-  await fsp.rename(tmp, file);
+  }));
 }
 
 /** 删自己的那份。失败只记 warn —— 读者那边还有"owner pid 已死就跳过"兜底 */

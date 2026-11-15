@@ -237,8 +237,10 @@ test('config.js: writeRawConfigFile 在异常分支清理孤儿 tmp 文件', asy
     path.join(projectRoot, 'src/fsAtomic.js'),
     'utf-8'
   )
+  // atomicWriteText 现在支持注入 fsMod（单测用 mock fs 伪造跨平台路径），
+  // 清理孤儿 tmp 必须走**同一个** fs —— 所以断言同时认 fs / fsMod 两种写法。
   assert.ok(
-    /atomicWriteText[\s\S]{0,2500}fs\.unlink\(tmpPath\)/.test(src),
+    /atomicWriteText[\s\S]{0,2500}(?:fs|fsMod)\.unlink\(tmpPath\)/.test(src),
     '原子写异常分支应调用 fs.unlink(tmpPath) 清理孤儿文件'
   )
   // 顺带钉住"只有一份实现"这条不变量 —— config.js 自己再写一套就等于分叉
