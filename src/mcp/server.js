@@ -19,7 +19,8 @@
 // 之所以同样不装 @modelcontextprotocol/sdk:dependencies 一直是精简的
 // (14 个运行时依赖),而这套协议面本身很小,自己写换零依赖 + 完全可控的降级行为。
 //
-// 传输无关:handleMessage(一条 JSON-RPC) → 一条响应(或 null,表示这是通知)。
+// 传输无关:handleMessage(一条 JSON-RPC,可选传输层 signal) → 一条响应
+// (或 null,表示这是通知 / 这一轮已被取消)。
 //   - src/mcp/stdio.js 按行读 stdin,一行一帧
 //   - src/mcp/http.js  挂在现有 express 上,POST 一个 JSON-RPC 回一个
 // 两条传输不做任何协议判断,全部逻辑收在这里,避免"两种入口行为不一致"。
@@ -75,7 +76,7 @@ const INSTRUCTIONS = [
  *
  * @param {{ tools: Array<{name:string, description:string, inputSchema:object, handler:(args:object, ctx:object)=>any}>,
  *           ctx?: object, onLog?: (level:string, message:string)=>void }} options
- * @returns {{ handleMessage: (msg:object)=>Promise<object|null>, listTools: ()=>Array<object>,
+ * @returns {{ handleMessage: (msg:object, extra?:{signal?:AbortSignal})=>Promise<object|null>, listTools: ()=>Array<object>,
  *             serverInfo: object, toolNames: string[] }}
  */
 export function createMcpServer({ tools, ctx = {}, onLog } = {}) {
@@ -88,6 +89,19 @@ export function createMcpServer({ tools, ctx = {}, onLog } = {}) {
   const log = (level, message) => {
     if (typeof onLog === 'function') onLog(level, message);
   };
+
+  /**
+   * 在飞的 tools/call:请求 id -> 这一轮的 AbortController。
+   *
+   * 为什么必须有:客户端放弃等待时会发 notifications/cancelled,此前这里把通知
+   * 一律静默丢掉,工具那一轮照跑到底。跑到底的若是 peer_ask / agent_ask,对端
+   * (或本机)的会话闸就一直被这一轮占着 —— 用户明明没在对话,下一问却回
+   * "该会话正在生成中"。取消要能真的传到工具的 await 上,闸才有机会被释放。
+   *
+   * id 统一按字符串存:JSON-RPC 允许 number 或 string,客户端回传的 requestId
+   * 不一定与它当初发的类型一致。
+   */
+  const pendingCalls = new Map();
 
   const serverInfo = {
     name: SERVER_NAME,
@@ -110,7 +124,7 @@ export function createMcpServer({ tools, ctx = {}, onLog } = {}) {
     return [{ type: 'text', text: JSON.stringify(value, null, 2) }];
   }
 
-  async function callTool(name, args) {
+  async function callTool(name, args, signal) {
     const tool = byName.get(name);
     if (!tool) {
       // 工具不存在是协议级问题(客户端调了不存在的东西),但对模型更友好的是
@@ -124,7 +138,8 @@ export function createMcpServer({ tools, ctx = {}, onLog } = {}) {
       };
     }
     try {
-      const result = await tool.handler(args && typeof args === 'object' ? args : {}, ctx);
+      // ctx 按调用复制一份:signal 是**这一轮**的,不能让并发的另一次调用共用
+      const result = await tool.handler(args && typeof args === 'object' ? args : {}, { ...ctx, signal });
       return { content: toContent(result) };
     } catch (err) {
       // 工具内部异常变成 isError,而不是 JSON-RPC error —— 这样模型能读到原因并
@@ -147,18 +162,37 @@ export function createMcpServer({ tools, ctx = {}, onLog } = {}) {
 
   /**
    * 处理一条 JSON-RPC 消息。
-   * @returns {Promise<object|null>} null 表示这是通知,不该有响应
+   *
+   * @param {object} message
+   * @param {{ signal?: AbortSignal }} [extra] 传输层的取消通道(HTTP 调用方断开)。
+   *   协议层的取消走 notifications/cancelled,两者最终都落到同一个 signal 上。
+   * @returns {Promise<object|null>} null 表示这是通知(或已被取消),不该有响应
    */
-  async function handleMessage(message) {
+  async function handleMessage(message, extra = {}) {
     if (!message || typeof message !== 'object' || Array.isArray(message)) {
       return fail(null, INVALID_REQUEST, '不是合法的 JSON-RPC 消息');
     }
     const { id, method } = message;
     const isNotification = id === undefined || id === null;
 
-    // 通知(如 notifications/initialized / notifications/cancelled)一律静默接受。
+    // 通知(如 notifications/initialized)一律静默接受。
     // 回响应反而是错的 —— 规范里通知没有 id,回一条会让客户端当成孤儿响应丢弃。
     if (isNotification) {
+      if (method === 'notifications/cancelled') {
+        const requestId = message.params?.requestId;
+        const pending = requestId === undefined || requestId === null
+          ? null
+          : pendingCalls.get(String(requestId));
+        if (pending) {
+          log('info', `客户端取消请求 ${requestId},中止这一轮工具调用`);
+          pending.abort();
+        } else {
+          // 已经收尾(或压根没这一条)的取消通知是正常的:客户端超时后才发,
+          // 而工具可能刚好先一步跑完。不是错误,别刷 warn。
+          log('debug', `取消通知 ${requestId}(没有在飞的调用)`);
+        }
+        return null;
+      }
       log('debug', `通知 ${method}`);
       return null;
     }
@@ -192,9 +226,36 @@ export function createMcpServer({ tools, ctx = {}, onLog } = {}) {
           return fail(id, INVALID_PARAMS, 'tools/call 需要 params.name');
         }
         const startedAt = Date.now();
-        const result = await callTool(name.trim(), message.params?.arguments);
-        log('info', `调用 ${name} (${Date.now() - startedAt}ms)${result.isError ? ' [失败]' : ''}`);
-        return ok(id, result);
+        const controller = new AbortController();
+        const key = String(id);
+        pendingCalls.set(key, controller);
+
+        // 传输层已经判定"调用方走了"(HTTP 连接断开)就跟着 abort。
+        // stdio 没有这条通道 —— 那边只能靠 notifications/cancelled。
+        const transportSignal = extra?.signal;
+        const onTransportAbort = () => controller.abort();
+        if (transportSignal) {
+          if (transportSignal.aborted) controller.abort();
+          else transportSignal.addEventListener('abort', onTransportAbort, { once: true });
+        }
+
+        try {
+          // 调用方在开跑前就走了:别再起一轮(起了也没人收,还会占住会话闸)
+          if (controller.signal.aborted) {
+            log('info', `调用 ${name} 未开始:调用方已取消`);
+            return null;
+          }
+          const result = await callTool(name.trim(), message.params?.arguments, controller.signal);
+          const cancelled = controller.signal.aborted;
+          log('info', `调用 ${name} (${Date.now() - startedAt}ms)${result.isError ? ' [失败]' : ''}${cancelled ? ' [已取消]' : ''}`);
+          // 规范要求被取消的请求不要再回响应:客户端已经不等了,回一条只会被
+          // 当成孤儿响应。工具若不认 signal,这里至少保证协议面是干净的。
+          if (cancelled) return null;
+          return ok(id, result);
+        } finally {
+          pendingCalls.delete(key);
+          transportSignal?.removeEventListener('abort', onTransportAbort);
+        }
       }
 
       // 客户端可能主动查资源/提示词(我们没实现,但别让它们把连接卡住)

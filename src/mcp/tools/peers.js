@@ -108,7 +108,7 @@ export const peerTools = [
       },
       required: ['question'],
     },
-    async handler(args) {
+    async handler(args, ctx) {
       const question = asString(args?.question);
       if (!question) return { error: '需要 question(要问对端的那句话)。' };
       const ref = asString(args?.peer);
@@ -116,7 +116,13 @@ export const peerTools = [
       const startedAt = Date.now();
 
       try {
-        const result = await askPeerByRef(ref, question, { timeoutMs: timeoutSeconds * 1000 });
+        // signal 必须往下传:调用方(客户端)放弃等待时,只有掐断这一跳,对端才会
+        // 中止它那一轮并放掉会话闸。不传的话对端把这一轮跑到底,固定的 `in:<from>`
+        // 会话被占住,之后每一问都回 SESSION_BUSY —— 而用户根本没在和它对话。
+        const result = await askPeerByRef(ref, question, {
+          timeoutMs: timeoutSeconds * 1000,
+          signal: ctx?.signal,
+        });
         // ⚠️ result.peer 是 peers.json 里的完整条目(带 token),只投影这三个字段
         const peer = result?.peer || {};
         return {

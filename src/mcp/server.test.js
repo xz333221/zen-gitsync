@@ -173,6 +173,108 @@ test('tools/call: handler 返回 undefined → 给一句占位，而不是空 co
   assert.ok(res.result.content[0].text.length > 0)
 })
 
+// ── 取消 ─────────────────────────────────────────────────────
+// 回归（2026-11-17 用户报"我没和它对话，却一直回『该会话正在生成中』"）：
+// 此前 notifications/cancelled 被静默丢掉，工具那一轮照跑到底。跑到底的若是
+// peer_ask / agent_ask，会话闸一直被占着，下一问就撞 SESSION_BUSY。
+// 取消必须真的传到工具的 await 上，且被取消的请求不再回响应。
+
+const tick = () => new Promise(r => setImmediate(r))
+
+/** 一个只等取消（或手动放行）的工具，开跑时把 ctx 和 resolve 交出来。 */
+function waitTool(onStart) {
+  return {
+    name: 'wait', description: '等到被取消', inputSchema: { type: 'object', properties: {} },
+    handler: (args, ctx) => new Promise(resolve => {
+      onStart(ctx, resolve)
+      ctx.signal.addEventListener('abort', () => resolve({ cancelled: true }), { once: true })
+    }),
+  }
+}
+
+test('tools/call: 取消通知把 signal 打给在飞的工具，且被取消的请求不再回响应', async () => {
+  let seenCtx = null
+  const server = makeServer([waitTool(ctx => { seenCtx = ctx })])
+  const pending = server.handleMessage({ jsonrpc: '2.0', id: 11, method: 'tools/call', params: { name: 'wait', arguments: {} } })
+  await tick()
+  assert.ok(seenCtx, '工具应已开跑')
+  assert.equal(seenCtx.signal.aborted, false)
+  assert.equal(seenCtx.cwd, 'C:\\proj', '按调用复制 ctx 时原有字段不能丢')
+  // 客户端回传的 requestId 类型可能与当初发的 id 不一致（number vs string）
+  const note = await server.handleMessage({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: '11' } })
+  assert.equal(note, null)
+  assert.equal(seenCtx.signal.aborted, true, '取消必须传到工具的 signal 上')
+  assert.equal(await pending, null, '被取消的请求不该再回响应')
+})
+
+test('tools/call: 取消一条不影响另一条在飞的调用（按请求 id 各管各的）', async () => {
+  const starts = []
+  const server = makeServer([waitTool((ctx, resolve) => starts.push({ ctx, resolve }))])
+  const a = server.handleMessage({ jsonrpc: '2.0', id: 'a', method: 'tools/call', params: { name: 'wait' } })
+  const b = server.handleMessage({ jsonrpc: '2.0', id: 'b', method: 'tools/call', params: { name: 'wait' } })
+  await tick()
+  await server.handleMessage({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 'a' } })
+  assert.equal(starts[0].ctx.signal.aborted, true)
+  assert.equal(starts[1].ctx.signal.aborted, false, '另一条调用不能被误伤')
+  assert.equal(await a, null)
+  starts[1].resolve({ done: true })
+  const resB = await b
+  assert.equal(resB.id, 'b')
+  assert.deepEqual(JSON.parse(resB.result.content[0].text), { done: true })
+})
+
+test('tools/call: 传输层已判定调用方走了（HTTP 断开）就不再开跑', async () => {
+  let ran = false
+  const server = makeServer([{
+    name: 'x', description: '不该被跑到', inputSchema: { type: 'object', properties: {} },
+    handler: () => { ran = true; return 1 },
+  }])
+  const controller = new AbortController()
+  controller.abort()
+  const res = await server.handleMessage(
+    { jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'x' } },
+    { signal: controller.signal },
+  )
+  assert.equal(ran, false, '起了也没人收，还会占住会话闸')
+  assert.equal(res, null)
+})
+
+test('tools/call: 跑到一半传输层 signal 中止（HTTP 调用方断开）同样掐掉工具并吞掉响应', async () => {
+  let seenCtx = null
+  const server = makeServer([waitTool(ctx => { seenCtx = ctx })])
+  const controller = new AbortController()
+  const pending = server.handleMessage(
+    { jsonrpc: '2.0', id: 12, method: 'tools/call', params: { name: 'wait' } },
+    { signal: controller.signal },
+  )
+  await tick()
+  controller.abort()
+  assert.equal(seenCtx.signal.aborted, true)
+  assert.equal(await pending, null)
+})
+
+test('tools/call: 工具不认 signal 跑完了，取消后也不回孤儿响应', async () => {
+  let release
+  const gate = new Promise(r => { release = r })
+  const server = makeServer([{
+    name: 'stubborn', description: '不认 signal', inputSchema: { type: 'object', properties: {} },
+    handler: async () => { await gate; return '跑完了' },
+  }])
+  const pending = server.handleMessage({ jsonrpc: '2.0', id: 21, method: 'tools/call', params: { name: 'stubborn' } })
+  await tick()
+  await server.handleMessage({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 21 } })
+  release()
+  assert.equal(await pending, null, '客户端已经不等了，回一条只会被当成孤儿响应')
+})
+
+test('迟到的取消通知（调用已收尾 / 压根没这一条）静默接受，不是错误', async () => {
+  const server = makeServer()
+  await call(server, 'echo', { value: 'hi' }) // id 3，已跑完
+  for (const params of [{ requestId: 3 }, { requestId: 'no-such' }, undefined]) {
+    assert.equal(await server.handleMessage({ jsonrpc: '2.0', method: 'notifications/cancelled', params }), null)
+  }
+})
+
 // ── 其它方法 ─────────────────────────────────────────────────
 test('ping → 空对象（规范要求的方法，别回 -32601）', async () => {
   const res = await makeServer().handleMessage({ jsonrpc: '2.0', id: 7, method: 'ping' })

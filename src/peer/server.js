@@ -29,6 +29,7 @@ import express from 'express';
 
 import { tokenEquals, getSessionId, setSessionId, maskToken } from './store.js';
 import { askLocalAgent } from './localAsk.js';
+import { isSessionBusy } from '../ui/server/routes/workbench/sessionGate.js';
 import logger from '../ui/server/utils/logger.js';
 
 const MAX_QUESTION_CHARS = 4000;
@@ -110,7 +111,18 @@ export function createPeerApp({
     }
 
     const sessionKey = `in:${from}`;
-    const sessionId = await getSession(sessionKey).catch(() => '');
+    let sessionId = await getSession(sessionKey).catch(() => '');
+    // 续接的那条会话还在生成中：闸是**按会话**占的，带着这个 id 进去必然撞
+    // SESSION_BUSY，而这一问的调用方可能早就放弃等待了（客户端有自己的超时，
+    // 到点只是本地不等，跨机器这一跳还在跑）。对端用户在界面上看不到任何在跑的
+    // 对话 —— peer 会话不属于任何项目 —— 于是表现为"我没和它说话，它却一直忙"。
+    //
+    // 这里改用一条新会话：宁可这一问丢掉上下文，也不能让一个固定 key 把之后
+    // 每一问都堵死。两条会话各自落盘，不会互相覆盖（闸挡的本来就是同一份快照）。
+    if (sessionId && isSessionBusy(sessionId)) {
+      logger.info?.(`[peer] 会话 ${sessionId} 仍在生成中，本问改用新会话（from=${from}）`);
+      sessionId = '';
+    }
     logger.info?.(`[peer] 收到提问 from=${from} len=${question.length}`);
 
     // 提问方断开 = 这一轮没人要了：必须把本机那一轮一起掐掉。

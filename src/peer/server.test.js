@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 
 import { createPeerApp } from './server.js';
+import { acquireSessionTurn, isSessionBusy, releaseSession } from '../ui/server/routes/workbench/sessionGate.js';
 
 const SELF = { id: 'node-abc12345', name: '这台电脑', avatar: '', token: 'k'.repeat(64) };
 
@@ -208,6 +209,46 @@ test('提问方断开时，/api/peer/ask 必须中止本机这一轮', async () 
     await waitUntil(() => aborted);
     assert.equal(runnerSignal.aborted, true, '提问方断开必须把这个信号打给本机那一轮');
   } finally {
+    await close();
+  }
+});
+
+// 回归（2026-11-17 用户报"我没和它对话，却一直回『该会话正在生成中』"）：
+//
+// 上面那条修法靠"提问方断开 → 掐掉本机这一轮"。但客户端不一定断开：它有自己的
+// 超时（实测 Qoder 的 MCP 调用 60s 封顶），到点只是本地不等了，连接还挂着，
+// 对端那一轮继续跑到底。闸是**按会话**占的，而 peer 的 key 固定是 `in:<from>`，
+// 续接同一条会话必然撞 SESSION_BUSY —— 用户在对端界面上还看不到任何在跑的对话。
+// 所以这里再兜一层：存下来的会话仍在生成中，就改用一条新会话把这一问答完。
+test('存下来的会话仍在生成中时改用新会话，而不是把这一问堵死', async () => {
+  const seenSessions = [];
+  const { app, sessions } = makeApp({
+    ask: async ({ sessionId }) => {
+      seenSessions.push(sessionId);
+      return { answer: '部署还没做', sessionId: sessionId || 'sess-fresh', ms: 1 };
+    }
+  });
+  sessions.set('in:node-busy', 'sess-held');
+  const held = acquireSessionTurn('sess-held');
+  assert.ok(held, '前置条件：这条会话确实被一个在跑的轮次占着');
+  const { url, close } = await serve(app);
+  const headers = { Authorization: `Bearer ${SELF.token}`, 'Content-Type': 'application/json' };
+  try {
+    const res = await fetch(`${url}/api/peer/ask`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ question: '部署了吗', from: 'node-busy' })
+    });
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.ok, true);
+    assert.equal(data.answer, '部署还没做');
+    assert.deepEqual(seenSessions, [''], '被占用的会话 id 不该再传进去');
+    assert.equal(data.sessionId, 'sess-fresh');
+    assert.equal(sessions.get('in:node-busy'), 'sess-fresh', '下一问接着新会话走');
+    assert.equal(isSessionBusy('sess-held'), true, '不许顺手放掉别人占着的闸');
+  } finally {
+    releaseSession('sess-held', held.token);
     await close();
   }
 });

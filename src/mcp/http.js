@@ -104,15 +104,28 @@ export function createMcpRouter({ getCwd, getLiveJobs, onLog } = {}) {
     }
 
     const server = serverFor(req);
+    // 调用方断开 = 这一轮没人要了。工具里跑的可能是 peer_ask / agent_ask 这种
+    // 几十秒起步的活,不掐掉它,对端(或本机)的会话闸会被一个没人等的轮次占着,
+    // 下一次提问就回"该会话正在生成中"。
+    //
+    // 这条传输上的取消**只能靠连接语义**:服务端是无状态的、每个请求一个新实例,
+    // 另一条 POST 送来的 notifications/cancelled 找不到这里在飞的调用。
+    const controller = new AbortController();
+    const onCallerGone = () => {
+      if (res.writableEnded) return; // 正常收尾也会触发 close,那不是取消
+      controller.abort();
+    };
+    res.once('close', onCallerGone);
+
     try {
       if (Array.isArray(body)) {
-        const results = (await Promise.all(body.map(m => server.handleMessage(m)))).filter(r => r !== null);
+        const results = (await Promise.all(body.map(m => server.handleMessage(m, { signal: controller.signal })))).filter(r => r !== null);
         // 全部是通知 → 规范要求 202 且无 body
         if (results.length === 0) return res.status(202).end();
         return res.json(results);
       }
 
-      const result = await server.handleMessage(body);
+      const result = await server.handleMessage(body, { signal: controller.signal });
       if (result === null) return res.status(202).end(); // 通知:202 Accepted,无响应体
       return res.json(result);
     } catch (err) {
@@ -124,6 +137,8 @@ export function createMcpRouter({ getCwd, getLiveJobs, onLog } = {}) {
         id,
         error: { code: INTERNAL_ERROR, message: `内部错误: ${err?.message || String(err)}` },
       });
+    } finally {
+      res.removeListener('close', onCallerGone);
     }
   });
 
