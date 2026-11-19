@@ -111,6 +111,9 @@ function killChildProcess(child, timeoutMs = 3000) {
       return resolve();
     }
     let done = false;
+    // 先声明再赋值:child.kill 同步抛错时 finish() 会立刻执行,
+    // 若 timer 还是后声明的 const,clearTimeout(timer) 会踩 TDZ 抛 ReferenceError。
+    let timer = null;
     const finish = () => {
       if (done) return;
       done = true;
@@ -127,7 +130,7 @@ function killChildProcess(child, timeoutMs = 3000) {
       return;
     }
     // 超时未退就 SIGKILL 强杀
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       try { child.kill('SIGKILL'); } catch (_) {}
       // 给 SIGKILL 200ms 兜底,再不退也不等了
       setTimeout(finish, 200);

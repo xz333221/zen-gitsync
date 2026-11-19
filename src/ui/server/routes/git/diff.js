@@ -65,11 +65,18 @@ export function registerGitDiffRoutes({
           return res.status(400).json({ error: '缺少文件路径参数' });
         }
       
-        const diffArgs = ['diff', '--', filePath];
+        // SEC-PATH-1:路径必须在当前项目内,越界返回 403。
+        // `--` 只挡参数注入,挡不住 `..` 上跳;git 虽然也会拒绝仓库外路径,
+        // 但没理由让一个越界路径走到 git 子进程里。
+        const safeFilePath = await safePathInProject(String(filePath));
+        if (!safeFilePath) {
+          return res.status(403).json({ error: '禁止访问工作目录以外的文件' });
+        }
+        const relPath = toGitRepoRelativePath(safeFilePath);
+        const diffArgs = ['diff', '--', relPath];
       
-        // 使用优化的检查函数(diffCommand 用于内部 numstat 检测的字符串转换,
-        // 实际走 git 时用 argv 数组,避免 Windows cmd.exe 拼引号问题)
-        const skipCheck = await checkShouldSkipDiff(filePath, `git diff -- "${filePath}"`);
+        // 直接把 argv 交给检查函数:文件名带引号时命令字符串重新拆分会错位
+        const skipCheck = await checkShouldSkipDiff(relPath, diffArgs);
         if (skipCheck.shouldSkip) {
           return res.json({
             diff: skipCheck.reason,
@@ -104,10 +111,16 @@ export function registerGitDiffRoutes({
           return res.status(400).json({ error: '缺少文件路径参数' });
         }
       
-        const diffArgs = ['diff', '--cached', '--', filePath];
+        // SEC-PATH-1:同上,路径必须在当前项目内
+        const safeFilePath = await safePathInProject(String(filePath));
+        if (!safeFilePath) {
+          return res.status(403).json({ error: '禁止访问工作目录以外的文件' });
+        }
+        const relPath = toGitRepoRelativePath(safeFilePath);
+        const diffArgs = ['diff', '--cached', '--', relPath];
       
-        // 使用优化的检查函数
-        const skipCheck = await checkShouldSkipDiff(filePath, `git diff --cached -- "${filePath}"`);
+        // 使用优化的检查函数(argv 直传,见 /api/diff 的说明)
+        const skipCheck = await checkShouldSkipDiff(relPath, diffArgs);
         if (skipCheck.shouldSkip) {
           return res.json({
             diff: skipCheck.reason,

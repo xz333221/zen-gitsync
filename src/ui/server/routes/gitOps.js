@@ -56,6 +56,69 @@ async function resolvePushArgs({ execGitCommand, remote }) {
   });
 }
 
+/**
+ * 快照暂存区里指定路径的精确条目（mode + blob + path）。
+ *
+ * 为什么不能在提交后用 `git add` 恢复: `git add` 取的是**工作区当前内容**。
+ * 如果锁定文件在提交期间又被改过,恢复动作会把新改动一并暂存 —— 用户原来的
+ * "暂存到某个版本"的边界就丢了。这里记下 index 里的 mode/sha,提交后原样写回。
+ *
+ * 必须在仓库根执行: `git diff --cached` 输出的是根相对路径,`git update-index`
+ * 也只认根相对路径,而当前项目可能只是仓库的一个子目录。
+ */
+async function snapshotStagedEntries(execGitCommand, repoRoot, paths) {
+  const entries = [];
+  const deletions = [];
+
+  const ls = await execGitCommand(['ls-files', '-s', '-z', '--', ...paths], {
+    cwd: repoRoot, log: false
+  });
+  for (const record of String(ls.stdout || '').split('\0')) {
+    if (!record) continue;
+    const tab = record.indexOf('\t');
+    if (tab < 0) continue;
+    const [mode, sha, stage] = record.slice(0, tab).split(' ');
+    // 冲突态(stage != 0)不处理:那种情况下提交本来就会被 git 拦住
+    if (!mode || !sha || stage !== '0') continue;
+    entries.push({ mode, sha, path: record.slice(tab + 1) });
+  }
+
+  // 暂存区里的删除不会出现在 ls-files 里,单独记下来
+  const diff = await execGitCommand(
+    ['diff', '--cached', '--name-only', '--diff-filter=D', '-z', '--', ...paths],
+    { cwd: repoRoot, log: false }
+  );
+  for (const p of String(diff.stdout || '').split('\0')) {
+    if (p) deletions.push(p);
+  }
+
+  return { entries, deletions };
+}
+
+/** 按快照恢复暂存区条目。逐条容错,别让一个坏路径拖垮整批恢复。 */
+async function restoreStagedEntries(execGitCommand, repoRoot, snapshot) {
+  if (!snapshot) return;
+  for (const entry of snapshot.entries) {
+    try {
+      await execGitCommand(
+        ['update-index', '--add', '--cacheinfo', `${entry.mode},${entry.sha},${entry.path}`],
+        { cwd: repoRoot, log: false }
+      );
+    } catch (e) {
+      logger.warn(`恢复锁定文件暂存失败(${entry.path}):`, e.message);
+    }
+  }
+  for (const p of snapshot.deletions) {
+    try {
+      await execGitCommand(['update-index', '--force-remove', p], {
+        cwd: repoRoot, log: false
+      });
+    } catch (e) {
+      logger.warn(`恢复锁定文件删除状态失败(${p}):`, e.message);
+    }
+  }
+}
+
 export function registerGitOpsRoutes({
   app,
   execGitCommand,
@@ -77,6 +140,9 @@ export function registerGitOpsRoutes({
     let tempFile = null;
     // 临时取消暂存的锁定文件列表（提交后需恢复）
     let unstagedLockedFiles = [];
+    // reset 之前的索引快照 + 仓库根，提交后按快照恢复
+    let lockedIndexSnapshot = null;
+    let lockedGitRoot = null;
 
     try {
       const { message, hasNewlines, noVerify } = req.body;
@@ -105,24 +171,27 @@ export function registerGitOpsRoutes({
       let skippedLockedFiles = [];
 
       if (lockedFiles.length > 0) {
+        // 仓库根:下面这些只跟 index 有关的命令都在根目录执行 ——
+        // `git diff --cached` 输出的是根相对路径,`git update-index` 也只认根相对路径,
+        // 而当前项目可能只是仓库的一个子目录。
+        let gitRoot;
+        try {
+          const { stdout: rootOut } = await execGitCommand(
+            ['rev-parse', '--show-toplevel'], { log: false }
+          );
+          gitRoot = path.normalize(rootOut.trim());
+        } catch (_) {
+          gitRoot = path.normalize(process.cwd());
+        }
+        lockedGitRoot = gitRoot;
+
         // 获取当前暂存区文件列表
         const { stdout: stagedOutput } = await execGitCommand(
-          ['diff', '--cached', '--name-only'], { log: false }
+          ['diff', '--cached', '--name-only'], { log: false, cwd: gitRoot }
         );
         const stagedFiles = stagedOutput.split('\n').filter(Boolean);
 
         if (stagedFiles.length > 0) {
-          // 获取 Git 根目录，用于将锁定文件的绝对路径转为 git 相对路径
-          let gitRoot;
-          try {
-            const { stdout: rootOut } = await execGitCommand(
-              ['rev-parse', '--show-toplevel'], { log: false }
-            );
-            gitRoot = path.normalize(rootOut.trim());
-          } catch (_) {
-            gitRoot = path.normalize(process.cwd());
-          }
-
           // 将锁定文件路径统一为 git 相对路径（正斜杠）以便与
           // git diff --cached --name-only 的输出进行比较
           function toGitRelative(p) {
@@ -141,21 +210,22 @@ export function registerGitOpsRoutes({
           );
 
           if (unstagedLockedFiles.length > 0) {
+            // 快照必须在 reset 之前:reset 之后索引条目已经回到 HEAD,
+            // 就分不清用户原本暂存的是哪个版本了
+            lockedIndexSnapshot = await snapshotStagedEntries(execGitCommand, gitRoot, unstagedLockedFiles);
             // 临时取消暂存锁定文件
             await execGitCommand(
-              ['reset', 'HEAD', '--', ...unstagedLockedFiles], { log: false }
+              ['reset', 'HEAD', '--', ...unstagedLockedFiles], { log: false, cwd: gitRoot }
             );
             skippedLockedFiles = unstagedLockedFiles;
 
             // 检查取消暂存后是否还有可提交的内容
             const { stdout: remainingStaged } = await execGitCommand(
-              ['diff', '--cached', '--name-only'], { log: false }
+              ['diff', '--cached', '--name-only'], { log: false, cwd: gitRoot }
             );
             if (!remainingStaged.trim()) {
-              // 所有暂存文件都是锁定的 — 恢复暂存状态并返回提示
-              await execGitCommand(
-                ['add', '--', ...unstagedLockedFiles], { log: false }
-              );
+              // 所有暂存文件都是锁定的 — 按快照恢复暂存状态并返回提示
+              await restoreStagedEntries(execGitCommand, gitRoot, lockedIndexSnapshot);
               if (tempFile) {
                 await fs.unlink(tempFile).catch(() => {});
               }
@@ -179,12 +249,10 @@ export function registerGitOpsRoutes({
         await fs.unlink(tempFile).catch(() => {});
       }
 
-      // 恢复锁定文件的暂存状态（保留用户在左侧文件列表中的暂存操作）
-      if (unstagedLockedFiles.length > 0) {
+      // 恢复锁定文件的暂存状态（按快照写回索引，保留用户原来的暂存边界）
+      if (lockedIndexSnapshot) {
         try {
-          await execGitCommand(
-            ['add', '--', ...unstagedLockedFiles], { log: false }
-          );
+          await restoreStagedEntries(execGitCommand, lockedGitRoot, lockedIndexSnapshot);
         } catch (e) {
           logger.warn('恢复锁定文件暂存状态失败:', e.message);
         }
@@ -198,11 +266,9 @@ export function registerGitOpsRoutes({
       });
     } catch (error) {
       // 出错时也要尝试恢复锁定文件的暂存状态
-      if (unstagedLockedFiles.length > 0) {
+      if (lockedIndexSnapshot) {
         try {
-          await execGitCommand(
-            ['add', '--', ...unstagedLockedFiles], { log: false }
-          );
+          await restoreStagedEntries(execGitCommand, lockedGitRoot, lockedIndexSnapshot);
         } catch (_) { /* 忽略恢复失败，不掩盖原始错误 */ }
       }
       if (tempFile) {
@@ -1147,10 +1213,8 @@ export function registerGitOpsRoutes({
 
       const diffCommandArgs = ['show', safeHash, '--', safePath];
 
-      // 使用优化的检查函数
-      // checkShouldSkipDiff 接受字符串命令,这里只用于大小判断,先按字面占位;
-      // 走 execGitCommand 时仍用 argv 数组保证转义正确。
-      const skipCheck = await checkShouldSkipDiff(safePath, `git show ${safeHash} -- "${safePath}"`);
+      // 使用优化的检查函数(argv 直传,避免命令字符串被引号拆错)
+      const skipCheck = await checkShouldSkipDiff(safePath, diffCommandArgs);
       if (skipCheck.shouldSkip) {
         return res.json({
           success: true,

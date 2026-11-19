@@ -175,7 +175,7 @@ export function registerTerminalRoutes({
         });
       } catch (error) {
         logger.error('在终端中执行命令失败:', error);
-        res.status(500).json({
+        res.status(error?.statusCode || 500).json({
           success: false,
           error: `在终端中执行命令失败: ${error.message}`
         });
@@ -187,7 +187,7 @@ export function registerTerminalRoutes({
         const sessions = Array.from(terminalSessions.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
         res.json({ success: true, sessions });
       } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(error?.statusCode || 500).json({ success: false, error: error.message });
       }
     }));
 
@@ -252,7 +252,7 @@ export function registerTerminalRoutes({
       
         res.json({ success: true, session });
       } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(error?.statusCode || 500).json({ success: false, error: error.message });
       }
     }));
 
@@ -289,7 +289,7 @@ export function registerTerminalRoutes({
       
         res.json({ success: true, sessions: output });
       } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(error?.statusCode || 500).json({ success: false, error: error.message });
       }
     }));
 
@@ -312,7 +312,7 @@ export function registerTerminalRoutes({
         terminalSessions.delete(id);
         res.json({ success: true, removedId: id });
       } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(error?.statusCode || 500).json({ success: false, error: error.message });
       }
     }));
 }

@@ -295,8 +295,11 @@ test('buildCliEnv: 继承来的"强制上色"变量一律清掉,并显式关色(
     assert.equal(env.FORCE_COLOR, undefined)
     assert.equal(env.NO_COLOR, '1')
     assert.equal(env.CLICOLOR, '0')
-    // 其它环境变量照旧带下去(子进程要能拿到 PATH 等)
-    assert.equal(env.PATH, process.env.PATH)
+    // 其它环境变量照旧带下去(子进程要能拿到 PATH 等)。
+    // Windows 上环境变量名不区分大小写,process.env 里保留的键是 `Path`,
+    // 展开成普通对象后 `env.PATH` 并不存在 —— 必须按大小写不敏感取键。
+    const pathKey = Object.keys(env).find((k) => k.toUpperCase() === 'PATH')
+    assert.equal(pathKey ? env[pathKey] : undefined, process.env.PATH)
   } finally {
     delete process.env.CLICOLOR_FORCE
     delete process.env.gh_force_tty

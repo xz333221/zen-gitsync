@@ -222,7 +222,9 @@ function execGitCommand(command, options = {}) {
     if (timeout === undefined) {
       timeout = getDefaultGitTimeout(command);
     }
-    let cwd = getCwd()
+    // options.cwd 供"必须固定在仓库根执行"的 plumbing 命令使用(如 update-index,
+    // 它的路径口径是仓库根相对的);不传则沿用当前项目目录。
+    let cwd = options.cwd || getCwd()
 
     // Record start time for command execution
     const startTime = Date.now();
@@ -769,17 +771,44 @@ async function execPull() {
 async function judgeRemote() {
   const spinner = ora('正在检查远程更新...').start();
   try {
-    // 检查是否有远程更新
-    // 先获取远程最新状态
-    await execGitCommand(['remote', 'update'], {
-      head: 'Fetching remote updates',
-      log: false
+    // 先确认当前分支有没有上游。本地仓库 / 新建仓库 / 只 `git remote add` 过
+    // 还没 push 过的仓库都没有上游,此时 `git rev-list HEAD..@{u}` 会 fatal
+    // ("no upstream configured")。没有远程可同步是合法状态,不该让整个 g 流程失败。
+    const upstreamRes = await execGitCommand(['rev-parse', '--abbrev-ref', '@{u}'], {
+      head: 'Checking upstream branch',
+      log: false,
+      ignoreError: true
     });
+    if (!String(upstreamRes.stdout || '').trim()) {
+      spinner.stop();
+      console.log(chalk.dim('ℹ️ 当前分支未配置上游，跳过远程更新检查'));
+      return;
+    }
+
+    // 检查是否有远程更新
+    // 先获取远程最新状态。离线 / 远程不可达时 fetch 会失败,
+    // 但"检查不到"不等于"流程失败",提示一句后跳过。
+    const updateRes = await execGitCommand(['remote', 'update'], {
+      head: 'Fetching remote updates',
+      log: false,
+      ignoreError: true
+    });
+    if (updateRes.error) {
+      spinner.stop();
+      console.log(chalk.yellow('⚠️ 无法检查远程更新（网络或远程仓库不可达），已跳过'));
+      return;
+    }
     // 检查是否需要 pull
     const res = await execGitCommand(['rev-list', 'HEAD..@{u}', '--count'], {
       head: 'Checking if behind remote',
-      log: false
+      log: false,
+      ignoreError: true
     });
+    if (res.error) {
+      spinner.stop();
+      console.log(chalk.yellow('⚠️ 无法检查远程更新，已跳过'));
+      return;
+    }
     const behindCount = res.stdout.trim()
     const { green, black, bgGreen, white } = chalk;
     // 如果本地落后于远程
@@ -1008,8 +1037,10 @@ async function execAddAndCommit({statusOutput, commitMessage, exit}) {
   const commitMessageArg = process.argv.find(arg => arg.startsWith('-m'));
   if (commitMessageArg) {
     if (commitMessageArg.includes('=')) {
-      // 处理 -m=<message> 的情况
-      commitMessage = commitMessageArg.split('=')[1]?.replace(/^['"]|['"]$/g, '');
+      // 处理 -m=<message> 的情况。只截第一个等号之后的内容:
+      // 提交信息本身可能带等号(`-m="fix: a=b"`),split('=')[1] 会把后面截掉。
+      const eqIndex = commitMessageArg.indexOf('=');
+      commitMessage = commitMessageArg.slice(eqIndex + 1)?.replace(/^['"]|['"]$/g, '');
     } else {
       // 处理 -m <message> 的情况
       const index = process.argv.indexOf(commitMessageArg);

@@ -484,7 +484,7 @@ async function main() {
     arg.startsWith('-m')
   );
   if (hasGitTask || !cmdArg) {
-    judgeInterval();
+    await judgeInterval();
   }
 }
 
@@ -558,8 +558,19 @@ const judgeInterval = async () => {
     }
     // 旧的 inline SIGINT handler 已移除,改由 setupSigintHandler 统一处理
   } else {
-    createGitCommit({exit: false});
+    // 必须 await:createGitCommit 在 catch 里会重新 throw,不接住就变成
+    // unhandledRejection(Node 15+ 默认直接终止进程,错误信息还会重复打一遍)。
+    // 它自己已经打印过完整错误,这里只负责收口退出码。
+    try {
+      await createGitCommit({exit: false});
+    } catch (_) {
+      process.exitCode = 1;
+    }
   }
 };
 
-main()
+main().catch((error) => {
+  // main() 里其余路径(配置命令 / 自定义命令等)的兜底,同样避免 unhandledRejection
+  console.error(chalk.red('执行失败:'), error?.message || error);
+  process.exit(1);
+});

@@ -499,13 +499,11 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
         }
       
         // 否则，使用原有方式获取与父1的变更
-        // checkShouldSkipDiff 接受字符串命令用于日志展示,这里只用于大小判断;
-        // 走 execGitCommand 时用 argv 数组,避免 Windows 下 cmd.exe 拼引号被破坏。
-        const diffCommandForCheck = `git show ${stashCommit} -- "${safeFile}"`;
+        // checkShouldSkipDiff 直接收 argv 数组,避免 Windows 下拼接引号被破坏。
         const diffCommandArgs = ['show', stashCommit, '--', safeFile];
 
         // 使用优化的检查函数
-        const skipCheck = await checkShouldSkipDiff(safeFile, diffCommandForCheck);
+        const skipCheck = await checkShouldSkipDiff(safeFile, diffCommandArgs);
         if (skipCheck.shouldSkip) {
           return res.json({
             success: true,

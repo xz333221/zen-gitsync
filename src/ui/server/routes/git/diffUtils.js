@@ -18,7 +18,8 @@ export function createDiffHelpers({ execGitCommand }) {
   /**
    * 检查文件是否应该跳过diff显示（参考GitLab策略）
    * @param {string} filePath - 文件路径
-   * @param {string} diffCommand - 要执行的git diff命令
+   * @param {string|string[]} diffCommand - git 命令。推荐传 argv 数组
+   *   (`['diff','--',path]`);字符串形态只为兼容旧调用方保留。
    * @returns {Promise<{shouldSkip: boolean, reason?: string, stats?: object}>}
    */
   async function checkShouldSkipDiff(filePath, diffCommand) {
@@ -33,25 +34,24 @@ export function createDiffHelpers({ execGitCommand }) {
 
     // 2. 使用 --numstat 快速检查变更量（不获取实际内容，速度快）
     try {
-      // 把传入的 diffCommand 字符串改写成 git diff/show 加 --numstat 的 argv 数组。
-      // 不再走 shell 模式,避免 Windows cmd.exe 下引号兼容问题(参 utils execGitCommand execFile 化)。
-      const numstatCommand = diffCommand.replace(/git (diff|show)/, 'git $1 --numstat')
-      const argvMatch = numstatCommand.trim().match(/^git\s+(\S+)\s*(.*)$/)
-      let numstatArgs
-      if (argvMatch) {
-        const subCmd = argvMatch[1]
-        const rest = argvMatch[2]
-        // 简单按空白拆分,带引号段整体保留 -- "--" + 路径
-        // 这里最常见形态是 'git diff/show -- "--path"' 或 'git diff/show hash -- "--path"'
-        const tokens = []
-        const re = /"([^"]*)"|(\S+)/g
-        let m
-        while ((m = re.exec(rest)) !== null) tokens.push(m[1] !== undefined ? m[1] : m[2])
-        // 找到 '--numstat' 位置,把它加到 subCmd 后面作为第一个参数
-        numstatArgs = [subCmd, '--numstat', ...tokens]
+      // argv 数组直接在子命令后插入 --numstat,不经过任何字符串拆分:
+      // 文件名带引号 / 空格时(如 `a"b.txt`)字符串拆分会切错,导致 numstat
+      // 检查静默失效。字符串形态只保留给尚未迁移的调用方。
+      let numstatArgs;
+      if (Array.isArray(diffCommand) && diffCommand.length > 0) {
+        numstatArgs = [diffCommand[0], '--numstat', ...diffCommand.slice(1)];
       } else {
-        // fallback: 走旧逻辑(字符串)
-        numstatArgs = numstatCommand
+        const numstatCommand = String(diffCommand || '').replace(/git (diff|show)/, 'git $1 --numstat');
+        const argvMatch = numstatCommand.trim().match(/^git\s+(\S+)\s*(.*)$/);
+        if (argvMatch) {
+          const tokens = [];
+          const re = /"([^"]*)"|(\S+)/g;
+          let m;
+          while ((m = re.exec(argvMatch[2])) !== null) tokens.push(m[1] !== undefined ? m[1] : m[2]);
+          numstatArgs = [argvMatch[1], ...tokens];
+        } else {
+          numstatArgs = ['diff', '--numstat', '--', filePath];
+        }
       }
       const { stdout: numstat } = await execGitCommand(numstatArgs, { log: false });
 
