@@ -55,6 +55,9 @@ export const PROVIDERS = [
   { id: 'moonshot',   label: 'Moonshot (Kimi)',     url: 'https://api.moonshot.cn/v1' },
   { id: 'zhipu',      label: '智谱 (GLM)',           url: 'https://open.bigmodel.cn/api/paas/v4' },
   { id: 'qwen',       label: '阿里 (Qwen)',          url: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
+  // 百度千帆 Token Plan:OpenAI 兼容,鉴权走 Bearer bce-v3/<AK>/<SK>。
+  // 这是套餐专属数据面路径,与千帆通用 /v2 不是同一条,填错直接 404。
+  { id: 'qianfan',    label: '百度千帆 (Baidu Qianfan)', url: 'https://qianfan.baidubce.com/v2/tokenplan/personal' },
   { id: 'cohere',     label: 'Cohere',              url: 'https://api.cohere.com/v2' },
   { id: 'groq',       label: 'Groq',                url: 'https://api.groq.com/openai/v1' },
   { id: 'together',   label: 'Together AI',         url: 'https://api.together.xyz/v1' },
@@ -120,6 +123,14 @@ export const BUILTIN_MODELS = {
   'https://dashscope.aliyuncs.com/compatible-mode/v1': [
     'qwen3.7-max', 'qwen3.6-max-preview', 'qwen3.6-plus', 'qwen3.6-flash',
     'qwen3.5-omni-plus', 'qwen3-vl-plus', 'qwen3-235b-a22b', 'qwen3-32b',
+  ],
+  // 百度千帆 Token Plan — 更新: 2026-11-20,用真实 Key 拉 /models 得到,与 ai-model-form 同步。
+  'https://qianfan.baidubce.com/v2/tokenplan/personal': [
+    'ernie-5.5-flash-preview', 'ernie-light-dt-1.0',
+    'glm-5.3', 'glm-5.3-flash', 'glm-5.2', 'glm-5.1',
+    'deepseek-v4.1-flash', 'deepseek-v4.1-flash-1017',
+    'deepseek-v4-pro', 'deepseek-v4-pro-0813', 'deepseek-v4-flash-0731',
+    'unlimited-ocr-2',
   ],
   'https://api.cohere.com/v2': [
     'command-r-plus-4', 'command-r-4', 'command-r', 'command-r-plus',

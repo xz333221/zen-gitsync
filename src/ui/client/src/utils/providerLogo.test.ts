@@ -25,6 +25,8 @@ describe('providerIconName', () => {
     expect(providerIconName('http://localhost:11434/v1')).toBe('ollama')
     // OpenDesign 的数据面在 amr-link 子域，主域名 open-design.ai 是 SPA（不该被认成服务商）
     expect(providerIconName('https://amr-link.open-design.ai/v1')).toBe('opendesign')
+    // 百度千帆 Token Plan：同域下专属路径，按域名认出来即可
+    expect(providerIconName('https://qianfan.baidubce.com/v2/tokenplan/personal')).toBe('baidu-color')
   })
 
   test('同一域名下的不同路径都认（火山两套套餐）', () => {

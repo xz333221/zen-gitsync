@@ -54,6 +54,7 @@ const HOST_TO_ICON: Record<string, string> = {
   'opencode.ai': 'opencode',
   'api.commandcode.ai': 'commandcode',
   'amr-link.open-design.ai': 'opendesign',
+  'qianfan.baidubce.com': 'baidu-color',
   'ark.cn-beijing.volces.com': 'volcengine-color',
   'localhost': 'ollama',
   '127.0.0.1': 'ollama',
