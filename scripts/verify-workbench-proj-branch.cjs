@@ -21,6 +21,16 @@
  *     ⚠️ 回归点：一排 0/0 是纯噪声，占的行高还让有任务的项目不显眼。
  *   G2 total>0            -> 进度行照常渲染（G1 不能变成"把进度行全关了"）
  *
+ *   H1-H5 收起 / hover 两态（2026-11-20 新增）
+ *     用户：「任务已完成数量还有分支名称不是特别重要，可以 hover 之后再显示」。
+ *     H1/H2 未 hover 时 row2（分支）/ row3（完成数）**几何高度为 0 且 opacity 0**；
+ *     H3 hover 后两行都展开（高度 > 0、opacity 1）；
+ *     H4 相对时间收起态可见、hover 时淡出让位给两颗操作按钮；
+ *     H5 收起态项目名与 32px 图标槽同轴（差 ≤ 1px）—— 图标跨 row1+row2，不给
+ *        row1 min-height 的话 grid 会按内容把 32px 摊成 25+7，名字就偏上 3px。
+ *     ⚠️ 收起态元素仍在 DOM（max-height:0 + opacity:0），只数节点会**恒绿**；
+ *        F/G 两组因此改成"先 hover 再量"，H 组专门量收起态。
+ *
  * 2026-10-13：左栏进度条移除（用户："数字有用，彩条占地方"），
  * 原 G1b（进度条本体不在）随消费点一起退役，进度行的契约只剩文字。
  *
@@ -107,6 +117,10 @@ const ROW = (name) => {
     return r ? { left: +r.left.toFixed(2), right: +r.right.toFixed(2), width: +r.width.toFixed(2), height: +r.height.toFixed(2) } : null
   }
   const row3 = el.querySelector('.proj-item__row3')
+  const titleEl = el.querySelector('.proj-item__name')
+  const slotEl = el.querySelector('.proj-item__icon-slot')
+  const timeEl = el.querySelector('.proj-item__time')
+  const op = (n) => (n ? getComputedStyle(n).opacity : null)
   return {
     row2Text: row2 ? row2.textContent.trim() : null,
     hasBranch: !!branch,
@@ -123,6 +137,18 @@ const ROW = (name) => {
     // 进度行（G1/G2）：有没有整行、里面写的是什么
     hasRow3: !!row3,
     row3Text: row3 ? row3.textContent.replace(/\s+/g, ' ').trim() : null,
+    // 收起/展开两态（H 组）：行高 + 可见性。收起时 row2/row3 是 max-height:0 + opacity:0，
+    // 元素仍在 DOM 里 —— 所以断言必须同时看几何和 opacity，只看"有没有节点"会恒绿。
+    row2H: row2 ? +row2.getBoundingClientRect().height.toFixed(1) : null,
+    row3H: row3 ? +row3.getBoundingClientRect().height.toFixed(1) : null,
+    row2Opacity: op(row2),
+    row3Opacity: op(row3),
+    timeOpacity: op(timeEl),
+    // 收起态项目名与 32px 图标槽是否同轴（差几 px 就说明 grid 把那 32px 摊给了两条轨道）
+    nameCenterGap: (titleEl && slotEl)
+      ? +((titleEl.getBoundingClientRect().top + titleEl.getBoundingClientRect().height / 2)
+        - (slotEl.getBoundingClientRect().top + slotEl.getBoundingClientRect().height / 2)).toFixed(1)
+      : null,
   }
 }
 
@@ -162,15 +188,27 @@ async function main() {
     const symbolOk = await page.evaluate(() => !!document.querySelector('symbol#icon-git-branch'))
     check('F0 sprite 已注册 symbol#icon-git-branch', symbolOk)
 
-    const rows = await page.evaluate(
-      ([fn, names]) => {
+    const readRow = (name) => page.evaluate(
+      ([fn, n]) => {
         // ROW 需要 document / getComputedStyle，只能在页面上下文里重新落地
         // eslint-disable-next-line no-eval
         const ROW = eval(`(${fn})`)
-        return Object.fromEntries(names.map((n) => [n, ROW(n)]))
+        return ROW(n)
       },
-      [ROW.toString(), FIXTURE.map((f) => f.name)]
+      [ROW.toString(), name]
     )
+
+    // 收起态先拍一张：H 组要证明"不 hover 时这些信息确实不可见"
+    const idle = {}
+    for (const f of FIXTURE) idle[f.name] = await readRow(f.name)
+
+    // 分支 / 完成数现在只在 hover 时展开（2026-11-20）—— 逐行 hover、等过渡走完再量
+    const rows = {}
+    for (const f of FIXTURE) {
+      await page.locator('.proj-item').filter({ hasText: f.name }).first().hover()
+      await sleep(300)
+      rows[f.name] = await readRow(f.name)
+    }
     FIXTURE.forEach((f) => { if (!rows[f.name]) check(`夹具行存在 ${f.name}`, false, '没找到 .proj-item') })
 
     /* ---------- F1 / F2：真分支 + 图标在左边 ---------- */
@@ -190,7 +228,9 @@ async function main() {
     check('F3a 非 Git 仓库：分支位不渲染', plain.hasBranch === false && !plain.iconHTML,
       `hasBranch=${plain.hasBranch}`)
     check('F3b 非 Git 仓库：row2 里没有「不是 Git 仓库」这类文字',
-      !!plain.row2Text && !/不是\s*Git\s*仓库|Not a Git repo/.test(plain.row2Text),
+      // 2026-11-20 起相对时间搬到 row1，非 Git 且无 ahead/behind 的行 row2 就是**空的**
+      // （原来靠时间戳撑着一句话）—— 这里只守"别把「不是 Git 仓库」写回来"，不要求非空。
+      plain.row2Text !== null && !/不是\s*Git\s*仓库|Not a Git repo/.test(plain.row2Text),
       `row2="${plain.row2Text}"`)
 
     /* ---------- F4：游离 HEAD ---------- */
@@ -231,6 +271,27 @@ async function main() {
     check('G2 有任务的项目：进度行照常渲染且文案正确',
       main.hasRow3 === true && /1\/3\s*任务完成/.test(main.row3Text || ''),
       `hasRow3=${main.hasRow3} row3Text="${main.row3Text}"`)
+
+    /* ---------- H：收起 / hover 展开两态（2026-11-20 新增契约） ----------
+       用户：「任务已完成数量还有分支名称不是特别重要，可以 hover 之后再显示」。
+       元素仍在 DOM（max-height:0 + opacity:0），所以只数节点会恒绿 —— 必须量几何 + opacity。 */
+    const im = idle['zen-verify-RepoMain'] || {}
+    check('H1 未 hover：分支行收起（高度 0、opacity 0）',
+      im.row2H !== null && im.row2H < 1 && im.row2Opacity === '0',
+      `h=${im.row2H} opacity=${im.row2Opacity}`)
+    check('H2 未 hover：进度行收起（高度 0、opacity 0）',
+      im.row3H !== null && im.row3H < 1 && im.row3Opacity === '0',
+      `h=${im.row3H} opacity=${im.row3Opacity}`)
+    check('H3 hover：分支行与进度行都展开（高度 > 0、opacity 1）',
+      main.row2H > 0 && main.row3H > 0 && main.row2Opacity === '1' && main.row3Opacity === '1',
+      `row2=${main.row2H}/${main.row2Opacity} row3=${main.row3H}/${main.row3Opacity}`)
+    check('H4 未 hover 时相对时间可见、hover 时让位（opacity 0）',
+      im.timeOpacity === '1' && main.timeOpacity === '0',
+      `idle=${im.timeOpacity} hover=${main.timeOpacity}`)
+    // 收起态整行只剩一行字，名字必须正对 32px 图标中心（grid 会把图标高度摊到两条轨道上）
+    check('H5 收起态项目名与图标槽同轴（中心差 ≤ 1px）',
+      im.nameCenterGap !== null && Math.abs(im.nameCenterGap) <= 1,
+      `Δ=${im.nameCenterGap}px`)
   } catch (err) {
     check('脚本异常', false, String(err?.message || err))
   } finally {

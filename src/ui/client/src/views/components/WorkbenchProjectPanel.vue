@@ -486,8 +486,13 @@ async function confirmRemove(p: ProjectSummary) {
               <span v-if="p.stats.runningJobs > 0" class="proj-item__running" aria-hidden="true" />
               <span v-if="p.isCurrent" class="proj-item__badge">{{ $t('@WORKBENCH:当前') }}</span>
             </span>
+            <!-- 时间从 row2 搬到 row1（2026-11-20）：收起态只剩「图标 + 项目名 + 时间」
+                 一行，hover 展开分支 / 完成数时它跟 signals 一起淡出，让位给两颗按钮。
+                 放在最后 = 各行的相对时间在同一列上（tabular-nums），扫一眼就能比新旧。 -->
+            <span class="proj-item__time">{{ relativeTimeFromIso(p.stats.lastActiveAt) }}</span>
           </div>
 
+          <!-- 分支 / ahead 等：需求上"不是特别重要"，默认收起，hover 才展开（见下方 CSS） -->
           <div class="proj-item__row2">
             <template v-if="p.exists === false">
               <span class="proj-chip proj-chip--missing">{{ $t('@WORKBENCH:目录不存在') }}</span>
@@ -506,7 +511,6 @@ async function confirmRemove(p: ProjectSummary) {
               <span v-if="p.git && p.git.behind > 0" class="proj-chip proj-chip--behind">↓{{ p.git.behind }}</span>
               <span v-if="p.git && p.git.changed > 0" class="proj-chip proj-chip--dirty">●{{ p.git.changed }}</span>
             </template>
-            <span class="proj-item__time">{{ relativeTimeFromIso(p.stats.lastActiveAt) }}</span>
           </div>
 
           <!-- 同上：这个项目一个任务都没有就不给进度行 -->
@@ -940,6 +944,14 @@ async function confirmRemove(p: ProjectSummary) {
   align-items: center;
   gap: 6px;
 }
+/* 收起态整行只剩这一行字，而行高由 32px 的图标撑着 —— 不给 min-height 的话，
+   图标那 32px 会被 grid 按内容比例摊到 row1 / row2 两条轨道上（实测 25+7），
+   项目名就比图标中心高 3px。钉成 32 后两条轨道是 32 + 0，名字正对图标中心。
+   「全部项目」不参与：它本来就有 row2 / row3 两行，钉 32 只会把顶部那行撑出
+   一段空档（87px vs 73px），而且它的图标是给整块当标记的，不需要和单行对齐。 */
+.proj-item:not(.proj-item--all) .proj-item__row1 {
+  min-height: 32px;
+}
 /* 文件夹兜底：槽有 32px，字形只占 20px —— 没有图标的行看起来比有图标的行轻，
    这正是"这儿没有图标"该有的样子；槽的尺寸不变，项目名的左边缘因此两种形态完全对齐。 */
 .proj-item__icon {
@@ -982,10 +994,9 @@ async function confirmRemove(p: ProjectSummary) {
   flex: 1;
   min-width: 0;
   line-height: 1.4;
-  /* 给 hover 才出现的两个操作按钮（打开文件夹 + 打开方式）留位：它们绝对定位在 row1 右端，
-     没有信号（运行中/当前）时名字会一路顶到那里，不留位就会被图标压住尾巴。
-     名字没被截断时这段 padding 完全不可见。 */
-  padding-right: 44px;
+  /* 不再给 hover 才出现的两个操作按钮留 44px：这几位现在是「相对时间」的，
+     时间自己带 min-width: 44px（见 .proj-item__time），按钮淡入时正好盖在它上面。
+     两处都留的话，窄栏里项目名会被这 99px 挤成省略号。 */
 }
 /* 运行中 / 当前：与操作按钮共用 row1 右端这个锚点，hover 时整组淡出让位 */
 .proj-item__signals {
@@ -1001,7 +1012,9 @@ async function confirmRemove(p: ProjectSummary) {
    目录不存在的行也在内 —— 它现在也有按钮了（就是「从清单移除」），
    信号组同样要让位，否则那颗运行中的小圆点会被按钮压在底下。 */
 .proj-item:hover .proj-item__signals,
-.proj-item:has(.proj-item__action:focus-visible) .proj-item__signals {
+.proj-item:hover .proj-item__time,
+.proj-item:has(.proj-item__action:focus-visible) .proj-item__signals,
+.proj-item:has(.proj-item__action:focus-visible) .proj-item__time {
   opacity: 0;
 }
 .proj-item__running {
@@ -1137,9 +1150,17 @@ async function confirmRemove(p: ProjectSummary) {
   color: currentColor;
 }
 .proj-item__time {
-  margin-left: auto;
+  /* 收起态它是行右端唯一的时间列（各行对齐，便于比较新旧）；
+     hover 展开时跟 signals 一起淡出，把这块让给两颗操作按钮。 */
   flex-shrink: 0;
+  /* = .proj-item__actions 的宽度（2×20 + 间距 2）：按钮淡入时正好盖住它，
+     项目名不会有一瞬间伸到按钮底下。 */
+  min-width: 44px;
+  text-align: right;
+  font-size: var(--font-size-xs);
+  color: var(--text-meta);
   font-variant-numeric: tabular-nums;
+  transition: opacity var(--transition-fast) var(--ease-custom);
 }
 .proj-chip {
   flex-shrink: 0;
@@ -1168,6 +1189,41 @@ async function confirmRemove(p: ProjectSummary) {
   font-size: var(--font-size-xs);
   color: var(--text-meta);
   font-variant-numeric: tabular-nums;
+}
+
+/* ── 分支 / 完成数：默认收起，hover 才展开（2026-11-20） ──────────────
+   用户：「任务已完成数量还有分支名称不是特别重要，可以 hover 之后再显示」。
+   收起后一行只剩「图标 + 项目名 + 相对时间」，48px 高；hover 再展开 row2（分支、
+   ahead/behind/dirty）与 row3（n/n 任务完成），行高 ≈85px。
+   为什么用 max-height 而不是 display:none：过渡能吃掉那一跳，鼠标扫过列表时
+   不至于一行一行"啪"地长出来。0 → 20px 只够一行 15px 文字 + 4px 余量。
+   「全部项目」那行**不参与**：它是整栏的汇总（266/268、2 个执行中）—— 第九轮
+   刚把标题旁的常驻计数删掉，这行再收起，面板就彻底没有总数了。 */
+.proj-item:not(.proj-item--all) .proj-item__row2,
+.proj-item:not(.proj-item--all) .proj-item__row3 {
+  max-height: 0;
+  margin-top: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition:
+    max-height var(--transition-fast) var(--ease-custom),
+    margin-top var(--transition-fast) var(--ease-custom),
+    opacity var(--transition-fast) var(--ease-custom);
+}
+.proj-item:not(.proj-item--all):hover .proj-item__row2,
+/* 键盘用户没有 hover：Tab 选中整行（li 自己带 tabindex=0）时同样展开 ——
+   否则这两行信息对他们等于不存在。用 :focus-visible 而不是 :focus-within：
+   点击行主体后 Chrome 会把焦点留在行上，:focus-within 会让那行一直摊着。 */
+.proj-item:not(.proj-item--all):focus-visible .proj-item__row2 {
+  max-height: 20px;
+  margin-top: 2px;
+  opacity: 1;
+}
+.proj-item:not(.proj-item--all):hover .proj-item__row3,
+.proj-item:not(.proj-item--all):focus-visible .proj-item__row3 {
+  max-height: 20px;
+  margin-top: 5px;
+  opacity: 1;
 }
 
 .proj-empty {

@@ -10,8 +10,9 @@
  *   K3 没图标（iconUrl = null）的行退回文件夹图标，且没有 <img>
  *   K4 图标全部 404 时（服务端重启 / 文件被删），行**当场退回**文件夹图标 ——
  *      不许留破图。这一条用 route 挡掉端点来造，是 K1 的反向对照。
- *   K5 几何：图标槽 32px 且两种形态同尺寸、项目名左边缘对齐；**图标真的占两行**
- *      （高度≈row1.top→row2.bottom 那一段）；**回退是纯主色实心文件夹字形**（无底、
+ *   K5 几何：图标槽 32px 且两种形态同尺寸、项目名左边缘对齐；**hover 展开后图标真的
+ *      占两行**（高度≈row1.top→row2.bottom；收起态分支行高度为 0，所以这条在 hover 态量）；
+ *      **收起态项目名与图标槽同轴**（|Δ| ≤ 1px）；**回退是纯主色实心文件夹字形**（无底、
  *      24px）—— 2026-10-16 两轮反馈的终态：先废「字形要比槽小/更轻」（灰色小字形
  *      夹在彩色头像列里又小又弱），再废「彩色片」（外框方块 + 里面小文件夹两层套，
  *      字形本体还是显小）。
@@ -115,13 +116,38 @@ const obsRows = (page) => page.evaluate(() => {
       folderBg: fcs ? fcs.backgroundColor : '',
       folderColor: fcs ? fcs.color : '',
       nameLeft: nameEl ? Math.round(nameEl.getBoundingClientRect().left) : 0,
+      // 收起态（row2 高度 0）名字与 32px 图标槽的中心差：>1px 就说明 grid 把图标那
+      // 32px 按内容摊到两条轨道上了（实测 25+7 → 名字偏上 3px）
+      nameCenterGap: (() => {
+        const slot = r.querySelector('.proj-item__icon-slot')
+        if (!nameEl || !slot) return null
+        const a = nameEl.getBoundingClientRect()
+        const b = slot.getBoundingClientRect()
+        return +((a.top + a.height / 2) - (b.top + b.height / 2)).toFixed(1)
+      })(),
       // row1 顶到 row2 底 = 「两行文字」的实际高度，图标该覆盖这一段
+      // （收起态 row2 是 max-height:0，这段只剩一行；`占两行` 要在 hover 态量）
       textSpan: (row1 && row2)
         ? Math.round(row2.getBoundingClientRect().bottom - row1.getBoundingClientRect().top)
+        : null,
+      // 这两行文字块的垂直中心：图标跨 row1+row2 且 32px 固定高，判据是"居中"不是"等高等长"
+      textCenter: (row1 && row2)
+        ? Math.round((row1.getBoundingClientRect().top + row2.getBoundingClientRect().bottom) / 2)
         : null,
     }
   })
 })
+
+/** hover 某一行后单独读它（分支行为 hover 才展开，几何要在展开态量） */
+const obsOneHovered = async (page, name) => {
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const row = page.locator('.proj-item', {
+    has: page.locator('.proj-item__name', { hasText: new RegExp(`^${esc}$`) }),
+  }).first()
+  await row.hover()
+  await sleep(300) // 等 max-height 过渡走完
+  return (await obsRows(page)).find((r) => r.name === name) || null
+}
 
 /** 读「常用目录」弹窗里的卡片 */
 const obsCards = (page) => page.evaluate(() => {
@@ -303,10 +329,22 @@ async function main() {
     const lefts = new Set(rows.map(r => r.nameLeft))
     check('K5b 有图标与没图标的行，项目名左边缘对齐',
       lefts.size === 1, `左边缘 ${[...lefts].join(' / ')}`)
-    // 用户要的"占 2 行的位置"：图标高度得跟 row1.top→row2.bottom 那一段对得上
-    const spanOk = iconRows.every(r => r.textSpan && Math.abs(r.imgBox.h - r.textSpan) <= 8)
-    check('K5c 图标真的占两行（高度≈名字行 + 分支行的总高）', spanOk,
-      iconRows.map(r => `${r.name}:${r.imgBox.h}/${r.textSpan}`).slice(0, 3).join(' '))
+    // 用户要的"占 2 行的位置"：图标恒 32px，跨 row1+row2 —— 判据是**图标中心落在
+    // 两行文字块的垂直中心**（±2px）。2026-11-20 起 row1 有 min-height:32（收起态对齐），
+    // 展开后的块高 ≈49，"等高等长"那条旧口径（±8px）在这里必然红，而且本来也不是意图。
+    const spanRow = iconRows[0]
+    const spanHover = spanRow ? await obsOneHovered(page, spanRow.name) : null
+    const spanOk = !!spanHover && spanHover.textCenter !== null && spanHover.imgBox
+      && Math.abs((spanHover.imgBox.top + spanHover.imgBox.h / 2) - spanHover.textCenter) <= 2
+      && Math.abs(spanHover.imgBox.h - 32) <= 1
+    check('K5c hover 展开后图标仍居中跨两行（32px，中心对两行文字块中心 ±2px）', spanOk,
+      spanHover
+        ? `${spanHover.name}: 图标 ${spanHover.imgBox.h}px 中心 ${Math.round(spanHover.imgBox.top + spanHover.imgBox.h / 2)} / 文字块中心 ${spanHover.textCenter}`
+        : '没有可量的行')
+    // 收起态只剩一行字：名字必须正对 32px 图标中心，否则整栏读起来"名字都往上飘"
+    const alignOk = rows.every(r => r.nameCenterGap !== null && Math.abs(r.nameCenterGap) <= 1)
+    check('K5e 收起态项目名与图标槽同轴（|Δ| ≤ 1px）', alignOk,
+      rows.map(r => `${r.name}:Δ${r.nameCenterGap}`).slice(0, 3).join(' '))
     // 2026-10-16 晚终态契约：回退 = **纯主色实心文件夹字形**（无底），且**顶满承载槽**
     // （32 槽放 32px 字形；字形自带边距，实际形宽 ≈24px）。用户对"字太小"连提两轮，
     // 20 → 24 → 32 一路调上来 —— 下限守"别又变小了"，上限守"别溢出槽"。

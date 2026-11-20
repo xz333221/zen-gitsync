@@ -295,6 +295,32 @@ tsc 与 build 均通过。`verify:ui-consistency` 3 条红为存量
 ![左栏搜索：点开展开](./wb-proj-search-open.png)
 ![右栏：无执行数、报告默认展开](./wb-oc-report-open.png)
 
+### 第十轮：左栏项目行收起 —— 分支 / 完成数 hover 才显示，相对时间提到名字行（2026-11-20）
+
+用户（截图圈了左栏「master」+「23/23 任务完成」那两行）：「任务已完成数量还有分支名称
+不是特别重要，可以 hover 之后再显示。但是在不 hover 的时候，右边的名称感觉需要调一下
+样式」。目标是把 40 个项目的列表从"每行三段字"压成"每行一段字"。
+
+1. **row2（分支 + ↑↓● 角标）/ row3（n/n 任务完成）默认收起**：`max-height:0` +
+   `opacity:0`，hover **或键盘 `:focus-visible`** 才展开（后者是给 Tab 用户的 ——
+   用 `:focus-within` 的话，点一下行就会一直摊着）。行高 48 → 85，一屏从 9 行变 12 行。
+2. **相对时间从 row2 搬到 row1 右端**：收起态这一行就是「图标 + 项目名 + 时间」。
+   时间带 `min-width:44px`（= 两颗 hover 操作按钮的宽度），hover 时跟 running /「当前」
+   信号一起淡出，把那块让给按钮 —— 不移走的话按钮会压住时间、名字也会被两侧挤爆。
+3. **项目名与 32px 图标槽同轴**：图标跨 row1+row2，收起态 row2 高度是 0，grid 会把
+   图标那 32px 按内容摊成 25+7 —— 名字因此比图标中心高 3px。给 row1 `min-height:32px`
+   后两条轨道是 32+0，实测 Δ=0。
+4. **「全部项目」不收起、也不吃 min-height**：它是整栏唯一还留着总数的地方（第九轮
+   刚把标题旁的计数删了），行高保持 73；钉 32 只会给它顶部撑出一段空档。
+
+![左栏项目行：收起态（分支 / 完成数已藏起）](./wb-proj-row-idle.png)
+![左栏项目行：hover 展开（时间让位给两颗按钮）](./wb-proj-row-hover.png)
+
+回归网：`verify:workbench-proj-branch` 21/21（新增 H1-H5：收起态量几何 + opacity，
+F/G 两组改成"先 hover 再量"）、`verify:wb-proj-icon` 的 K5c 改成"图标中心 = 两行文字块
+中心 ±2px"并新增 K5e（收起态同轴），`verify:wb-proj-active` 13/13、`verify:wb-proj-filter`
+27/27。⚠️ 收起态元素仍在 DOM 里，只数节点会恒绿 —— 必须量 `height` 与 `opacity`。
+
 
 
 ## 修复状态（2026-10-04 当轮）
