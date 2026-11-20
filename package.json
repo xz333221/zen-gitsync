@@ -194,6 +194,8 @@
     "verify:header-monitor": "node scripts/verify-header-monitor.cjs",
     "verify:header-git-buttons": "node scripts/verify-header-git-buttons.cjs",
     "verify:header-git-buttons:reverse": "node scripts/verify-header-git-buttons.cjs --reverse",
+    "verify:hub-chrome": "node scripts/verify-hub-chrome.cjs",
+    "verify:hub-chrome:reverse": "node scripts/verify-hub-chrome.cjs --reverse",
     "shots:ui": "node scripts/capture-ui-shots.mjs"
   },
   "files": [

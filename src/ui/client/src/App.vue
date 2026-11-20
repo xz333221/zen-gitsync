@@ -714,8 +714,12 @@ function stopVResize() {
         <h1>Zen GitSync</h1>
       </a>
     </div>
+    <!-- hub（5599）没有"当前项目"这个概念：目录胶囊 + 「用工具打开这个目录」那一排按钮
+         描述的都是 hub 进程自己的 cwd（通常就是用户主目录），点开只会把用户引到一个
+         没有意义的工作目录。占位 div 保留 —— 顶栏是三列 grid，抽掉中间那格会让右侧
+         状态区整个跑到中间来；这里只把内容摘掉。 -->
     <div class="header-center">
-      <DirectorySelector variant="header" />
+      <DirectorySelector v-if="appRole !== 'hub'" variant="header" />
     </div>
     <div class="header-info">
       <!-- 顶部右侧动作 -->
@@ -731,7 +735,9 @@ function stopVResize() {
            2026-10-06：非 Git 仓库目录下这两个入口整组隐藏（用户反馈"不是 git 仓库的
            就不用设置这两个按钮了"）—— 命令历史里只有 git 命令有意义，Git 操作抽屉
            在非仓库里打开也无事可做，留着只是噪音。 -->
-      <template v-if="gitStore.isGitRepo">
+      <!-- hub 下同样不显示：这两个入口操作的是「当前目录那个仓库」，而 hub 没有
+           当前项目（cwd 只是进程落地位置）。 -->
+      <template v-if="appRole !== 'hub' && gitStore.isGitRepo">
         <CommandHistory size="small" />
         <GitOperationsButton variant="icon" size="small" />
       </template>
@@ -1123,8 +1129,13 @@ function stopVResize() {
 
   <footer class="main-footer app-footer">
     <div class="footer-left">
-      <BranchSelector @branch-changed="handleBranchChanged" />
-      <RemoteRepoCard />
+      <!-- hub 没有仓库概念：分支选择器与远程地址卡读的都是 hub 进程 cwd 的仓库，
+           在跨项目常驻节点上永远停在「未配置远程仓库」。左列保留（底栏同样是三列
+           grid，中列的「默认模型」要靠左右两列夹在正中间），hub 下不渲染内容。 -->
+      <template v-if="appRole !== 'hub'">
+        <BranchSelector @branch-changed="handleBranchChanged" />
+        <RemoteRepoCard />
+      </template>
     </div>
     <!-- 默认模型：三区栅格的中列，永远居中且不会和两侧文字重叠
          （改前是绝对定位 left:50% + translateX(-50%)，远程地址较长时
