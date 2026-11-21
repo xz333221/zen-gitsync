@@ -2295,6 +2295,12 @@ export default {
   '@EDITOR:视频': '视频',
   '@EDITOR:正在载入媒体文件…': '正在载入媒体文件…',
   '@EDITOR:无法播放该文件，可能是编码或格式不受支持': '无法播放该文件，可能是编码或格式不受支持',
+  '@EDITOR:关闭': '关闭',
+  '@EDITOR:关闭其他': '关闭其他',
+  '@EDITOR:关闭右侧标签页': '关闭右侧标签页',
+  '@EDITOR:关闭已保存的标签页': '关闭已保存的标签页',
+  '@EDITOR:全部关闭': '全部关闭',
+  '@EDITOR:有 {n} 个未保存的文件，确认关闭？': '有 {n} 个未保存的文件，确认关闭？',
   // @EDITOR: file end
   // @INSSW: file path: components/InstanceSwitcher.vue, components/ServerClosedOverlay.vue
   '@INSSW:个实例': '个实例',

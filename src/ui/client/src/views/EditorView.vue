@@ -890,8 +890,8 @@ watch(() => props.pendingFilePath, async (filePath) => {
   console.log('[debug-open-in-editor] EditorView openFile returned')
 }, { immediate: true })
 
-function closeTab(path: string, e: MouseEvent) {
-  e.stopPropagation()
+function closeTab(path: string, e?: MouseEvent) {
+  e?.stopPropagation()
   const idx = tabs.value.findIndex(t => t.path === path)
   if (idx === -1) return
   const tab = tabs.value[idx]
@@ -1429,6 +1429,12 @@ async function saveCurrentFile(silent = false) {
 
 // Ctrl+S 保存
 function handleKeydown(e: KeyboardEvent) {
+  // 标签页右键菜单开着时，Esc 优先收菜单，别让它漏给 Monaco / 搜索框
+  if (e.key === 'Escape' && tabCtxMenu.value) {
+    e.preventDefault()
+    closeTabContextMenu()
+    return
+  }
   const mod = e.ctrlKey || e.metaKey
   if (mod && e.key.toLowerCase() === 'f') {
     // Ctrl/Cmd+F:聚焦到资源管理器的搜索框(类似 VS Code)
@@ -1589,13 +1595,34 @@ interface CtxMenu { x: number; y: number; node: TreeNode }
 const ctxMenu = ref<CtxMenu | null>(null)
 const ctxMenuRef = ref<HTMLElement | null>(null)
 
+// 标签页右键菜单（参考 VS Code：关闭 / 关闭其他 / 关闭右侧 / 关闭已保存 / 全部关闭 …）
+interface TabCtxMenu { x: number; y: number; path: string }
+const tabCtxMenu = ref<TabCtxMenu | null>(null)
+// 估算值只用于贴边右键时把菜单往回收，避免整块被推出视口
+const TAB_CTX_MENU_WIDTH = 190
+const TAB_CTX_MENU_HEIGHT = 400
+
 function openContextMenu(e: MouseEvent, node: TreeNode) {
   e.preventDefault()
+  tabCtxMenu.value = null
   ctxMenu.value = { x: e.clientX, y: e.clientY, node }
 }
 
 function closeContextMenu() {
   ctxMenu.value = null
+  tabCtxMenu.value = null
+}
+
+function openTabContextMenu(e: MouseEvent, tab: Tab) {
+  e.preventDefault()
+  ctxMenu.value = null
+  const x = Math.max(4, Math.min(e.clientX, window.innerWidth - TAB_CTX_MENU_WIDTH - 4))
+  const y = Math.max(4, Math.min(e.clientY, window.innerHeight - TAB_CTX_MENU_HEIGHT - 4))
+  tabCtxMenu.value = { x, y, path: tab.path }
+}
+
+function closeTabContextMenu() {
+  tabCtxMenu.value = null
 }
 
 async function ctxNewFile() {
@@ -1782,12 +1809,125 @@ async function ctxOpenInBrowser() {
   }
 }
 
+// ── 标签页右键菜单动作 ────────────────────────────────
+const tabCtxTarget = computed(() => {
+  const path = tabCtxMenu.value?.path
+  return path ? tabs.value.find(t => t.path === path) ?? null : null
+})
+const tabCtxIndex = computed(() => {
+  const path = tabCtxMenu.value?.path
+  return path ? tabs.value.findIndex(t => t.path === path) : -1
+})
+const tabCtxHasOthers = computed(() => tabs.value.length > 1)
+const tabCtxHasRight = computed(() => tabCtxIndex.value >= 0 && tabCtxIndex.value < tabs.value.length - 1)
+const tabCtxHasSaved = computed(() => tabs.value.some(t => !t.isDirty))
+
+// 一次性移除多个标签。若当前激活的标签被关掉，按"被关掉的位置"就近挑剩余标签，
+// 避免关闭右侧 / 关闭其他之后编辑器停在空态。
+function removeTabs(paths: string[]) {
+  if (!paths.length) return
+  const removed = new Set(paths)
+  const activeRemoved = !!activeTabPath.value && removed.has(activeTabPath.value)
+  if (!activeRemoved) {
+    tabs.value = tabs.value.filter(t => !removed.has(t.path))
+    return
+  }
+  const lastIdx = paths.reduce(
+    (max, p) => Math.max(max, tabs.value.findIndex(t => t.path === p)),
+    -1,
+  )
+  tabs.value = tabs.value.filter(t => !removed.has(t.path))
+  activeTabPath.value = tabs.value[Math.min(lastIdx, tabs.value.length - 1)]?.path ?? null
+}
+
+function closeTabsWithConfirm(targets: Tab[]) {
+  if (!targets.length) return
+  const dirty = targets.filter(t => t.isDirty).length
+  if (dirty > 0 && !confirm($t('@EDITOR:有 {n} 个未保存的文件，确认关闭？', { n: dirty }))) return
+  removeTabs(targets.map(t => t.path))
+}
+
+function ctxCloseTab() {
+  const path = tabCtxMenu.value?.path
+  closeTabContextMenu()
+  if (path) closeTab(path)
+}
+
+function ctxCloseOtherTabs() {
+  const path = tabCtxMenu.value?.path
+  closeTabContextMenu()
+  if (!path) return
+  closeTabsWithConfirm(tabs.value.filter(t => t.path !== path))
+}
+
+function ctxCloseTabsToRight() {
+  const idx = tabCtxIndex.value
+  closeTabContextMenu()
+  if (idx < 0) return
+  closeTabsWithConfirm(tabs.value.slice(idx + 1))
+}
+
+function ctxCloseSavedTabs() {
+  closeTabContextMenu()
+  closeTabsWithConfirm(tabs.value.filter(t => !t.isDirty))
+}
+
+function ctxCloseAllTabs() {
+  closeTabContextMenu()
+  closeTabsWithConfirm([...tabs.value])
+}
+
+async function ctxCopyTabPath(relative: boolean) {
+  const tab = tabCtxTarget.value
+  closeTabContextMenu()
+  if (!tab) return
+  const ok = await copyTextToClipboard(relative ? toWorkspaceRelative(tab.path) : tab.path)
+  if (ok) ElMessage.success($t('@EDITOR:已复制到剪贴板'))
+  else ElMessage.error($t('@EDITOR:复制失败'))
+}
+
+async function ctxRevealTabInExplorer() {
+  const tab = tabCtxTarget.value
+  closeTabContextMenu()
+  if (!tab) return
+  try {
+    const resp = await fetch('/api/editor/reveal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: tab.path }),
+    })
+    const data = await resp.json()
+    if (!data.success) ElMessage.error(data.error)
+  } catch (error: any) {
+    ElMessage.error(error?.message || String(error))
+  }
+}
+
+async function ctxOpenTabInVscode() {
+  const tab = tabCtxTarget.value
+  closeTabContextMenu()
+  if (!tab) return
+  try {
+    const resp = await fetch('/api/editor/open-in-vscode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: tab.path }),
+    })
+    const data = await resp.json()
+    if (!data.success) ElMessage.error(data.error)
+  } catch (error: any) {
+    ElMessage.error(error?.message || String(error))
+  }
+}
+
 // 点击全局关闭右键菜单
 onMounted(() => {
   document.addEventListener('click', closeContextMenu)
+  window.addEventListener('scroll', closeTabContextMenu)
 })
 onBeforeUnmount(() => {
   document.removeEventListener('click', closeContextMenu)
+  window.removeEventListener('scroll', closeTabContextMenu)
 })
 
 // ── 预览面板 ────────────────────────────────────────────
@@ -2418,6 +2558,7 @@ function stopPreviewResize() {
             class="editor-tab"
             :class="{ active: activeTabPath === tab.path, dirty: tab.isDirty }"
             @click="activeTabPath = tab.path"
+            @contextmenu.prevent="openTabContextMenu($event, tab)"
             :title="tab.path"
           >
             <span class="tab-name">{{ tab.name }}</span>
@@ -2715,6 +2856,103 @@ function stopPreviewResize() {
           <path d="M9 7v-3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3" />
         </svg>
         {{ $t('@EDITOR:删除') }}
+      </button>
+    </div>
+  </teleport>
+
+  <!-- 标签页右键菜单（参考 VS Code：关闭 / 关闭其他 / 关闭右侧 / 关闭已保存 / 全部关闭） -->
+  <teleport to="body">
+    <div
+      v-if="tabCtxMenu && tabCtxTarget"
+      class="ctx-menu tab-ctx-menu"
+      :style="{ left: tabCtxMenu.x + 'px', top: tabCtxMenu.y + 'px' }"
+      @click.stop
+      @contextmenu.prevent
+    >
+      <button class="ctx-menu-item" @click="ctxCloseTab">
+        <!-- x.svg（Tabler icons，MIT） -->
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+        {{ $t('@EDITOR:关闭') }}
+      </button>
+      <button
+        class="ctx-menu-item"
+        :class="{ 'ctx-menu-item--disabled': !tabCtxHasOthers }"
+        @click="tabCtxHasOthers && ctxCloseOtherTabs()"
+      >
+        <!-- stack-2.svg（Tabler icons，MIT） -->
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 4l-8 4l8 4l8 -4l-8 -4" />
+          <path d="M4 12l8 4l8 -4" />
+          <path d="M4 16l8 4l8 -4" />
+        </svg>
+        {{ $t('@EDITOR:关闭其他') }}
+      </button>
+      <button
+        class="ctx-menu-item"
+        :class="{ 'ctx-menu-item--disabled': !tabCtxHasRight }"
+        @click="tabCtxHasRight && ctxCloseTabsToRight()"
+      >
+        <!-- chevrons-right.svg（Tabler icons，MIT） -->
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M7 7l5 5l-5 5" />
+          <path d="M13 7l5 5l-5 5" />
+        </svg>
+        {{ $t('@EDITOR:关闭右侧标签页') }}
+      </button>
+      <button
+        class="ctx-menu-item"
+        :class="{ 'ctx-menu-item--disabled': !tabCtxHasSaved }"
+        @click="tabCtxHasSaved && ctxCloseSavedTabs()"
+      >
+        <!-- device-floppy.svg（Tabler icons，MIT） -->
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M6 4h10l4 4v10a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2" />
+          <circle cx="12" cy="14" r="2" />
+          <path d="M14 4l0 4l-6 0l0 -4" />
+        </svg>
+        {{ $t('@EDITOR:关闭已保存的标签页') }}
+      </button>
+      <button class="ctx-menu-item" @click="ctxCloseAllTabs">
+        <!-- square-x.svg（Tabler icons，MIT） -->
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M9 9l6 6" />
+          <path d="M15 9l-6 6" />
+        </svg>
+        {{ $t('@EDITOR:全部关闭') }}
+      </button>
+      <div class="ctx-menu-sep" />
+      <button class="ctx-menu-item" @click="ctxCopyTabPath(false)">
+        <!-- copy.svg（Tabler icons，MIT） -->
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M7 9.667a2.667 2.667 0 0 1 2.667-2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667l0 -8.666" />
+          <path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
+        </svg>
+        {{ $t('@EDITOR:复制绝对路径') }}
+      </button>
+      <button class="ctx-menu-item" @click="ctxCopyTabPath(true)">
+        <!-- link.svg（Tabler icons，MIT） -->
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9 15l6 -6" />
+          <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" />
+          <path d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463" />
+        </svg>
+        {{ $t('@EDITOR:复制相对路径') }}
+      </button>
+      <div class="ctx-menu-sep" />
+      <button class="ctx-menu-item" @click="ctxRevealTabInExplorer">
+        <!-- folder-open.svg（Tabler icons，MIT） -->
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M5 19l2.757 -7.351a1 1 0 0 1 .936 -.649h12.307a1 1 0 0 1 .986 1.164l-.996 5.211a2 2 0 0 1 -1.964 1.625h-14.026a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2h4l3 3h7a2 2 0 0 1 2 2v2" />
+        </svg>
+        {{ $t('@EDITOR:在资源管理器中打开') }}
+      </button>
+      <button class="ctx-menu-item" @click="ctxOpenTabInVscode">
+        <svg-icon icon-class="vscode" class-name="ctx-menu-icon" />
+        {{ $t('@EDITOR:在 VSCode 中打开') }}
       </button>
     </div>
   </teleport>
@@ -3854,6 +4092,18 @@ function stopPreviewResize() {
 
 .ctx-menu-item--danger:hover {
   background: rgba(239, 68, 68, 0.1);
+}
+
+.ctx-menu-item--disabled,
+.ctx-menu-item--disabled:hover {
+  background: none;
+  color: var(--text-primary);
+  opacity: var(--disabled-opacity);
+  cursor: default;
+}
+
+.tab-ctx-menu {
+  min-width: 190px;
 }
 
 .ctx-menu-sep {

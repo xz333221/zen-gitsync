@@ -13,6 +13,11 @@
  *   P4 点这个按钮真的能打开预览面板（不是只渲染了个死按钮）
  *   P5 新开的文件（当前 tab）被滚进可视区（滚动条隐藏，看不见的 tab 等于没开）
  *   P6 反向验证：把按钮节点塞回滚动容器 → P2 的判据必须翻红
+ *   P7 右键标签页弹出菜单，且五个关闭项都在
+ *   P8 贴边右键时菜单整体仍在视口内
+ *   P9 关闭右侧标签页：右侧 tab 全关、右键那个保留
+ *   P10 关闭其他：只剩右键的标签页
+ *   P11 全部关闭：tab 清空并回到空态
  *
  * 前置：dev server 已启动（前端 5544 + 后端在 .port 上）。
  * 用法：node scripts/verify-editor-tabs-actions.cjs
@@ -177,6 +182,54 @@ async function main() {
     const p2WouldFail = !!t2 && !(t2.btn && t2.btnVisible && t2.btn.right <= t2.box.right + 1 && t2.btn.left >= t2.box.left - 1)
     check('P6 反向验证：按钮塞回滚动容器后 P2 判据翻红', reverted && p2WouldFail,
       reverted ? `btn=${t2?.btn ? `${t2.btn.left}..${t2.btn.right}` : 'null'} box=${t2?.box.left}..${t2?.box.right}` : '注入失败')
+
+    // ── P7-P11 标签页右键菜单（参考 VS Code）────────────────────────────
+    const ctxMenu = page.locator('.tab-ctx-menu')
+    const tabCount = () => page.locator('.editor-tabs-scroll .editor-tab').count()
+    const rightClickActive = async () => {
+      await page.locator('.editor-tabs-scroll .editor-tab.active').first().click({ button: 'right' })
+      return waitFor(async () => (await ctxMenu.count()) > 0 && (await ctxMenu.first().isVisible()), 4000)
+    }
+
+    const p7Shown = await rightClickActive()
+    const p7Items = p7Shown ? await ctxMenu.locator('.ctx-menu-item').allTextContents() : []
+    const p7Texts = p7Items.map(t => t.replace(/\s+/g, ''))
+    check('P7 右键标签页弹出菜单，五个关闭项都在',
+      p7Shown && ['关闭', '关闭其他', '关闭右侧标签页', '关闭已保存的标签页', '全部关闭']
+        .every(t => p7Texts.includes(t)),
+      `shown=${p7Shown} items=${p7Items.length}`)
+
+    const p8Box = p7Shown ? await ctxMenu.first().boundingBox() : null
+    check('P8 菜单整体在视口内（贴边右键不外溢）',
+      !!p8Box && p8Box.x >= 0 && p8Box.y >= 0 && p8Box.x + p8Box.width <= 1281 && p8Box.y + p8Box.height <= 861,
+      p8Box ? `x=${Math.round(p8Box.x)} y=${Math.round(p8Box.y)} w=${Math.round(p8Box.width)} h=${Math.round(p8Box.height)}` : 'no menu')
+
+    // 先选中第一个 tab，确保它右侧还有 tab 可关
+    await page.locator('.editor-tabs-scroll .editor-tab').first().click()
+    await sleep(150)
+    const keepTitle = await page.locator('.editor-tabs-scroll .editor-tab.active').first().getAttribute('title')
+    const beforeRight = await tabCount()
+    await rightClickActive()
+    await ctxMenu.locator('.ctx-menu-item', { hasText: '关闭右侧标签页' }).first().click()
+    await sleep(300)
+    const afterRight = await tabCount()
+    const keepActive = await page.locator('.editor-tabs-scroll .editor-tab.active').first().getAttribute('title').catch(() => null)
+    check('P9 关闭右侧标签页：右侧 tab 全关、右键那个保留',
+      afterRight < beforeRight && keepActive === keepTitle,
+      `before=${beforeRight} after=${afterRight} kept=${keepActive === keepTitle}`)
+
+    await rightClickActive()
+    await ctxMenu.locator('.ctx-menu-item', { hasText: '关闭其他' }).first().click()
+    await sleep(300)
+    const afterOthers = await tabCount()
+    check('P10 关闭其他：只剩右键的标签页', afterOthers === 1, `left=${afterOthers}`)
+
+    await rightClickActive()
+    await ctxMenu.locator('.ctx-menu-item', { hasText: '全部关闭' }).first().click()
+    await sleep(300)
+    const afterAll = await tabCount()
+    const emptyShown = await page.locator('.editor-empty').isVisible().catch(() => false)
+    check('P11 全部关闭：tab 清空并回到空态', afterAll === 0 && emptyShown, `tabs=${afterAll} empty=${emptyShown}`)
   } finally {
     // tab 快照是防抖写盘的：先等它落定再关浏览器，最后把 config.json 原样写回
     await sleep(800)
