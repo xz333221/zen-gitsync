@@ -97,20 +97,28 @@ vi.mock('@/composables/useAgentChat', async () => {
 
 // 组件库与广场都只关心"在不在"，给个能查的壳就够
 // （排队的几个 prop 要声明出来 —— 桩不声明就只当普通 attribute 落下去，props() 读不到）
-vi.mock('zen-ai-chat-ui', () => ({
-  ChatContainer: {
-    name: 'ChatContainer',
-    props: ['messages', 'generating', 'disabled', 'allowQueue', 'queued', 'queuePaused', 'queueLabels', 'placeholder', 'theme', 'showInput', 'presetQuestions'],
-    // 库里真输入框的根节点类名：上下文卡的锚点要住进它（syncContextSlot 查询它）
-    template: '<div class="stub-chat"><div class="acu-input-wrap" /></div>',
-    methods: { scrollToBottom() {} },
-  },
-  ConversationList: {
-    name: 'ConversationList',
-    props: ['items', 'activeId', 'loading', 'labels', 'compact', 'showSearch'],
-    template: '<div class="stub-conv" />',
-  },
-}))
+vi.mock('zen-ai-chat-ui', async () => {
+  const { ref } = await import('vue')
+  return {
+    ChatContainer: {
+      name: 'ChatContainer',
+      props: ['messages', 'generating', 'disabled', 'allowQueue', 'queued', 'queuePaused', 'queueLabels', 'placeholder', 'theme', 'showInput', 'presetQuestions'],
+      // 受控草稿：面板一旦被卸载重建，这份状态就归零 ——
+      // 「切 Tab 不丢草稿」的回归用例靠它判"确实没被卸载"（不是靠对象引用巧合）。
+      setup() {
+        return { draft: ref('') }
+      },
+      // 库里真输入框的根节点类名：上下文卡的锚点要住进它（syncContextSlot 查询它）
+      template: '<div class="stub-chat"><div class="acu-input-wrap" /><input class="stub-chat-input" v-model="draft" /></div>',
+      methods: { scrollToBottom() {} },
+    },
+    ConversationList: {
+      name: 'ConversationList',
+      props: ['items', 'activeId', 'loading', 'labels', 'compact', 'showSearch'],
+      template: '<div class="stub-conv" />',
+    },
+  }
+})
 
 vi.mock('@/components/MarketplacePanel.vue', () => ({
   default: { name: 'MarketplacePanel', template: '<div class="stub-marketplace" />' },
@@ -281,7 +289,11 @@ describe('AgentView 窄屏折行', () => {
     expect(skillTab).toBeTruthy()
     await skillTab!.trigger('click')
     expect(w.find('.stub-marketplace').exists()).toBe(true)
-    expect(w.find('.agent-list-page').exists()).toBe(false)
+    // 2026-11 起对话面板改成 v-show（切 Tab 不丢草稿/附件）——节点仍在 DOM，
+    // 但整块 display:none 不占空间，列表页那套状态不会外溢到广场上。
+    // 读 inline style 而不是 isVisible()：jsdom 的 getComputedStyle 会按元素缓存 display，
+    // 而被隐藏的是祖先（.agent-chat-pane），断内联值才是 v-show 的契约本身。
+    expect((w.find('.agent-chat-pane').element as HTMLElement).style.display).toBe('none')
     expect(w.find('.agent-page-bar').exists()).toBe(false)
   })
 
@@ -293,6 +305,36 @@ describe('AgentView 窄屏折行', () => {
     await scheduleTab!.trigger('click')
     expect(w.find('.stub-schedule').exists()).toBe(true)
     expect(w.find('.agent-engine').exists()).toBe(false)
+  })
+
+  // 回归：草稿与附件是 ChatInput 的内部状态，宿主没有持久化 ——
+  // 早先对话面板用 v-if，切走就整块卸载，回来时输入框空空如也。
+  // 现在改成 v-show 常驻挂载，这里用"受控 input 的值还在"证明它确实没被销毁。
+  it('切到定时任务再切回对话：输入框草稿仍在（面板没被卸载）', async () => {
+    const w = mountView()
+    await setNarrow(false)
+
+    const input = w.find('.stub-chat-input')
+    expect(input.exists()).toBe(true)
+    await input.setValue('还没发出去的草稿')
+    expect((input.element as HTMLInputElement).value).toBe('还没发出去的草稿')
+
+    const scheduleTab = w.findAll('.agent-tab').find(t => t.text().includes('@AGENT:定时任务'))
+    expect(scheduleTab).toBeTruthy()
+    await scheduleTab!.trigger('click')
+
+    // 节点还在，只是整块隐藏（v-show 的契约是内联 display，不是从 DOM 里删掉）
+    expect(w.find('.agent-chat-pane').exists()).toBe(true)
+    expect((w.find('.agent-chat-pane').element as HTMLElement).style.display).toBe('none')
+    expect(w.find('.stub-schedule').exists()).toBe(true)
+
+    // 按 title 定位（紧凑态下 tab 文字为空，title 恒为 label）
+    const chatTab = w.findAll('.agent-tab').find(t => t.attributes('title') === '@AGENT:对话')
+    expect(chatTab).toBeTruthy()
+    await chatTab!.trigger('click')
+
+    expect((w.find('.agent-chat-pane').element as HTMLElement).style.display).not.toBe('none')
+    expect((w.find('.stub-chat-input').element as HTMLInputElement).value).toBe('还没发出去的草稿')
   })
 })
 

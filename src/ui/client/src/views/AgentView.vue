@@ -651,8 +651,12 @@ defineExpose({
       </nav>
 
       <div class="agent-tab-body">
-        <!-- ── 对话 ── -->
-        <div v-if="activeTab === 'chat'" class="agent-chat-pane">
+        <!-- ── 对话 ──
+             这里必须 **常驻挂载、只切显隐**（v-show 而不是 v-if）：
+             草稿文字与附件都是 ChatInput 的内部状态，宿主没有持久化，卸载就全丢；
+             常驻还能让切 Tab 时进行中的流式渲染不断。
+             代价是 v-show 不能参与 v-if / v-else-if 链 —— 所以下面三块各自独立 v-if。 -->
+        <div v-show="activeTab === 'chat'" class="agent-chat-pane">
           <!-- 窄屏 · 会话列表页：列表独占整页。
                整页列表没有「收起」的去处，而库从 0.1.0-beta.30 起默认带收起按钮 —— 显式关掉 -->
           <div v-if="narrow && chatPage === 'list'" class="agent-list-page">
@@ -799,15 +803,15 @@ defineExpose({
 
         <!-- ── 定时任务 ── -->
         <SchedulePanel
-          v-else-if="activeTab === 'schedule'"
+          v-if="activeTab === 'schedule'"
           @open-session="handleScheduleOpenSession"
         />
 
         <!-- ── Skill 广场 / MCP 广场 ── -->
-        <MarketplacePanel v-else-if="activeTab === 'skill' || activeTab === 'mcp'" :type="marketplaceType" />
+        <MarketplacePanel v-if="activeTab === 'skill' || activeTab === 'mcp'" :type="marketplaceType" />
 
         <!-- ── 设置（提示词设置）── -->
-        <AgentPromptSettings v-else>
+        <AgentPromptSettings v-if="activeTab === 'settings'">
           <DispatchSettings />
         </AgentPromptSettings>
       </div>
