@@ -353,7 +353,9 @@ async function startUIServer(noOpen = false, savePort = false, options = {}) {
   // 两个 git 检测并行发起(Windows 上每个 git spawn ~180-200ms,串行要 ~380ms):
   // show-toplevel 供下面"记录最近目录"立即 await;is-inside-work-tree 供路由注册后
   // 的 isGitRepo 判定使用,让它在路由注册期间后台完成,此处不 await。
-  const gitToplevelP = execGitCommand(['rev-parse', '--show-toplevel'])
+  // 两个都静默(log:false):非仓库目录下失败是预期路径,下面有各自的降级处理,
+  // 不值得为它往启动日志里打报错框。
+  const gitToplevelP = execGitCommand(['rev-parse', '--show-toplevel'], { log: false })
     .catch(() => null);
   const gitRepoCheckP = execGitCommand(['rev-parse', '--is-inside-work-tree'], { log: false })
     .then(({ stdout }) => ({ isRepo: stdout.trim() === 'true', failed: false }))
@@ -363,7 +365,6 @@ async function startUIServer(noOpen = false, savePort = false, options = {}) {
   try {
     let dirPath = process.cwd();
     try {
-      if(showConsole) logger.info(`记录最近打开目录`)
       const result = await gitToplevelP;
       const root = result?.stdout?.trim();
       if (root) dirPath = root;
@@ -372,7 +373,6 @@ async function startUIServer(noOpen = false, savePort = false, options = {}) {
     }
     if (showConsole) logger.info(`记录最近打开目录: ${dirPath}`)
     await configManager.saveRecentDirectory(dirPath);
-    if (showConsole) console.log(chalk.gray(`已记录最近打开目录: ${dirPath}`));
   } catch (e) {
     console.warn(chalk.yellow(`记录最近目录失败: ${e?.message || e}`));
   }

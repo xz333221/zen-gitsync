@@ -120,9 +120,10 @@ export function registerFsRoutes({
       const directory = process.cwd();
       const iconUrl = await currentIconUrl(directory);
 
-      // 检查当前目录是否是Git仓库
+      // 检查当前目录是否是Git仓库(探测命令本身静默:非仓库的报错是预期路径,
+      // 下面的 400 响应已携带足够信息,不用再往控制台打两个报错框)
       try {
-        await execGitCommand(['rev-parse', '--is-inside-work-tree']);
+        await execGitCommand(['rev-parse', '--is-inside-work-tree'], { log: false });
         // 用实时检测结果回写服务端 isGitRepo 标志,自愈启动后目录状态
         // 发生变化(如外部终端里 git init)导致的 stale false。
         setIsGitRepo(true);
@@ -193,9 +194,9 @@ export function registerFsRoutes({
         console.log(chalk.yellow(`项目路径切换: ${oldProjectPath} -> ${newProjectPath}`));
         console.log(chalk.yellow(`房间ID更新: ${getProjectRoomId()} -> ${newProjectRoomId}`));
       
-        // 检查新目录是否是Git仓库
+        // 检查新目录是否是Git仓库(同样静默,失败由下方降级逻辑处理)
         try {
-          await execGitCommand(['rev-parse', '--is-inside-work-tree']);
+          await execGitCommand(['rev-parse', '--is-inside-work-tree'], { log: false });
       
           // 更新全局变量
           setCurrentProjectPath(newProjectPath);
@@ -1014,7 +1015,13 @@ export function registerFsRoutes({
       const probed = await probeDirectoryGitStates([target], { useCache: false });
       state = probed[target] || null;
     }
-    logger.info(`[recent_directories/fetch] ${result.status}${result.reason ? `(${result.reason})` : ''} ${target}`);
+    if (result.status === 'ok') {
+      // 成功是默认预期,逐条打会把「最近目录批量刷新」刷成几十行流水账;
+      // 要排查时开 DEBUG=1 仍能逐条看到
+      logger.debug(`[recent_directories/fetch] ok ${target}`);
+    } else {
+      logger.info(`[recent_directories/fetch] ${result.status}${result.reason ? `(${result.reason})` : ''} ${target}`);
+    }
 
     // success 表示"这次请求处理完了"，fetch 本身的结果在 status 里 ——
     // 跳过（非仓库/无 remote）不是接口错误，前端要按三态分别计数。

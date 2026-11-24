@@ -334,9 +334,11 @@ function execGitCommand(command, options = {}) {
           resolve({ stdout: stdout || '', stderr: stderr || '', error })
           return
         }
-        log && coloredLog(head, error, 'error')
-        // 错误情况也打印目录和时间
-        if (log) {
+        // stderr 框(上面)已经打了 git 的原始报错(fatal: ...),再打一个
+        // "Error: Command failed: ..." 的框是同一条命令的重复信息 → 只在
+        // stdout/stderr 都为空(拿不到任何 git 输出,如 git 未安装)时才补打
+        if (log && !stdout && !stderr) {
+          coloredLog(head, error, 'error')
           const currentTime = new Date().toLocaleString('zh-CN', { hour12: false });
           console.log(chalk.dim(`📁 目录: ${cwd} | ⏰ 时间: ${currentTime}`));
         }
