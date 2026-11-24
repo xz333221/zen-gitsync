@@ -203,6 +203,7 @@
     "src/ui/server/**",
     "src/mcp/**",
     "src/peer/store.js",
+    "src/peer/platform.js",
     "src/peer/client.js",
     "src/peer/server.js",
     "src/peer/localAsk.js",

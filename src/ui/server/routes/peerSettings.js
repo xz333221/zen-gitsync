@@ -48,7 +48,16 @@ const PROBE_TIMEOUT_MS = 2500;
 async function probe(peer) {
   try {
     const info = await fetchPeerInfo(peer, { timeoutMs: PROBE_TIMEOUT_MS });
-    return { online: true, remoteName: info.name || '', remoteAvatar: info.avatar || '', version: info.version || '', remoteId: info.id || '' };
+    return {
+      online: true,
+      remoteName: info.name || '',
+      remoteAvatar: info.avatar || '',
+      version: info.version || '',
+      remoteId: info.id || '',
+      // 对端自报的系统（老版本对端没有这两个字段 → null / ''，界面显示"系统未知"）
+      os: info.os || null,
+      shell: info.shell || ''
+    };
   } catch (err) {
     return { online: false, error: String(err?.message || err) };
   }
@@ -125,6 +134,8 @@ export function registerPeerSettingsRoutes({
         url: p.url,
         online: p.online,
         version: p.version || '',
+        os: p.online ? (p.os || null) : null,
+        shell: p.online ? (p.shell || '') : '',
         error: p.error || ''
       };
     }));
@@ -218,7 +229,11 @@ export function registerPeerSettingsRoutes({
     // 这里允许显式传 name，是给将来"本地备注"留的口子；界面不再问用户填。
     const name = String(req.body?.name || '').trim() || String(info.name || '').trim() || url;
     const state = await upsertPeer({ id: info.id || '', name, url, token });
-    res.json({ success: true, peer: { id: info.id || '', name, url, online: true, version: info.version || '' }, count: state.peers.length });
+    res.json({
+      success: true,
+      peer: { id: info.id || '', name, url, online: true, version: info.version || '', os: info.os || null },
+      count: state.peers.length
+    });
   }));
 
   /** DELETE /api/peer-settings/peers/:ref —— 移除（ref 可以是 id 或昵称）。 */

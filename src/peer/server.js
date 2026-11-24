@@ -29,12 +29,41 @@ import express from 'express';
 
 import { tokenEquals, getSessionId, setSessionId, maskToken } from './store.js';
 import { askLocalAgent } from './localAsk.js';
+import { describePlatform, describeShell } from './platform.js';
 import { isSessionBusy } from '../ui/server/routes/workbench/sessionGate.js';
 import logger from '../ui/server/utils/logger.js';
 
 const MAX_QUESTION_CHARS = 4000;
 const DEFAULT_ASK_TIMEOUT_MS = 10 * 60 * 1000;
 const STARTED_AT = new Date().toISOString();
+/** 提问方自报字段的上限：够放下"Windows 11 (win32/x64)"这类标签，又不会把前缀撑爆。 */
+const FROM_FIELD_MAX = 64;
+
+/** 清洗提问方自报的字段：去换行（防止伪造前缀的多行结构）、限长。 */
+function cleanFromField(value) {
+  return String(value || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, FROM_FIELD_MAX);
+}
+
+/**
+ * 拼跨机器提问的上下文前缀。
+ *
+ * 对端 agent 默认只会把自己当"本机"——它看不到提问方那边。不写清"这是另一台机器、
+ * 对方是什么系统、你自己是什么系统"，模型很容易顺着对方的话把 Windows 当 Linux，
+ * 给出 `ls` / `tail` / 单引号路径这种在本机必然报错的命令。
+ *
+ * 单独抽出来是为了单测能直接断文案，不必起服务。
+ *
+ * @param {{from?:string, fromName?:string, fromOs?:string}} [opts]
+ */
+export function buildPeerQuestionPrefix({ from, fromName, fromOs } = {}) {
+  const who = cleanFromField(fromName) || cleanFromField(from) || '匿名节点';
+  const fromPlatform = cleanFromField(fromOs) || '系统未知';
+  const me = describePlatform();
+  const shell = describeShell();
+  return `〔跨机器提问 · 来自另一台机器「${who}」(${fromPlatform}),不是你本机 · `
+    + `你这台是 ${me.label}(${shell}) —— 涉及命令/路径时先按你自己机器的系统来判断,`
+    + '对方提的路径或命令不一定适用于你这台机器〕';
+}
 
 /**
  * 造 peer 的 express app（不含 listen，方便单测直接 supertest/裸 http 打）。
@@ -88,6 +117,10 @@ export function createPeerApp({
       name: self.name,
       avatar: self.avatar || '',
       version: getVersion(),
+      // 系统信息**只能由这台机器自报**：对端没法从网络里读出来，猜就是错的来源。
+      // 新增字段只增不改 —— 老版本对端不认识它们，但继续靠上面那些字段工作。
+      os: describePlatform(),
+      shell: describeShell(),
       capabilities: ['ask'],
       startedAt: STARTED_AT
     });
@@ -96,8 +129,13 @@ export function createPeerApp({
   /**
    * POST /api/peer/ask — 让本机 g ai 回答一个问题。
    *
-   * body: { question: string, from?: string /* 提问方节点 id *\/ }
+   * body: { question: string, from?: string /* 提问方节点 id *\/
+   *         fromOs?: string /* 提问方自报的系统 label，如 "Ubuntu 22.04 (linux/x64)" *\/
+   *         fromName?: string /* 提问方昵称 *\/ }
    * 返回: { ok, answer, sessionId, ms }
+   *
+   * fromOs / fromName 都是**可选**的：老版本提问方不会带，这时前缀里写"系统未知"。
+   * 两者只用于拼上下文前缀，不参与鉴权、不参与会话 key（key 仍只看 from）。
    *
    * 会话连续性：每个提问方在**本机**占一个会话（key = `in:<from>`），这样 A 问
    * 第二句时 B 还记得第一句，但 A 和 C 的上下文不会串。
@@ -109,6 +147,15 @@ export function createPeerApp({
     if (question.length > MAX_QUESTION_CHARS) {
       return res.status(413).json({ ok: false, error: `问题过长（上限 ${MAX_QUESTION_CHARS} 字）` });
     }
+
+    // 前缀放在问题之前交给本机 agent：它默认只把自己当"本机"，不告诉它这是跨机器
+    // 提问、双方各是什么系统，模型就会按错误的那套命令写法回答（详见函数注释）。
+    const prefix = buildPeerQuestionPrefix({
+      from,
+      fromName: req.body?.fromName,
+      fromOs: req.body?.fromOs
+    });
+    const questionForAgent = `${prefix}\n${question}`;
 
     const sessionKey = `in:${from}`;
     let sessionId = await getSession(sessionKey).catch(() => '');
@@ -145,7 +192,7 @@ export function createPeerApp({
       const runner = typeof ask === 'function'
         ? ask
         : (args) => askLocalAgent({ ...args, port: getLocalPort(), timeoutMs });
-      const result = await runner({ question, sessionId, from, signal: controller.signal });
+      const result = await runner({ question: questionForAgent, sessionId, from, signal: controller.signal });
       if (result?.sessionId && result.sessionId !== sessionId) {
         await setSession(sessionKey, result.sessionId).catch(() => {});
       }

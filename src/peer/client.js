@@ -30,6 +30,7 @@ import {
   setSessionId,
   ensureSelf
 } from './store.js';
+import { describePlatform } from './platform.js';
 
 const INFO_TIMEOUT_MS = 4000;
 const ASK_TIMEOUT_MS = 10 * 60 * 1000;
@@ -110,7 +111,14 @@ export async function askPeer(peer, self, question, { timeoutMs = ASK_TIMEOUT_MS
   const data = await callPeer(`${peer.url}/api/peer/ask`, {
     method: 'POST',
     token: peer.token,
-    body: { question, from: self?.id || '' },
+    // fromOs / fromName 让对端 agent 知道"这一问来自另一台什么系统的机器"。
+    // 老版本对端会忽略它们（express 只读 question/from），不影响提问。
+    body: {
+      question,
+      from: self?.id || '',
+      fromOs: describePlatform().label,
+      fromName: self?.name || ''
+    },
     timeoutMs,
     signal
   });
@@ -137,21 +145,32 @@ export async function askPeer(peer, self, question, { timeoutMs = ASK_TIMEOUT_MS
  * 顺带把失败原因放进 `error`：只报"离线"会让用户去查网络，而真实原因常常是
  * 令牌不匹配（对端重生成过令牌）或地址写错，两者该被区分开。
  *
+ * `os` / `shell` 是**对端自报**的（来自它的 /api/peer/info）。老版本对端没有这两个
+ * 字段 → os 为 null（表示"不知道对方是什么系统"，不是"对方没有系统"），shell 为 ''。
+ *
  * @param {{probe?:boolean}} [opts]
- * @returns {Promise<Array<{id:string,name:string,url:string,online:boolean,label?:string,error?:string}>>}
+ * @returns {Promise<Array<{id:string,name:string,url:string,online:boolean,label?:string,os?:object|null,shell?:string,error?:string}>>}
  */
 export async function listPeerStatus({ probe = true } = {}) {
   const { peers } = await readState();
   if (!peers.length) return [];
   return Promise.all(peers.map(async (p) => {
     if (!probe) {
-      return { id: p.id, name: p.name, url: p.url, hasToken: !!p.token, online: false };
+      return { id: p.id, name: p.name, url: p.url, hasToken: !!p.token, online: false, os: null, shell: '' };
     }
     try {
       const info = await fetchPeerInfo(p, { timeoutMs: 2000 });
-      return { id: info.id || p.id, name: info.name || p.name, url: p.url, online: true, label: info.version || '' };
+      return {
+        id: info.id || p.id,
+        name: info.name || p.name,
+        url: p.url,
+        online: true,
+        label: info.version || '',
+        os: info.os || null,
+        shell: info.shell || ''
+      };
     } catch (err) {
-      return { id: p.id, name: p.name, url: p.url, online: false, error: String(err?.message || err) };
+      return { id: p.id, name: p.name, url: p.url, online: false, os: null, shell: '', error: String(err?.message || err) };
     }
   }));
 }
@@ -184,8 +203,13 @@ export async function askPeerByRef(ref, question, opts = {}) {
   }
   if (!peer.url || !peer.token) throw new Error(`对端「${peer.name}」缺少地址或令牌，请重新 \`g peer add\``);
 
+  // 顺手取一次对端身份里的系统信息（工具层要把它投影给模型看）。**失败一律忽略**：
+  // 这一跳纯属锦上添花，绝不能因为"info 探不到"就让真正的提问失败 —— 提问本身
+  // 有它自己的错误语义（见 callPeer），别在这里混入第二种失败原因。
+  const peerInfo = await fetchPeerInfo(peer, { timeoutMs: 2000 }).catch(() => null);
+
   const result = await askPeer(peer, self, question, opts);
-  return { peer, ...result };
+  return { peer, peerInfo, ...result };
 }
 
 /** 取与某个对端的上一次会话 id（调试/CLI 用）。 */

@@ -75,7 +75,7 @@
           </span>
           <span class="peer-row-name">{{ p.name }}</span>
           <span class="peer-row-url">{{ p.url }}</span>
-          <span class="peer-row-ver">{{ p.online ? p.version : (p.error || $t('@PEER:离线')) }}</span>
+          <span class="peer-row-ver" :title="peerVerLine(p)">{{ peerVerLine(p) }}</span>
           <button class="peer-btn peer-btn--ghost" type="button" @click="testPeer(p)">{{ $t('@PEER:测试') }}</button>
           <button class="peer-btn peer-btn--danger" type="button" @click="removePeer(p)">{{ $t('@PEER:删除') }}</button>
         </li>
@@ -138,6 +138,9 @@ interface PeerRow {
   url: string
   online: boolean
   version?: string
+  /** 对端自报的系统（老版本对端没有 → null，显示"系统未知"，不代表对方没有系统） */
+  os?: { platform?: string; arch?: string; label?: string } | null
+  shell?: string
   error?: string
 }
 
@@ -152,6 +155,16 @@ function avatarView(value?: string): { img: string; text: string } | null {
   if (resolved.kind === 'image') return { img: resolved.src, text: '' }
   if (resolved.kind === 'text') return { img: '', text: resolved.text }
   return null
+}
+
+/**
+ * 对端那一行右侧的说明：在线时是"系统 · 版本"（如 `Windows 11 · 2.19.18`），
+ * 拿不到系统就写"系统未知"；离线时仍然只显示原因（不要拿旧版本号冒充在线）。
+ */
+function peerVerLine(p: PeerRow): string {
+  if (!p.online) return p.error || $t('@PEER:离线')
+  const sys = p.os?.label || $t('@PEER:系统未知')
+  return p.version ? `${sys} · ${p.version}` : sys
 }
 
 const loading = ref(false)
@@ -269,6 +282,8 @@ async function testPeer(p: PeerRow) {
     const data = await readJson(await fetch(`/api/peer-settings/peers/${encodeURIComponent(p.id || p.name)}/test`, { method: 'POST' }))
     p.online = data.online
     p.version = data.version || ''
+    p.os = data.os || null
+    p.shell = data.shell || ''
     p.error = data.error || ''
     if (data.online) ElMessage.success($t('@PEER:「{name}」在线', { name: p.name }))
     else ElMessage.error($t('@PEER:「{name}」连不上：{msg}', { name: p.name, msg: data.error || $t('@PEER:离线') }))
@@ -530,8 +545,13 @@ onMounted(async () => {
   font-size: 11px;
 }
 
+/* 纯文字（不是圆角胶囊）：系统 · 版本，宽度不够就截断，绝不换行把行撑高 */
 .peer-row-ver {
   flex: 0 0 auto;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-secondary);
   font-size: 11px;
 }

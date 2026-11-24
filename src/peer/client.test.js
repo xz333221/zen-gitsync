@@ -86,6 +86,11 @@ test('listPeerStatus：令牌正确时判在线（回归：曾因拿脱敏清单
     assert.equal(p.name, REMOTE.name, '昵称以对端自报为准');
     assert.equal(p.id, REMOTE.id);
     assert.equal(p.label, '9.9.9');
+    // os / shell 是**对端自报**的（来自它的 /api/peer/info）
+    assert.equal(p.os.platform, process.platform);
+    assert.equal(p.os.arch, process.arch);
+    assert.ok(p.os.label, 'label 不能为空');
+    assert.equal(typeof p.shell, 'string');
     assert.equal(p.error, undefined);
   } finally {
     await remote.close();
@@ -99,6 +104,8 @@ test('listPeerStatus：令牌不对时离线，并把「令牌无效」这个原
 
     const [p] = await listPeerStatus({ probe: true });
     assert.equal(p.online, false);
+    assert.equal(p.os, null, '不知道对方是什么系统就是 null，别造一个假的');
+    assert.equal(p.shell, '');
     assert.match(p.error, /令牌无效/, '不能只报"离线"——真实原因是鉴权失败');
   } finally {
     await remote.close();
@@ -127,6 +134,8 @@ test('listPeerStatus：probe=false 时不发请求（给"我只想要清单"的�
   const [p] = await listPeerStatus({ probe: false });
   assert.equal(p.online, false);
   assert.equal(p.hasToken, true);
+  assert.equal(p.os, null, '没探活就没有对端自报的系统');
+  assert.equal(p.shell, '');
 });
 
 // ── 令牌不外泄 ──────────────────────────────────────────────────────────────
@@ -140,6 +149,33 @@ test('listPeerStatus 的返回值里不许出现令牌明文', async () => {
     }
   } finally {
     await remote.close();
+  }
+});
+
+// 系统标识：提问时必须把自己的系统一起发过去，对端 agent 才知道这一问来自哪种机器。
+test('askPeer 发出的 body 带 fromOs / fromName（对端据此判断命令写法）', async () => {
+  let body = null;
+  const server = http.createServer((req, res) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, answer: '收到', sessionId: '', ms: 1 }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const url = `http://127.0.0.1:${server.address().port}`;
+  try {
+    await askPeer({ id: 'node-x', url, token: REMOTE.token }, { id: 'me', name: '本机' }, '在吗');
+    assert.equal(body.question, '在吗');
+    assert.equal(body.from, 'me');
+    assert.equal(body.fromName, '本机');
+    assert.match(body.fromOs, /\(/, 'fromOs 要带上系统标签');
+    assert.ok(body.fromOs.includes(process.platform), `fromOs 应含平台：${body.fromOs}`);
+  } finally {
+    server.closeAllConnections?.();
+    await new Promise((resolve) => server.close(resolve));
   }
 });
 

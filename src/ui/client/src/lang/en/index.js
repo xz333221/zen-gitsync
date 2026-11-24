@@ -35,6 +35,7 @@ export default {
   '@PEER:还没有对端。在另一台机器上打开本页，把这边的地址和令牌填进去即可。': 'No peers yet. Open this page on the other machine and fill in the address and token shown here.',
   '@PEER:在线': 'Online',
   '@PEER:离线': 'Offline',
+  '@PEER:系统未知': 'Unknown OS',
   '@PEER:测试': 'Test',
   '@PEER:删除': 'Remove',
   '@PEER:添加对端': 'Add peer',

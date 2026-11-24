@@ -27,6 +27,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -36,6 +37,7 @@ process.env.HOME = sandboxHome;
 await fs.mkdir(path.join(sandboxHome, '.zen-gitsync'), { recursive: true });
 
 const { registerPeerSettingsRoutes } = await import('./peerSettings.js');
+const { createPeerApp } = await import('../../../peer/server.js');
 const { PEERS_FILE } = await import('../../../paths.js');
 const { ensureSelf, updateSelf, readState } = await import('../../../peer/store.js');
 
@@ -259,4 +261,70 @@ test('reload：project 收到只回报状态，绝不自己 bind', async () => {
   const res = await request('POST /api/peer-settings/reload');
   assert.equal(res.code, 200);
   assert.equal(runtime.calls.length, 0, '转发链打转的根源就在这里');
+});
+
+// ── 对端系统标识 ────────────────────────────────────────────────────────────
+//
+// 面板要显示"对端是什么系统"，数据只能来自对端自报的 /api/peer/info。
+// 老版本对端没有 os 字段 → 面板显示"系统未知"，不能凭空造一个。
+
+/** 起一个真的 peer 服务，返回 { url, token, close }。 */
+async function servePeer(self) {
+  const app = createPeerApp({ self, getLocalPort: () => 1234, getVersion: () => '2.19.18' });
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return {
+    url: `http://127.0.0.1:${server.address().port}`,
+    close: () => new Promise((resolve) => server.close(resolve))
+  };
+}
+
+test('添加对端 / 列表 probe 都透传对端自报的 os 与 shell', async () => {
+  await resetState();
+  const remote = await servePeer({ id: 'node-os', name: '远端', avatar: '', token: 's'.repeat(64) });
+  try {
+    const { request } = createHarness({ role: 'project', runtime: fakeRuntime(), query: fakeQuery() });
+    const added = await request('POST /api/peer-settings/peers', {
+      body: { url: remote.url, token: 's'.repeat(64) }
+    });
+    assert.equal(added.code, 200);
+    assert.equal(added.body.peer.os.platform, process.platform);
+    assert.ok(added.body.peer.os.label, '添加时就要把系统带回来');
+
+    const list = await request('GET /api/peer-settings');
+    assert.equal(list.code, 200);
+    const [row] = list.body.peers;
+    assert.equal(row.os.label, added.body.peer.os.label, '列表与添加必须是同一份口径');
+    const expectedShell = process.platform === 'win32' ? 'cmd.exe / PowerShell' : (process.env.SHELL || '/bin/sh');
+    assert.equal(row.shell, expectedShell);
+  } finally {
+    await remote.close();
+  }
+});
+
+test('老版本对端没有 os 字段：os 为 null（界面显示"系统未知"，不是"没有系统"）', async () => {
+  await resetState();
+  // 一个只回旧字段的 peer 服务：模拟还没升级的对端
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, id: 'node-old', name: '旧版对端', avatar: '', version: '2.0.0', capabilities: ['ask'] }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const url = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const { request } = createHarness({ role: 'project', runtime: fakeRuntime(), query: fakeQuery() });
+    const added = await request('POST /api/peer-settings/peers', {
+      body: { url, token: 'o'.repeat(64) }
+    });
+    assert.equal(added.code, 200);
+    assert.equal(added.body.peer.os, null);
+
+    const list = await request('GET /api/peer-settings');
+    assert.equal(list.body.peers[0].os, null);
+    assert.equal(list.body.peers[0].shell, '');
+    assert.equal(list.body.peers[0].online, true, '没有 os 不影响"在线"判断');
+  } finally {
+    server.closeAllConnections?.();
+    await new Promise((resolve) => server.close(resolve));
+  }
 });

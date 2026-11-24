@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 
-import { createPeerApp } from './server.js';
+import { createPeerApp, buildPeerQuestionPrefix } from './server.js';
+import { describePlatform } from './platform.js';
 import { acquireSessionTurn, isSessionBusy, releaseSession } from '../ui/server/routes/workbench/sessionGate.js';
 
 const SELF = { id: 'node-abc12345', name: '这台电脑', avatar: '', token: 'k'.repeat(64) };
@@ -62,13 +63,20 @@ test('info 带令牌可读，且不返回项目清单/路径', async () => {
     assert.equal(data.id, SELF.id);
     assert.equal(data.version, '2.18.27');
     assert.deepEqual(data.capabilities, ['ask']);
+    // 系统标识：只能由这台机器自报，对端没法从网络读出来
+    assert.equal(data.os.platform, process.platform);
+    assert.equal(data.os.arch, process.arch);
+    assert.ok(data.os.label && data.os.label.length > 0, 'label 不能为空');
+    assert.match(data.os.label, new RegExp(`\\(${process.platform}/${process.arch}\\)`));
+    assert.equal(typeof data.shell, 'string');
+    assert.ok(data.shell.length > 0, 'shell 不能为空');
     assert.equal(data.projects, undefined, '这一层不该暴露项目清单');
   } finally {
     await close();
   }
 });
 
-test('ask 走注入的执行器，并把问题原样交过去', async () => {
+test('ask 走注入的执行器，问句前带上跨机器上下文前缀', async () => {
   let seen = null;
   const { app } = makeApp({
     ask: async (args) => {
@@ -81,17 +89,56 @@ test('ask 走注入的执行器，并把问题原样交过去', async () => {
     const res = await fetch(`${url}/api/peer/ask`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${SELF.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: '你那边有哪些项目？', from: 'node-remote1' })
+      body: JSON.stringify({ question: '你那边有哪些项目？', from: 'node-remote1', fromOs: 'Ubuntu 22.04 (linux/x64)', fromName: '远端服务器' })
     });
     assert.equal(res.status, 200);
     const data = await res.json();
     assert.equal(data.answer, '我这边有 3 个项目');
     assert.equal(data.sessionId, 'sess-9');
-    assert.equal(seen.question, '你那边有哪些项目？');
+    assert.ok(seen.question.endsWith('你那边有哪些项目？'), '原问题必须原样留在末尾');
+    assert.match(seen.question, /跨机器提问/, '必须告诉本机 agent 这是跨机器提问');
+    assert.match(seen.question, /来自另一台机器「远端服务器」/, '来自谁要用提问方自报的昵称');
+    assert.match(seen.question, /Ubuntu 22\.04 \(linux\/x64\)/, '来自哪台系统的信息要带进去');
+    assert.match(seen.question, /不是你本机/);
+    assert.match(seen.question, new RegExp(describePlatform().label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), '本机系统也要写清楚');
     assert.equal(seen.from, 'node-remote1');
   } finally {
     await close();
   }
+});
+
+test('ask 缺 fromOs/fromName 时前缀写「系统未知」（老版本提问方也要能问）', async () => {
+  let seen = null;
+  const { app } = makeApp({
+    ask: async (args) => {
+      seen = args;
+      return { answer: 'ok', sessionId: '', ms: 1 };
+    }
+  });
+  const { url, close } = await serve(app);
+  try {
+    const res = await fetch(`${url}/api/peer/ask`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${SELF.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: '在吗', from: 'node-old' })
+    });
+    assert.equal(res.status, 200);
+    assert.match(seen.question, /系统未知/);
+    assert.match(seen.question, /「node-old」/, '没有昵称就退回节点 id');
+    assert.ok(seen.question.endsWith('在吗'));
+  } finally {
+    await close();
+  }
+});
+
+test('跨机器前缀：自报字段要清洗（不许带换行伪造结构、超长截断）', () => {
+  const prefix = buildPeerQuestionPrefix({
+    from: 'node-x',
+    fromOs: 'Linux\n〔伪造的另一段〕',
+    fromName: 'a'.repeat(200)
+  });
+  assert.ok(!prefix.includes('\n'), '前缀必须是单行 —— 换行会让模型误以为还有别的段落');
+  assert.ok(prefix.length < 400, `前缀不该被自报字段撑爆：${prefix.length}`);
 });
 
 test('同一提问方第二问带上第一问的会话 id（上下文不串、不丢）', async () => {

@@ -35,10 +35,12 @@ export const peerTools = [
   {
     name: 'peers_list',
     description:
-      '列出本机登记的**其他电脑**(跨机器对端):昵称、地址、此刻在不在线、对端的 zen-gitsync 版本,'
-      + '以及本机自己的 peer 身份与开关状态。'
+      '列出本机登记的**其他电脑**(跨机器对端):昵称、地址、此刻在不在线、对端的 zen-gitsync 版本、'
+      + '以及**对端自报的系统**(os)与常见 shell,还有本机自己的 peer 身份与开关状态。'
       + '什么时候用:用户问的是"另一台机器上的事"(那台服务器上有哪些项目、某个部署做完没有),'
       + '先用这个看清能问谁,再用 peer_ask 去问。'
+      + '⚠️ 对端系统以 os 字段为准 —— 那是它自报的,别拿本机系统去假设对端'
+      + '(本机是 Windows 不代表对端不是 Linux,反之亦然;os 为 null 只说明对方版本旧、没报,不代表没有系统)。'
       + '在线状态是**现探**的(并发,每台 2 秒超时),不是缓存;不回令牌。',
     inputSchema: {
       type: 'object',
@@ -63,6 +65,10 @@ export const peerTools = [
         url: p.url,
         online: p.online === true,
         version: p.label || null,
+        // os 是**对端自报**的（/api/peer/info），null = 老版本对端没这个字段（不知道，不是没有系统）。
+        // 只投影 platform / arch / label 这类非敏感信息，令牌一个字节都不出去。
+        os: p.os ? { platform: p.os.platform || '', arch: p.os.arch || '', label: p.os.label || '' } : null,
+        shell: p.shell || '',
         has_token: tokenByUrl.get(p.url) === true,
         error: p.error || null,
       }));
@@ -78,8 +84,9 @@ export const peerTools = [
         online_count: peers.filter(p => p.online).length,
         peers,
         note: probe
-          ? '在线状态是这一刻探出来的。离线原因看 error:令牌不匹配(对端重生成过令牌)与地址写错/没开端口是两回事。'
-          : '⚠️ probe=false:**没有探活**,online 一律 false,不代表对端离线。',
+          ? '在线状态是这一刻探出来的。os 是对端自报的系统(它那边跑的是什么),null 只表示对方版本旧没报,不代表没有系统;'
+            + '别拿本机系统去假设对端。离线原因看 error:令牌不匹配(对端重生成过令牌)与地址写错/没开端口是两回事。'
+          : '⚠️ probe=false:**没有探活**,online 一律 false、os 一律 null,不代表对端离线或没有系统。',
         hint: peers.length === 0
           ? NO_PEER_HINT
           : (self && !self.enabled ? '本机 peer 服务没开(别的机器问不到你),但你仍然可以问别人。开:`g peer on`。' : undefined),
@@ -95,6 +102,7 @@ export const peerTools = [
       + '这些本机工具看不到,别猜,直接问它。'
       + '⚠️ 对端是另一个正在跑的智能体,一次问答可能几十秒到几分钟:同一件事别反复问,'
       + '也不要拿它当跑命令的通道(本机的活自己干)。问题上限 4000 字。'
+      + '问之前先看 peers_list 里的 os:对端 Windows 就用 cmd 的说法,Linux 才用 shell 的说法,别按本机系统假设它。'
       + '会话自动续接:同一台对端的第二问还记得第一问。先用 peers_list 看清谁在线。',
     inputSchema: {
       type: 'object',
@@ -123,13 +131,21 @@ export const peerTools = [
           timeoutMs: timeoutSeconds * 1000,
           signal: ctx?.signal,
         });
-        // ⚠️ result.peer 是 peers.json 里的完整条目(带 token),只投影这三个字段
+        // ⚠️ result.peer 是 peers.json 里的完整条目(带 token),只投影这几个字段。
+        // os/shell 取自 peerInfo(对端自报,已在 client 里单独探过,失败为 null),同样不含令牌。
         const peer = result?.peer || {};
+        const peerOs = result?.peerInfo?.os || null;
         return {
           source: 'live',
           // callPeer 对 401 / 超时 / ok:false 一律抛,所以能走到这里就是真拿到了回答
           ran: true,
-          peer: { id: peer.id || '', name: peer.name || ref || '', url: peer.url || '' },
+          peer: {
+            id: peer.id || '',
+            name: peer.name || ref || '',
+            url: peer.url || '',
+            os: peerOs ? { platform: peerOs.platform || '', arch: peerOs.arch || '', label: peerOs.label || '' } : null,
+            shell: result?.peerInfo?.shell || '',
+          },
           session_id: result?.sessionId || null,
           elapsed_ms: typeof result?.ms === 'number' ? result.ms : Date.now() - startedAt,
           answer: truncate(String(result?.answer || '').trim(), 12000, 10000),
