@@ -141,6 +141,7 @@ import { taskExecutorName } from '@/utils/taskExecutor'
 import { buildJobToolCalls } from '@/utils/jobToolCalls'
 import { buildJobReasoningTiming } from '@/utils/jobReasoningTiming'
 import { userFacingPrompt } from '@/utils/jobUserPrompt'
+import { jobMessageAttachments, toChatAttachments } from '@/utils/jobPromptAttachments'
 import { resolveLocalImages } from '@/utils/localImageSrc'
 import { $t } from '@/lang/static'
 import { agentFileChangeLabels } from '@/utils/agentConversations'
@@ -264,11 +265,16 @@ const chatMessages = computed<ChatMessage[]>(() => {
     // 注入的环境块/记忆块/附件清单不进对话流（见 utils/jobUserPrompt.ts）。
     // 注意「复制日志」（copyAll）仍按 job.prompt 原文导出 —— 那是排查用的全量快照。
     const content = userFacingPrompt(j.prompt)
-    if (content) {
+    // 这一轮的附件清单也从 prompt 尾块解析回来，挂在气泡上（与任务对话流同一份解析）。
+    // 本组件拿不到任务的 attachments 记录（ExecutionLogManager 只有 job），认领不到
+    // id 就只出文件名 chip，不猜缩略图端点 —— 任务对话流里有任务上下文，能看到缩略图。
+    const atts = jobMessageAttachments(j.prompt)
+    if (content || atts.length > 0) {
       msgs.push({
         id: `${j.id}-u`,
         role: 'user',
         content,
+        attachments: atts.length > 0 ? toChatAttachments(atts) : undefined,
         status: 'done',
         createdAt
       })

@@ -196,7 +196,8 @@
     "verify:header-git-buttons:reverse": "node scripts/verify-header-git-buttons.cjs --reverse",
     "verify:hub-chrome": "node scripts/verify-hub-chrome.cjs",
     "verify:hub-chrome:reverse": "node scripts/verify-hub-chrome.cjs --reverse",
-    "shots:ui": "node scripts/capture-ui-shots.mjs"
+    "shots:ui": "node scripts/capture-ui-shots.mjs",
+    "verify:wb-att-bubble": "node scripts/verify-wb-att-bubble.cjs"
   },
   "files": [
     "src/ui/public/**",

@@ -5,6 +5,7 @@ import type { Job, Task } from '@/types/workbench'
 import { buildJobToolCalls } from '@/utils/jobToolCalls'
 import { buildJobReasoningTiming } from '@/utils/jobReasoningTiming'
 import { userFacingPrompt } from '@/utils/jobUserPrompt'
+import { jobMessageAttachments, toChatAttachments } from '@/utils/jobPromptAttachments'
 import { resolveLocalImages } from '@/utils/localImageSrc'
 
 const SIMPLE_SUB_ID_SUFFIX = '__simple'
@@ -44,7 +45,8 @@ export function useWorkbenchSimpleConversation(jobs: Ref<Job[]>, selectedTask: C
 
   const simpleConversationMessages = computed<ChatMessage[]>(() => {
     if (!selectedTask.value) return []
-    const allJobs = simpleAllJobsFor(selectedTask.value)
+    const task = selectedTask.value
+    const allJobs = simpleAllJobsFor(task)
     if (allJobs.length === 0) return []
     const msgs: ChatMessage[] = []
     allJobs.forEach((j, idx) => {
@@ -55,11 +57,16 @@ export function useWorkbenchSimpleConversation(jobs: Ref<Job[]>, selectedTask: C
       // 每轮气泡糊一大块重复内容，而且用户复制对话再粘回去时会把这些块一起带回去）。
       if (j.prompt) {
         const content = userFacingPrompt(j.prompt)
-        if (content) {
+        // 这一轮实际带走的附件：prompt 尾部清单是 spawn 时冻结的（比任务当前的
+        // attachments 更贴近历史），id / 大小从任务当前记录里按路径认领，
+        // 认领到的图片出缩略图。与 JobLogDetails 共用同一份解析（jobPromptAttachments.ts）。
+        const atts = jobMessageAttachments(j.prompt, task.attachments)
+        if (content || atts.length > 0) {
           msgs.push({
             id: `${j.id}-u`,
             role: 'user',
             content,
+            attachments: atts.length > 0 ? toChatAttachments(atts) : undefined,
             status: 'done',
             createdAt
           })
