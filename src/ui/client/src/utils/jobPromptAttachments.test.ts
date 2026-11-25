@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from 'vitest'
-import { jobMessageAttachments, toChatAttachments } from './jobPromptAttachments'
+import { jobMessageAttachments, jobMessageAttachmentRecords, toChatAttachments } from './jobPromptAttachments'
 import type { Attachment } from '@/types/workbench'
 
 // 夹具结构与 jobUserPrompt.test.ts 同源（真实 job 的拼装格式）：
@@ -115,5 +115,22 @@ describe('toChatAttachments', () => {
     ])
     expect(out[0]).toEqual({ id: 'at1', name: 'a.png', size: 9, type: 'image/png', preview: '/api/workbench/attachments/at1/raw' })
     expect(out[1]).toEqual({ id: 'C:\\x\\b.zip', name: 'b.zip', size: 0, type: 'application/zip', preview: undefined })
+  })
+})
+
+describe('jobMessageAttachmentRecords', () => {
+  it('按尾块路径认领任务附件库里的原记录（重试那一轮时原样重带）', () => {
+    const r1 = att({ id: 'at-9', originalName: '截图最终版.png', size: 456 })
+    const out = jobMessageAttachmentRecords(CONTINUE_PROMPT, [r1, att({ id: 'at-log', ext: 'log', absolutePath: 'C:\\Users\\me\\.zen-gitsync\\workbench-images\\_task-x\\日志.log' })])
+    expect(out.map(r => r.id)).toEqual(['at-9', 'at-log'])
+  })
+
+  it('认领不到的条目（附件已被删）跳过，不造假记录', () => {
+    const out = jobMessageAttachmentRecords(FIRST_PROMPT_OLD, [att({ absolutePath: 'C:\\别的\\路径.png' })])
+    expect(out).toEqual([])
+  })
+
+  it('反向：没有尾块的 prompt 返回空数组', () => {
+    expect(jobMessageAttachmentRecords('帮我拉一下最新代码', [att({})])).toEqual([])
   })
 })

@@ -656,7 +656,12 @@ export function registerWorkbenchRoutes({
     }
     const nextRound = maxRound + 1;
     const bodyAtts = req.body?.attachments;
-    const carryAtts = Array.isArray(bodyAtts) && bodyAtts.length > 0
+    // 字段**在不在**才是兼容线（2026-11-25）：新前端每轮只带本轮上传的附件（没带就给 []），
+    // 旧前端总是把任务全部附件整包塞进来。所以字段缺省（旧前端）才回退任务全量；
+    // 显式 [] = 这轮真的没带东西 —— 历史附件已经在 resume 的会话上下文里，逐轮重发
+    // 只会让 prompt 尾块（前端气泡附件条的数据源，见 jobPromptAttachments.ts）
+    // 每一轮都挂着全部历史图片。
+    const carryAtts = Array.isArray(bodyAtts)
       ? bodyAtts
       : (Array.isArray(task.attachments) ? task.attachments : []);
     const virtualSub = {

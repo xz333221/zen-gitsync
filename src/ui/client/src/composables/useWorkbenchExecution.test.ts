@@ -115,7 +115,15 @@ function setup(initialJobs: Job[]) {
   const jobs = ref<Job[]>(initialJobs)
   const tasks = ref<Task[]>([makeTask()])
   const selectedTask = computed<Task | null>(() => tasks.value[0] ?? null)
-  const uploadAttachment = vi.fn(async () => {})
+  // 上传成功返回写进任务的附件记录（deliverChat 靠返回值收集「本轮带的附件」）
+  const uploadAttachment = vi.fn(async (_target: any, file: File) => ({
+    id: `att-${file.name}`,
+    originalName: file.name,
+    mimeType: file.type || 'application/octet-stream',
+    size: file.size,
+    ext: 'png',
+    absolutePath: `C:\\att\\${file.name}`
+  }))
   const api = useWorkbenchExecution(jobs, tasks, selectedTask, {
     clearJobsByTask: vi.fn(async () => 0),
     persistTask: vi.fn(async () => true),
@@ -183,6 +191,42 @@ describe('排队续聊', () => {
 
     expect(uploadAttachment).toHaveBeenCalledTimes(1)
     expect(continueBodies[0].userMessage).toBe('带张图')
+  })
+
+  test('续聊只带本轮上传的附件，不整包重发任务历史附件（2026-11-25）', async () => {
+    // 任务上挂着历史附件：这轮没传新图的话，请求里就不该再出现它
+    const { jobs, tasks, api } = setup([makeJob({ status: 'running' })])
+    tasks.value[0] = makeTask({
+      attachments: [{ id: 'att-old', originalName: 'old.png', mimeType: 'image/png', size: 1, ext: 'png', absolutePath: 'C:\\att\\old.png' }]
+    })
+
+    // 这轮没带文件 → attachments 是空数组（历史附件躺在 resume 的会话上下文里）
+    await api.onContinueSendFromChat(makeTask(), { text: '没带图', files: [] })
+    jobs.value[0] = makeJob({ status: 'done' })
+    await settle()
+    expect(continueBodies[0].attachments).toEqual([])
+
+    // 这轮带了一张 → 只带这一张，old.png 不回灌（此时任务空闲，直接发）
+    await api.onContinueSendFromChat(makeTask(), { text: '带一张', files: [makeFile('new.png')] })
+    await settle()
+    expect(continueBodies[1].attachments.map((a: any) => a.originalName)).toEqual(['new.png'])
+  })
+
+  test('重试把失败那轮自己的附件原样带上，不带任务现在的全量', async () => {
+    const roundAtt = { id: 'att-r1', originalName: 'r1.png', mimeType: 'image/png', size: 1, ext: 'png', absolutePath: 'C:\\att\\r1.png' }
+    const otherAtt = { id: 'att-other', originalName: 'other.png', mimeType: 'image/png', size: 1, ext: 'png', absolutePath: 'C:\\att\\other.png' }
+    // 失败那轮的 prompt 尾块只挂着它自己带的那张图
+    const failedPrompt = '改一下这个\n\n---\n本任务包含 1 个附件（请按文件路径读取，不要让用户重新提供）：\n\n## 任务附件\n  1. [image/png] C:\\att\\r1.png\n---'
+    const prevJob = makeJob({ id: 'j1', status: 'done', claudeSessionId: 'sess-1' })
+    const failedJob = makeJob({ id: 'j2', subId: 't1__simple__r1', status: 'error', prompt: failedPrompt })
+    const { tasks, api } = setup([prevJob, failedJob])
+    // 任务现在的附件库里除了 r1 还多了一张别的轮次传的图
+    tasks.value[0] = makeTask({ attachments: [roundAtt, otherAtt] })
+
+    expect(await api.retryRound(makeTask({ attachments: [roundAtt, otherAtt] }), failedJob, prevJob)).toBe(true)
+
+    expect(continueBodies).toHaveLength(1)
+    expect(continueBodies[0].attachments.map((a: any) => a.id)).toEqual(['att-r1'])
   })
 
   test('「清空执行」把 job 全删掉时不补发、也不弹「没有可续接的会话」', async () => {

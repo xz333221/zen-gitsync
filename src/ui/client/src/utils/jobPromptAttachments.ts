@@ -142,3 +142,26 @@ export function toChatAttachments(atts: JobMessageAttachment[]) {
     preview: a.previewUrl
   }))
 }
+
+/**
+ * 从某一轮的 prompt 尾块还原出**任务附件库里的原记录**（重试那一轮时原样重带）。
+ * 只认领得到 id 的条目 —— 附件已从任务上删掉的（认领不到）不造假记录，
+ * 服务端重建尾块拿不到真实路径，重试就只重发文字。
+ */
+export function jobMessageAttachmentRecords(
+  prompt: string | undefined,
+  taskAttachments?: Attachment[]
+): Attachment[] {
+  const byId = new Map(
+    (Array.isArray(taskAttachments) ? taskAttachments : [])
+      .filter(r => r?.id)
+      .map(r => [r.id as string, r])
+  )
+  const out: Attachment[] = []
+  for (const a of jobMessageAttachments(prompt, taskAttachments)) {
+    if (!a.id) continue
+    const rec = byId.get(a.id)
+    if (rec && !out.includes(rec)) out.push(rec)
+  }
+  return out
+}

@@ -2004,7 +2004,11 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
   // 图片和其他文件仍列路径让 Claude CLI 直接读取。
   // 注意：首次执行时 sub.attachments 就是 task.attachments 的同一引用，
   // 不去重会把同一张图在 prompt 里列两遍。按 absolutePath 去重。
-  const taskAtts = Array.isArray(task.attachments) ? task.attachments : [];
+  // 续接轮（--resume）**不**并 task.attachments：历史附件的路径已经躺在会话上下文里，
+  // 逐轮重发只会把 prompt 尾块（= 前端气泡附件条的数据源，见 jobPromptAttachments.ts）
+  // 撑成"每一轮都挂全部历史图片"。首次执行/手动重跑仍合并 —— 派发链路的
+  // sub.attachments 是空的（附件挂在任务上，见 dispatchInstruction.js）。
+  const taskAtts = (!resumeSessionId && Array.isArray(task.attachments)) ? task.attachments : [];
   const subAtts = Array.isArray(sub.attachments) ? sub.attachments : [];
   const seen = new Set();
   const allAttachments = [];

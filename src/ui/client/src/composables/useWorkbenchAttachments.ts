@@ -200,16 +200,22 @@ export function useWorkbenchAttachments() {
     files.forEach(f => uploadAttachment(t, f))
   }
 
-  async function uploadAttachment(t: AttachmentTarget, file: File) {
+  /**
+   * 上传一个附件。成功（含命中同名同体积去重复用）时返回写入任务的附件记录 ——
+   * 续聊发送要用它把「本轮真正带上的附件」传给 /continue（每轮气泡只显示
+   * 本轮携带的附件，不再整包重发任务历史附件，见 useWorkbenchExecution.deliverChat）。
+   * 类型不支持 / 超限 / 上传失败时返回 undefined。
+   */
+  async function uploadAttachment(t: AttachmentTarget, file: File): Promise<Attachment | undefined> {
     if (!ALLOWED_MIME.has(file.type) && !file.name.match(/\.(png|jpg|jpeg|gif|webp|bmp|svg|pdf|txt|md|markdown|csv|json|log)$/i)) {
       ElMessage.error(`${$t('@WORKBENCH:不支持的文件类型')}（${file.name}）`)
-      return
+      return undefined
     }
     const existing = targetAttachments(t)
     const dup = existing.find(a => a.originalName === file.name && a.size === file.size)
     if (dup) {
       ElMessage.info(`${file.name} ${$t('@WORKBENCH:已存在，已复用')}`)
-      return
+      return dup
     }
     const key = targetKey(t)
     uploadingTargets.value[key] = true
@@ -229,7 +235,7 @@ export function useWorkbenchAttachments() {
       }
       if (out.size > MAX_ATTACHMENT_BYTES) {
         ElMessage.error(`「${file.name}」${$t('@WORKBENCH:超过 {size} 限制', { size: humanSize(MAX_ATTACHMENT_BYTES) })}`)
-        return
+        return undefined
       }
       const res = await fetch(targetUploadUrl(t), {
         method: 'POST',
@@ -249,11 +255,14 @@ export function useWorkbenchAttachments() {
         list.push(res.attachment)
         setTargetAttachments(t, list)
         ElMessage.success(`${$t('@WORKBENCH:已添加：')}${out.name}`)
+        return res.attachment
       } else {
         ElMessage.error(res.error || $t('@WORKBENCH:上传失败'))
+        return undefined
       }
     } catch (err: any) {
       ElMessage.error($t('@WORKBENCH:上传失败') + '：' + (err && err.message || err))
+      return undefined
     } finally {
       uploadingTargets.value[key] = false
     }

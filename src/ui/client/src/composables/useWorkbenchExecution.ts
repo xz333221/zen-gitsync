@@ -2,9 +2,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { $t } from '@/lang/static'
 import { computed, reactive, watch } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
-import type { Task, Job } from '@/types/workbench'
+import type { Task, Job, Attachment } from '@/types/workbench'
 import type { TaskExecutorId } from '@/utils/taskExecutor'
 import { userFacingPrompt } from '@/utils/jobUserPrompt'
+import { jobMessageAttachmentRecords } from '@/utils/jobPromptAttachments'
 import type { SelectedFile } from 'zen-ai-chat-ui'
 
 /** 排队中的一条续聊（任务还在跑，等这一轮结束再发） */
@@ -38,7 +39,7 @@ export function useWorkbenchExecution(
   options: {
     clearJobsByTask: (taskId: string) => Promise<number>
     persistTask: (showSuccess: boolean) => Promise<boolean>
-    uploadAttachment: (target: any, file: File) => Promise<void>
+    uploadAttachment: (target: any, file: File) => Promise<Attachment | undefined>
     /** 本次执行用哪个本地 CLI（claude | opencode | codex）。工作台执行按钮旁的临时选择 */
     getExecutor: () => TaskExecutorId
   }
@@ -104,20 +105,24 @@ export function useWorkbenchExecution(
    *
    * `parent` 不给时用这个任务最新的一轮 —— 正常续聊就是这个口径。
    * 重试（retryRound）要显式指定：它删掉失败那轮之后，上一轮可能不是数组末尾那条。
+   *
+   * `roundAtts` = **本轮**携带的附件记录（deliverChat 传本轮刚上传的那几条，
+   * retryRound 传失败那轮自己的）。历史附件已在该轮 resume 的会话上下文里，
+   * 不再整包重发 —— 整包重发会让 prompt 尾块（气泡附件条的数据源）每一轮
+   * 都挂着任务的全部历史图片（2026-11-25 用户反馈改的）。
    */
-  async function continueChat(t: Task, message: string, parent?: Job): Promise<boolean> {
+  async function continueChat(t: Task, message: string, parent?: Job, roundAtts?: Attachment[]): Promise<boolean> {
     const latest = parent ?? newestJobOf(t.id)
     if (!latest) {
       ElMessage.error($t('@WORKBENCH:没有可续接的会话'))
       return false
     }
-    const carryAtts = Array.isArray(t.attachments) ? t.attachments : []
     const res = await fetch(`/api/workbench/jobs/${latest.id}/continue`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         userMessage: message,
-        attachments: carryAtts
+        attachments: Array.isArray(roundAtts) ? roundAtts : []
       })
     }).then(r => r.json()).catch(err => ({ success: false, error: err?.message || String(err) }))
     if (res.success) {
@@ -158,7 +163,10 @@ export function useWorkbenchExecution(
       return false
     }
     jobs.value = jobs.value.filter(j => j.id !== failed.id)
-    return await continueChat(t, message, prev)
+    // 重发失败那轮时把它**当时**带的附件原样带上（从它的 prompt 尾块还原），
+    // 不带任务现在的全量 —— 否则重试气泡会比原来多挂别的轮次的图
+    const roundAtts = jobMessageAttachmentRecords(failed.prompt, t.attachments)
+    return await continueChat(t, message, prev, roundAtts)
   }
 
   // ── 排队续聊 ──────────────────────────────────────────────────────────
@@ -196,12 +204,16 @@ export function useWorkbenchExecution(
     if (!list.length) delete chatQueue[taskId]
   }
 
-  /** 附件上传 + 续接，串成一步；排队出队和直接发送都走它 */
+  /** 附件上传 + 续接，串成一步；排队出队和直接发送都走它。
+   *  只把**本轮上传成功**的附件交给 /continue —— 气泡上"本轮携带的图片"
+   *  就是这几条（历史附件已在该轮 resume 的会话上下文里，不再整包重发）。 */
   async function deliverChat(t: Task, item: { text: string; files: SelectedFile[] }): Promise<boolean> {
+    const roundAtts: Attachment[] = []
     for (const sf of item.files) {
-      await options.uploadAttachment({ kind: 'task', task: t }, sf.file)
+      const rec = await options.uploadAttachment({ kind: 'task', task: t }, sf.file)
+      if (rec) roundAtts.push(rec)
     }
-    return await continueChat(t, item.text)
+    return await continueChat(t, item.text, undefined, roundAtts)
   }
 
   /**
