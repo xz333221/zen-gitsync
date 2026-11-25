@@ -144,11 +144,10 @@ export default {
   '@F13B4:取消': '取消',
   '@F13B4:创建': '创建',
   '@F13B4:远程仓库:': '远程仓库:',
-  // Git 视图顶部的三个 Tab
-  '@F13B4:当前项目': '当前项目',
+  // 「远程仓库」视图的两个子 Tab(2026-11-25 从 Git 视图顶部 Tab 行拆出)
   '@F13B4:GitHub 仓库': 'GitHub 仓库',
   '@F13B4:Gitee 仓库': 'Gitee 仓库',
-  '@F13B4:Git 视图切换': 'Git 视图切换',
+  '@F13B4:远程仓库切换': '远程仓库切换',
   '@F13B4:跳到主内容': '跳到主内容',
   // @F13B4: file end
   // @76A11: file path: components\buttons\CommitButton.vue
@@ -2331,7 +2330,10 @@ export default {
   // @INSSW: file end
   // @ACTBAR: file path: components/ActivityBar.vue
   '@ACTBAR:工作台': '工作台',
-  // @ACTBAR: file end
+  // @ACTBAR: file end (追加6: 远程仓库)
+  // @ACTBAR: file path: components/ActivityBar.vue (追加: 远程仓库)
+  '@ACTBAR:远程仓库': '远程仓库',
+  // @ACTBAR: file end (追加6)
   // @WORKBENCH: file path: views/WorkbenchView.vue
   '@WORKBENCH:任务列表': '任务列表',
   '@WORKBENCH:新建任务': '新建任务',

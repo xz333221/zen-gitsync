@@ -44,26 +44,27 @@ export const ALL_AI_CONTEXT_SECTIONS: string[] = []
 /**
  * 视图 → 该刷的板块。
  *
- * git 视图是 null:它有子 Tab(当前项目 / GitHub / Gitee),对应板块完全不同,
- * 由下面那张表按 gitTab 决定。console / editor / source-map 与快照无关,一律 null ——
+ * git 视图固定刷 git 板块(仓库列表已拆到 remotes 视图,它不再有子 Tab);
+ * remotes 视图是 null:它有子 Tab(GitHub / Gitee),对应板块完全不同,
+ * 由下面那张表按子 Tab 决定。console / editor / source-map 与快照无关,一律 null ——
  * 切过去什么都不刷,别为了"整齐"给它们硬塞一个板块。
  *
  * 原「智能体」视图的条目(全刷)已随入口整合移除:g ai 对话现在住在右下角悬浮 dock,
  * 任何视图下都能打开,全刷改由 AgentDock 打开面板时触发(见 AgentDock.vue 的 open())。
  */
 export const AI_CONTEXT_SECTIONS_BY_VIEW: Record<string, AiContextSections> = {
-  git: null,
+  git: ['git'],
   console: null,
   editor: null,
   'source-map': null,
   workbench: ['tasks'],
   monitor: ['system'],
   mindmap: ['mindmap'],
+  remotes: null,
 }
 
-/** Git 视图内三个子 Tab → 该刷的板块 */
-export const AI_CONTEXT_SECTIONS_BY_GIT_TAB: Record<string, AiContextSections> = {
-  current: ['git'],
+/** 远程仓库视图内两个子 Tab → 该刷的板块 */
+export const AI_CONTEXT_SECTIONS_BY_REMOTE_TAB: Record<string, AiContextSections> = {
   github: ['github'],
   gitee: ['gitee'],
 }
@@ -86,11 +87,11 @@ export function refreshAiContext(sections: AiContextSections): void {
 /**
  * 按当前所在视图算出该刷的板块，并触发刷新。
  * @param view 当前活动视图
- * @param gitTab Git 视图内的子 Tab（view 不是 git 时忽略）
+ * @param remoteTab 远程仓库视图内的子 Tab（view 不是 remotes 时忽略）
  */
-export function refreshAiContextForView(view: string, gitTab: string): void {
-  const sections = view === 'git'
-    ? AI_CONTEXT_SECTIONS_BY_GIT_TAB[gitTab] ?? null
+export function refreshAiContextForView(view: string, remoteTab: string): void {
+  const sections = view === 'remotes'
+    ? AI_CONTEXT_SECTIONS_BY_REMOTE_TAB[remoteTab] ?? null
     : AI_CONTEXT_SECTIONS_BY_VIEW[view] ?? null
   refreshAiContext(sections)
 }

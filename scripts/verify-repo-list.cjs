@@ -34,6 +34,12 @@
  *    三段 rgb() 一律视为不透明,别再写成"取最后一组数字当 alpha"。
  *
  * 前置:dev server 已启动(npm run dev,后端 5545 / 前端 5544),且 gh / gitee 已登录。
+ *
+ * ⚠️ 角色桩(2026-11-25):仓库列表已从 Git 视图顶部 Tab 行拆到活动栏的「远程仓库」
+ * 公共板块,project 角色下没有入口 —— 把 /api/app-role 桩成 full(公共板块可见、
+ * 其余不变),探针先点活动栏再点子 Tab。与 verify-hub-chrome.cjs 同一套做法,
+ * 劫持的是接口不是本机实例。
+ *
  * 用法:node scripts/verify-repo-list.cjs [--reverse]
  * 退出码:0 全通过,1 有失败项,2 脚本异常。
  */
@@ -68,8 +74,18 @@ const byFullName = (a, b) => (a.fullName.toLowerCase() < b.fullName.toLowerCase(
   const consoleErrors = []
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()) })
 
+  // 远程仓库是公共板块:project 角色下活动栏没有入口,桩成 full(只多出公共 tab,其余不变)
+  await page.route('**/api/app-role*', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, role: 'full', version: 'probe' }),
+    }))
+
   await page.goto(BASE, { waitUntil: 'domcontentloaded' })
-  await sleep(1500)
+  await page.waitForSelector('.activity-bar', { timeout: 30000 })
+  await page.locator('.activity-btn[aria-label^="远程仓库"]').first().click()
+  await sleep(800)
   await page.getByRole('tab', { name: 'Gitee 仓库' }).click()
   await page.waitForSelector('.repo-card', { timeout: 60000 })
   await sleep(500)

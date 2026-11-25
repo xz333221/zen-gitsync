@@ -353,21 +353,35 @@ if (await captureView(page, '工作台', path.join(L, '02-workbench-board.png'),
 // ── 12. 项目管理视图 ───────────────────────────────────────────────────────
 await captureView(page, '项目管理', path.join(D, '15-projects-view-dark.png'), '项目管理(文档页)')
 
-// ── 13. 仓库浏览器(GitHub tab,gh 已登录则有真实列表)────────────────────────
-if (await gotoView(page, 'Git')) {
-  try {
-    const ghTab = page.locator('button#git-tab-github')
-    await ghTab.waitFor({ state: 'visible', timeout: 15000 })
-    await ghTab.click()
-    await waitSettled(page)
-    // gh repo list 要 shell 出去跑一会,等卡片出现
-    await page.waitForTimeout(6000)
-    await shot(page, path.join(D, '16-repo-browser-dark.png'), '仓库浏览器(文档页)')
-  } catch (e) {
-    results.push(`  FAIL 仓库浏览器(文档页): ${e.message}`)
+// ── 13. 仓库浏览器(远程仓库视图 → GitHub tab,gh 已登录则有真实列表)────────────────
+// 远程仓库是公共板块,project 角色下活动栏没有入口:给 /api/app-role 桩成 full 再 reload,
+// 截完 unroute + reload 恢复 project 形态,不影响其余截图里活动栏的样子
+{
+  await page.route('**/api/app-role*', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, role: 'full', version: 'probe' }),
+    }))
+  await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {})
+  if (await gotoView(page, '远程仓库')) {
+    try {
+      const ghTab = page.locator('button#remotes-tab-github')
+      await ghTab.waitFor({ state: 'visible', timeout: 15000 })
+      await ghTab.click()
+      await waitSettled(page)
+      // gh repo list 要 shell 出去跑一会,等卡片出现
+      await page.waitForTimeout(6000)
+      await shot(page, path.join(D, '16-repo-browser-dark.png'), '仓库浏览器(文档页)')
+    } catch (e) {
+      results.push(`  FAIL 仓库浏览器(文档页): ${e.message}`)
+    }
+  } else {
+    results.push('  skip 仓库浏览器(文档页): 切不进远程仓库视图')
   }
-} else {
-  results.push('  skip 仓库浏览器(文档页): 切不回 Git 视图')
+  await page.unroute('**/api/app-role*')
+  await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {})
+  await page.locator('button.activity-btn').first().waitFor({ state: 'visible', timeout: 30000 }).catch(() => {})
 }
 
 // ── 14. 系统监控(先点刷新,端口列表才拉满)───────────────────────────────────

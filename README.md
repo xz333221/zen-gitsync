@@ -50,7 +50,7 @@ npm install -g zen-gitsync
 - **Visual GUI** — Full graphical interface for Git operations
 - **Branch management** — Create, switch, and track local/remote branches
 - **Remote management** — Manage multiple remotes (add / rename / retarget / delete) from one dialog, configure multi push URLs, and push to a chosen remote or to all remotes at once
-- **Repository browser** — GitHub / Gitee tabs listing every repository your CLI account can see (private ones included), with search, sorting (recently pushed / recently created / most starred / name), grouping by workspace, and cards that carry last-push date, fork count, default branch and license
+- **Repository browser** — a dedicated **远程仓库** (remote repositories) activity-bar tab right below the Workbench (a public panel: available in the hub and `--role=full` windows, since account-wide repositories do not belong to any single project); its GitHub / Gitee tabs list every repository your CLI account can see (private ones included), with search, sorting (recently pushed / recently created / most starred / name), grouping by workspace, and cards that carry last-push date, fork count, default branch and license
 - **Stash management** — Save and restore stashes with locked-file filtering
 - **Tag management** — Create lightweight and annotated tags
 - **Merge support** — Detect and complete in-progress merges
@@ -185,7 +185,7 @@ In either mode, click **AI Generate** to fill in the fields automatically based 
 
 ### GitHub / Gitee Repositories
 
-> The Git view has three tabs: **当前项目** (current project), **GitHub 仓库**, and **Gitee 仓库**. The latter two list every repository your `gh` / `gitee` account can see — private ones included. ZenGitSync never touches your token: both panels shell out to the official CLI (`gh`, `@gitee/gitee-cli`), which keeps its own credentials.
+> The repository browser has its own **远程仓库** (remote repositories) entry in the activity bar, right below the Workbench tab (a public panel: shown in the hub and `--role=full` windows, since account-wide repositories do not belong to any single project). Inside, two tabs — **GitHub 仓库** and **Gitee 仓库** — list every repository your `gh` / `gitee` account can see — private ones included. ZenGitSync never touches your token: both panels shell out to the official CLI (`gh`, `@gitee/gitee-cli`), which keeps its own credentials.
 
 - **Zero-config guidance** — a missing CLI shows the install command for your platform (winget / Homebrew / `npm install -g @gitee/gitee-cli`) with one-click install and auto-refresh; an installed but signed-out CLI shows the sign-in command plus one-click sign-in, then polls until you finish the interactive flow in the terminal
 - **Search** — filters by name, full path and description; the header switches to `匹配 M / 共 N 个仓库` so you can tell how much got filtered out
@@ -775,7 +775,7 @@ npm install -g zen-gitsync
 - **可视化 GUI** — 完整的 Git 图形操作界面
 - **分支管理** — 创建、切换、追踪本地/远程分支
 - **远程仓库管理** — 在一个弹窗里管理多个远程仓库（添加/重命名/改地址/删除）、配置多推送地址，并支持推送到指定远程或一键推送全部
-- **仓库浏览器** — GitHub / Gitee 两个 Tab 列出 CLI 账号下的全部仓库（含私有），支持搜索、排序（最近推送 / 最近创建 / 星标最多 / 仓库名）与按工作空间分组，卡片带最近推送日期、Fork 数、默认分支与许可证
+- **仓库浏览器** — 活动栏独立的「远程仓库」入口（工作台正下方，公共板块：仓库列表是账号级内容，不属于任何项目，hub 与 `--role=full` 窗口可见），GitHub / Gitee 两个 Tab 列出 CLI 账号下的全部仓库（含私有），支持搜索、排序（最近推送 / 最近创建 / 星标最多 / 仓库名）与按工作空间分组，卡片带最近推送日期、Fork 数、默认分支与许可证
 - **Stash 管理** — 储藏与恢复变更，支持排除锁定文件
 - **Tag 管理** — 创建轻量/附注标签
 - **合并支持** — 自动检测并引导完成进行中的合并
@@ -941,7 +941,7 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 
 ### GitHub / Gitee 仓库
 
-> Git 视图有三个 Tab：**当前项目**、**GitHub 仓库**、**Gitee 仓库**。后两个列出你的 `gh` / `gitee` 账号下能看到的全部仓库（含私有）。ZenGitSync 全程不接触你的令牌：面板调用的是官方 CLI（`gh`、`@gitee/gitee-cli`），凭据由 CLI 自己保管。
+> 仓库浏览器有独立的活动栏入口 **远程仓库**（排在工作台正下方，属于公共板块 —— 仓库列表是账号级内容，不属于任何项目，hub 与 `--role=full` 窗口可见）。里面两个 Tab：**GitHub 仓库**、**Gitee 仓库**，列出你的 `gh` / `gitee` 账号下能看到的全部仓库（含私有）。ZenGitSync 全程不接触你的令牌：面板调用的是官方 CLI（`gh`、`@gitee/gitee-cli`），凭据由 CLI 自己保管。
 
 - **零配置引导** — 没装 CLI 时按平台给出安装命令（winget / Homebrew / `npm install -g @gitee/gitee-cli`），支持一键安装并自动刷新；装了但没登录时给出登录命令 + 一键登录，然后轮询等你走完终端里的交互流程
 - **搜索** — 按仓库名、完整路径、描述过滤；顶部提示同时显示 `匹配 M / 共 N 个仓库`，一眼看出筛掉了多少

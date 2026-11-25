@@ -23,12 +23,12 @@ import { useEditorTabsStore } from '@stores/editorTabs'
 import { useTerminalSessionsStore } from '@stores/terminalSessions'
 
 const props = defineProps<{
-  activeView: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'projects' | 'monitor' | 'mindmap'
+  activeView: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'remotes' | 'projects' | 'monitor' | 'mindmap'
   /**
    * 运行角色：
-   *   project —— 项目窗口，只有 Git / 控制台 / 文件空间（公共 4 个板块在 hub 进程里）
-   *   hub     —— 常驻节点，只有工作台 / 项目管理 / 系统监控 / 思维导图
-   *   full    —— 旧行为，7 个都在（`g ui --role=full`）
+   *   project —— 项目窗口，只有 Git / 控制台 / 文件空间（公共板块在 hub 进程里）
+   *   hub     —— 常驻节点，只有工作台 / 远程仓库 / 项目管理 / 系统监控 / 思维导图
+   *   full    —— 旧行为，全部都在（`g ui --role=full`）
    * 不传时按 project 处理：默认值必须和"日常开一个项目窗口"一致。
    */
   role?: 'project' | 'hub' | 'full'
@@ -37,11 +37,11 @@ const props = defineProps<{
 /** 项目级 tab 是否显示（git / 控制台 / 文件空间）。 */
 const showProjectTabs = computed(() => props.role !== 'hub')
 
-/** 公共 tab 是否显示（工作台 / 项目管理 / 系统监控 / 思维导图）。缺省按 project 算。 */
+/** 公共 tab 是否显示（工作台 / 远程仓库 / 项目管理 / 系统监控 / 思维导图）。缺省按 project 算。 */
 const showPublicTabs = computed(() => (props.role ?? 'project') !== 'project')
 
 const emit = defineEmits<{
-  'update:activeView': [view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'projects' | 'monitor' | 'mindmap']
+  'update:activeView': [view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'remotes' | 'projects' | 'monitor' | 'mindmap']
 }>()
 
 const wbStatus = useWorkbenchStatusStore()
@@ -120,7 +120,7 @@ const editorDirtyBadge = computed(() => {
   return n > 99 ? '99+' : String(n)
 })
 
-function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'projects' | 'monitor' | 'mindmap') {
+function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'remotes' | 'projects' | 'monitor' | 'mindmap') {
   emit('update:activeView', view)
 }
 </script>
@@ -259,6 +259,29 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
           :title="$t('@ACTBAR:有任务正在执行')"
           aria-hidden="true"
         >{{ wbStatus.runningCount > 99 ? '99+' : wbStatus.runningCount }}</span>
+      </button>
+    </el-tooltip>
+
+    <!-- 远程仓库:GitHub / Gitee 账号下的仓库列表(2026-11-25 从 Git 视图顶部 Tab 行拆出)。
+         数据是账号级的,与"当前项目"无关,所以归入公共板块(hub/full 显示),
+         而且排在工作台正下方 —— 它是看"我有哪些仓库"的入口,和工作台同属跨项目视角。 -->
+    <el-tooltip v-if="showPublicTabs" :content="$t('@ACTBAR:远程仓库')" placement="right" :show-after="300">
+      <button
+        class="activity-btn"
+        :class="{ active: props.activeView === 'remotes' }"
+        @click="select('remotes')"
+        :aria-label="$t('@ACTBAR:远程仓库')"
+        :aria-pressed="props.activeView === 'remotes'"
+      >
+        <!-- git-fork.svg（Tabler icons，MIT）：三仓分叉的仓库网络意象,
+             与活动栏里已有的"单个文件夹"(编辑器/项目管理)区分开 -->
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="18" r="2" />
+          <circle cx="6" cy="6" r="2" />
+          <circle cx="18" cy="6" r="2" />
+          <path d="M18 8v2a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2v-2" />
+          <path d="M12 12v4" />
+        </svg>
       </button>
     </el-tooltip>
 

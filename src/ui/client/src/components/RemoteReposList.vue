@@ -14,7 +14,7 @@
   ~ limitations under the License.
   -->
 <script setup lang="ts">
-// GitHub / Gitee 仓库列表面板(App.vue 的「{平台} 仓库」Tab)。
+// GitHub / Gitee 仓库列表面板(App.vue「远程仓库」视图的「{平台} 仓库」子 Tab)。
 //
 // 同一个组件服务两个平台,差异全在 provider 上:
 //   github → gh        (winget / brew / apt 装)
@@ -1336,7 +1336,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-base);
-  /* 父级(App.vue 的 .git-pane__body)是列方向 flex:用 flex 撑满而不是 height:100%,
+  /* 父级(App.vue 的 .remotes-pane__body)是列方向 flex:用 flex 撑满而不是 height:100%,
      否则自带的 margin 会把总高顶成 100%+2*margin,底部被父级 overflow 切掉。
      height:100% 只作为"父级不是 flex 容器"时的兜底。 */
   flex: 1 1 auto;

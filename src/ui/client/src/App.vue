@@ -39,8 +39,9 @@ import ServerClosedOverlay from '@/components/ServerClosedOverlay.vue'
 import RecentDirectoriesList from '@/components/RecentDirectoriesList.vue'
 import CommandHistory from '@/views/components/CommandHistory.vue'
 import GitOperationsButton from '@/components/buttons/GitOperationsButton.vue'
-// GitHub / Gitee 仓库列表面板(Git 视图的另外两个 Tab)。静态导入:只有切到对应
-// Tab 才挂载,不占首屏请求;但它本身不大,不值得为它多开一个异步 chunk。
+// GitHub / Gitee 仓库列表面板(「远程仓库」视图的两个子 Tab,2026-11-25 从 Git 视图
+// 顶部 Tab 行拆出 —— 账号级内容不属于任何项目,活动栏里给了独立公共入口)。
+// 静态导入:只有切到对应子 Tab 才挂载,不占首屏请求;但它本身不大,不值得为它多开一个异步 chunk。
 import RemoteReposList from '@/components/RemoteReposList.vue'
 import ViewLoading from '@/components/ViewLoading.vue'
 // 右下角 g ai 悬浮 dock：静态导入（常驻，与活动栏无关）；里面的 AgentView 自己懒加载
@@ -338,12 +339,13 @@ function handleBranchChanged() {
 }
 
 // 活动视图切换
-const activeView = ref<'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'projects' | 'monitor' | 'mindmap'>('git')
+const activeView = ref<'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'remotes' | 'projects' | 'monitor' | 'mindmap'>('git')
 
-// 运行角色：hub（跨机器常驻节点）只挂公共 4 个板块。
+// 运行角色：hub（跨机器常驻节点）只挂公共板块。
 // 服务端在 hub 下不注册 exec / terminal / process 三条执行面路由，所以这里必须
 // 把 3 个项目级 tab 收起来 + 把默认视图挪到工作台 —— 否则一开机就停在 git 视图，
 // 而那个视图的数据全靠不存在的接口。
+// remotes（远程仓库）不在重定向名单里：账号级内容，hub 下本来就要用。
 const { role: appRole } = useAppRole()
 watch(appRole, (r) => {
   if (r !== 'hub') return
@@ -374,17 +376,14 @@ const dockContextNote = computed(() => {
   return buildMindmapAiNote(mindmapStore.current?.path, localeStore.currentLocale)
 })
 
-// Git 视图内的三个 Tab:
-//   current → 当前项目(原有的 GitStatus + CommitForm/最近项目 + LogList 布局,原样保留)
-//   github  → GitHub 账号下的仓库列表(需要 gh)
-//   gitee   → Gitee 账号下的仓库列表(需要 @gitee/gitee-cli)
-// 默认停在「当前项目」,行为与加 Tab 之前完全一致。
-// 只有切到对应 Tab 才会挂载 RemoteReposList(v-if),也就不会在启动时白跑一次
-// gh / gitee 的检测与联网请求。
-type GitTab = 'current' | 'github' | 'gitee'
-const gitTab = ref<GitTab>('current')
-const GIT_TABS: Array<{ id: GitTab; labelKey: string }> = [
-  { id: 'current', labelKey: '@F13B4:当前项目' },
+// 「远程仓库」视图内的两个子 Tab:
+//   github → GitHub 账号下的仓库列表(需要 gh)
+//   gitee  → Gitee 账号下的仓库列表(需要 @gitee/gitee-cli)
+// 默认停在 GitHub。只有切到对应子 Tab 才会挂载 RemoteReposList(v-if),
+// 也就不会在启动时白跑一次 gh / gitee 的检测与联网请求。
+type RemotesTab = 'github' | 'gitee'
+const remotesTab = ref<RemotesTab>('github')
+const REMOTES_TABS: Array<{ id: RemotesTab; labelKey: string }> = [
   { id: 'github', labelKey: '@F13B4:GitHub 仓库' },
   { id: 'gitee', labelKey: '@F13B4:Gitee 仓库' },
 ]
@@ -409,8 +408,9 @@ watch(activeView, (view) => {
 // onActivated 上会漏掉"首次挂载"和"从 Git 视图切回智能体"这两条路径。
 //
 // 不 await、不 loading、失败无感：它只影响模型看到的东西，与界面无关（见 composable 头注释）。
-// gitTab 与 activeView 一起 watch：Git 视图内的三个 Tab 对应的板块完全不同。
-watch([activeView, gitTab], ([view, tab]) => {
+// git 视图没有子 Tab 了(仓库列表已拆到 remotes 视图),固定刷 git 板块;
+// remotes 视图的两个子 Tab 对应的板块完全不同,按子 Tab 查表。
+watch([activeView, remotesTab], ([view, tab]) => {
   refreshAiContextForView(view, tab)
 })
 
@@ -921,43 +921,12 @@ function stopVResize() {
       <!-- Git 视图:2 列布局 — 左 GitStatus | 右(上 commit-form / 下 log-list)
            右侧上下之间没有分隔条:上按内容自适应,下占满剩余(见 .grid-layout)。
            非 Git 仓库时:右上 RecentDirectoriesList 占满右侧整列,收起 log-list-panel,
-           由 .grid-layout--no-bottom 控制 grid-template-rows 去掉下方行 -->
+           由 .grid-layout--no-bottom 控制 grid-template-rows 去掉下方行
+           2026-11-25:原顶部的「当前项目 / GitHub 仓库 / Gitee 仓库」Tab 行已拆掉 ——
+           两个仓库列表挪进了活动栏的「远程仓库」公共入口,这里只剩当前项目一种内容,
+           不再需要 Tab 外壳(状态刷新、滚动位置都直接住在 .grid-layout 上)。 -->
       <div v-show="activeView === 'git'" class="view-pane git-pane">
-      <!-- 三个 Tab:当前项目 / GitHub 仓库 / Gitee 仓库。
-           用 v-show + v-if 混合:当前项目那块要一直挂着(竖分隔条的拖拽比例、
-           LogList 的滚动位置都在它身上,不能反复销毁重建);
-          两个仓库面板则是 v-if,切过去才挂载 —— 启动时不白跑 CLI 检测。 -->
-      <div class="git-tabs" role="tablist" :aria-label="$t('@F13B4:Git 视图切换')">
-        <button
-          v-for="tab in GIT_TABS"
-          :key="tab.id"
-          :id="'git-tab-' + tab.id"
-          type="button"
-          role="tab"
-          class="git-tab"
-          :class="{ 'is-active': gitTab === tab.id }"
-          :aria-selected="gitTab === tab.id"
-          :aria-controls="'git-panel-' + tab.id"
-          @click="gitTab = tab.id"
-        ><svg
-            v-if="tab.id === 'github'"
-            class="git-tab__icon"
-            viewBox="0 0 16 16"
-            width="14"
-            height="14"
-            aria-hidden="true"
-          ><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg><svg
-            v-else-if="tab.id === 'gitee'"
-            class="git-tab__icon"
-            viewBox="0 0 1024 1024"
-            width="14"
-            height="14"
-            aria-hidden="true"
-          ><path fill="currentColor" d="M512 1024C229.2 1024 0 794.8 0 512S229.2 0 512 0s512 229.2 512 512-229.2 512-512 512z m259.2-569.6H480c-12.8 0-25.6 12.8-25.6 25.6v64c0 12.8 12.8 25.6 25.6 25.6h176c12.8 0 25.6 12.8 25.6 25.6v12.8c0 41.6-35.2 76.8-76.8 76.8h-240c-12.8 0-25.6-12.8-25.6-25.6V416c0-41.6 35.2-76.8 76.8-76.8h355.2c12.8 0 25.6-12.8 25.6-25.6v-64c0-12.8-12.8-25.6-25.6-25.6H416c-105.6 0-192 86.4-192 192v355.2c0 12.8 12.8 25.6 25.6 25.6h374.4c92.8 0 172.8-76.8 172.8-172.8v-144c0-12.8-12.8-25.6-25.6-25.6z"/></svg>{{ $t(tab.labelKey) }}</button>
-      </div>
-
-      <div class="git-pane__body">
-      <div v-show="gitTab === 'current'" id="git-panel-current" role="tabpanel" aria-labelledby="git-tab-current" class="grid-layout" :class="{ 'grid-layout--no-bottom': !gitStore.isGitRepo }">
+      <div id="git-panel-current" class="grid-layout" :class="{ 'grid-layout--no-bottom': !gitStore.isGitRepo }">
       <!-- 左侧Git状态 -->
       <div class="git-status-panel">
         <GitStatus ref="gitStatusRef" :initial-directory="currentDirectory" />
@@ -1041,28 +1010,64 @@ function stopVResize() {
 
       </div><!-- /grid-layout（当前项目） -->
 
-      <!-- GitHub 仓库列表。v-if 而非 v-show:切过来才发请求、才去检测 gh ——
-           否则每次启动都会白跑一次 CLI 探测。 -->
-      <RemoteReposList
-        v-if="gitTab === 'github'"
-        id="git-panel-github"
-        role="tabpanel"
-        aria-labelledby="git-tab-github"
-        provider="github"
-      />
-
-      <!-- Gitee 仓库列表(检测 gitee / @gitee/gitee-cli) -->
-      <RemoteReposList
-        v-if="gitTab === 'gitee'"
-        id="git-panel-gitee"
-        role="tabpanel"
-        aria-labelledby="git-tab-gitee"
-        provider="gitee"
-      />
-
-      </div><!-- /git-pane__body -->
-
       </div><!-- /view-pane git -->
+
+      <!-- 远程仓库视图(公共板块,2026-11-25 从 Git 视图顶部 Tab 行拆出):
+           GitHub / Gitee 账号下的仓库列表,数据与"当前项目"无关,活动栏独立入口。
+           子 Tab 用 v-show 高亮 + v-if 挂载:切过来才发请求、才去检测 gh / gitee ——
+           否则每次启动都会白跑一次 CLI 探测。 -->
+      <div v-show="activeView === 'remotes'" class="view-pane remotes-pane">
+        <div class="git-tabs" role="tablist" :aria-label="$t('@F13B4:远程仓库切换')">
+          <button
+            v-for="tab in REMOTES_TABS"
+            :key="tab.id"
+            :id="'remotes-tab-' + tab.id"
+            type="button"
+            role="tab"
+            class="git-tab"
+            :class="{ 'is-active': remotesTab === tab.id }"
+            :aria-selected="remotesTab === tab.id"
+            :aria-controls="'remotes-panel-' + tab.id"
+            @click="remotesTab = tab.id"
+          ><svg
+              v-if="tab.id === 'github'"
+              class="git-tab__icon"
+              viewBox="0 0 16 16"
+              width="14"
+              height="14"
+              aria-hidden="true"
+            ><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg><svg
+              v-else-if="tab.id === 'gitee'"
+              class="git-tab__icon"
+              viewBox="0 0 1024 1024"
+              width="14"
+              height="14"
+              aria-hidden="true"
+            ><path fill="currentColor" d="M512 1024C229.2 1024 0 794.8 0 512S229.2 0 512 0s512 229.2 512 512-229.2 512-512 512z m259.2-569.6H480c-12.8 0-25.6 12.8-25.6 25.6v64c0 12.8 12.8 25.6 25.6 25.6h176c12.8 0 25.6 12.8 25.6 25.6v12.8c0 41.6-35.2 76.8-76.8 76.8h-240c-12.8 0-25.6-12.8-25.6-25.6V416c0-41.6 35.2-76.8 76.8-76.8h355.2c12.8 0 25.6-12.8 25.6-25.6v-64c0-12.8-12.8-25.6-25.6-25.6H416c-105.6 0-192 86.4-192 192v355.2c0 12.8 12.8 25.6 25.6 25.6h374.4c92.8 0 172.8-76.8 172.8-172.8v-144c0-12.8-12.8-25.6-25.6-25.6z"/></svg>{{ $t(tab.labelKey) }}</button>
+        </div>
+
+        <div class="remotes-pane__body">
+        <!-- GitHub 仓库列表。v-if 而非 v-show:切过来才发请求、才去检测 gh ——
+             否则每次启动都会白跑一次 CLI 探测。 -->
+        <RemoteReposList
+          v-if="remotesTab === 'github'"
+          id="remotes-panel-github"
+          role="tabpanel"
+          aria-labelledby="remotes-tab-github"
+          provider="github"
+        />
+
+        <!-- Gitee 仓库列表(检测 gitee / @gitee/gitee-cli) -->
+        <RemoteReposList
+          v-if="remotesTab === 'gitee'"
+          id="remotes-panel-gitee"
+          role="tabpanel"
+          aria-labelledby="remotes-tab-gitee"
+          provider="gitee"
+        />
+        </div><!-- /remotes-pane__body -->
+
+      </div><!-- /view-pane remotes -->
 
       <!-- 控制台视图（默认加载：随首屏静态挂载，切过去零等待；KeepAlive 缓存实例保状态） -->
       <!-- 控制台面板：hub 不挂这个组件 —— 它启动即轮询 /api/terminal-sessions
@@ -1321,12 +1326,15 @@ body {
   flex-shrink: 0;
 }
 
-/* ── Git 视图的 Tab 外壳(当前项目 / GitHub 仓库 / Gitee 仓库) ────────────
+/* ── Git 视图(当前项目)与远程仓库视图的外壳 ────────────────────────────
    .git-pane 取代原来 .view-pane.grid-layout 的双重身份:自己只负责"列方向
-   flex + 撑满",网格布局下移到 .git-pane__body 里的 .grid-layout。
+   flex + 撑满",网格布局下移到里面的 .grid-layout。
    .grid-layout 的类名必须保留 —— 竖分隔条靠 querySelector('.grid-layout')
-   读写 grid-template-columns(水平分隔条已移除,不再写 grid-template-rows)。 */
-.git-pane {
+   读写 grid-template-columns(水平分隔条已移除,不再写 grid-template-rows)。
+   2026-11-25:Tab 行拆走后 .git-pane__body 外壳不再需要,grid-layout 直接
+   挂在 .git-pane 下;同一条 .git-tabs / .git-tab 样式被 remotes 视图的子 Tab 复用。 */
+.git-pane,
+.remotes-pane {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1390,18 +1398,20 @@ body {
   outline-offset: -2px;
 }
 
-.git-pane__body {
+/* 当前项目那格:min-height:0 是关键 —— 没有它,grid 的 min-content 会把
+   flex 项顶高,底部的提交历史会被挤出视口(与 .dir-list--panel 同一个坑) */
+.git-pane > .grid-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* 远程仓库视图:子 Tab 之下是仓库卡片网格(.repo-list 自带 flex:1 撑满) */
+.remotes-pane__body {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-/* 当前项目那格:min-height:0 是关键 —— 没有它,grid 的 min-content 会把
-   flex 项顶高,底部的提交历史会被挤出视口(与 .dir-list--panel 同一个坑) */
-.git-pane__body > .grid-layout {
-  flex: 1 1 auto;
-  min-height: 0;
 }
 
 .grid-layout {
