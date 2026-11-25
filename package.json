@@ -62,6 +62,7 @@
     "verify:wb-dialogs": "node scripts/verify-workbench-dialogs.cjs",
     "verify:wb-dispatch": "node scripts/verify-workbench-dispatch-attach.cjs",
     "verify:wb-env-context": "node scripts/verify-workbench-env-context.mjs",
+    "verify:wb-isolation": "node scripts/verify-workbench-isolation.mjs",
     "verify:wb-live-jobs": "node scripts/verify-wb-live-jobs.mjs",
     "verify:wb-manual-done": "node scripts/verify-wb-manual-done.mjs",
     "verify:wb-bubble-prompt": "node scripts/verify-wb-bubble-prompt.cjs",

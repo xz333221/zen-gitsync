@@ -448,6 +448,9 @@ export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now(),
     title: task.title || '',
     desc: task.desc || '',
     projectPath: task.projectPath || '',
+    // worktree 隔离开关跟着任务走(卡片徽标的数据源):decorate 出的是**显式字段**
+    // 而非整 task 透传,漏了这行前端就永远看不到这个开关
+    worktree: task.worktree === true,
     column,
     attachmentCount: Array.isArray(task.attachments) ? task.attachments.length : 0,
     /**

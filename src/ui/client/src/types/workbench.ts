@@ -81,6 +81,16 @@ export interface Job {
    * 老 job 没有这个字段（= null，无从判断）。
    */
   cwd?: string | null
+  /**
+   * 本轮的 worktree 隔离信息（null = 没开隔离）。前端靠它画徽标、出「合并/丢弃」。
+   * 老 job 没这个字段（= null）。
+   */
+  worktree?: { path: string; branch: string; base: string; reused: boolean } | null
+  /**
+   * 本轮起跑前的工作区快照（服务端隐藏 ref，见 checkpointOps）。
+   * 非 git 仓库 / 老版本跑的轮次没有这个字段（= null，没有「回滚」可点）。
+   */
+  checkpoint?: { ref: string; commit: string; runDir: string } | null
 }
 
 // ── Workbench 任务相关类型 ──────────────────────────────────────────
@@ -106,6 +116,8 @@ export interface Task {
   projectPath?: string
   status: string
   attachments?: Attachment[]
+  /** 在独立 worktree 中执行(隔离并行任务的改动)。老任务没有这个字段(视为关) */
+  worktree?: boolean
   createdAt?: string
   updatedAt?: string
 }
@@ -236,6 +248,8 @@ export interface BoardTask {
   title: string
   desc: string
   projectPath: string
+  /** worktree 隔离开关跟着任务走(卡片徽标数据源,服务端 decorateTaskForBoard 给) */
+  worktree?: boolean
   column: TaskColumn
   attachmentCount: number
   /**

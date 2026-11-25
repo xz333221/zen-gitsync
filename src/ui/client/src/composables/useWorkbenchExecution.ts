@@ -364,11 +364,140 @@ export function useWorkbenchExecution(
     }
   }
 
+  // ── worktree 隔离收尾 + checkpoint 回滚 ─────────────────────────────
+  //
+  // 合并是**人的决定**:agent 在 worktree 里改的东西该不该进主干,不该默认为"该"。
+  // 所以先 checkOnly 拿预检结果(重叠/冲突清单),把事实摆进确认框,用户点头才真合并。
+  async function mergeWorktreeForTask(t: Task): Promise<void> {
+    const checkRes = await fetch(`/api/workbench/tasks/${encodeURIComponent(t.id)}/worktree/merge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ checkOnly: true })
+    }).then(r => r.json()).catch(err => ({ success: false, error: err?.message || String(err) }))
+    if (!checkRes?.success) {
+      ElMessage.error(checkRes?.error || $t('@WORKBENCH:预检失败'))
+      return
+    }
+    const c = checkRes.check as {
+      ok: boolean; reason?: string; overlap: string[]; conflictFiles: string[]
+      mergeFiles: string[]; dirtyFiles: string[]
+    }
+    if (!c.ok) {
+      ElMessage.error(c.reason || $t('@WORKBENCH:预检不通过,已取消合并'))
+      return
+    }
+    const dirtyNote = c.dirtyFiles.length > 0
+      ? '\n' + $t('@WORKBENCH:你的工作区有 {n} 处未提交改动,与本次合并无交集,不会受影响。', { n: c.dirtyFiles.length })
+      : ''
+    try {
+      await ElMessageBox.confirm(
+        $t('@WORKBENCH:将把 worktree 里 {n} 个文件的改动合并回主干。', { n: c.mergeFiles.length }) + dirtyNote,
+        $t('@WORKBENCH:合并回主干'),
+        { confirmButtonText: $t('@WORKBENCH:合并'), cancelButtonText: $t('@WORKBENCH:取消'), type: 'warning' }
+      )
+    } catch {
+      return
+    }
+    const res = await fetch(`/api/workbench/tasks/${encodeURIComponent(t.id)}/worktree/merge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    }).then(r => r.json()).catch(err => ({ success: false, error: err?.message || String(err) }))
+    if (res?.success) {
+      ElMessage.success(res.message || $t('@WORKBENCH:已合并'))
+    } else {
+      ElMessage.error(res?.error || $t('@WORKBENCH:合并失败'))
+    }
+  }
+
+  async function discardWorktreeForTask(t: Task): Promise<void> {
+    try {
+      await ElMessageBox.confirm(
+        $t('@WORKBENCH:将删除该任务的 worktree,里面未合并的改动会一并消失。'),
+        $t('@WORKBENCH:丢弃 worktree'),
+        {
+          confirmButtonText: $t('@WORKBENCH:丢弃'),
+          cancelButtonText: $t('@WORKBENCH:取消'),
+          type: 'warning',
+          confirmButtonClass: 'el-button--danger'
+        }
+      )
+    } catch {
+      return
+    }
+    const res = await fetch(`/api/workbench/tasks/${encodeURIComponent(t.id)}/worktree`, { method: 'DELETE' })
+      .then(r => r.json())
+      .catch(err => ({ success: false, error: err?.message || String(err) }))
+    if (res?.success) {
+      ElMessage.success(res.message || $t('@WORKBENCH:已丢弃'))
+    } else {
+      ElMessage.error(res?.error || $t('@WORKBENCH:丢弃失败'))
+    }
+  }
+
+  /**
+   * 把任务**最新一轮**的改动回滚到它起跑前的快照。
+   * 快照之后改了什么先摆进确认框——归因做不到精确,「agent 改的」和
+   * 「用户在快照之后手改的」都会被还原,所以必须人看过清单再动手。
+   */
+  async function rollbackLatestRound(t: Task): Promise<void> {
+    const latest = newestJobOf(t.id)
+    if (!latest?.checkpoint) {
+      ElMessage.error($t('@WORKBENCH:这一轮没有检查点'))
+      return
+    }
+    if (latest.status === 'running' || latest.status === 'pending') {
+      ElMessage.warning($t('@WORKBENCH:任务正在执行,请先停止再回滚'))
+      return
+    }
+    const info = await fetch(`/api/workbench/jobs/${encodeURIComponent(latest.id)}/checkpoint`)
+      .then(r => r.json())
+      .catch(err => ({ success: false, error: err?.message || String(err) }))
+    if (!info?.success || !info.available) {
+      ElMessage.error(info?.reason || info?.error || $t('@WORKBENCH:检查点已失效'))
+      return
+    }
+    const changes = (info.changes as Array<{ path: string; status: string }>) || []
+    const counts = {
+      m: changes.filter(c => c.status === 'M').length,
+      a: changes.filter(c => c.status === 'A').length,
+      d: changes.filter(c => c.status === 'D').length
+    }
+    const summary = $t('@WORKBENCH:将还原 {m} 个被修改的文件、删除 {a} 个新增文件、恢复 {d} 个被删文件。', counts)
+    const listNote = changes.length > 0 && changes.length <= 20
+      ? '\n' + changes.map(c => `${c.status}  ${c.path}`).join('\n')
+      : ''
+    try {
+      await ElMessageBox.confirm(
+        summary + listNote + (listNote ? '' : $t('@WORKBENCH:（改动清单过长,已省略明细）')),
+        $t('@WORKBENCH:回滚到本轮开始前'),
+        {
+          confirmButtonText: $t('@WORKBENCH:回滚'),
+          cancelButtonText: $t('@WORKBENCH:取消'),
+          type: 'warning',
+          customClass: 'wb-rollback-confirm'
+        }
+      )
+    } catch {
+      return
+    }
+    const res = await fetch(`/api/workbench/jobs/${encodeURIComponent(latest.id)}/rollback`, { method: 'POST' })
+      .then(r => r.json())
+      .catch(err => ({ success: false, error: err?.message || String(err) }))
+    if (res?.success) {
+      ElMessage.success(res.message || $t('@WORKBENCH:已回滚'))
+    } else {
+      ElMessage.error(res?.error || $t('@WORKBENCH:回滚失败'))
+    }
+  }
+
   return {
     runTask, continueChat, onContinueSendFromChat,
     onReExecuteJob, retryRound, cancelJob,
     clearExecutionForSelectedTask,
     // 排队续聊
-    isTaskRunning, queuedChatsOf, removeQueuedChat, flushNextQueued
+    isTaskRunning, queuedChatsOf, removeQueuedChat, flushNextQueued,
+    // worktree 隔离收尾 + checkpoint 回滚
+    mergeWorktreeForTask, discardWorktreeForTask, rollbackLatestRound
   }
 }

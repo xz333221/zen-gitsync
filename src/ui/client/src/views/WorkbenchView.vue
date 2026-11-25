@@ -22,11 +22,13 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  Connection,
   Document,
   Delete,
   CopyDocument,
   Expand,
   Fold,
+  RefreshLeft,
   VideoPlay,
   Warning
 } from '@element-plus/icons-vue'
@@ -1121,7 +1123,9 @@ const {
   // 重命名：本文件里已有一个按 Task 判定的 isTaskRunning（见下方 640 行附近），
   // 那边改成委托给这一份，全仓只留一个"这条任务在不在跑"的口径
   isTaskRunning: isTaskRunningById,
-  queuedChatsOf, removeQueuedChat, flushNextQueued
+  queuedChatsOf, removeQueuedChat, flushNextQueued,
+  // worktree 隔离收尾 + checkpoint 回滚(交互逻辑在 composable,这里只管按钮接线)
+  mergeWorktreeForTask, discardWorktreeForTask, rollbackLatestRound
 } = useWorkbenchExecution(
   jobs, tasks, selectedTask,
   {
@@ -1132,8 +1136,56 @@ const {
   }
 )
 
-// ── 任务执行器（claude | opencode | codex）────────────────────────────
-// 「上次用过哪个」与「设置里的默认值」都收口在 composables/useTaskExecutorSelection：
+// ── worktree 隔离（选中任务的状态探测 + 开关） ─────────────────────────
+// 状态是**服务端事实**（磁盘上有没有这个 worktree），不是前端推的 ——
+// 任务开没开过、worktree 建没建出来、里面改了几个文件，只有服务端知道。
+interface WorktreeStatus {
+  exists: boolean
+  path: string
+  branch: string
+  base?: string | null
+  changedCount?: number
+  changedFiles?: string[]
+}
+const worktreeStatusOfSelected = ref<WorktreeStatus | null>(null)
+async function refreshWorktreeStatus(): Promise<void> {
+  const t = selectedTask.value
+  if (!t || t.worktree !== true) {
+    worktreeStatusOfSelected.value = null
+    return
+  }
+  const res = await fetch(`/api/workbench/tasks/${encodeURIComponent(t.id)}/worktree`)
+    .then(r => r.json())
+    .catch(() => null)
+  worktreeStatusOfSelected.value = res?.success ? (res.status as WorktreeStatus) : null
+}
+watch([selectedTaskId, () => selectedTask.value?.worktree], () => { void refreshWorktreeStatus() })
+// 任务从在跑到不跑（这一轮终态）也要刷一次：worktree 可能刚被建出来
+watch(selectedTaskRunning, (now, prev) => {
+  if (prev && !now) void refreshWorktreeStatus()
+})
+
+/** 开关 worktree 隔离。切换即保存（与提示词开关同口径），跑着的时候不让切 */
+async function toggleWorktree(): Promise<void> {
+  const t = selectedTask.value
+  if (!t) return
+  if (selectedTaskRunning.value) {
+    ElMessage.warning($t('@WORKBENCH:任务正在执行,请先停止再切换隔离开关'))
+    return
+  }
+  t.worktree = t.worktree !== true
+  const ok = await persistTask(false)
+  if (ok) void refreshWorktreeStatus()
+}
+
+/** 最新一轮有检查点就可以回滚（服务端会校验 ref 是否还在） */
+const canRollbackSelected = computed(() => {
+  const t = selectedTask.value
+  if (!t || selectedTaskRunning.value) return false
+  return jobs.value.some(j => j.taskId === t.id && !!j.checkpoint)
+})
+
+// ── 任务执行器（claude | opencode | codex）────────────────────────────// 「上次用过哪个」与「设置里的默认值」都收口在 composables/useTaskExecutorSelection：
 // 执行按钮旁临时切一下即落 config.json（ui.lastTaskExecutor），下次打开还停在这儿。
 // 选中项没装时的回落也在那儿（纯计算，不写回），这里不再自己纠偏一遍。
 const {
@@ -1491,6 +1543,61 @@ const queueLabels = agentQueueLabels()
               </template>
             </el-dropdown>
           </div>
+          <!--
+            worktree 隔离:开关 + 收尾动作。
+            开关亮着 = 这条任务的执行跑在独立 worktree 里(与主工作区互不干扰);
+            探测到 worktree 还在(跑完没合并)时,给「合并回主干 / 丢弃」两个出口 ——
+            合并与否是人的决定,服务端不会有任何自动合并。
+            「回滚」看最新一轮的检查点:改坏了回到那一轮开始之前的状态。
+          -->
+          <button
+            type="button"
+            class="wb-logs-inline-btn"
+            :class="{ 'is-active': selectedTask.worktree === true }"
+            :title="selectedTask.worktree === true
+              ? $t('@WORKBENCH:worktree 隔离已开启:任务跑在独立工作树里,点击关闭')
+              : $t('@WORKBENCH:开启 worktree 隔离:执行时在独立工作树里改动,合并与否由你决定')"
+            :aria-label="$t('@WORKBENCH:worktree 隔离开关')"
+            @click="toggleWorktree"
+          >
+            <el-icon class="wb-logs-inline-btn__icon"><Connection /></el-icon>
+            <span class="sr-only">{{ $t('@WORKBENCH:worktree 隔离开关') }}</span>
+          </button>
+          <template v-if="selectedTask.worktree === true && worktreeStatusOfSelected?.exists">
+            <button
+              type="button"
+              class="wb-logs-inline-btn"
+              :disabled="selectedTaskRunning"
+              :title="$t('@WORKBENCH:把 worktree 里 {n} 个文件的改动合并回主干', { n: worktreeStatusOfSelected.changedCount ?? 0 })"
+              :aria-label="$t('@WORKBENCH:合并回主干')"
+              @click="mergeWorktreeForTask(selectedTask)"
+            >
+              <el-icon class="wb-logs-inline-btn__icon"><Connection /></el-icon>
+              <span class="sr-only">{{ $t('@WORKBENCH:合并回主干') }}</span>
+            </button>
+            <button
+              type="button"
+              class="wb-logs-inline-btn wb-logs-inline-btn--danger"
+              :disabled="selectedTaskRunning"
+              :title="$t('@WORKBENCH:删除 worktree,里面未合并的改动一并消失')"
+              :aria-label="$t('@WORKBENCH:丢弃 worktree')"
+              @click="discardWorktreeForTask(selectedTask)"
+            >
+              <el-icon class="wb-logs-inline-btn__icon"><Delete /></el-icon>
+              <span class="sr-only">{{ $t('@WORKBENCH:丢弃 worktree') }}</span>
+            </button>
+          </template>
+          <button
+            v-if="canRollbackSelected"
+            type="button"
+            class="wb-logs-inline-btn"
+            :title="$t('@WORKBENCH:把工作区还原到最新一轮开始之前的状态')"
+            :aria-label="$t('@WORKBENCH:回滚本轮改动')"
+            @click="rollbackLatestRound(selectedTask)"
+          >
+            <el-icon class="wb-logs-inline-btn__icon"><RefreshLeft /></el-icon>
+            <span class="sr-only">{{ $t('@WORKBENCH:回滚本轮改动') }}</span>
+          </button>
           <button
             type="button"
             class="wb-logs-inline-btn wb-logs-inline-btn--danger"
@@ -2761,6 +2868,12 @@ const queueLabels = agentQueueLabels()
   color: var(--color-primary);
   border-color: var(--tint-primary-35);
 }
+/* 「worktree 隔离」开着时常亮主色：它是一个状态开关，不亮用户看不出任务正被隔离 */
+.wb-logs-inline-btn.is-active {
+  color: var(--color-primary);
+  border-color: var(--tint-primary-35);
+  background: var(--tint-primary-12);
+}
 /* 「清空执行」danger 变体：常规态用次级色(不抢眼),hover 才显危险色,避免误点 */
 .wb-logs-inline-btn--danger {
   color: var(--text-secondary);
@@ -3433,6 +3546,14 @@ const queueLabels = agentQueueLabels()
      scoped 选择器（即便 :deep()）都拿不到它。
      这里的规则只匹配 wb-logs-dialog 这一个 class，影响面可控。 -->
 <style>
+/* 回滚确认框：清单是 "M  path" 每行一条，得保留换行才读得清。
+   el-message-box teleport 到 body，只能写在非 scoped 块里（与上面两个弹窗同因）。 */
+.wb-rollback-confirm .el-message-box__message {
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 40vh;
+  overflow: auto;
+}
 .wb-logs-dialog {
   max-height: 88vh;
   display: flex;

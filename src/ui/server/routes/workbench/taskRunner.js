@@ -70,6 +70,8 @@ import {
 // 混着写会在**链接期**就炸（node --check 查不出来，得靠动态 import 或真跑单测）。
 import { MEMORY_DIR } from '../../../../paths.js';
 import { projectIndexFile } from '../../../../memory/store.js';
+import { ensureWorktree } from './worktreeOps.js';
+import { createCheckpoint } from './checkpointOps.js';
 
 // ── 运行环境上下文的提供者 ────────────────────────────────────────────────
 // 为什么用注入而不是在这里直接读：拼这份上下文要「最近目录」（在 configManager 上），
@@ -2013,13 +2015,27 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
   const opts = options || {};
   const resumeSessionId = opts.resumeSessionId || null;
   const executor = normalizeTaskExecutor(opts.executor);
+  // ── worktree 隔离:任务开了开关就从这里换 cwd ──
+  // worktree 是**每任务常驻**的(ensureWorktree 复用已存在的),续聊轮的 CLI
+  // 会话按 cwd 索引,路径一变会话就续不上。开关在任务上(opts.worktree 由
+  // 路由层从 task.worktree 抄过来),不在 job 上——job 只记录这一轮实际用的目录。
+  // 创建失败(不是 git 仓库等)直接抛,路由层把错误发布成 task:error。
+  const worktreeEnabled = opts.worktree === true;
+  let worktree = null;
+  if (worktreeEnabled && repoPath) {
+    worktree = await ensureWorktree(repoPath, task.id);
+  }
+  // 这一轮实际 spawn 的工作目录:开了隔离就是 worktree,否则还是项目目录
+  const runDir = worktree ? worktree.path : (repoPath || process.cwd());
   // 提示词唯一来源：派发时抄进任务的快照（simpleOverride → sub.promptOverride）。
   // 旧实现还有一条"任务绑定预置词库条目"的回退，随提示词合并（2026-10-04）删除。
   const promptTemplate = sub.promptOverride || '';
   const ctx = {
     task: { title: task.title, desc: task.desc || '' },
     sub: { title: sub.title, desc: sub.desc || '' },
-    repo: { path: repoPath || '' },
+    // 插值指向**本轮实际干活的目录**:agent 读着这个路径去改文件,指到主工作区
+    // 等于让它绕开隔离直接改用户的目录,worktree 就白开了
+    repo: { path: runDir || '' },
     branch: branch || ''
   };
   const interpolated = interpolate(promptTemplate, ctx);
@@ -2067,8 +2083,10 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
   const prefixBlocks = [];
 
   if (task.envContext !== false) {
-    // 续聊轮只要精简刷新版（见 resolveEnvContext 的注释）
-    const envBlock = await resolveEnvContext(repoPath, { compact: !!resumeSessionId });
+    // 续聊轮只要精简刷新版（见 resolveEnvContext 的注释）。
+    // 用 runDir:开了 worktree 时 agent 看到的分支/改动状态是 worktree 的,
+    // 拿主工作区的状态描述给它是张冠李戴。
+    const envBlock = await resolveEnvContext(runDir, { compact: !!resumeSessionId });
     if (envBlock) prefixBlocks.push(envBlock);
   }
 
@@ -2105,11 +2123,15 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
     // codebuddy 的 session_id / pi 的 session header id 都存这里,
     // 语义是"该执行器的会话续接标识"。
     claudeSessionId: resumeSessionId,
-    // 这一轮**实际 spawn 的工作目录**（与下面 launcher 的入参同一个表达式）。
+    // 这一轮**实际 spawn 的工作目录**（worktree 隔离时是 worktree 的路径）。
     // 续聊时要拿它和"任务现在的工作目录"比对：五家 CLI 的会话库按 cwd 索引，
     // 任务被「移动到其他项目」后 cwd 变了，旧 session id 在新目录下查无此会话
     // （CLI 只回一句 No conversation found，退出码还是 0）。判据见 resumeGuard.js。
-    cwd: repoPath || process.cwd(),
+    // 开了 worktree 的任务,这里就是 worktree 路径 —— 续聊路由的冲突判定用
+    // worktreePath() 推出同一个值(见 index.js),两边口径一致。
+    cwd: runDir,
+    // worktree 隔离信息(null = 没开隔离)。前端靠它画徽标、出「合并/丢弃」按钮。
+    worktree: worktree ? { path: worktree.path, branch: worktree.branch, base: worktree.base, reused: worktree.reused } : null,
     // 工具调用流水（{id,name,argsPreview,arguments,result,status,error}[]）。
     // 先给个空数组，前端拿到的 job:update 就有了稳定形态，不用到处判 undefined。
     toolCalls: [],
@@ -2130,10 +2152,18 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
   let toolTracker = null;
 
   try {
+    // ── 起跑前快照(checkpoint):记录这一轮开始之前的工作区状态 ──
+    // 不是 git 仓库时返回 null,照常跑,只是没有「回滚」可点。
+    // 快照走隐藏 ref(refs/zen-checkpoints/<jobId>),不碰用户的分支/暂存区。
+    const checkpoint = await createCheckpoint(runDir, jobId);
+    if (checkpoint) {
+      job.checkpoint = { ref: checkpoint.ref, commit: checkpoint.commit, runDir };
+    }
+
     // 查表而不是 if 链：加执行器只改 EXECUTOR_LAUNCHERS 一张表（五家以后 if 链
     // 已经长得该收了）。查无此人理论上不可能 —— normalizeTaskExecutor 刚夹过一遍。
     const launcher = EXECUTOR_LAUNCHERS[executor] || launchClaudeInNewWindow;
-    const { pid, child } = await launcher(repoPath || process.cwd(), prompt, resumeSessionId);
+    const { pid, child } = await launcher(runDir, prompt, resumeSessionId);
     job.pid = pid;
     // 保存 child 引用，供 cancel 接口调用 kill
     job.child = child;

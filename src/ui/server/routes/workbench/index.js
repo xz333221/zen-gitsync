@@ -94,6 +94,19 @@ import {
   setEnvContextProvider,
 } from './taskRunner.js';
 import {
+  ensureWorktree,
+  worktreePath,
+  worktreeStatus,
+  precheckMerge,
+  mergeWorktree,
+  discardWorktree,
+} from './worktreeOps.js';
+import {
+  checkpointExists,
+  checkpointDiff,
+  rollbackToCheckpoint,
+} from './checkpointOps.js';
+import {
   listProjects,
   groupJobsByTask,
   decorateTaskForBoard,
@@ -335,6 +348,8 @@ export function registerWorkbenchRoutes({
       // simpleOverride 是派发时的提示词快照：只在调用方显式带了字符串时才覆盖，
       // 缺省不能清空（否则编辑器把整 task 体提交一遍就把提示词抹掉了）
       if (typeof simpleOverride === 'string') tasks[i].simpleOverride = safeOverride;
+      // worktree 开关同口径:显式带布尔才覆盖(老前端整 task 体提交不带它,不能误清)
+      if (typeof req.body?.worktree === 'boolean') tasks[i].worktree = req.body.worktree;
       await writeJson(TASKS_FILE, { tasks });
       return res.json({ success: true, task: tasks[i] });
     }
@@ -353,6 +368,8 @@ export function registerWorkbenchRoutes({
       // 混进来会被当成"暂存区里的草稿"去认领，结果是保存一次就把附件全判失效。
       attachments: await claimStagedAttachments(req.body?.stagedAttachments, taskId, now),
       status: 'todo',
+      // 新建时就能带上隔离开关(编辑器开关对空任务同样可开)
+      ...(req.body?.worktree === true ? { worktree: true } : {}),
       createdAt: now,
       updatedAt: now
     };
@@ -459,9 +476,123 @@ export function registerWorkbenchRoutes({
       attachments: Array.isArray(task.attachments) ? task.attachments : []
     };
     res.json({ success: true, message: '已开始执行任务' });
-    runSingleSubtask(task, virtualSub, repoPath, '', { executor }).catch(err => {
+    runSingleSubtask(task, virtualSub, repoPath, '', {
+      executor,
+      // worktree 隔离是任务的属性,开关跟着任务走(路由只负责抄过来)
+      worktree: task.worktree === true
+    }).catch(err => {
       publish('task:error', { taskId: task.id, error: err.message });
     });
+  }));
+
+  // ════════════════════════════════════════════════════════════════════════
+  // §12.2 worktree 隔离的收尾动作(状态 / 合并回主干 / 丢弃)
+  //
+  // 合并是**人的决定**:agent 在 worktree 里改的东西该不该进主干,不该默认为"该"。
+  // 所以跑完不会有任何自动合并,卡片上出「合并回主干」「丢弃」两个按钮,走这里。
+  //
+  // 合并前的预检(precheckMerge)把三种情况分开:
+  //   干净 / 有改动但不相交 → 照常合并;相交 → 拦下并列出撞名文件;
+  //   合并本身有冲突 → 拦下并列出冲突文件。预检是只读的(merge-tree 内存合并),
+  //   拦下时主工作区与 worktree 都不会被改动。
+  // ════════════════════════════════════════════════════════════════════════
+
+  /** 任务与它本轮执行目录(开 worktree 时是 worktree 本身) */
+  async function taskWithRepoPath(taskId) {
+    const data = await readJson(TASKS_FILE, { tasks: [] });
+    const task = (data.tasks || []).find(t => t && t.id === taskId);
+    if (!task) throw new HttpError(404, '任务不存在');
+    const repoPath = resolveTaskRepoPath(task, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
+    if (!repoPath) throw new HttpError(400, '任务没有可用的项目目录');
+    return { task, repoPath };
+  }
+
+  // GET /api/workbench/tasks/:id/worktree —— 卡片徽标与合并确认框的数据源
+  app.get('/api/workbench/tasks/:id/worktree', asyncRoute(async (req, res) => {
+    const { task, repoPath } = await taskWithRepoPath(req.params.id);
+    if (task.worktree !== true) throw new HttpError(400, '该任务未开启 worktree 隔离');
+    const status = await worktreeStatus(repoPath, req.params.id);
+    res.json({ success: true, status });
+  }));
+
+  // POST /api/workbench/tasks/:id/worktree/merge —— body: { checkOnly?: boolean }
+  // checkOnly=true 只做预检(确认框先拿重叠/冲突清单),false 真正合并。
+  app.post('/api/workbench/tasks/:id/worktree/merge', asyncRoute(async (req, res) => {
+    const { task, repoPath } = await taskWithRepoPath(req.params.id);
+    if (task.worktree !== true) throw new HttpError(400, '该任务未开启 worktree 隔离');
+    // 执行中不合并:agent 还在写 worktree,固化提交拿到的是半个改动
+    await refreshJobsFromDisk();
+    const liveJob = snapshotJobs().find(j => j.taskId === task.id && (j.status === 'running' || j.status === 'pending'));
+    if (liveJob) throw new HttpError(400, '该任务正在执行,请先停止再合并');
+
+    const wtPath = worktreePath(repoPath, task.id);
+    const status = await worktreeStatus(repoPath, task.id);
+    if (!status.exists) throw new HttpError(404, '该任务没有 worktree(可能已合并或丢弃)');
+    if (req.body?.checkOnly) {
+      const base = status.base || (await ensureWorktree(repoPath, task.id)).base;
+      const branch = status.branch;
+      const precheck = await precheckMerge(repoPath, wtPath, base, branch);
+      return res.json({ success: true, check: precheck });
+    }
+    const base = status.base || (await ensureWorktree(repoPath, task.id)).base;
+    // 合并前再预检一次:checkOnly 与真正合并之间用户可能又改了文件
+    const precheck = await precheckMerge(repoPath, wtPath, base, status.branch);
+    if (!precheck.ok) {
+      return res.json({ success: false, error: precheck.reason, check: precheck });
+    }
+    const result = await mergeWorktree(repoPath, wtPath, base, status.branch);
+    // 合并成功即收摊:worktree 与分支都清掉,下一轮任务从新 worktree 重新开始
+    await discardWorktree(repoPath, task.id);
+    res.json({ success: true, result, message: `已合并 ${result.files.length} 个文件的改动并清理 worktree` });
+  }));
+
+  // DELETE /api/workbench/tasks/:id/worktree —— 丢弃(worktree 里未合并的改动一并消失)
+  app.delete('/api/workbench/tasks/:id/worktree', asyncRoute(async (req, res) => {
+    const { task, repoPath } = await taskWithRepoPath(req.params.id);
+    if (task.worktree !== true) throw new HttpError(400, '该任务未开启 worktree 隔离');
+    await refreshJobsFromDisk();
+    const liveJob = snapshotJobs().find(j => j.taskId === task.id && (j.status === 'running' || j.status === 'pending'));
+    if (liveJob) throw new HttpError(400, '该任务正在执行,不能丢弃它正在用的 worktree');
+    await discardWorktree(repoPath, task.id);
+    res.json({ success: true, message: '已丢弃 worktree 与其中的改动' });
+  }));
+
+  // ════════════════════════════════════════════════════════════════════════
+  // §12.3 执行快照(checkpoint)回滚
+  //
+  // 每轮 job 起跑前自动拍快照(隐藏 ref),改坏了从卡片一键回到改前状态。
+  // 回滚**只还原磁盘文件**,不碰用户的暂存区;确认框先拿 checkpointDiff 的
+  // 清单——归因做不到精确,所以「快照之后改了什么」必须先摆出来再确认。
+  // ════════════════════════════════════════════════════════════════════════
+
+  // GET /api/workbench/jobs/:id/checkpoint —— 回滚确认框的数据源
+  app.get('/api/workbench/jobs/:id/checkpoint', asyncRoute(async (req, res) => {
+    await refreshJobsFromDisk();
+    const job = mergedJobs().get(req.params.id) || jobs.get(req.params.id);
+    if (!job?.checkpoint?.ref) throw new HttpError(404, '这一轮没有检查点(非 git 仓库或老版本跑的)');
+    const runDir = job.checkpoint.runDir || job.cwd;
+    if (!(await checkpointExists(runDir, job.checkpoint.ref))) {
+      return res.json({ success: true, available: false, reason: '检查点已被清理(超出保留数量)' });
+    }
+    const changes = await checkpointDiff(runDir, job.checkpoint.ref);
+    res.json({ success: true, available: true, ref: job.checkpoint.ref, runDir, changes });
+  }));
+
+  // POST /api/workbench/jobs/:id/rollback —— 真正回滚
+  app.post('/api/workbench/jobs/:id/rollback', asyncRoute(async (req, res) => {
+    await refreshJobsFromDisk();
+    const job = mergedJobs().get(req.params.id) || jobs.get(req.params.id);
+    if (!job?.checkpoint?.ref) throw new HttpError(404, '这一轮没有检查点');
+    const runDir = job.checkpoint.runDir || job.cwd;
+    // 还在跑的轮次不能回滚:agent 一边写一边删,还原出来的状态没有意义
+    if (job.status === 'running' || job.status === 'pending') {
+      throw new HttpError(400, '该轮正在执行,请先停止再回滚');
+    }
+    if (!(await checkpointExists(runDir, job.checkpoint.ref))) {
+      throw new HttpError(410, '检查点已失效(被 git gc 或清理移除)');
+    }
+    const result = await rollbackToCheckpoint(runDir, job.checkpoint.ref);
+    res.json({ success: true, result, message: `已还原 ${result.restored} 个文件,删除 ${result.removed} 个这轮新增的文件` });
   }));
 
   // ════════════════════════════════════════════════════════════════════════
@@ -678,18 +809,24 @@ export function registerWorkbenchRoutes({
     // 续接的这轮在错误的工作区里干活，而 --resume 又把上下文带过来了，症状很隐蔽。
     // 2026-09-30 由 verify:wb-env-context 第 8 组抓到（续聊轮的 prompt 里出现的不是任务的项目）。
     const repoPath = resolveTaskRepoPath(task, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
+    // 开了 worktree 隔离的任务,历史轮次的 cwd 是 worktree 路径 —— 冲突判定和
+    // 实际 spawn 都要用 worktreePath() 推出**同一个值**(与 taskRunner 内部的
+    // ensureWorktree 复用逻辑一致:路径稳定,会话才续得上)。
+    const taskWorktreeOn = task.worktree === true;
+    const runDir = taskWorktreeOn && repoPath ? worktreePath(repoPath, task.id) : repoPath;
     // 工作目录变过就不能续（判据与事故背景见 resumeGuard.js）：
     // 「移动到其他项目」只改 task.projectPath，历史轮次的会话仍在旧目录的会话库里。
     // 不拦的话 spawn 到新 cwd 再拿旧 id 去 resume，CLI 回一条英文 error 且退出码 0，
     // 用户只会看到对话区突然断在一句 No conversation found 上。
-    const cwdConflict = resumeCwdConflict(prevJob.cwd, repoPath);
+    const cwdConflict = resumeCwdConflict(prevJob.cwd, runDir);
     if (cwdConflict) throw new HttpError(400, cwdConflict);
     res.json({ success: true, message: '已加入续接队列' });
     // 执行器必须沿用上一轮 job 的 agent：claude 的 --resume 和 opencode 的 --session
     // 互不认对方的会话 id，串了执行器续接必然失败。
     runSingleSubtask(task, virtualSub, repoPath, '', {
       resumeSessionId: prevJob.claudeSessionId,
-      executor: normalizeTaskExecutor(prevJob.agent)
+      executor: normalizeTaskExecutor(prevJob.agent),
+      worktree: taskWorktreeOn
     })
       .catch(err => {
         publish('task:error', { taskId: task.id, error: err.message });

@@ -704,6 +704,12 @@ function coverTitle(img: BoardImage): string {
                 :style="projectTagStyle(t.projectPath)"
                 :title="t.projectPath"
               >{{ projectLabel(t) }}</span>
+              <!-- worktree 隔离徽标:这条任务的执行与主工作区互不干扰;悬停说清含义 -->
+              <span
+                v-if="t.worktree"
+                class="kb-card__wt-chip"
+                :title="$t('@WORKBENCH:worktree 隔离:任务跑在独立工作树里,合并与否由你决定')"
+              >{{ $t('@WORKBENCH:隔离') }}</span>
               <p class="kb-card__title" :title="cardTitle(t)">{{ cardTitle(t) || $t('@WORKBENCH:未命名任务') }}</p>
               <span class="kb-card__time">{{ relativeTimeFromIso(cardTime(t)) }}</span>
             </div>
@@ -1706,6 +1712,18 @@ function coverTitle(img: BoardImage): string {
 .kb-card__row1 .kb-card__project-chip {
   flex: 0 1 auto;
   min-width: 0;
+}
+/* worktree 隔离徽标:不收缩、不换行,内容固定两字,比项目色标更窄 */
+.kb-card__wt-chip {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border: 1px solid var(--tint-primary-35, color-mix(in srgb, var(--color-primary) 35%, transparent));
+  border-radius: var(--radius-pill);
+  background: var(--tint-primary-12, color-mix(in srgb, var(--color-primary) 12%, transparent));
+  color: var(--color-primary);
+  font-size: var(--font-size-xs);
+  line-height: 16px;
+  white-space: nowrap;
 }
 /* 列表行里要与任务名同行（.kb-table__name 是 inline）：
    抬 1px 是把胶囊的**文字基线**与同行任务名的基线对齐后做的光学微调——
