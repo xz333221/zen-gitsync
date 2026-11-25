@@ -4,6 +4,8 @@
 
 A Git automation platform with interactive commits, scheduled sync, custom command orchestration, file locking, and a visual GUI.
 
+> **Official site:** [zen-gitsync.flowdash.cn](https://zen-gitsync.flowdash.cn/) — live feature tour & docs
+
 ## Table of Contents
 
 - [Installation](#installation)
@@ -61,7 +63,9 @@ npm install -g zen-gitsync
 - **Custom commands** — Save, parameterize, and reuse shell commands
 - **Project startup** — Auto-run commands or workflows when a project opens
 - **Built-in code editor** — Monaco-based file editor with Markdown preview
-- **Workbench** — a multi-project board with a kanban view and a master-agent dispatch console; task-driven agent execution (Claude Code or OpenCode) with prompt presets, isolated per-task processes, live streaming output, AI-generated presets and task-level attachments
+- **Workbench** — a multi-project board with a kanban view and a master-agent dispatch console; task-driven agent execution across seven CLIs (Claude Code, OpenCode, Codex, CodeBuddy Code, Pi, CodeArts, Qoder) with prompt presets, isolated per-task processes, live streaming output, AI-generated presets and task-level attachments
+- **Floating agent dock** — the AI chat lives in a floating dock available from every view: a mascot button at the bottom-right expands the chat panel in place, maximize restores the full two-column session experience, and switching views keeps the conversation open
+- **Peer MCP tools** — the MCP tool set installed via `g mcp` now includes `peers_list` / `peer_ask`, so an agent on one machine can query and ask the zen-gitsync hub running on another
 - **Repository cloning** — clone any GitHub / Gitee repository into a folder straight from the repo browser, with an *Already cloned* badge (and its local path(s), including the count when a repo lives in several folders) backed by a whole-disk local-repository scan
 - **Skill / MCP marketplace** — install skills and MCP servers from the Agent view into the current project or the `g ai` agent
 - **One-click MCP install** — right-click an editor / AI tool button in the header (VS Code, Claude Code, Codex, OpenCode, CodeBuddy Code, Pi Agent) and choose *Add zen-gitsync MCP* to register zen-gitsync as that tool's MCP server: merged into its config in place with a `.bak` backup (never hand-edit config files again), and the menu shows whether it is already added. The same registry is available from the CLI via `g mcp install`
@@ -88,7 +92,25 @@ npm install -g zen-gitsync
 $ g ui
 ```
 
-The GUI runs as a local web server and opens in your default browser on the first free port it finds in `4000–6000` (set `PORT` to pin a fixed one). It attaches to the current Git repository automatically. The activity bar on the left switches between **Git**, **Console**, **Agent**, **Editor**, **Workbench**, **Projects**, **System Monitor** and **Mindmap**, top to bottom. See the [Core Git Panel](#core-git-panel) screenshot below for what the main view looks like.
+The GUI runs as a local web server and opens in your default browser on the first free port it finds in `4000–6000` (set `PORT` to pin a fixed one). It attaches to the current Git repository automatically. The activity bar on the left switches between **Git**, **Console**, **Editor**, **Workbench**, **Remote repositories**, **Projects**, **System Monitor** and **Mindmap**, top to bottom. The AI agent is not on the rail — it lives in a floating dock at the bottom-right corner of every view (see [AI Agent](#ai-agent-web)). See the [Core Git Panel](#core-git-panel) screenshot below for what the main view looks like.
+
+### Listen address & cross-site guard
+
+By default the GUI server binds to `127.0.0.1` (loopback) only. There is no authentication layer — bound to `0.0.0.0`, endpoints that execute commands, write `package.json` or open files with the system handler would be callable by any host on the network.
+
+To reach the GUI from another machine (or WSL), opt in explicitly:
+
+```shell
+$ ZEN_HOST=0.0.0.0 g ui      # macOS / Linux
+$ set ZEN_HOST=0.0.0.0 && g ui   # Windows cmd
+$ $env:ZEN_HOST="0.0.0.0"; g ui  # PowerShell
+```
+
+With `ZEN_HOST` set, the address is added to the Origin whitelist automatically. All `/api` requests are Origin-checked: no `Origin` header (curl / CLI / same-origin GET), loopback origins on any port, and `file://` pages pass; any other origin gets `403`. Extra origins can be allowed with `ZEN_ALLOWED_ORIGINS` (comma-separated full origins, scheme and port included):
+
+```shell
+$ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
+```
 
 ### Architecture at a glance
 
@@ -102,9 +124,6 @@ The GUI runs as a local web server and opens in your default browser on the firs
                   │  └───┘                                      │
                   │  ┌──────┐                                   │
                   │  │Consol│─► Saved commands + terminal       │
-                  │  └──────┘                                   │
-                  │  ┌──────┐                                   │
-                  │  │Agent │─► Web agent + Skill/MCP plaza     │
                   │  └──────┘                                   │
                   │  ┌──────┐                                   │
                   │  │Edit  │─► Monaco editor + file tree       │
@@ -205,7 +224,7 @@ In either mode, click **AI Generate** to fill in the fields automatically based 
 
 > Click the directory name in the header (or the folder icon) to open this dialog. Type a path, hit **浏览** to use the OS file picker, or pick from **常用目录** for one-click switching. **使用新标签打开** spawns a new GUI tab on that path so you can keep the current project open.
 
-The header row beside the directory name carries its own quick actions: open in the file manager, open in a terminal, copy the folder name (last path segment only), open with `g ai`, and one button per detected editor / AI tool — VS Code, Codex, OpenCode, CodeBuddy Code, Pi Agent, Kimi Code, ZCode, DeepSeek Harness and Claude Code. Right-clicking a tool button opens its menu: the tools whose CLI can skip approval prompts (Claude Code, Codex, OpenCode, CodeBuddy Code, Kimi Code) list their permission tiers there — default plus that CLI's own fully-approved switch, each row naming the flag it passes — above **update to the latest version**. Tools that are not installed are collected into a **more** menu, where clicking one opens the install guide.
+The header row beside the directory name carries its own quick actions: open in the file manager, open in a terminal, copy the folder name (last path segment only), open with `g ai`, and one button per detected editor / AI tool — VS Code, Codex, OpenCode, CodeBuddy Code, Pi Agent, CodeArts (华为云码道), Qoder, Kimi Code, ZCode, DeepSeek Harness and Claude Code. Right-clicking a tool button opens its menu: the tools whose CLI can skip approval prompts (Claude Code, Codex, OpenCode, CodeBuddy Code, Kimi Code) list their permission tiers there — default plus that CLI's own fully-approved switch, each row naming the flag it passes — above **update to the latest version**. Tools that are not installed are collected into a **more** menu, where clicking one opens the install guide.
 
 When the GUI is opened on a directory that is not a Git repository, the right pane shows the **Recent projects** list instead — every recent directory with its Git badges (behind / ahead / uncommitted) and one-click "open in a new tab". Each page load runs a `git fetch` pass over all of them automatically, so the ahead/behind badges show the real state rather than the snapshot from the last fetch; the **刷新全部** button does the same thing on demand. The switcher dialog shows the same list as **常用目录** and carries the very same **刷新全部** button at the right end of its heading — the automatic pass stays panel-only (opening a dialog should not fetch a dozen repositories behind your back), but the manual one is identical in both places, right down to the progress readout. Both places also have a search box above the cards: type any fragment of a path to filter the list (the AI status summary below keeps describing the whole set, not the filtered view).
 
@@ -374,7 +393,7 @@ Configure commands or workflows to run automatically when a project is opened:
 | **Editor** | Browse & edit project files without leaving the GUI | Open tabs, unsaved markers, recent files | Monaco editor with syntax highlighting, Markdown preview, file search (file names and contents) |
 | **Workbench** | Multi-project board for dispatching and running agent tasks | Tasks, prompts, board layout, log retention | Kanban board, master-agent console, executor choice, live chat-style logs |
 | **Projects** | Manage the project list as an asset | The same list the Workbench reads | Add / remove without touching the current project, recommended additions, 10 s silent refresh |
-| **Agent** | Chat with the built-in AI agent (web + CLI sessions) | Sessions, pending questions | Streaming answers, tool-call cards, Skill / MCP plaza, rail badge counting the conversations still generating |
+| **Agent (dock)** | Chat with the built-in AI agent from any view (web + CLI sessions) | Sessions, pending questions | Floating dock at the bottom-right, streaming answers, tool-call cards, Skill / MCP plaza, dock badge counting the conversations still generating |
 
 **Console**, **System Monitor** and **Mindmap** are utility views on the same rail.
 
@@ -425,15 +444,15 @@ A dedicated view for running coding agents across one or many projects. Every ta
 | Marking a task done by hand | The columns are derived from execution facts, which cannot express the two things only you know: a task sitting in **Todo** that was really finished somewhere else, and an **In progress** task whose model has gone quiet while you can see the work is done. Both cards now hover out a **Done** button next to **Run** / **Stop**, and a card that got into Done *by hand* trades it for **Undo**. A card that finished on its own keeps showing neither — undoing a mark it never had would do nothing at all. Marking a still-running task done asks first and stops that run as part of the same action (a card cannot be Done and running at once), which holds across windows too: if the job lives in another `g ui` instance the server refuses with that very reason instead of pretending. The mark is stored on the task rather than faked as a run record, and a later run of that task supersedes it, so the card goes back to following the facts. Undo is one click with no confirmation — it is the "I clicked the wrong one" path — and hands the card back to the execution facts, which is why it is offered only where the mark is what keeps the card in Done |
 | Dispatch default prompts | Give every dispatch a standing prompt: one **global** entry that applies to all projects, plus one **per project** that is appended after it whenever you dispatch to that project (it supplements the global one rather than replacing it). Both are edited from the gear button in the console's composer; the combined text is prepended to the instruction, a "Default prompt (global + this project)" checkbox appears next to **Run now** so a single dispatch can opt out, and the instruction log records which level was attached. The prompt is copied onto the task at dispatch time, so editing the setting later never rewrites tasks that already exist; it lands in the task's own prompt field, where you can still edit it per task |
 | Project icon | Every project row leads with **the project's own favicon** instead of a generic folder — a 32 px tile spanning the name and branch lines, so the list reads at a glance. The same icon is used on the **recent-directories** cards in the switch-directory dialog, on the **top-bar directory pill**, and on the **board's own title line** (one lookup, one fallback — only the slot height differs per row: 32 px in the list, 24 px on the board, 20 px in the top bar). The server looks for the icon the project actually ships: first the `<link rel="icon">` declared in its `index.html`, then a `favicon.svg` / `.png` / `.webp` / `.ico` found within two levels of the project root (which is what finds layouts like `frontend/public/favicon.svg`). The lookup is bounded (dependency, VCS and cache folders are skipped outright; build output is searched last) and cached for five minutes, so the board's five-second poll never re-walks the disk. Projects that ship no icon — and icons that fail to load, such as a CDN URL the browser refuses — fall back to the folder glyph, so a row never shows a broken image. Nested repositories are skipped on purpose: a folder that merely *contains* your projects keeps the folder glyph instead of borrowing one of theirs |
-| Open-with menu per project | Hovering a project row in the board's project list reveals two buttons: **Open folder** (straight to your file manager) and **Open with**, a menu holding file manager / terminal / `g ui` in a new tab plus every editor and AI tool (VS Code, Codex, OpenCode, CodeBuddy Code, Pi Agent, Kimi Code, ZCode, DeepSeek Harness). The tools whose CLI can skip approval prompts — Claude Code, Codex, OpenCode, CodeBuddy Code, Kimi Code — each add their own fully-approved entry (Codex also gets its auto-approve-but-still-sandboxed one). Tools that are not installed are dimmed and labelled "Not installed" — clicking one opens the very same install guide the top bar uses. Every action applies to that row's project only; the board's selection is never touched |
+| Open-with menu per project | Hovering a project row in the board's project list reveals two buttons: **Open folder** (straight to your file manager) and **Open with**, a menu holding file manager / terminal / `g ui` in a new tab plus every editor and AI tool (VS Code, Codex, OpenCode, CodeBuddy Code, Pi Agent, CodeArts, Qoder, Kimi Code, ZCode, DeepSeek Harness). The tools whose CLI can skip approval prompts — Claude Code, Codex, OpenCode, CodeBuddy Code, Kimi Code — each add their own fully-approved entry (Codex also gets its auto-approve-but-still-sandboxed one). Tools that are not installed are dimmed and labelled "Not installed" — clicking one opens the very same install guide the top bar uses. Every action applies to that row's project only; the board's selection is never touched |
 | Remove a dead project | A row whose folder no longer exists still shows up — the list is the union of recent directories and the paths your tasks remember — so that row gets a single red **Remove from list** button instead of the open actions (opening a missing folder can only fail). The confirm dialog spells it out: **no tasks are deleted**, and the toast repeats how many were kept. The entry disappears from the list while every task, job and history record stays put; if you ever clone the folder back, the row returns on its own |
 | Task editor overlay | Clicking a board card opens the editor as an overlay: a flat sidebar holding the task list and prompt presets, then the task header, preset selector, executor split-button, the copy-execution / execution-log / clear-execution actions, and a chat-style execution body. The description collapses into a one-line "Task description (optional)" summary until clicked, showing a "Filled" badge and the attachment count once there is content. Opening the overlay lands the conversation on its **newest** turn rather than its first: the flow keeps re-pinning to the bottom while markdown highlighting and tool-call folding are still growing it after mount, and lets go as soon as you scroll yourself. The thin bar on top carries the back-to-board button, the current project, then a **task-status badge** (running / done / failed / to-do, in the same role colors as the board column headers, its dot pulsing while it runs; hover for the "AI marked done" / "marked done manually" reasoning — before this the bar showed only time and duration, so a running task could still wear last turn's "1 hour ago · took 13 min" and look finished), and — just left of the "Task execution" label at its right end — the task's **relative time and how long it took** (a "took x" line once it has run, a live "running for x" while it is, and only the time — no placeholder — if it never ran), word for word the same two values the board card shows. When the window narrows, this block and the status badge yield first (the badge is dropped entirely at roughly phone width rather than squashing the project name): the back button, project and execution-path chips never give up a single pixel |
 | Copy execution content | **Copy execution content** in the task header puts the whole task — every turn, not just whatever is on screen — on the clipboard as plain Markdown: a header line for the task and its project, then one section per turn (`## Round N`, with the executor, status and start time on the line under it) holding the user's prompt, the agent's thinking, its tool calls (arguments and results in fenced blocks) and the model's output. It is assembled from the run records rather than scraped from the DOM, so what you get never depends on what happens to be selected. The user side goes through the same trimming the chat bubbles use, so what you copy is what you typed — the injected environment / memory blocks and the attachment list stay behind in `job.prompt`. Turns with nothing in them are skipped without renumbering the ones after them, and a task that has never run answers with a "nothing to copy" toast instead of putting an empty string on the clipboard |
-| Executor choice | Run each task with **Claude Code**, **OpenCode** or **Codex**. The global default is set in **Settings → General → Task executor** (`config.taskExecutor`); the split-button next to the run button switches it for the next run and remembers that pick in the browser. A continued conversation always stays on the executor that started it — Claude's `--resume`, OpenCode's `--session` and Codex's thread id are not interchangeable |
+| Executor choice | Run each task with **Claude Code**, **OpenCode**, **Codex**, **CodeBuddy Code**, **Pi**, **CodeArts (华为云码道)** or **Qoder**. The global default is set in **Settings → General → Task executor** (`config.taskExecutor`); the split-button next to the run button switches it for the next run and remembers that pick in the browser. A continued conversation always stays on the executor that started it — the resume flags are not interchangeable across CLIs |
 | Attachments | Any number of files per task (image / PDF / text / Markdown / CSV / JSON / log, ≤ 20 MB each); images over 3.5 MB are re-encoded / downscaled in the browser before upload so 4K screenshots still fit what the model and the reader can take. Their absolute paths are appended to the prompt so the agent reads them directly. Right-click an image attachment to copy it to the system clipboard (`image/png` / `jpeg` / `webp` / `gif`). The board's create-task dialog takes them too, before the task exists: files are staged server-side (`workbench-images/_dispatch/`) and claimed into the task's own folder the moment you hit Create, the create button stays disabled while an upload is in flight, and closing the dialog without creating deletes them instead of leaving screenshots behind. File names travel percent-encoded, so a name written in Chinese uploads like any other. The attachments a run actually carried also show up on that turn's question bubble in the conversation flow (image thumbnails included) — see Continue chat |
 | Prompt presets | Reusable prompt templates with `{{task.title}}` / `{{task.desc}}` / `{{repo.path}}` / `{{branch}}` variable interpolation |
 | AI prompt generation | The "New / Edit preset" dialog carries an **AI Generate project architecture** button plus an **Edit instruction** button: the server recursively finds every sub-project (a directory holding `.git` or one of 9 manifests), reads each one's key files on its own (manifest 20 KB / README 8 KB / a 2-level tree), calls the LLM concurrently to produce a per-sub-project architecture description, and merges them into one when there are several. **Edit instruction** customises the prompt used for generation (persisted to `~/.zen-gitsync/ai-instruction.json`) |
-| Pipe-mode launcher | Spawns the selected executor as a detached process with stdout/stderr piped to the server — no external terminal window is opened, so output streams directly into the UI. Claude Code runs as `claude -p - --output-format stream-json --verbose --permission-mode bypassPermissions --dangerously-skip-permissions` (the prompt goes in over stdin to dodge Windows' 32 K command-line limit); OpenCode runs as `opencode run --format json --auto --thinking`; Codex runs as `codex exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -`, both following whatever default model their own CLI is configured with |
+| Pipe-mode launcher | Spawns the selected executor as a detached process with stdout/stderr piped to the server — no external terminal window is opened, so output streams directly into the UI. Claude Code runs as `claude -p - --output-format stream-json --verbose --permission-mode bypassPermissions --dangerously-skip-permissions` (the prompt goes in over stdin to dodge Windows' 32 K command-line limit); OpenCode runs as `opencode run --format json --auto --thinking`; Codex runs as `codex exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -`; CodeBuddy / Pi / CodeArts / Qoder run their own headless JSON-stream equivalents — each following whatever default model its own CLI is configured with |
 | Isolated processes | Every run is its own detached process with fresh context, so memory and conversation state never accumulate across tasks |
 | **Cross-run memory** | Every dispatched task is told about a local memory library at `~/.zen-gitsync/memory/` — the lessons earlier agents in that same repository left behind. The library is deliberately **two-tier**: only `INDEX.md` (one ≤100-character line per lesson) ever enters the prompt, while the lesson bodies live in `lessons/*.md` and are read **on demand, only when an index line actually matches the task**. Nothing is preloaded and `archive/` is never read — which is the whole point, since pasting the index into every prompt would make each dispatch pay for every unrelated historical lesson. When the workbench starts, the library is seeded if it does not exist yet (existing files are never overwritten). Before finishing, each agent self-checks four questions — stuck ≥3 min or a repeated wrong path, a wrong tool / wrong file / a grep drowned in build output, a correction from you, or a verified non-obvious shortcut — and writes **one** lesson if any of them is yes, always appending the matching `INDEX.md` line (a lesson without an index line is a lesson nobody will ever find). Set `memoryContext: false` on a task to opt out of the whole thing |
 | Memory library panel | **Settings → Memory** browses the same library: a scope picker (the two global files plus every repository the agents have worked in, labelled by its real path), the lesson list for the selected scope, and click-to-expand for the raw text. Deleting a lesson **also removes its line from the index** — leaving a line behind would point agents at a file that no longer exists. Lessons that were written without an index line are badged as **Not indexed**, since the agent can never find those. `GLOBAL.md` and `INDEX.md` themselves cannot be deleted (they are the accounting). Nothing here is saved through the dialog's Save button: every action takes effect immediately |
@@ -445,7 +464,7 @@ A dedicated view for running coding agents across one or many projects. Every ta
 | Cross-view indicator | While any Workbench task is running, a pulsing dot appears on the Workbench icon in the Activity Bar so you can see job state from the Git or Editor view |
 | Execution log manager (dialog) | The "Execution logs" button in the workbench top bar opens a dialog with the list / filter / batch delete / clear / retention-policy UI (defaults: 500 records, 256 MB); the task execution view stays mounted so no work-in-progress state is dropped |
 | Continue chat | After a task reaches a done / error / cancelled state, a follow-up composer appears; sending a message resumes the previous session (`claude --resume <session_id>` for Claude Code, `--session` for OpenCode, `codex exec resume <thread_id>` for Codex), and each new turn stacks into the same chat-style flow. Since the resumed session already carries the previous turn's context, follow-up turns inject only a **slim refresh** of the run-environment block (current project + board totals + truth-file paths) instead of the full project list. The bubbles show only what the user actually typed: the injected environment / memory blocks and the attachment list stay in the raw `job.prompt` (readable and copyable in the run log), so copying a conversation out and pasting it back no longer drags a whole round of background along. **The attachments each turn actually carried render on that turn's question bubble** — parsed back from the frozen list at the tail of `job.prompt`, so old runs show them too and files added later never leak onto earlier bubbles; images claim their thumbnail from the attachment endpoint when the task still has the record, otherwise they degrade to a file chip |
-| Local tool detection | On startup + every 10 min the server probes 7 CLIs (`code`, `claude`, `codex`, `opencode`, `kimi`, `zcode`, `dsh`). Tools that are missing are dimmed and labelled "Not installed" — clicking one opens the install guide, and right-clicking a tool button offers an update to the latest published version |
+| Local tool detection | On startup + every 10 min the server probes 11 CLIs (`code`, `claude`, `codex`, `opencode`, `codebuddy`, `pi`, `codearts`, `qoder`, `kimi`, `zcode`, `dsh`). Tools that are missing are dimmed and labelled "Not installed" — clicking one opens the install guide, and right-clicking a tool button offers an update to the latest published version |
 
 Prompt presets and tasks are persisted to `~/.zen-gitsync/prompts.json` and `~/.zen-gitsync/tasks.json` (cross-project, shared across repos); run history and the retention policy live in `jobs.json` / `jobs-config.json`, the master-agent console state in `orchestrator.json` (with its report history in `orchestrator-reports.json` — kept apart so the polled state file stays small), and task attachments under `~/.zen-gitsync/workbench-images/_task-<taskId>/`.
 
@@ -453,7 +472,7 @@ Prompt presets and tasks are persisted to `~/.zen-gitsync/prompts.json` and `~/.
 
 ### AI Agent (Web)
 
-A dedicated view (robot icon in the activity bar) for chatting with the built-in AI agent directly from the browser. The left sidebar lists all saved sessions (both Web and CLI origins); the right pane is a full chat interface with streaming responses, thinking process display, and tool-call visualization.
+The AI agent is reachable from every view through a **floating dock at the bottom-right corner**: a small mascot button expands the chat panel in place, and the dock's maximize button turns it into the full two-column layout (session list + conversation) — the complete experience the former dedicated Agent view had. The session list covers all saved sessions (both Web and CLI origins); the conversation pane is a full chat interface with streaming responses, thinking process display, and tool-call visualization.
 
 | Feature | Description |
 |---|---|
@@ -729,6 +748,8 @@ $ g --check-lock=config.json
 
 `zen-gitsync` 是一个 Git 自动化工作平台，支持交互式提交、定时同步、自定义命令编排、文件锁定与可视化 GUI 界面。
 
+> **官网：** [zen-gitsync.flowdash.cn](https://zen-gitsync.flowdash.cn/) —— 功能介绍与在线文档
+
 ## 目录
 
 - [安装](#安装)
@@ -786,7 +807,9 @@ npm install -g zen-gitsync
 - **自定义命令** — 保存、参数化并复用 Shell 命令
 - **项目启动** — 打开项目时自动运行命令或工作流
 - **内置代码编辑器** — 基于 Monaco 的文件编辑器，支持 Markdown 预览
-- **工作台** — 多项目看板 + 主 Agent 派发控制台；任务驱动的智能体执行（Claude Code 或 OpenCode），支持提示词预置、任务级附件、独立进程、实时流式回传与 AI 生成预置提示词
+- **工作台** — 多项目看板 + 主 Agent 派发控制台；任务驱动的智能体执行，支持 7 个 CLI 执行器（Claude Code、OpenCode、Codex、CodeBuddy Code、Pi、华为云码道、Qoder），支持提示词预置、任务级附件、独立进程、实时流式回传与 AI 生成预置提示词
+- **g ai 悬浮 dock** — AI 对话整合为右下角悬浮球：点 mascot 原地展开对话面板，最大化恢复完整两栏会话体验；切换视图不丢对话
+- **peer MCP 工具** — `g mcp` 登记的 MCP 工具集新增 `peers_list` / `peer_ask`，一台机器上的智能体可以查询并询问另一台机器上的 zen-gitsync hub
 - **仓库克隆** — 在仓库浏览器里把任意 GitHub / Gitee 仓库直接克隆到指定文件夹，卡片带「已克隆」徽标与本地路径（同一仓库克隆到多处时会显示条数，由全盘本地仓库扫描得出）
 - **Skill / MCP 广场** — 在智能体页把 Skill 与 MCP 服务安装到当前项目或 `g ai` 智能体
 - **一键添加 MCP** — 右键顶栏的编辑器 / AI 工具按钮（VS Code、Claude Code、Codex、OpenCode、CodeBuddy Code、Pi Agent），选「添加 zen-gitsync MCP」即可把 zen-gitsync 登记为那个工具的 MCP 服务 —— 合并式写入 + `.bak` 备份，不用手改配置文件；菜单里会标出是否已添加。同一份登记逻辑在 CLI 侧是 `g mcp install`
@@ -813,7 +836,7 @@ npm install -g zen-gitsync
 $ g ui
 ```
 
-GUI 以本地 Web 服务器形式运行，自动在浏览器中打开，并附加到当前 Git 仓库。端口默认在 `4000–6000` 里挑第一个可用的（可用 `PORT` 固定）。左侧 Activity Bar 自上而下为 **Git** / **控制台** / **智能体** / **编辑器** / **工作台** / **项目管理** / **系统监控** / **思维导图**。主界面长什么样可参考下方[核心 Git 面板](#核心-git-面板)的截图。
+GUI 以本地 Web 服务器形式运行，自动在浏览器中打开，并附加到当前 Git 仓库。端口默认在 `4000–6000` 里挑第一个可用的（可用 `PORT` 固定）。左侧 Activity Bar 自上而下为 **Git** / **控制台** / **编辑器** / **工作台** / **远程仓库** / **项目管理** / **系统监控** / **思维导图**；AI 智能体不在导航栏上 —— 它是每个视图右下角的悬浮 dock（见[智能体](#智能体web-端)）。主界面长什么样可参考下方[核心 Git 面板](#核心-git-面板)的截图。
 
 ### 监听地址
 
@@ -858,9 +881,6 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
                   │  └───┘                                      │
                   │  ┌──────┐                                   │
                   │  │控制 │──► 保存的命令 + 终端                 │
-                  │  └──────┘                                   │
-                  │  ┌──────┐                                   │
-                  │  │智能 │──► Web 智能体 + Skill/MCP 广场      │
                   │  └──────┘                                   │
                   │  ┌──────┐                                   │
                   │  │编辑 │──► Monaco 编辑器 + 文件树           │
@@ -961,7 +981,7 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 
 > 点击顶部条里的目录名（或文件夹图标）即可弹出该对话框。直接输入路径、点击 **浏览** 唤起系统文件选择器，或从 **常用目录** 一键切换。**使用新标签打开** 会在新 GUI 标签里加载目标路径，原项目保持不动。
 
-目录名旁边的顶部条自带一排快捷操作：在资源管理器中打开、在终端中打开、复制文件夹名称（只复制最后一级目录名）、用 `g ai` 打开，以及每个已检测到的编辑器 / AI 工具各一个按钮 —— VS Code、Codex、OpenCode、CodeBuddy Code、Pi Agent、Kimi Code、ZCode、DeepSeek Harness 与 Claude Code。右键工具按钮弹出的菜单里：CLI 本身有免批准档的工具（Claude Code、Codex、OpenCode、CodeBuddy Code、Kimi Code）逐档列出「默认权限」与它自己那个完全批准开关（每行都写明实际传的参数），排在「更新到最新版本」之上。没安装的工具会收进 **更多** 菜单，点一下弹出安装引导。
+目录名旁边的顶部条自带一排快捷操作：在资源管理器中打开、在终端中打开、复制文件夹名称（只复制最后一级目录名）、用 `g ai` 打开，以及每个已检测到的编辑器 / AI 工具各一个按钮 —— VS Code、Codex、OpenCode、CodeBuddy Code、Pi Agent、华为云码道（CodeArts）、Qoder、Kimi Code、ZCode、DeepSeek Harness 与 Claude Code。右键工具按钮弹出的菜单里：CLI 本身有免批准档的工具（Claude Code、Codex、OpenCode、CodeBuddy Code、Kimi Code）逐档列出「默认权限」与它自己那个完全批准开关（每行都写明实际传的参数），排在「更新到最新版本」之上。没安装的工具会收进 **更多** 菜单，点一下弹出安装引导。
 
 当 GUI 打开在一个**不是 Git 仓库**的目录上时，右侧会改为显示「最近项目」列表 —— 每个最近目录一张卡片，带 Git 徽标（落后 / 领先 / 未提交）与「在新标签页打开」。每次打开界面时会自动对所有项目跑一遍 `git fetch`，让「领先/落后」显示真实状态而不是上次 fetch 时的快照；**刷新全部** 按钮可以随时手动再刷一遍。切换目录弹窗里是同一份列表（叫 **常用目录**），标题行右端摆着同一个 **刷新全部** 按钮 —— 自动刷新仍然只发生在常驻面板上（打开一个选目录的弹窗不该顺手联网刷十几个仓库），但手动刷新两处完全一致，连进度读数都是同一个。两处的卡片上方还各有一个搜索框：敲路径里的任意一段就能筛出对应的卡片（底下的 AI 状态解读始终按全量那批目录来讲，不跟着筛选变）。
 
@@ -1130,7 +1150,7 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 | **编辑器** | 不离开 GUI 浏览并编辑项目文件 | 打开的 tab、未保存标记、最近访问 | Monaco 编辑器带语法高亮、Markdown 预览、文件搜索（文件名 + 文件内容） |
 | **工作台** | 多项目看板：派发并执行智能体任务 | 任务、提示词、看板布局、日志保留策略 | 看板视图、主 Agent 控制台、执行器选择、对话式实时日志 |
 | **项目管理** | 把项目清单当资产管理 | 与工作台同一份清单 | 添加 / 删除不切换当前项目、推荐添加、10 秒静默刷新 |
-| **智能体** | 与内置 AI 智能体对话（Web + CLI 会话） | 会话、待回答问题 | 流式回答、工具调用卡片、Skill / MCP 广场、导航栏徽标显示仍在生成的对话数 |
+| **智能体（悬浮 dock）** | 在任意视图与内置 AI 智能体对话（Web + CLI 会话） | 会话、待回答问题 | 右下角悬浮 dock、流式回答、工具调用卡片、Skill / MCP 广场、dock 徽标显示仍在生成的对话数 |
 
 **控制台**、**系统监控**、**思维导图** 是同一导航栏上的辅助视图。
 
@@ -1182,15 +1202,15 @@ Activity Bar 第四个视图，在 GUI 内直接浏览并编辑项目文件：
 | 派发执行器 | 派出去的任务由哪个 CLI 跑：**对话模式**在输入框下方选，**指令模式**在派发栏选 —— 两处是同一个组件、同一份选择，与执行按钮的临时切换也共用。注意「引擎」和「执行器」不是一回事：只有**内置 g ai** 能在服务端跑工具循环、才有派发能力，所以对话模式下把引擎切成外部 CLI 时，执行器选择会换成一句「当前引擎只能对话，不能派发任务 —— 切到内置 g ai 才能派活」的说明，而不是让你点了个不会生效的下拉 |
 | 派发默认提示词 | 给每次派发配一段常驻提示词：一条**全局**的（所有项目都附加）+ 每个项目一条（派发到该项目时追加在全局之后，是补充而不是覆盖）。两者都在控制台输入区的齿轮按钮里设置；拼好的正文放在指令**之前**，「立即执行」旁边会多出一个「默认提示词（全局 + 本项目）」勾选，单次派发可以取消勾选，指令流水里也记下这条指令附带的是哪一级。提示词在派发那一刻就抄进任务自己的提示词字段，之后改设置不会回头改写已建任务，单条任务仍可再改 |
 | 项目图标 | 每一行的图标位优先画**项目自己的 favicon**，而不是一律一枚文件夹 —— 32px 的方块，跨「名字行 + 分支行」两行，一屏扫下来认得出谁是谁；**切换目录弹窗里的「常用目录」卡片**用的是同一枚图，**顶栏目录胶囊**与**中间看板的标题行**也是这一枚（同一个探测、同一套兜底，只是槽高按各自那一行的高度定：左栏 32px / 看板 24px / 顶栏 20px）。服务端去找项目真正带的那一枚：先是它 `index.html` 里声明的 `<link rel="icon">`，再是项目根往下两层内的 `favicon.svg` / `.png` / `.webp` / `.ico`（`frontend/public/favicon.svg` 这类布局正是靠这一条找到的）。扫描范围有界（依赖 / 版本控制 / 缓存目录直接不进，构建产物排在最后），结果缓存 5 分钟 —— 看板 5 秒轮询不会反复走盘。没带图标的项目、以及加载失败的图标（例如项目把图标放在 CDN 上而浏览器拒了那次请求）都退回文件夹图标，行上不会留一枚破图。嵌套仓库刻意跳过：只是"装着一堆项目"的目录显示文件夹图标，不去借里面某个项目的 logo |
-| 项目行打开方式 | 编排台项目列表里 hover 任意一行会出现两个按钮：「打开文件夹」一键进资源管理器，以及「打开方式」菜单 —— 文件管理器 / 终端 / 新标签页跑 `g ui`，以及各编辑器与 AI 工具（VS Code、Codex、OpenCode、CodeBuddy Code、Pi Agent、Kimi Code、ZCode、DeepSeek Harness）。CLI 有免批准档的那几家 —— Claude Code、Codex、OpenCode、CodeBuddy Code、Kimi Code —— 各自多出一条「完全批准」项（Codex 还多一条"自动批准但仍在沙箱内"）。没安装的工具会置灰并标「未安装」，点它弹的是顶栏那套安装引导；菜单里的动作只作用于该行项目，不会改变看板选中态 |
+| 项目行打开方式 | 编排台项目列表里 hover 任意一行会出现两个按钮：「打开文件夹」一键进资源管理器，以及「打开方式」菜单 —— 文件管理器 / 终端 / 新标签页跑 `g ui`，以及各编辑器与 AI 工具（VS Code、Codex、OpenCode、CodeBuddy Code、Pi Agent、华为云码道、Qoder、Kimi Code、ZCode、DeepSeek Harness）。CLI 有免批准档的那几家 —— Claude Code、Codex、OpenCode、CodeBuddy Code、Kimi Code —— 各自多出一条「完全批准」项（Codex 还多一条"自动批准但仍在沙箱内"）。没安装的工具会置灰并标「未安装」，点它弹的是顶栏那套安装引导；菜单里的动作只作用于该行项目，不会改变看板选中态 |
 | 移除死项目 | 目录已经不存在的项目行仍会留在清单里（清单是常用目录与任务路径两份来源的并集），这一行 hover 时不再给任何打开动作（点了只会报「无法打开目录」），只留一颗红色的**「从清单移除」**。确认框会写明**任务不会被删除**，成功提示还会带上保留的条数。移除后这一行从清单消失，而任务、执行记录、历史一条不动；目录哪天被克隆回来，它会自己现身 |
 | 任务编辑器浮层 | 点击看板卡片时以浮层打开：左侧是扁平化的任务列表与提示词预置，右侧依次是任务头部、预置下拉、执行器 split 按钮、「复制执行内容 / 执行日志 / 清空执行」动作，以及对话式执行主体。描述默认折叠成一行「任务描述（可选）」摘要，点击展开；已填写描述或挂有附件时摘要右侧显示「已填写」徽标与附件数量。打开浮层时对话流直接落在**最新一轮**而不是第一轮：正文异步高亮与工具调用折叠会在挂载后继续长高，这段时间里持续贴底，用户自己一滚就立刻撒手。顶部细栏在「返回看板」与当前项目之后补一枚**任务状态徽标**（执行中 / 已完成 / 执行失败 / 待处理，用与看板列头同一套角色色，在跑时圆点脉动；悬停可看「AI 判定完成」「手动已完成」等依据 —— 以前细栏只有时间与用时，正在跑的任务顶上可能还挂着上一轮的「1 小时前 · 用时 13 分」，看着像早就跑完了），右端靠着一枚「任务执行」，并给出这条任务的**相对时间与用时**（跑过给「用时 x」，正在跑给实时的「已运行 x」，从没跑过只给时间、不写占位），与看板卡片上那两个值逐字一致；窗口收窄时先让位的是这一块与状态徽标，左边的返回 / 项目 / 执行于一个字节都不动（状态徽标在≈手机宽时整体收起，而不是压着项目名变形） |
 | 复制执行内容 | 任务头部的「复制执行内容」把**整条任务**（所有轮次，不只是屏幕上那一段）以纯 Markdown 放进剪贴板：先是任务与项目的标题行，然后一轮一节（`## 第 N 轮`，下面一行是本轮执行器、状态与开始时间），每节依次是用户提示词、智能体思考、工具调用（参数与结果都放在围栏代码块里）与模型返回。内容是从执行记录现拼的、不是从 DOM 里抠的，所以复制到什么跟你当前选中了哪段文字无关。用户侧走的是与对话气泡同一套裁剪，复制出来的就是你真正说过的话 —— 注入的环境块 / 记忆块 / 附件清单留在 `job.prompt` 里不跟着出去。一个字都没有的轮次会被跳过，且不让后面的轮次跟着往前重编号；从没跑过的任务回答「暂无执行内容可复制」，而不是把空串写进剪贴板 |
-| 执行器选择 | 每个任务可用 **Claude Code** / **OpenCode** / **Codex** 执行。全局默认在 **设置 → 通用设置 → 任务执行器**（`config.taskExecutor`）；执行按钮旁的 split 按钮可临时切换下一次执行用的执行器，选择记在浏览器里。续聊固定沿用最初那个执行器 —— Claude 的 `--resume`、OpenCode 的 `--session`、Codex 的 thread id 互不通用 |
+| 执行器选择 | 每个任务可用 **Claude Code** / **OpenCode** / **Codex** / **CodeBuddy Code** / **Pi** / **华为云码道（CodeArts）** / **Qoder** 执行。全局默认在 **设置 → 通用设置 → 任务执行器**（`config.taskExecutor`）；执行按钮旁的 split 按钮可临时切换下一次执行用的执行器，选择记在浏览器里。续聊固定沿用最初那个执行器 —— 各家 CLI 的续接参数互不通用 |
 | 附件 | 附件**数量不设上限**（图片 / PDF / 文本 / Markdown / CSV / JSON / log，单个 ≤ 20 MB）；超过 3.5 MB 的图片会先在浏览器里压缩（先按原分辨率转 WebP，压不下去再逐级降采样），4K 屏截图不用再手动裁剪；执行时绝对路径会自动追加到 prompt 末尾，智能体直接按路径读取。**右键图片附件可一键复制到系统剪贴板**（支持 png / jpeg / webp / gif）。看板的**新建任务弹窗**也能挂附件 —— 那一刻任务还不存在，所以文件先落在服务端暂存区（`workbench-images/_dispatch/`），点「创建」的瞬间被认领进任务自己的目录；还有附件正在上传时创建按钮是禁用的（否则那张图既进不了任务也不会被清掉），而关掉弹窗等于放弃这次新建，暂存的文件会一并删掉、不在磁盘上留一堆截图。文件名按百分号编码传输，所以中文名文件（「登录模块-改造前.png」）也能正常上传。这一轮实际带走的附件也会显示在对话流里那一轮的提问气泡上（含图片缩略图）—— 见「继续对话」一行 |
 | 提示词预置 | 可复用提示词模板，支持 `{{task.title}}` / `{{task.desc}}` / `{{repo.path}}` / `{{branch}}` 变量插值 |
 | AI 生成预置 | 「新建 / 编辑预置」对话框内置 **AI 生成项目架构说明** 按钮 + **编辑指令** 按钮：服务端递归识别当前项目里的所有子项目（含 `.git` 或 9 种 manifest 之一的目录），为每个子项目独立读取关键文件（manifest 20 KB / README 8 KB / 2 层目录树），并发调 LLM 产出各子项目架构说明，多子项目场景再合并成一份整体说明；用户可点「编辑指令」自定义生成策略（持久化到 `~/.zen-gitsync/ai-instruction.json`）；`max_tokens=4000`，单次请求最多 20 分钟 |
-| 管道模式启动 | 选定执行器以 detached 进程拉起，stdout / stderr 通过管道回传服务端，不再弹外部终端窗口。Claude Code 走 `claude -p - --output-format stream-json --verbose --permission-mode bypassPermissions --dangerously-skip-permissions`（prompt 从 stdin 喂入，避开 Windows 32K 命令行上限）；OpenCode 走 `opencode run --format json --auto --thinking`；Codex 走 `codex exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -`，后两者的模型都跟随各自 CLI 配置的默认值 |
+| 管道模式启动 | 选定执行器以 detached 进程拉起，stdout / stderr 通过管道回传服务端，不再弹外部终端窗口。Claude Code 走 `claude -p - --output-format stream-json --verbose --permission-mode bypassPermissions --dangerously-skip-permissions`（prompt 从 stdin 喂入，避开 Windows 32K 命令行上限）；OpenCode 走 `opencode run --format json --auto --thinking`；Codex 走 `codex exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -`；CodeBuddy / Pi / 华为云码道 / Qoder 各走自家无头 JSON 流参数 —— 模型都跟随各自 CLI 配置的默认值 |
 | 独立进程 | 每次执行都是独立的 detached 进程，上下文与状态不会跨任务累积 |
 | **跨轮记忆** | 每次派发都会告诉智能体本机有一份记忆库 `~/.zen-gitsync/memory/` —— 同一仓库里之前的智能体踩过的坑。记忆库刻意做成**两级**：只有 `INDEX.md`（每条经验 ≤100 字）会进 prompt，经验正文放在 `lessons/*.md` 里，**命中关键词才按需读取**。不预加载、`archive/` 永不读 —— 这正是重点：把索引整份塞进每次派发，等于每跑一次任务都要为所有不相关的历史经验付 token。工作台启动时若目录不存在会铺一份种子（**已存在的文件永不覆盖**）。收尾时智能体自检四问：卡住 ≥3 分钟或走了反复路径 / 用错工具写错文件或 grep 被构建产物淹没 / 你纠正过它的方向 / 发现"看似绕路但更快"或"反直觉但正确"且被验证的做法 —— 任一为是就记**一条**，并且必须在对应 `INDEX.md` 补一行索引（**没索引的经验等于不存在**）。单条任务可设 `memoryContext: false` 整块关掉 |
 | 记忆库面板 | **设置 → 记忆库** 浏览同一份库：范围选择器（全局两篇 + 智能体干过活的所有仓库，按真实路径标注）→ 该范围的条目列表 → 点标题展开看**原始文本**。删除一条会**连带删掉它在索引里的那一行** —— 留着就是一条指向已删文件的死链。没有索引行的经验标为**「未索引」**，因为智能体永远查不到它们。`GLOBAL.md` 与 `INDEX.md` 本身不可删（它们是记账口径）。面板里的操作全部即时生效，不走弹窗的「保存设置」 |
@@ -1202,7 +1222,7 @@ Activity Bar 第四个视图，在 GUI 内直接浏览并编辑项目文件：
 | 跨视图指示 | 任意任务运行中时，Activity Bar 上的工作台图标会显示脉动小圆点；切换到 Git 或编辑器视图也能看到运行状态 |
 | 执行日志管理（弹窗） | 顶部「执行日志」按钮唤起弹窗：列表 / 过滤 / 批量删除 / 清空 / 保留策略全部可在此一次性管理（默认保留 500 条、256 MB）；弹窗关闭后任务执行视图常驻，避免切换时不必要的卸载 |
 | 继续对话 | 任务进入终态（done / error / cancelled）后出现续聊输入框；发送续聊消息会用 `claude --resume <session_id>`（Claude Code）、`--session`（OpenCode）或 `codex exec resume <thread_id>`（Codex）续接上一轮会话，**新一轮 = 新 job**，多轮纵向堆叠成对话流。续接的会话本身就带着上一轮的上下文，所以续聊轮注入的是**精简刷新版**运行环境块（当前项目 + 看板合计 + 真相源路径），不再重发整份项目清单。对话气泡只显示用户真正说过的那句话 —— 注入的环境块 / 记忆块 / 附件清单仍留在 `job.prompt` 原文里（执行日志详情可看可复制），所以把对话复制出来再粘回续聊框时不会连带一整套背景一起回去。**每一轮提问气泡上还会渲染那一轮实际带走的附件** —— 从 `job.prompt` 尾部那份 spawn 时冻结的清单解析回来，老任务同样能看到，后来补传的附件也不会回灌到早先的气泡上；图片在任务还留着这条附件记录时从附件端点取缩略图，取不到就退回文件名 chip |
-| 本地工具检测 | 启动时 + 每 10 分钟探测 7 个 CLI（`code` / `claude` / `codex` / `opencode` / `kimi` / `zcode` / `dsh`）。未安装的工具置灰并标「未安装」，点击弹出安装引导；右键工具按钮可升级到最新已发布版本 |
+| 本地工具检测 | 启动时 + 每 10 分钟探测 11 个 CLI（`code` / `claude` / `codex` / `opencode` / `codebuddy` / `pi` / `codearts` / `qoder` / `kimi` / `zcode` / `dsh`）。未安装的工具置灰并标「未安装」，点击弹出安装引导；右键工具按钮可升级到最新已发布版本 |
 
 提示词预置与任务数据持久化到 `~/.zen-gitsync/prompts.json` 和 `~/.zen-gitsync/tasks.json`（跨项目共享）；执行历史与保留策略在 `jobs.json` / `jobs-config.json`，主 Agent 控制台状态在 `orchestrator.json`（进度报告历史另存 `orchestrator-reports.json` —— 与"配置和历史分两个文件"同一个理由：被 5s 轮询的那份要小），任务附件落盘在 `~/.zen-gitsync/workbench-images/_task-<taskId>/`。
 
@@ -1210,7 +1230,7 @@ Activity Bar 第四个视图，在 GUI 内直接浏览并编辑项目文件：
 
 ### 智能体（Web 端）
 
-Activity Bar 中的机器人图标视图，可直接在浏览器中与内置 AI 智能体对话。左侧边栏列出所有已保存的会话（含 Web 端和 CLI 端来源）；右侧为完整的对话界面，支持流式输出、思考过程展示和工具调用可视化。
+AI 智能体通过每个视图**右下角的悬浮 dock** 随时可达：点 mascot 按钮原地展开对话面板，dock 上的最大化按钮再恢复成完整两栏布局（会话列表 + 对话）—— 即原先独立智能体视图的完整体验。左侧会话列表覆盖全部已保存会话（含 Web 端和 CLI 端来源）；对话区是完整的对话界面，支持流式输出、思考过程展示和工具调用可视化。
 
 | 功能 | 说明 |
 |---|---|

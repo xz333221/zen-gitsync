@@ -156,6 +156,15 @@ page.on('console', (m) => {
   if (m.type() === 'error') console.log(`  [console:error] ${m.text().slice(0, 160)}`)
 })
 
+// 活动栏按角色门控后(project 只剩 3 个 tab),控制台/文件空间/项目管理/监控/思维导图全被藏掉。
+// 整场以 full 角色跑(与 g ui --role=full 同形态),各视图才都有入口;原来只在仓库浏览器那一步临时桩。
+await page.route('**/api/app-role*', (route) =>
+  route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ success: true, role: 'full', version: 'probe' }),
+  }))
+
 console.log(`打开 ${BASE} ...`)
 // dev 环境下后端启动会写 .env.local 触发 vite 重启一次,首屏模块请求可能撞上重启窗口;
 // 这里最多重试两次加载
@@ -354,16 +363,8 @@ if (await captureView(page, '工作台', path.join(L, '02-workbench-board.png'),
 await captureView(page, '项目管理', path.join(D, '15-projects-view-dark.png'), '项目管理(文档页)')
 
 // ── 13. 仓库浏览器(远程仓库视图 → GitHub tab,gh 已登录则有真实列表)────────────────
-// 远程仓库是公共板块,project 角色下活动栏没有入口:给 /api/app-role 桩成 full 再 reload,
-// 截完 unroute + reload 恢复 project 形态,不影响其余截图里活动栏的样子
+// 角色已在脚本开头全局桩成 full,活动栏从首屏起就有「远程仓库」入口,直接切视图即可
 {
-  await page.route('**/api/app-role*', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ success: true, role: 'full', version: 'probe' }),
-    }))
-  await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {})
   if (await gotoView(page, '远程仓库')) {
     try {
       const ghTab = page.locator('button#remotes-tab-github')
@@ -379,9 +380,6 @@ await captureView(page, '项目管理', path.join(D, '15-projects-view-dark.png'
   } else {
     results.push('  skip 仓库浏览器(文档页): 切不进远程仓库视图')
   }
-  await page.unroute('**/api/app-role*')
-  await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {})
-  await page.locator('button.activity-btn').first().waitFor({ state: 'visible', timeout: 30000 }).catch(() => {})
 }
 
 // ── 14. 系统监控(先点刷新,端口列表才拉满)───────────────────────────────────
