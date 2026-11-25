@@ -1191,6 +1191,33 @@ export function appendThinkingToJob(job, text, at = nowIso()) {
 }
 
 /**
+ * 一轮**没能正常收口**（启动器抛错 / 解析中途炸了）时的统一记账：失败原因 + 时间戳。
+ *
+ * 时间戳不是可选项。`startedAt` 写在启动器**返回之后**（runSingleSubtask 里
+ * `job.startedAt = nowIso()`），spawn 失败（ENOENT / EACCES / cwd 不存在）时那一行
+ * 根本走不到；`endedAt` 也只有"进程正常退出"那条路才补。两个都空→ 前端按
+ * startedAt 升序排、缺失的当"最末"，于是**更早发生**的那次失败被摆到对话流最底部，
+ * 看着就像报错永远贴在下面（2026-11-25 实测：blog 任务 spawn claude.exe ENOENT，
+ * 后面成功的轮次反而排在它上面）。jobActivity 的时长/静默判定也读这两个字段。
+ *
+ * 导出仅为回归测试可见（taskRunner.spawnFailure.test.js）：要真跑一次 spawn 失败
+ * 得造 PATH / 起进程，代价不划算。
+ *
+ * @param {object} job  执行记录（error / status / startedAt / endedAt 都记在它身上）
+ * @param {unknown} err 启动器或主流程抛出的错误
+ * @param {string} [at] 时间戳（ISO）；默认当前时刻，测试可注入
+ * @returns {object} 同一个 job（便于链式断言）
+ */
+export function stampJobFailure(job, err, at = nowIso()) {
+  job.error = err && err.message ? err.message : String(err);
+  job.status = 'error';
+  // 已经有 startedAt 的（跑到一半才炸）保持原值，别把真实起跑时刻抹成失败时刻
+  if (!job.startedAt) job.startedAt = at;
+  job.endedAt = at;
+  return job;
+}
+
+/**
  * claude stream-json 事件处理器。
  *   system/init    → session_id（--resume 续接用）
  *   assistant      → message.content 里的 text / thinking / tool_use 块
@@ -2235,9 +2262,9 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
       job.status = 'done';
     }
   } catch (err) {
-    const errMsg = err && err.message ? err.message : String(err);
-    job.error = errMsg;
-    job.status = 'error';
+    // 时间戳必须在这里补（见 stampJobFailure 的注释）：spawn 就直接失败的话，
+    // 上面 `job.startedAt = nowIso()` 那一行根本走不到。
+    stampJobFailure(job, err);
   } finally {
     // 工具调用收口：进程都退了，还挂在 running 的调用不会再有下文。先标终态再推 job:update，
     // 否则前端那些工具块会一直转圈。

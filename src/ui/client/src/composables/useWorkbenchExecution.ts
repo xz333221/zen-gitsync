@@ -17,9 +17,10 @@ export interface QueuedChat {
   files: SelectedFile[]
 }
 
-/** job 的起始时刻（毫秒）。缺失/非法按 0 —— 刚起跑那条还没有 startedAt */
+/** job 的起始时刻（毫秒）。缺失/非法按 0 —— 刚起跑那条还没有 startedAt。
+ *  endedAt 兜底是为 2026-11-25 之前落盘的老记录（spawn 失败那条两个时间都没有）。 */
 function jobStartMs(j: Job): number {
-  const ms = Date.parse(j.startedAt || '')
+  const ms = Date.parse(j.startedAt || j.endedAt || '')
   return Number.isNaN(ms) ? 0 : ms
 }
 
@@ -90,14 +91,22 @@ export function useWorkbenchExecution(
    *
    * 所以按 startedAt 取最大，与数组顺序解耦。时间缺失（刚起跑的 pending）按 0 算，
    * 只在没有别的候选时才会被选中。
+   *
+   * **优先挑"续得上"的那一轮**（2026-11-25）：spawn 直接失败的那条也会带 startedAt
+   * 了（服务端 stampJobFailure），它必然是时间最新、却**没有 claudeSessionId** ——
+   * 拿它当 parent 续接，服务端只会回 400「会话标识未捕获」。全都续不上时才退回按
+   * 时间取最新，好让"没有可续接的会话"这类提示仍然出得来。
    */
   function newestJobOf(taskId: string): Job | null {
     let newest: Job | null = null
+    let resumable: Job | null = null
     for (const j of jobs.value) {
       if (j.taskId !== taskId) continue
       if (!newest || jobStartMs(j) >= jobStartMs(newest)) newest = j
+      if (!j.claudeSessionId) continue
+      if (!resumable || jobStartMs(j) >= jobStartMs(resumable)) resumable = j
     }
-    return newest
+    return resumable ?? newest
   }
 
   /**

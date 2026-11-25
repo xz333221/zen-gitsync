@@ -291,3 +291,85 @@ describe('正文里嵌的本机图片真的画成了 <img>', () => {
     // 走组件库就是 `""`）。那是 zen-ai-chat-ui 那边的一行修复，改完再回来补这条断言。
   })
 })
+
+// 2026-11-25 实测：blog 任务第一轮 spawn claude.exe ENOENT（服务端当时没写时间戳），
+// 之后重发成功 —— 界面却把**更早**那次失败钉在对话流最底部，看着像"报错常驻"。
+// 这里钉两件事：
+//   1. 老记录只有 id 时也能排回正确位置（id 首段是 Date.now().toString(36)）；
+//   2. 非最后一轮的零产出失败不再画空气泡；最后一轮照旧给 error（重试按钮在那条上）；
+//      有产出的失败（跑到一半炸）不吞。
+describe('失败轮在对话流里的位置', () => {
+  test('老记录没有时间戳：按 id 里的时间排到成功轮之前，不再垫底', () => {
+    const messages = setup([
+      // 先发生的那条：真实时刻 2026-11-25T13:34:53Z，records 里两个时间戳都是空的
+      makeJob({
+        id: 'mww614vt-rgga1p',
+        subId: 't1__simple',
+        status: 'error',
+        prompt: '第一句',
+        output: '',
+        startedAt: undefined,
+        endedAt: undefined,
+        error: 'spawn claude.exe ENOENT'
+      }),
+      // 后成功的那条：13:39:45Z
+      makeJob({
+        id: 'mww67eje-88xu2u',
+        subId: 't1__simple',
+        status: 'done',
+        prompt: '第二句',
+        output: '好了',
+        startedAt: '2026-11-25T13:39:45.706Z',
+        endedAt: '2026-11-25T13:40:05.307Z'
+      })
+    ]).value
+
+    // 顺序 = 先失败（只剩用户气泡）→ 后成功（用户气泡 + 正文）
+    expect(messages.map(m => m.content)).toEqual(['第一句', '第二句', '好了'])
+    expect(messages[messages.length - 1].status).toBe('done')
+  })
+
+  test('最后一轮失败仍然给 error 状态和原因（重试按钮挂在这条上）', () => {
+    const messages = setup([
+      makeJob({ id: 'j1', status: 'done', prompt: '先跑这个', output: '好' }),
+      makeJob({
+        id: 'mww6aaaa-zzzzzz',
+        status: 'error',
+        prompt: '再跑这个',
+        output: '',
+        startedAt: undefined,
+        endedAt: undefined,
+        error: 'spawn claude.exe ENOENT'
+      })
+    ]).value
+
+    const last = messages[messages.length - 1]
+    expect(last.role).toBe('assistant')
+    expect(last.status).toBe('error')
+    expect(last.error).toBe('spawn claude.exe ENOENT')
+  })
+
+  test('非最后一轮、但**有产出**的失败不吞掉（正文照旧留在流里）', () => {
+    const messages = setup([
+      makeJob({
+        id: 'mww61000-aaaaaa',
+        status: 'error',
+        prompt: '问一句',
+        output: '干到一半炸了',
+        startedAt: '2026-11-25T13:00:00.000Z',
+        endedAt: '2026-11-25T13:00:30.000Z'
+      }),
+      makeJob({
+        id: 'mww62000-bbbbbb',
+        status: 'done',
+        prompt: '再问',
+        output: '好',
+        startedAt: '2026-11-25T13:10:00.000Z',
+        endedAt: '2026-11-25T13:10:10.000Z'
+      })
+    ]).value
+
+    expect(messages.map(m => m.content)).toContain('干到一半炸了')
+  })
+})
+

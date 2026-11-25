@@ -437,4 +437,31 @@ describe('续聊取最新一轮（不依赖数组顺序）', () => {
       'POST /api/workbench/jobs/j-done/continue'
     ])
   })
+
+  // 2026-11-25：spawn 失败那轮现在也有 startedAt 了（服务端 stampJobFailure），
+  // 于是它会成为"时间上最新"的那条 —— 但它**没有 claudeSessionId**，拿它当 parent
+  // 续接，服务端只会回 400「无法续接:会话标识未捕获」。所以挑 parent 时要先看能不能续。
+  test('最新一轮是 spawn 失败（有时间戳、没有会话标识）→ 续到上一轮真正跑过的', async () => {
+    const good = makeJob({
+      id: 'j-good',
+      status: 'done',
+      startedAt: '2026-11-25T13:39:45.706Z',
+      claudeSessionId: 'sess-good'
+    })
+    const spawnFailed = makeJob({
+      id: 'mww70aaa-cccccc',
+      status: 'error',
+      startedAt: '2026-11-25T13:50:00.000Z',
+      endedAt: '2026-11-25T13:50:00.000Z',
+      error: 'spawn claude.exe ENOENT'
+    })
+    const { api } = setup([spawnFailed, good])
+
+    expect(await api.continueChat(makeTask(), '接着说')).toBe(true)
+
+    expect(httpCalls.map(c => `${c.method} ${c.url.replace(/^.*\/api/, '/api')}`)).toEqual([
+      'POST /api/workbench/jobs/j-good/continue'
+    ])
+    expect(continueBodies[0]?.userMessage).toBe('接着说')
+  })
 })

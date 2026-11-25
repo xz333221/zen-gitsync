@@ -11,6 +11,24 @@ import { resolveLocalImages } from '@/utils/localImageSrc'
 const SIMPLE_SUB_ID_SUFFIX = '__simple'
 const MAX_LOG_DISPLAY_SIMPLE = 64 * 1024
 
+/**
+ * 一轮在时间线上的位置（毫秒，升序排用）。
+ *
+ * 不能只看 `startedAt`：spawn 直接失败的那轮（`spawn claude.exe ENOENT`）在
+ * 2026-11-25 之前的服务端从来没写过时间戳（见 taskRunner 的 stampJobFailure），
+ * 缺失值一律当"最末"，于是**更早**的失败被排到对话流底部、永远贴在输入框上面。
+ * 老记录只剩 id 可用 —— 它的首段就是 `Date.now().toString(36)`（shared.js），
+ * 反解回毫秒就能和 ISO 时间放进同一把尺子里比较。
+ */
+function jobTimeMs(j: Job): number {
+  const t = Date.parse(j.startedAt || j.endedAt || '')
+  if (!Number.isNaN(t)) return t
+  const m = /^([0-9a-z]{6,})-/i.exec(j.id || '')
+  const fromId = m ? parseInt(m[1], 36) : NaN
+  // 连 id 都不认识：沿用旧口径（缺失算最末），别让脏记录蹿到最前面
+  return Number.isNaN(fromId) ? Number.MAX_SAFE_INTEGER : fromId
+}
+
 export function useWorkbenchSimpleConversation(jobs: Ref<Job[]>, selectedTask: ComputedRef<Task | null>) {
 
   function simpleAllJobsFor(task: Task | null): Job[] {
@@ -18,14 +36,7 @@ export function useWorkbenchSimpleConversation(jobs: Ref<Job[]>, selectedTask: C
     const prefix = `${task.id}${SIMPLE_SUB_ID_SUFFIX}`
     return jobs.value
       .filter(j => j.subId === prefix || j.subId.startsWith(`${prefix}__r`))
-      .sort((a, b) => {
-        const sa = a.startedAt || ''
-        const sb = b.startedAt || ''
-        if (sa && sb) return sa.localeCompare(sb)
-        if (sa) return -1
-        if (sb) return 1
-        return 0
-      })
+      .sort((a, b) => jobTimeMs(a) - jobTimeMs(b))
   }
 
   function simpleJobFor(task: Task | null): Job | null {
@@ -87,6 +98,12 @@ export function useWorkbenchSimpleConversation(jobs: Ref<Job[]>, selectedTask: C
       const toolCalls = buildJobToolCalls(j)
       const hasToolCalls = toolCalls.length > 0
       const hasContent = hasOutput || hasThinking || hasToolCalls
+      // 一轮压根没跑起来（spawn 失败）、零产出，而且后面还有别的轮次：assistant 侧不画。
+      // 组件库只在 status==='error' 时渲错误块，非最后一轮一律降级成 done —— 硬画出来
+      // 就是个空气泡（"用户说了一句、底下跟一坨空的"），比不画更难懂。最后一轮仍然
+      // 走 error（重试按钮挂在它身上），失败原因没丢；历史去「执行记录 / 历史报告」查。
+      // （forEach 回调里没有 continue，用 return 跳过本次 push。）
+      if (!isLast && j.status === 'error' && !hasContent) return
       let status: MessageStatus
       if (!isLast) {
         status = 'done'
