@@ -208,7 +208,7 @@ export const DOCS = [
           { term: '进度报告', desc: '主 Agent 读每个在跑 job 的时长 / 思考 / 工具分布 / 静默情况,写汇报并给整体与单任务进度估计;按 5–60 分钟间隔自动生成,标签页关着也攒历史' },
           { term: '静默收尾', desc: '静默超 10 分钟让主 Agent 判断是否已完成:判完成则落终态并标「AI 判定完成」(带依据);判据不足就什么都不做,最多问 3 次' },
           { term: '手动标记完成', desc: '待处理 / 进行中卡片可手动标完成(进行中的会先确认并停掉那一轮),手动标的可一键撤销;标记记在任务上,再跑一轮即作废' },
-          { term: '执行器', desc: 'Claude Code / OpenCode / Codex,管道模式 detached 进程直连,输出流回 UI;续聊固定沿用初始执行器(--resume / --session / thread id)' },
+          { term: '执行器', desc: 'Claude Code / OpenCode / Codex / CodeBuddy Code / Pi / 华为云码道 / Qoder 七个 CLI,管道模式 detached 进程直连,输出流回 UI;续聊固定沿用初始执行器(各家续接参数互不通用)' },
           { term: '提示词预置', desc: '可复用模板,支持 {{task.title}} / {{task.desc}} / {{repo.path}} / {{branch}} 插值;AI 生成项目架构说明一键成稿' },
           { term: '跨轮记忆', desc: '每次派发告知智能体本机记忆库 ~/.zen-gitsync/memory/:只有索引进 prompt,正文按需读;收尾自检四问,该记的记一条' },
           { term: '结束提示', desc: '页面提示 / 浏览器通知 / 提示音三个独立开关;智能体提问时第三种音色,切窗也听得到' },

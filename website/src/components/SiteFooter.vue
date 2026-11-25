@@ -20,6 +20,7 @@ const APP_VERSION = typeof __APP_VERSION__ === 'undefined' ? 'dev' : __APP_VERSI
           <span>GitHub</span>
         </a>
         <a :href="REPO.npm" target="_blank" rel="noreferrer"><span>npm</span></a>
+        <a :href="REPO.blog" target="_blank" rel="noreferrer"><span>博客</span></a>
         <a :href="REPO.issues" target="_blank" rel="noreferrer"><span>问题反馈</span></a>
       </nav>
     </div>

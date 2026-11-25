@@ -8,7 +8,8 @@ export const REPO = {
   slug: 'xz333221/zen-gitsync',
   github: 'https://github.com/xz333221/zen-gitsync',
   npm: 'https://www.npmjs.com/package/zen-gitsync',
-  issues: 'https://github.com/xz333221/zen-gitsync/issues'
+  issues: 'https://github.com/xz333221/zen-gitsync/issues',
+  blog: 'https://blog.flowdash.cn/'
 }
 
 export const COMMANDS = {

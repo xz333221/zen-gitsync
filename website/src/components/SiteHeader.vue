@@ -27,6 +27,7 @@ defineProps({
           <a href="#install">安装</a>
           <a href="./docs.html">文档</a>
         </template>
+        <a :href="REPO.blog" target="_blank" rel="noreferrer">博客</a>
       </nav>
 
       <div class="nav__actions">
