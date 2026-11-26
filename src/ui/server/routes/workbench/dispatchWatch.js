@@ -27,6 +27,8 @@
 //      注入一条系统通知 user 消息并跑完整一轮 runAgentTurn —— 模型读到结果、
 //      向用户汇报、继续答应过的后续动作；
 //   3. 会话闸被占（用户正在那聊 / 别的轮次在跑）→ 按固定间隔重试，别跟用户抢。
+//      反过来，唤醒轮**占着闸**时用户发消息可以抢占它（对话路由 busy 路径看到
+//      WAKE_TURN_STAGE 就掐断汇报轮接着跑）—— 汇报轮无人观看，用户优先。
 //
 // 设计约束：
 //   - 一条任务只唤醒一次：注册即消费（终态到达就弹掉监听）。用户之后手动重跑
@@ -45,6 +47,16 @@ export const WAKE_TURN_MAX_MS = 15 * 60_000;
 /** 会话被占时的重试间隔与次数：30s × 40 ≈ 20 分钟 */
 export const DEFAULT_RETRY_DELAY_MS = 30_000;
 export const DEFAULT_MAX_RETRIES = 40;
+
+/**
+ * 唤醒轮在会话闸上的 stage 标记。对话路由看到这个 stage 就知道占闸的是
+ * 无人观看的后台汇报轮 —— 用户此时发消息应当**抢占**（掐断汇报轮接着跑），
+ * 而不是回一句"该会话正在生成中"让人干等十几分钟（见 agentRoutes 的 busy 路径）。
+ */
+export const WAKE_TURN_STAGE = 'wake-report';
+
+/** 唤醒轮的检查点落盘间隔：与 agentRoutes 轮内检查点同一节奏 */
+export const WAKE_CHECKPOINT_MS = 2000;
 
 const JOB_STATUS_LABELS = {
   done: '执行成功',
@@ -110,7 +122,9 @@ export function buildWakeMessage(entry, job, { outputTailChars = 1500 } = {}) {
  * @param {object} deps
  * @param {(id: string) => Promise<object|null>} deps.readSession     agentSessionStore.read
  * @param {(id: string, session: object) => Promise<void>} deps.writeSession
- * @param {(id: string) => object|null} deps.acquireTurn              sessionGate.acquireSessionTurn（null = 被占）
+ * @param {(id: string, options?: object) => object|null} deps.acquireTurn  sessionGate.acquireSessionTurn（null = 被占）；
+ *        唤醒轮会传入 { abort, onAbandon, stage } —— abort 是 /api/agent/abort 与用户
+ *        消息抢占掐断这一轮的通道，onAbandon 是宽限兜底强制放闸的标志，stage 见 WAKE_TURN_STAGE。
  * @param {(id: string, token?: object) => boolean} deps.releaseTurn  sessionGate.releaseSession
  * @param {Function} deps.runTurn                                     runAgentTurn（测试注入替身）
  * @param {() => Promise<{model:string,name:string,...}>} deps.resolveTurnModel
@@ -119,6 +133,7 @@ export function buildWakeMessage(entry, job, { outputTailChars = 1500 } = {}) {
  *        原样展开进 runAgentTurn 的参数。entry 里带 sessionId，链式派发要往**本会话**回挂监听。
  * @param {Function} [deps.findLatestTerminalJob]  注册时补查：派发后任务瞬间终态（spawn 秒败）
  *        时终态事件会抢在 register 前面，靠这个兜住。返回该任务最新的终态 job 或 null。
+ * @param {number} [deps.checkpointMs]  唤醒轮的检查点落盘间隔（0 = 关掉；测试用）
  * @param {object} [deps.logger]
  * @param {number} [deps.retryDelayMs] [deps.maxRetries]
  */
@@ -134,6 +149,7 @@ export function createDispatchWatch({
   retryDelayMs = DEFAULT_RETRY_DELAY_MS,
   maxRetries = DEFAULT_MAX_RETRIES,
   findLatestTerminalJob,
+  checkpointMs = WAKE_CHECKPOINT_MS,
 } = {}) {
   /** taskId -> { taskId, sessionId, taskTitle, projectPath } */
   const watched = new Map();
@@ -184,10 +200,20 @@ export function createDispatchWatch({
     watched.delete(taskId);
 
     for (let attempt = 0; ; attempt++) {
-      const token = acquireTurn(entry.sessionId);
+      // 唤醒轮也要能被掐断（2026-11-26）：abort 通道接 AbortController —— 没有它
+      // /api/agent/abort 对这一轮是空操作，用户消息抢占（对话路由 busy 路径）也没法
+      // 把它让开，只能干等整轮跑完。onAbandon 是"宽限兜底强制放闸"的标志：那之后
+      // 会话已归用户轮次所有，这一轮的任何落盘都必须停（再写就是覆盖别人的消息）。
+      const abortController = new AbortController();
+      let preempted = false;
+      const token = acquireTurn(entry.sessionId, {
+        abort: () => { try { abortController.abort(); } catch { /* 已 aborted */ } },
+        onAbandon: () => { preempted = true; },
+        stage: WAKE_TURN_STAGE,
+      });
       if (token) {
         try {
-          await runWakeTurn(entry, job);
+          await runWakeTurn(entry, job, { abortController, wasPreempted: () => preempted });
           return { handled: true, woken: true };
         } catch (err) {
           logger.warn(`[dispatch-watch] 唤醒会话失败(${entry.sessionId}, taskId=${taskId}): ${err?.message || err}`);
@@ -207,8 +233,13 @@ export function createDispatchWatch({
   /**
    * 跑唤醒那一轮。与 scheduler.executeTask 的编排同构：读会话 → 拿默认模型 →
    * 注入通知消息 → runTurn → 记用时 → 落盘。闸的占用在 handleJobUpdate 里做。
+   *
+   * 轮内检查点落盘（checkpointMs 节流 + 脏检查）：唤醒轮没有 SSE 观众，前端靠
+   * sessions_changed 的目录事件重拉会话 —— 不检查点的话，通知消息与汇报要等
+   * 整轮（可能十几分钟）跑完才一次性出现，用户的观感就是"回复凭空蹦出来"。
+   * 被抢占（闸被用户轮次收走）后必须停写，最终落盘也跳过。
    */
-  async function runWakeTurn(entry, job) {
+  async function runWakeTurn(entry, job, { abortController, wasPreempted } = {}) {
     const session = await readSession(entry.sessionId);
     if (!session) throw new Error('来源会话不存在（已被删除？）');
     if (!Array.isArray(session.messages)) session.messages = [];
@@ -218,11 +249,21 @@ export function createDispatchWatch({
     const model = await resolveTurnModel();
     session.model = `${model.model || ''} (${model.name || ''})`;
 
-    const abortController = new AbortController();
     const timeoutId = setTimeout(() => {
       try { abortController.abort(); } catch { /* 已 aborted */ }
     }, WAKE_TURN_MAX_MS);
     const startedAt = Date.now();
+    let checkpointSig = '';
+    const checkpointTimer = checkpointMs > 0 ? setInterval(() => {
+      if (typeof wasPreempted === 'function' && wasPreempted()) return;
+      const last = session.messages[session.messages.length - 1];
+      const sig = `${session.messages.length}:${typeof last?.content === 'string' ? last.content.length : 0}`;
+      if (sig === checkpointSig) return;
+      checkpointSig = sig;
+      writeSession(session.sessionId, session).catch(err => {
+        logger.warn(`[dispatch-watch] 检查点落盘失败(本轮继续): ${err?.message || err}`);
+      });
+    }, checkpointMs) : null;
     try {
       const extras = typeof buildTurnExtras === 'function'
         ? (await buildTurnExtras(entry) || {})
@@ -244,6 +285,13 @@ export function createDispatchWatch({
       });
     } finally {
       clearTimeout(timeoutId);
+      if (checkpointTimer) clearInterval(checkpointTimer);
+    }
+    // 被抢占：会话已归用户轮次，落盘（含最终版）全部跳过 —— 检查点已把当时的
+    // 进度写下去了，剩下的部分本来就该随用户那轮的上下文走。
+    if (typeof wasPreempted === 'function' && wasPreempted()) {
+      logger.warn(`[dispatch-watch] 唤醒轮被用户消息抢占，放弃最终落盘(${entry.sessionId})`);
+      return;
     }
     recordTurnTiming(session, { turnIndex, durationMs: Date.now() - startedAt });
     session.updatedAt = nowIso();

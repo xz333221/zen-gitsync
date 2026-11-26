@@ -397,6 +397,108 @@ test('客户端断开后闸必须自愈：卡死的轮次不能让同一会话�
   }
 });
 
+// 回归（2026-11-26 用户报："派发的任务完成之后，通知的消息再发消息就没法发了"）：
+//
+// 任务终态触发的唤醒轮（dispatchWatch）会占着会话闸跑完整一轮（汇报 + 继续答应过
+// 的后续动作，上限 15 分钟），期间用户发的每条消息都撞 SESSION_BUSY。现在对话路由
+// 撞上唤醒轮（stage = wake-report）时应当**抢占**：掐断无人观看的汇报轮、等闸放
+// 回来跑用户这轮 —— 只有占闸的不是唤醒轮时才维持原样回 SESSION_BUSY。
+test('用户消息抢占唤醒轮：撞上后台汇报轮不回 SESSION_BUSY，掐断后接着跑', async () => {
+  const { WAKE_TURN_STAGE } = await import('./dispatchWatch.js');
+  const { acquireSessionTurn, releaseSession, isSessionBusy } = await import('./sessionGate.js');
+  const activeCwd = path.resolve('active-project');
+  let chatHandler;
+  const app = {
+    get() {},
+    delete() {},
+    put() {},
+    post(route, handler) {
+      if (route === '/api/agent/chat') chatHandler = handler;
+    }
+  };
+  registerAgentRoutes({
+    app,
+    getCurrentProjectPath: () => activeCwd,
+    configManager: {
+      readRawConfigFile: async () => ({
+        models: [{ model: 'test', name: 'T', baseURL: 'https://example.invalid/v1', apiKey: 'k', isDefault: true }]
+      })
+    },
+    snapshotter: STUB_SNAPSHOTTER
+  });
+
+  const reply = text => new Response(new ReadableStream({
+    start(stream) {
+      const bytes = new TextEncoder();
+      stream.enqueue(bytes.encode(event({ choices: [{ delta: { content: text } }] })));
+      stream.enqueue(bytes.encode('data: [DONE]\n\n'));
+      stream.close();
+    }
+  }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => reply('本轮的回答');
+
+  const framesOf = text => text.split('\n')
+    .filter(l => l.trim().startsWith('data:'))
+    .map(l => { try { return JSON.parse(l.trim().slice(5)) } catch { return null } })
+    .filter(Boolean);
+
+  const send = async (body) => {
+    let output = '';
+    let onClose;
+    const req = {
+      body: { cwd: activeCwd, ...body },
+      headers: {},
+      socket: { once(_evt, cb) { onClose = cb; } }
+    };
+    const res = {
+      set() {},
+      flushHeaders() {},
+      write(c) { output += c; },
+      end() {}
+    };
+    const route = chatHandler(req, res);
+    return { route, get output() { return output; }, close: () => onClose?.() };
+  };
+
+  try {
+    // 先正常跑一轮拿到会话 id
+    const first = await send({ userMessage: '帮我派个活' });
+    await first.route;
+    const sessionId = framesOf(first.output).find(e => e.type === 'meta')?.sessionId;
+    assert.ok(sessionId, '第一轮应推过 meta');
+
+    // 模拟唤醒轮占闸：stage = wake-report，abort 时像真唤醒轮一样自己退出放闸
+    let wakeAborted = false;
+    const wakeTurn = acquireSessionTurn(sessionId, {
+      stage: WAKE_TURN_STAGE,
+      abort: () => {
+        wakeAborted = true;
+        releaseSession(sessionId, wakeTurn.token);
+      }
+    });
+    assert.ok(wakeTurn);
+    assert.equal(isSessionBusy(sessionId), true);
+
+    // 用户此刻发消息：应当抢占唤醒轮（掐断它）并真的跑起来
+    const second = await send({ userMessage: '任务结果里那个报错怎么回事', sessionId });
+    await second.route;
+    assert.equal(wakeAborted, true, '用户的消息应当掐断后台汇报轮');
+    assert.ok(!second.output.includes('SESSION_BUSY'), `抢占后不该再回 busy：${second.output.slice(0, 300)}`);
+    assert.match(second.output, /"type":"done"/, '用户这轮应当真的跑完');
+
+    // 对照组：占闸的不是唤醒轮（普通轮次）→ 维持原样回 SESSION_BUSY，且不掐它
+    const holderTurn = acquireSessionTurn(sessionId, { stage: 'preparing' });
+    const third = await send({ userMessage: '再来一句', sessionId });
+    await third.route;
+    assert.ok(third.output.includes('SESSION_BUSY'), '非唤醒轮占闸时维持 busy 语义');
+    assert.equal(isSessionBusy(sessionId), true, '普通轮次不该被抢占掐掉');
+    releaseSession(sessionId, holderTurn.token);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 // 每轮用时（session.turnTimings + SSE 的 turn_done）。
 // 这两份必须是**同一个数**：前端自己再算一遍，刷新后从会话文件读出来就会变，
 // 同一轮看着像有两个用时。序号按"第几条 user 消息"往后走，供前端对齐到对应气泡。

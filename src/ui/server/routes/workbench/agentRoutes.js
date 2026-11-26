@@ -34,7 +34,7 @@ import { createProjectListProvider } from './projectTool.js';
 import { askPeerByRef, listPeerStatus } from '../../../../peer/client.js';
 import { createDispatcher } from './dispatchInstruction.js';
 import { createWorkspaceSnapshotter } from '../aiContext/wiring.js';
-import { createDispatchWatch } from './dispatchWatch.js';
+import { createDispatchWatch, WAKE_TURN_STAGE } from './dispatchWatch.js';
 import { createTaskStatusProvider } from './taskStatusProvider.js';
 // jobStore 的 bus：job:update 终态事件从这里转发给 dispatchWatch（派发任务完成后
 // 自动唤醒来源会话，见 dispatchWatch.js 文件头）。
@@ -289,7 +289,8 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
   const dispatchWatch = createDispatchWatch({
     readSession,
     writeSession,
-    acquireTurn: (sessionId) => acquireSessionTurn(sessionId),
+    // options 原样透传：唤醒轮要挂 abort 通道 / stage 标记（见 dispatchWatch.handleJobUpdate）
+    acquireTurn: (sessionId, options) => acquireSessionTurn(sessionId, options),
     releaseTurn: (sessionId, token) => releaseSession(sessionId, token),
     runTurn: runAgentTurn,
     resolveTurnModel: async () => {
@@ -709,11 +710,27 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
       try { res.end(); } catch {}
     };
     if (sessionIdInput) {
-      acquiredTurn = acquireSessionTurn(sessionIdInput, {
+      const acquireThisTurn = () => acquireSessionTurn(sessionIdInput, {
         abort: abortTurn,
         onAbandon: stopTurnStream,
         stage: 'preparing',
       });
+      acquiredTurn = acquireThisTurn();
+      if (!acquiredTurn) {
+        // 用户消息优先（2026-11-26）：占着闸的是后台汇报轮（派发任务完成后的自动
+        // 唤醒轮，见 dispatchWatch.js）时，不等它跑完 —— 掐断它、等闸放回来再跑
+        // 用户这轮。汇报轮无人观看，却可能带着工具链跑上十几分钟，让用户对着
+        // "该会话正在生成中"干等是本末倒置。唤醒轮自己退出由它的 finally 放闸；
+        // 卡死的话 3s 宽限兜底强制放（requestSessionAbort），这里最多等 5s。
+        if (getSessionTurn(sessionIdInput)?.stage === WAKE_TURN_STAGE) {
+          requestSessionAbort(sessionIdInput);
+          const preemptDeadline = Date.now() + 5000;
+          while (!acquiredTurn && Date.now() < preemptDeadline) {
+            await new Promise(resolve => setTimeout(resolve, 120));
+            acquiredTurn = acquireThisTurn();
+          }
+        }
+      }
       if (!acquiredTurn) {
         const holder = getSessionTurn(sessionIdInput);
         send({
