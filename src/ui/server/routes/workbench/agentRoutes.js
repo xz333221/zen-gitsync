@@ -34,6 +34,11 @@ import { createProjectListProvider } from './projectTool.js';
 import { askPeerByRef, listPeerStatus } from '../../../../peer/client.js';
 import { createDispatcher } from './dispatchInstruction.js';
 import { createWorkspaceSnapshotter } from '../aiContext/wiring.js';
+import { createDispatchWatch } from './dispatchWatch.js';
+import { createTaskStatusProvider } from './taskStatusProvider.js';
+// jobStore 的 bus：job:update 终态事件从这里转发给 dispatchWatch（派发任务完成后
+// 自动唤醒来源会话，见 dispatchWatch.js 文件头）。
+import { bus as jobBus, snapshotJobs } from './jobStore.js';
 import { subscribeAgentSessionChanges } from './agentSessionEvents.js';
 // 用户固定提示词（g ai 默认提示词 + 派发提示词）的解析 —— 两条引擎链路共用同一份
 import { resolveChatPromptSection, buildDispatchPolicySection } from './chatPrompts.js';
@@ -181,7 +186,7 @@ function targetSourceLabel(source) {
  * 导出只为单测（agentRoutes.test.js 钉住这几句文案与透传口径）——
  * 与 waitForAgentAnswer / submitAgentAnswer 同一取舍。
  */
-export async function runDispatchTask({ dispatch, payload, defaults }) {
+export async function runDispatchTask({ dispatch, payload, defaults, onDispatched }) {
   try {
     const result = await dispatch({
       text: payload.text,
@@ -202,13 +207,24 @@ export async function runDispatchTask({ dispatch, payload, defaults }) {
     const head = `已派发：任务「${result.task.title}」→ 项目「${project}」`;
     const facts = `taskId=${result.task.id}；落点依据：${targetSourceLabel(result.target?.source)}`;
 
+    // 派发事实往外递（dispatchWatch 的 register 在这里挂）：钩子的失败不能影响
+    // 工具结果本身 —— 盯不上是体验损失，把"已派发"说成失败是错误汇报。
+    if (typeof onDispatched === 'function') {
+      try {
+        onDispatched(result);
+      } catch (hookErr) {
+        logger.warn(`[agent] dispatch_task 的 onDispatched 钩子失败: ${hookErr?.message || hookErr}`);
+      }
+    }
+
     if (!result.ran) {
       return `${head}，但**没有开始执行**（${result.instruction?.reason || '未开启自动执行'}）。${facts}。`
         + '它在看板的「待处理」列里，等用户自己点执行。'
     }
     return `${head}，已交给 ${engineLabel(result.executor)} 开始执行。${facts}。`
-      + '它在独立进程里跑、不占用本次对话，跑完会有任务完成提示；'
-      + '不要等它结束，也不要为同一件事重复派发。'
+      + '它在独立进程里跑、不占用本次对话；任务结束后这条会话会自动收到一条系统通知'
+      + '（含状态与输出摘要），届时再向用户汇报结果，等待期间可以用 task_status 工具查进度；'
+      + '不要为同一件事重复派发。'
   } catch (err) {
     return `派发失败：${err?.message || String(err)}`
   }
@@ -259,6 +275,76 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
   const workspaceSnapshotter = snapshotter || createWorkspaceSnapshotter({ configManager, getCurrentProjectPath });
   const getContextBlock = ({ locale } = {}) => workspaceSnapshotter.getBlock({ locale });
 
+  // task_status 工具的数据源（tasks.json + 合并后的执行记录）。同样在这里建一次、复用。
+  const taskStatus = createTaskStatusProvider();
+
+  // ════════════════════════════════════════════════════════════════════════
+  // 派发任务完成 → 自动唤醒派发它的那条 g ai 会话（dispatchWatch）。
+  //
+  // dispatch_task 的老文案是"跑完会有任务完成提示"，但那条提示只到用户的眼睛，
+  // 到不了模型 —— 模型一轮结束就睡了，收尾全靠人喊。这里把闭环补上：
+  //   派发成功（ran=true）→ 记 taskId → 来源会话；
+  //   job 进终态（下面订阅 jobBus）→ 往来源会话注入系统通知并跑完整一轮。
+  // ════════════════════════════════════════════════════════════════════════
+  const dispatchWatch = createDispatchWatch({
+    readSession,
+    writeSession,
+    acquireTurn: (sessionId) => acquireSessionTurn(sessionId),
+    releaseTurn: (sessionId, token) => releaseSession(sessionId, token),
+    runTurn: runAgentTurn,
+    resolveTurnModel: async () => {
+      if (!configManager) throw new Error('configManager 不可用');
+      const rawConfig = await configManager.readRawConfigFile();
+      const models = resolveModels(rawConfig);
+      const model = models.find(m => m.isDefault) || models[0];
+      if (!model) throw new Error('未配置 AI 模型，无法自动汇报任务结果');
+      return model;
+    },
+    // 唤醒轮的工具注入与普通对话同一份；dispatchTask 走无人值守默认（与定时任务
+    // 同一口径），链式派发回挂到**本会话** —— 唤醒轮自己派出去的活完成后同样会汇报。
+    buildTurnExtras: (entry) => ({
+      listProjects,
+      registerProject,
+      dispatchTask: (payload) => runDispatchTask({
+        dispatch: dispatchInstruction,
+        payload,
+        defaults: { executor: '', useDefaultPrompt: true },
+        onDispatched: (result) => {
+          if (!result?.ran || !result?.task?.id) return;
+          dispatchWatch.register({
+            taskId: result.task.id,
+            sessionId: entry.sessionId,
+            taskTitle: result.task.title || '',
+            projectPath: result.target?.path || '',
+          });
+        },
+      }),
+      getContextBlock,
+      taskStatus,
+      // 无人值守版派活策略 —— 唤醒轮可能发生在没人看着的时候，别开"主动找活派"
+      dispatchPolicySection: buildDispatchPolicySection({ scheduled: true, locale: 'zh' }),
+    }),
+    // 注册补查：spawn 秒败的任务，终态事件会抢在 register 前面（见 dispatchWatch.js）
+    findLatestTerminalJob: (taskId) => {
+      const list = snapshotJobs().filter(j => j && j.taskId === taskId
+        && (j.status === 'done' || j.status === 'error' || j.status === 'cancelled'));
+      if (!list.length) return null;
+      return list.sort((a, b) =>
+        String(b.endedAt || b.startedAt || '').localeCompare(String(a.endedAt || a.startedAt || '')))[0];
+    },
+  });
+
+  const TERMINAL_JOB_STATUSES = new Set(['done', 'error', 'cancelled']);
+  jobBus.on('event', ({ event, payload }) => {
+    if (event !== 'job:update' || !payload) return;
+    if (!TERMINAL_JOB_STATUSES.has(payload.status)) return;
+    if (!dispatchWatch.isWatched(payload.taskId)) return;
+    // 异步收尾：bus 回调里不能 await，失败在 handleJobUpdate 内部已记日志
+    dispatchWatch.handleJobUpdate(payload)
+      .catch(err => logger.warn(`[dispatch-watch] 唤醒流程异常: ${err?.message || err}`));
+  });
+
+
   // 定时任务：调度器 + 路由（见 scheduler.js / scheduleRoutes.js）。
   //
   // 依赖注入的三件事与对话链路是**同一份实现**：list_projects、上下文快照、
@@ -277,6 +363,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
     registerProject,
     dispatchTask: scheduleDispatchTask,
     getContextBlock,
+    taskStatus,
   });
   registerScheduleRoutes({ app, scheduler: scheduleScheduler, getCurrentProjectPath });
 
@@ -965,6 +1052,20 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
             useDefaultPrompt: req.body?.dispatchUseDefaultPrompt !== false,
             forceExecutor: dispatchPriority.length > 0,
           },
+          // 派发成功且真的开跑了 → 盯住它，完成后自动唤醒本会话汇报（dispatchWatch）。
+          // 只建不跑的任务不盯：它躺在看板等用户点执行，那是用户自己盯着看的活动。
+          onDispatched: (result) => {
+            if (!result?.ran || !result?.task?.id) return;
+            const registered = dispatchWatch.register({
+              taskId: result.task.id,
+              sessionId: session.sessionId,
+              taskTitle: result.task.title || '',
+              projectPath: result.target?.path || '',
+            });
+            if (registered) {
+              logger.info(`[agent] 盯住派发任务 ${result.task.id}，完成后唤醒会话 ${session.sessionId}`);
+            }
+          },
         })
         : undefined;
 
@@ -1061,6 +1162,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager,
           dispatchTask,
           listProjects,
           registerProject,
+          taskStatus,
           askPeer,
           listPeers,
           getContextBlock,

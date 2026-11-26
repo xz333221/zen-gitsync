@@ -70,6 +70,7 @@ export const MAX_RUN_MS = 60 * 60_000;
  * @param {Function} [deps.registerProject]     register_project / 建仓库后登记常用目录的实现
  * @param {Function} [deps.dispatchTask]        dispatch_task 工具的实现（已绑定默认参数）
  * @param {Function} [deps.getContextBlock]     工作区状态快照
+ * @param {Function} [deps.taskStatus]          task_status 工具的实现（查看板任务状态）
  * @param {Function} [deps.runTurn]             执行一轮对话（默认 runAgentTurn；测试注入替身）
  * @param {object} [deps.logger]                日志替身（测试用）
  * @param {() => Date} [deps.now]               时钟替身（测试用）
@@ -81,6 +82,7 @@ export function createScheduler({
   registerProject,
   dispatchTask,
   getContextBlock,
+  taskStatus,
   runTurn = runAgentTurn,
   logger = defaultLogger,
   now = () => new Date(),
@@ -228,6 +230,7 @@ export function createScheduler({
           listProjects,
           registerProject,
           dispatchTask,
+          taskStatus,
           getContextBlock,
           requestBudget,
           // 派活策略：**无人值守版**，不继承"主动派活"那个开关 —— 定时任务是

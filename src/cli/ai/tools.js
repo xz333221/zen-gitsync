@@ -411,6 +411,8 @@ export const TOOL_DEFINITIONS = [
         + '这是"让别的 agent 替我干活"的唯一入口：工作台里的一条任务 = 一次独立会话，派出去之后它在自己的进程里跑，'
         + '不占本次对话，也不阻塞你继续回答用户。'
         + '只在 g ui 右下角的 g ai 悬浮面板里可用；其它入口调用会拿到一句 unavailable，那时直接回答用户即可。'
+        + '完成通知：任务真的开跑后，它执行结束（成功 / 出错 / 被取消）时这条会话会**自动收到一条系统通知**'
+        + '（含状态、用时与输出摘要），你不需要用户转达，也不要自己反复轮询等它 —— 等待期间确有必要可用 task_status 查一次进度。'
         + '落点：不传 project_path 时由服务端按指令内容判断（指令里点名的项目 > 语义判断 > 应用当前项目），'
         + '判断依据会如实记进指令流水；不确定有哪些项目时先用 list_projects 看清楚，不要猜目录名。'
         + '粒度：一次调用只建**一条**任务。要分成几件事就分几次调用 —— 每次调用都会真的建一个任务、'
@@ -445,6 +447,25 @@ export const TOOL_DEFINITIONS = [
           },
         },
         required: ['text'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'task_status',
+      description: '查询本机看板上任务的状态与最近一次执行结果 —— 典型对象就是你用 dispatch_task 派出去的活。'
+        + '两种用法：传 task_id 查指定任务（含执行输出结尾与错误信息）；不传则列出最近的任务及其状态。'
+        + '什么时候用：用户问"那个任务跑完没有 / 怎么样了"；或者你在等某条派发的结果、'
+        + '还没收到系统通知时主动查一次。别为了"确认派出去了"而查 —— dispatch_task 的结果里已经写了 taskId。',
+      parameters: {
+        type: 'object',
+        properties: {
+          task_id: {
+            type: 'string',
+            description: '要查的任务 id（dispatch_task 结果里的 taskId）。不传 = 列出最近的任务。',
+          },
+        },
       },
     },
   },
@@ -1521,6 +1542,18 @@ async function toolDispatchTask(args, ctx) {
   return ctx.dispatchTask(payload)
 }
 
+// task_status 与 dispatch_task 同一条边界：工具的**定义**在这里，tasks.json / jobs
+// 只有 GUI 侧拿得到，实现由 agentRoutes 注入 ctx.taskStatus（见 taskStatusProvider.js）。
+// 派发出去的任务完成后会话会自动收到系统通知（dispatchWatch），这个工具管的是
+// "通知还没来 / 用户随口问进度"时的主动查询。
+async function toolTaskStatus(args, ctx) {
+  if (typeof ctx.taskStatus !== 'function') {
+    return '错误: task_status 只在 g ui(GUI 界面)的内置智能体里可用。命令行 g ai 下请改用 run_command '
+      + '直接读任务库文件，例如 cat ~/.zen-gitsync/tasks.json 与 ~/.zen-gitsync/jobs.json。'
+  }
+  return ctx.taskStatus({ taskId: args.task_id })
+}
+
 // schedule_task：定时任务的登记与管理。
 //
 // 与 dispatch_task 的注入模式不同：它不依赖 GUI 层的 configManager / 任务系统，
@@ -1679,6 +1712,7 @@ const TOOL_HANDLERS = {
   update_plan: toolUpdatePlan,
   ask_user: toolAskUser,
   dispatch_task: toolDispatchTask,
+  task_status: toolTaskStatus,
   schedule_task: toolScheduleTask,
   web_search: toolWebSearch,
   web_fetch: toolWebFetch,

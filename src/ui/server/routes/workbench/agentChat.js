@@ -358,6 +358,9 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 //   - dispatchTask: (payload) => Promise<string>  dispatch_task 工具的实现 —— 派发一条
 //     工作台任务。同样由 agentRoutes 注入，但**只在主 Agent 控制台发起的对话里**注入
 //     （别的入口不注入 = 那个入口没有派发能力，工具会回一句可照做的 unavailable）
+//   - taskStatus: (args) => Promise<string>  task_status 工具的数据源 —— 查看板任务
+//     状态与最近一次执行结果。由 agentRoutes 注入（tasks.json / jobs 只有那一层拿得到）；
+//     不注入（CLI / 测试）= 工具回一句可照做的说明。
 //   - getContextBlock: ({locale}) => Promise<string>  工作区状态快照的摘要块
 //     (由 agentRoutes 注入,实现在 routes/aiContext/:七个板块的摘要 + 落盘文件路径)
 //   - requestBudget: { maxChars, maxMessages, maxUserChars }  每轮请求的上下文预算
@@ -383,8 +386,8 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 // 分流、摘要注进请求副本（agentParity.test.js 有守卫）。
 //
 // 返回: { aborted: boolean }
-export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, docNote = '', attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, registerProject, dispatchTask, askPeer, listPeers, getContextBlock, requestBudget = null, resume = false, streamFn = streamChatOnce, promptSection, dispatchPolicySection = '' }) {
-  const ctx = { cwd, locale, onChild, askUser, listProjects, registerProject, dispatchTask, askPeer, listPeers };
+export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, openFilePath, docNote = '', attachments = [], dirStatusBlock = '', signal, send, onChild, askUser, listProjects, registerProject, dispatchTask, askPeer, listPeers, taskStatus, getContextBlock, requestBudget = null, resume = false, streamFn = streamChatOnce, promptSection, dispatchPolicySection = '' }) {
+  const ctx = { cwd, locale, onChild, askUser, listProjects, registerProject, dispatchTask, askPeer, listPeers, taskStatus };
 
   // 确保 session.messages 存在
   if (!Array.isArray(session.messages)) session.messages = [];

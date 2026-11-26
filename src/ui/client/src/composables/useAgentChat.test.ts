@@ -1425,4 +1425,77 @@ describe('useAgentChat displayMessages：正文图片改写', () => {
     chatStreams[0].close()
     await promise
   })
+
+  // ── 外部写入的静默重拉（任务完成通知 / 远端 peer / CLI 都不经过本窗口 SSE） ──
+  test('外部写入：磁盘版本更新时静默重拉当前会话，版本对齐后不再拉', async () => {
+    // 会话 A 的服务端内容做成可变的：模拟后台轮次往磁盘追加消息
+    let sessionA = {
+      ...sessionMeta('A', '会话 A'),
+      version: 1,
+      updatedAt: '2026-09-01T00:00:00.000Z',
+      messages: [{ role: 'user', content: '第一句' }],
+    }
+    let detailFetches = 0
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.startsWith('/api/agent/sessions?')) {
+        return json({ success: true, sessions: [{ ...sessionMeta('A', '会话 A'), updatedAt: sessionA.updatedAt }] })
+      }
+      if (url === '/api/agent/sessions/A') {
+        detailFetches += 1
+        return json({ success: true, session: sessionA })
+      }
+      return json({ success: true })
+    }))
+
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    // 版本没变：不拉
+    await chat.refreshOpenSessionIfStale()
+    expect(detailFetches).toBe(1) // 只有 loadSession 那一次
+
+    // 后台轮次落盘：updatedAt 推进 + 多一条「任务完成」通知
+    sessionA = {
+      ...sessionA,
+      updatedAt: '2026-09-01T00:05:00.000Z',
+      messages: [
+        { role: 'user', content: '第一句' },
+        { role: 'user', content: '【系统通知】你派发的任务已执行结束：执行成功。' },
+        { role: 'assistant', content: '任务完成了，结果如下……' },
+      ],
+    }
+    await chat.loadSessions({ silent: true })
+    await chat.refreshOpenSessionIfStale()
+    expect(detailFetches).toBe(2)
+    expect(chat.messages.value.map((m) => m.content)).toEqual([
+      '第一句',
+      '【系统通知】你派发的任务已执行结束：执行成功。',
+      '任务完成了，结果如下……',
+    ])
+
+    // 版本已对齐：再来一次目录事件不重复拉（节流之外的第二道闸）
+    await chat.refreshOpenSessionIfStale()
+    expect(detailFetches).toBe(2)
+  })
+
+  test('外部写入：本地正在流式时绝不覆盖缓冲', async () => {
+    const chat = useAgentChat()
+    await chat.loadSessions()
+    await chat.loadSession('A')
+
+    const sendPromise = chat.sendMessage('别打断我')
+    await flush()
+    chatStreams[0].send({ type: 'meta', sessionId: 'A', title: '会话 A' })
+    chatStreams[0].send({ type: 'content', delta: '生成中……' })
+    await flush()
+
+    await chat.refreshOpenSessionIfStale()
+    // 流没结束：缓冲原样保留（不重拉、不覆盖）
+    expect(chat.messages.value[chat.messages.value.length - 1]?.content).toBe('生成中……')
+
+    chatStreams[0].send({ type: 'done', content: '生成完了' })
+    chatStreams[0].close()
+    await sendPromise
+  })
 })

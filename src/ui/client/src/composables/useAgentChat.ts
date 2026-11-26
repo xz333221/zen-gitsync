@@ -455,6 +455,14 @@ interface SessionRun {
    * 重算一遍等于把那一轮发出去时的东西换掉（与队列存快照同理）。
    */
   lastSendOptions?: AgentSendOptions
+  /**
+   * 本地缓冲与服务端磁盘**对齐到的版本**（会话文件的 updatedAt，服务端时钟）。
+   *
+   * 外部写入检测（任务完成通知触发的后台轮次、远端 peer、CLI）全靠它：列表刷新时
+   * 拿 meta.updatedAt 与这里比，更新了才重拉会话正文。两个值同源（都是服务端写的
+   * ISO 串），可以安全比较；`undefined` = 从没对过账（老状态 / 刚被外部创建）。
+   */
+  loadedUpdatedAt?: string
 }
 
 // ── composable ───────────────────────────────────────────
@@ -860,6 +868,73 @@ export function useAgentChat() {
     }
   }
 
+  // ── 外部写入的静默重拉（当前打开的会话） ─────────────────
+  // 会话文件是整机共享的：任务完成通知触发的后台轮次、远端 peer、CLI 都会往里写，
+  // 而这些写入方不会经过本窗口的任何一次 SSE。没有这一步，用户正看着的对话里
+  // "任务完成了"那条通知和汇报永远不出现，得切走再切回来。
+  //
+  // 三道闸，缺一道都会出事：
+  //   · 本地正在流式 → 不能覆盖缓冲（isStreaming / pendingQuestion）；
+  //   · 版本没变 → 不拉（meta.updatedAt === loadedUpdatedAt，两个都是服务端写的）；
+  //   · 节流 → 后台轮次的检查点每 2s 落盘一次，SSE 会跟着连响，别每响一次拉一遍
+  //     整个会话（大会话几 MB，10s 一次是更新感与开销的折中）。
+  let lastExternalRefreshAt = 0
+  // 节流窗内又来事件时，不直接丢 —— 排一个"窗过期就补拍"的定时器。不然检查点
+  // 连发时最后一条写入会被吞到下一次事件才有机会进来（实测：用户看到的滞后
+  // 不是 10 秒，而是"直到下次有人写这条会话为止"）。
+  let pendingExternalRefreshTimer: ReturnType<typeof setTimeout> | null = null
+
+  async function refreshOpenSessionIfStale() {
+    const sessionId = currentSessionId.value
+    if (!sessionId) return
+    const run = runs.get(sessionId)
+    if (run?.isStreaming || run?.pendingQuestion) return
+    const meta = sessions.value.find(s => s.sessionId === sessionId)
+    if (!meta?.updatedAt) return
+    if (run?.loadedUpdatedAt && meta.updatedAt <= run.loadedUpdatedAt) return
+    const now = Date.now()
+    const sinceLast = now - lastExternalRefreshAt
+    if (sinceLast < 10_000) {
+      if (!pendingExternalRefreshTimer) {
+        pendingExternalRefreshTimer = setTimeout(() => {
+          pendingExternalRefreshTimer = null
+          refreshOpenSessionIfStale().catch(() => {})
+        }, 10_000 - sinceLast + 50)
+      }
+      return
+    }
+    lastExternalRefreshAt = Date.now()
+    try {
+      const resp = await fetch(`/api/agent/sessions/${encodeURIComponent(sessionId)}`)
+      const res = await resp.json()
+      // 等响应的窗口里状态可能全变了：不是当前会话 / 本地开跑了 / 版本又更新了都放弃
+      if (!res.success || currentSessionId.value !== sessionId) return
+      const fresh = runs.get(sessionId)
+      if (fresh?.isStreaming || fresh?.pendingQuestion) return
+      const serverUpdatedAt = res.session?.updatedAt || ''
+      if (fresh?.loadedUpdatedAt && serverUpdatedAt && serverUpdatedAt <= fresh.loadedUpdatedAt) return
+      const target = ensureRun(sessionId)
+      target.messages = convertSessionToMessages(res.session)
+      if (res.session?.title) target.title = res.session.title
+      target.loadedUpdatedAt = serverUpdatedAt
+    } catch {
+      // 静默：外部刷新失败不打扰用户，下一次目录事件自然会再试
+    }
+  }
+
+  /**
+   * 外部变更事件（sessions_changed SSE）的统一入口：先重拉列表，**等它完成**
+   * 再做当前会话的外部刷新。
+   *
+   * 两步必须串行 —— 刷新的"版本变了没"判据读的就是刚拉回来的列表；并行跑的话
+   * 第一次事件时列表还是旧的，meta.updatedAt == 已加载版本，重拉被当成"没变化"
+   * 吞掉，用户看到的就是"通知要等下一次事件才冒出来"。
+   */
+  async function handleExternalSessionsChanged() {
+    await loadSessions({ silent: true })
+    await refreshOpenSessionIfStale()
+  }
+
   // ── 乐观插入会话(流式期间让左栏立刻出现这一条) ─────────
   // 服务端要等整轮回答跑完才 writeSession(),前端也只在流结束后 loadSessions(),
   // 中间这几分钟左栏完全静止。meta 事件已经带了 sessionId + 自动标题,
@@ -936,6 +1011,8 @@ export function useAgentChat() {
       run.sessionId = sessionId
       run.messages = convertSessionToMessages(res.session)
       if (res.session?.title) run.title = res.session.title
+      // 对齐版本号：外部变更检测的基准（见 SessionRun.loadedUpdatedAt）
+      run.loadedUpdatedAt = res.session?.updatedAt || ''
       // 服务端列表里没有这条（跨项目 / 列表还没刷新）→ 补进左栏，别出现"打开了却不在列表里"
       rememberOpenedSession(res.session)
     } catch (err: any) {
@@ -1543,7 +1620,16 @@ export function useAgentChat() {
         clearGeneratingSession(streamSessionId)
       }
       // 刷新会话列表：并入仍在后台流的其它会话，并顺带清掉未落盘的幽灵条目
-      loadSessions().catch(() => {})
+      loadSessions().then(() => {
+        // 本地这轮的内容已经完整躺在缓冲里：把磁盘版本号记下来，外部变更检测
+        // （refreshOpenSessionIfStale）才不会把同一条会话反复重拉。
+        // 两个值都来自服务端，可安全比较；停止的轮次 writeSession 往往晚于这次
+        // 刷新 —— 对不上就留给下一次外部事件再对账，不影响正确性。
+        if (!streamSessionId) return
+        const meta = sessions.value.find(s => s.sessionId === streamSessionId)
+        const r = runs.get(streamSessionId)
+        if (meta?.updatedAt && r && !r.isStreaming) r.loadedUpdatedAt = meta.updatedAt
+      }).catch(() => {})
     }
   }
 
@@ -1709,6 +1795,8 @@ export function useAgentChat() {
     // 本轮已经多久没有收到任何 SSE 事件（毫秒）；不在跑 → null。
     // 界面自己决定阈值 / 颜色（见 ChatSilenceBadge）—— 这里只给原始数字。
     silentMs,
+    refreshOpenSessionIfStale,
+    handleExternalSessionsChanged,
     sessionLoading,
     pendingQuestion,
     // 面板展示用：只有正在等回答时非空

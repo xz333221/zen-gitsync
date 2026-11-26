@@ -307,6 +307,8 @@ const {
   flushQueued,
   // 本轮静默时长（毫秒）；头部那枚「静默 x 秒」读它，口径见 ChatSilenceBadge
   silentMs,
+  // 外部写入（任务完成通知的后台轮次 / 远端 peer）的事件入口：拉列表 + 静默刷新当前会话
+  handleExternalSessionsChanged,
 } = useAgentChat()
 
 // ── 输入框工具条上的「当前分支 + 默认模型」两片 ────────────────
@@ -520,7 +522,8 @@ let disposeSessionEvents: (() => void) | null = null
 onMounted(() => {
   loadSessions().catch(() => {})
   disposeSessionEvents = subscribeAgentSessionEvents(() => {
-    loadSessions({ silent: true }).catch(() => {})
+    // 先拉列表、再刷新当前会话 —— 两步必须串行（见 useAgentChat 里同名函数的注释）
+    handleExternalSessionsChanged().catch(() => {})
   })
   nextTick(() => {
     syncContextSlot()
