@@ -34,9 +34,9 @@
     · 添加 / 删除成功后就地刷一次，用户不用等下一个轮询周期。
 -->
 <script setup lang="ts">
-import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue'
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Search } from '@element-plus/icons-vue'
 import { $t } from '@/lang/static'
 import ProjectManagePanel from '@views/components/ProjectManagePanel.vue'
 import RecommendedProjects from '@views/components/RecommendedProjects.vue'
@@ -51,6 +51,22 @@ const removingKey = ref('')
 const addVisible = ref(false)
 const addSubmitting = ref(false)
 const recommendedRef = ref<InstanceType<typeof RecommendedProjects> | null>(null)
+
+/**
+ * 页头搜索词：一处输入、两个列表同时过滤 —— 推荐添加区筛"未添加的扫描结果"，
+ * 主列表筛"已添加的项目"（都按名称 / 路径大小写不敏感匹配，纯前端过滤）。
+ * 用户之前反馈"搜索只过滤了上面没过滤下面"，根因是搜索框原来是推荐组件的内部状态。
+ */
+const searchInput = ref('')
+/** 搜索是否生效（有非空关键词）——头部的项目计数在过滤时改显示"命中 / 总数" */
+const searching = computed(() => searchInput.value.trim().length > 0)
+/** 主列表过滤后的清单（推荐区的过滤在 RecommendedProjects 内部做，数据不出组件） */
+const filteredProjects = computed(() => {
+  const q = searchInput.value.trim().toLowerCase()
+  if (!q) return projects.value
+  return projects.value.filter(p =>
+    p.name.toLowerCase().includes(q) || p.path.toLowerCase().includes(q))
+})
 
 const POLL_MS = 10000
 let pollTimer: number | null = null
@@ -132,7 +148,18 @@ async function onRemove(p: ProjectSummary) {
   <section class="pm">
     <header class="pm__head">
       <h2 class="pm__title">{{ $t('@PROJM:项目管理') }}</h2>
-      <span class="pm__count">{{ $t('@PROJM:共 {n} 个项目', { n: projects.length }) }}</span>
+      <span v-if="searching" class="pm__count">
+        {{ $t('@PROJM:{shown} / {total} 个项目', { shown: filteredProjects.length, total: projects.length }) }}
+      </span>
+      <span v-else class="pm__count">{{ $t('@PROJM:共 {n} 个项目', { n: projects.length }) }}</span>
+      <el-input
+        v-model="searchInput"
+        class="pm__search"
+        size="small"
+        clearable
+        :prefix-icon="Search"
+        :placeholder="$t('@PROJM:搜索项目 / 推荐仓库...')"
+      />
       <button
         type="button"
         class="pm__add"
@@ -146,12 +173,13 @@ async function onRemove(p: ProjectSummary) {
 
     <!-- 推荐添加在**项目列表上面**（用户要求把扫描添加挪上来）：它是一块固定不滚的带子，
          下面的项目列表自己滚 —— 这样"扫到的新仓库"永远在视线里，不会滚下去就忘了。 -->
-    <RecommendedProjects ref="recommendedRef" :on-add="onAddFromRecommended" />
+    <RecommendedProjects ref="recommendedRef" :on-add="onAddFromRecommended" :search="searchInput" />
 
     <!-- 只有项目列表参与滚动：不给它单独加滚动条的话，"滚到底看推荐"会变成滚两次 -->
     <div class="pm__body">
       <ProjectManagePanel
-        :projects="projects"
+        :projects="filteredProjects"
+        :total="projects.length"
         :loading="loading"
         :removing-key="removingKey"
         @remove="onRemove"
@@ -194,6 +222,15 @@ async function onRemove(p: ProjectSummary) {
   font-size: var(--font-size-xs);
   color: var(--text-meta);
   font-variant-numeric: tabular-nums;
+}
+/* 页头搜索框：与全站其它 el-input 同一套壳，这里只管宽度 ——
+   头部高度有限，不许把「添加项目」按钮挤换行 */
+.pm__search {
+  width: 200px;
+  flex-shrink: 0;
+}
+@media (max-width: 900px) {
+  .pm__search { width: 140px; }
 }
 .pm__add {
   flex-shrink: 0;

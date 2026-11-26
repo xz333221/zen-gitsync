@@ -30,10 +30,12 @@
 
   搜索是**前端本地过滤**（不重新请求）：扫出来的清单已在内存里，按名称/路径
   大小写不敏感匹配即可，没必要为过滤再打一次有预算上限的扫描。
+  搜索框在页头（ProjectManagerView），词从 `search` prop 传进来 —— 一处输入
+  同时过滤推荐区和下面的项目列表（用户反馈过"只过滤上面不过滤下面"是坑）。
 -->
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Refresh, Search } from '@element-plus/icons-vue'
+import { Refresh } from '@element-plus/icons-vue'
 import IconButton from '@components/IconButton.vue'
 import { $t } from '@/lang/static'
 
@@ -46,6 +48,8 @@ export interface RecommendedProject {
 const props = defineProps<{
   /** 真正执行添加（父组件的 useWorkbenchProjects.addProject）；返回结果供本组件决定行内状态 */
   onAdd: (path: string) => Promise<{ ok: boolean; alreadyKnown: boolean }>
+  /** 页头搜索词（父组件 v-model 之外的单向下传）：按名称 / 路径过滤本清单 */
+  search?: string
 }>()
 
 type Status = 'idle' | 'loading' | 'done' | 'empty' | 'error'
@@ -56,10 +60,9 @@ const errorText = ref('')
 const addingPath = ref('')
 /** 本次会话里已经加成功的（服务端下次扫描也不会再列出来，这里只是立刻消失） */
 const addedPaths = ref<Set<string>>(new Set())
-/** 搜索词：扫出来的仓库可能几十条，按名称 / 路径过滤（大小写不敏感） */
-const searchInput = ref('')
+/** 搜索词来自页头（props.search）：扫出来的仓库可能几十条，按名称 / 路径过滤（大小写不敏感） */
 const filteredItems = computed(() => {
-  const q = searchInput.value.trim().toLowerCase()
+  const q = (props.search || '').trim().toLowerCase()
   if (!q) return items.value
   return items.value.filter(it =>
     it.name.toLowerCase().includes(q) || it.path.toLowerCase().includes(q))
@@ -107,18 +110,6 @@ defineExpose({ reload })
     <header class="pm-rec__head">
       <h3 class="pm-rec__title">{{ $t('@PROJM:推荐添加') }}</h3>
       <span v-if="status === 'done'" class="pm-rec__count">{{ filteredItems.length }}</span>
-      <el-input
-        v-if="status === 'done'"
-        v-model="searchInput"
-        class="pm-rec__search"
-        size="small"
-        clearable
-        :placeholder="$t('@PROJM:搜索推荐仓库...')"
-      >
-        <template #prefix>
-          <el-icon><Search /></el-icon>
-        </template>
-      </el-input>
       <IconButton
         size="small"
         :disabled="status === 'loading'"
@@ -196,15 +187,7 @@ defineExpose({ reload })
   color: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
-/* 搜索框与全站其它 el-input 同一套壳（全局统一了圆角 + box-shadow 环），
-   这里只管宽度：这条带子高度有限，输入框不许把列表挤下去。 */
-.pm-rec__search {
-  width: 180px;
-  flex-shrink: 0;
-}
-@media (max-width: 900px) {
-  .pm-rec__search { width: 130px; }
-}
+/* 搜索框已上移到页头（ProjectManagerView 的 .pm__search），这条带子不再放输入框 */
 .pm-rec__hint {
   margin: 2px 0 4px;
   font-size: var(--font-size-xs);

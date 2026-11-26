@@ -3442,6 +3442,9 @@ export default {
   //           + composables/useWorkbenchProjects.ts
   '@PROJM:项目管理': 'Project management',
   '@PROJM:共 {n} 个项目': '{n} projects',
+  '@PROJM:{shown} / {total} 个项目': '{shown} / {total} projects',
+  '@PROJM:搜索项目 / 推荐仓库...': 'Search projects / suggestions...',
+  '@PROJM:没有匹配的项目，换个关键词试试': 'No matching projects — try another keyword',
   '@PROJM:添加项目': 'Add project',
   '@PROJM:正在读取项目列表…': 'Loading projects…',
   '@PROJM:尚无项目': 'No projects yet',
@@ -3449,7 +3452,6 @@ export default {
   '@PROJM:展开启动方式': 'Show startup commands',
   '@PROJM:收起启动方式': 'Hide startup commands',
   '@PROJM:推荐添加': 'Suggested',
-  '@PROJM:搜索推荐仓库...': 'Search suggested repositories...',
   '@PROJM:没有匹配的仓库，换个关键词试试': 'No matching repositories — try another keyword',
   '@PROJM:重新扫描': 'Rescan',
   '@PROJM:扫描已有项目所在的目录，列出还没加进来、且含 .git 的仓库': 'Scans the folders your projects live in and lists repositories (folders with .git) that are not added yet',

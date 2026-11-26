@@ -16,9 +16,9 @@
 <!--
   项目清单（「项目管理」视图的主体）：一行一个 ProjectManageItem。
 
-  刻意**不做搜索/筛选**（工作台左栏那套是给"快速选一个项目"用的）：这个视图的项目数
-  就是用户自己的仓库数（几十个），按"正在跑 → 最近活跃 → 名字"排序后一屏能看完；
-  真到需要筛的时候再加，现在加只是把工具栏塞满。
+  过滤在父组件做（页头搜索词 → filteredProjects 传进来），这里只管**排序**；
+  `total`（全量数）用来区分"真没项目"和"都被搜索词挡掉"两种空态 ——
+  混成一种会让用户以为项目丢了。
 
   排序口径与工作台左栏一致（有活跃执行的排前面，再按最后活跃时间倒序，最后按名字）——
   两处显示同一份清单，顺序不一样会让人以为数据不同步。
@@ -30,7 +30,10 @@ import ProjectManageItem from '@views/components/ProjectManageItem.vue'
 import type { ProjectSummary } from '@/types/workbench'
 
 const props = defineProps<{
+  /** 已按搜索词过滤的项目清单（没搜索时 == 全量） */
   projects: ProjectSummary[]
+  /** 全量项目数（与 projects 分开传，空态文案要用它判断"真没项目"还是"被过滤光"） */
+  total: number
   loading: boolean
   /** 正在删除的项目 key（转圈 + 防重复点） */
   removingKey?: string
@@ -66,9 +69,14 @@ const ordered = computed(() => {
     </div>
 
     <!-- 一个项目都没有：这是这个视图最该说话的时候 —— 告诉用户下一步去哪 -->
-    <div v-else-if="projects.length === 0" class="pm-list__state">
+    <div v-else-if="total === 0" class="pm-list__state">
       <p class="pm-list__state-title">{{ $t('@PROJM:尚无项目') }}</p>
       <p class="pm-list__state-text">{{ $t('@PROJM:用「添加项目」把仓库加进来，或看看上面的推荐列表') }}</p>
+    </div>
+
+    <!-- 有项目但都被搜索词挡掉：与"尚无项目"分开说，否则用户以为项目丢了 -->
+    <div v-else-if="projects.length === 0" class="pm-list__state">
+      <p class="pm-list__state-title">{{ $t('@PROJM:没有匹配的项目，换个关键词试试') }}</p>
     </div>
 
     <ul v-else class="pm-list__items">
