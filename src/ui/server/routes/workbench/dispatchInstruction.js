@@ -255,7 +255,11 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
       };
       // 派发入口可以显式指定执行器；不传则用配置里的全局默认（resolveExecutor 走回落链）
       executor = await resolveExecutor(payload.executor, configManager);
-      launch(task, virtualSub, targetPath, '', { executor }).catch(err => {
+      launch(task, virtualSub, targetPath, '', {
+        executor,
+        // worktree 三态与 POST /tasks/:id/run 同口径:auto = git 仓库自动进隔离
+        worktree: task.worktree === false ? false : (task.worktree === true ? true : 'auto'),
+      }).catch(err => {
         publish('task:error', { taskId: task.id, error: err.message });
       });
     }

@@ -1165,7 +1165,12 @@ watch(selectedTaskRunning, (now, prev) => {
   if (prev && !now) void refreshWorktreeStatus()
 })
 
-/** 开关 worktree 隔离。切换即保存（与提示词开关同口径），跑着的时候不让切 */
+/**
+ * 切换 worktree 隔离(三态在 UI 上折叠成两态:亮 = 开或自动,灭 = 显式关)。
+ * 「自动」是默认:git 仓库就进 worktree,不是就退回主工作区 —— 所以点击是把
+ * 任务钉成显式的另一态(亮→显式关,灭→显式开),钉了才不会再随默认漂移。
+ * 跑着的时候不让切。
+ */
 async function toggleWorktree(): Promise<void> {
   const t = selectedTask.value
   if (!t) return
@@ -1173,7 +1178,7 @@ async function toggleWorktree(): Promise<void> {
     ElMessage.warning($t('@WORKBENCH:任务正在执行,请先停止再切换隔离开关'))
     return
   }
-  t.worktree = t.worktree !== true
+  t.worktree = t.worktree === false ? true : false
   const ok = await persistTask(false)
   if (ok) void refreshWorktreeStatus()
 }
@@ -1553,17 +1558,19 @@ const queueLabels = agentQueueLabels()
           <button
             type="button"
             class="wb-logs-inline-btn"
-            :class="{ 'is-active': selectedTask.worktree === true }"
-            :title="selectedTask.worktree === true
-              ? $t('@WORKBENCH:worktree 隔离已开启:任务跑在独立工作树里,点击关闭')
-              : $t('@WORKBENCH:开启 worktree 隔离:执行时在独立工作树里改动,合并与否由你决定')"
+            :class="{ 'is-active': selectedTask.worktree !== false }"
+            :title="selectedTask.worktree === false
+              ? $t('@WORKBENCH:worktree 隔离已关闭:任务将直接在主工作区执行,点击恢复自动隔离')
+              : selectedTask.worktree === true
+                ? $t('@WORKBENCH:worktree 隔离已固定开启:每轮都跑在独立工作树里,点击关闭')
+                : $t('@WORKBENCH:worktree 隔离为自动(默认):git 仓库自动进独立工作树,跑完由 AI 评估合并;点击固定关闭')"
             :aria-label="$t('@WORKBENCH:worktree 隔离开关')"
             @click="toggleWorktree"
           >
             <el-icon class="wb-logs-inline-btn__icon"><Connection /></el-icon>
             <span class="sr-only">{{ $t('@WORKBENCH:worktree 隔离开关') }}</span>
           </button>
-          <template v-if="selectedTask.worktree === true && worktreeStatusOfSelected?.exists">
+          <template v-if="selectedTask.worktree !== false && worktreeStatusOfSelected?.exists">
             <button
               type="button"
               class="wb-logs-inline-btn"

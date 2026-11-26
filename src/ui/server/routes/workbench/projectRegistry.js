@@ -448,9 +448,14 @@ export function decorateTaskForBoard(task, jobsForTask = [], { now = Date.now(),
     title: task.title || '',
     desc: task.desc || '',
     projectPath: task.projectPath || '',
-    // worktree 隔离开关跟着任务走(卡片徽标的数据源):decorate 出的是**显式字段**
-    // 而非整 task 透传,漏了这行前端就永远看不到这个开关
-    worktree: task.worktree === true,
+    // worktree 三态原样透传(编辑器开关的状态源):undefined=auto / true / false
+    worktree: task.worktree === true ? true : (task.worktree === false ? false : null),
+    // 最近一轮**实际**跑在了 worktree 里(auto 模式下这才知道隔离真生效了)
+    worktreeUsed: !!(last && last.worktree),
+    // AI 自主合并的结论(autoMerge.js 收尾钩子落盘的):卡片显示「AI 已合并」
+    aiMergedAt: task.aiMergedAt || null,
+    aiMergeReason: task.aiMergeReason || '',
+    aiMergeDeclined: task.aiMergeDeclined || null,
     column,
     attachmentCount: Array.isArray(task.attachments) ? task.attachments.length : 0,
     /**

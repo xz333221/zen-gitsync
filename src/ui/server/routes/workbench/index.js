@@ -92,7 +92,9 @@ import {
   normalizeTaskExecutor,
   runSingleSubtask,
   setEnvContextProvider,
+  setAutoMergeHandler,
 } from './taskRunner.js';
+import { evaluateAndAutoMerge } from './autoMerge.js';
 import {
   ensureWorktree,
   worktreePath,
@@ -478,8 +480,9 @@ export function registerWorkbenchRoutes({
     res.json({ success: true, message: '已开始执行任务' });
     runSingleSubtask(task, virtualSub, repoPath, '', {
       executor,
-      // worktree 隔离是任务的属性,开关跟着任务走(路由只负责抄过来)
-      worktree: task.worktree === true
+      // worktree 三态:任务拨到开 = true,拨到关 = false,没拨过 = 'auto'
+      // (auto 由 taskRunner 兜底:git 仓库进 worktree,不是就静默退回主工作区)
+      worktree: task.worktree === false ? false : (task.worktree === true ? true : 'auto')
     }).catch(err => {
       publish('task:error', { taskId: task.id, error: err.message });
     });
@@ -510,7 +513,7 @@ export function registerWorkbenchRoutes({
   // GET /api/workbench/tasks/:id/worktree —— 卡片徽标与合并确认框的数据源
   app.get('/api/workbench/tasks/:id/worktree', asyncRoute(async (req, res) => {
     const { task, repoPath } = await taskWithRepoPath(req.params.id);
-    if (task.worktree !== true) throw new HttpError(400, '该任务未开启 worktree 隔离');
+    if (task.worktree === false) throw new HttpError(400, '该任务关闭了 worktree 隔离');
     const status = await worktreeStatus(repoPath, req.params.id);
     res.json({ success: true, status });
   }));
@@ -519,7 +522,7 @@ export function registerWorkbenchRoutes({
   // checkOnly=true 只做预检(确认框先拿重叠/冲突清单),false 真正合并。
   app.post('/api/workbench/tasks/:id/worktree/merge', asyncRoute(async (req, res) => {
     const { task, repoPath } = await taskWithRepoPath(req.params.id);
-    if (task.worktree !== true) throw new HttpError(400, '该任务未开启 worktree 隔离');
+    if (task.worktree === false) throw new HttpError(400, '该任务关闭了 worktree 隔离');
     // 执行中不合并:agent 还在写 worktree,固化提交拿到的是半个改动
     await refreshJobsFromDisk();
     const liveJob = snapshotJobs().find(j => j.taskId === task.id && (j.status === 'running' || j.status === 'pending'));
@@ -549,7 +552,7 @@ export function registerWorkbenchRoutes({
   // DELETE /api/workbench/tasks/:id/worktree —— 丢弃(worktree 里未合并的改动一并消失)
   app.delete('/api/workbench/tasks/:id/worktree', asyncRoute(async (req, res) => {
     const { task, repoPath } = await taskWithRepoPath(req.params.id);
-    if (task.worktree !== true) throw new HttpError(400, '该任务未开启 worktree 隔离');
+    if (task.worktree === false) throw new HttpError(400, '该任务关闭了 worktree 隔离');
     await refreshJobsFromDisk();
     const liveJob = snapshotJobs().find(j => j.taskId === task.id && (j.status === 'running' || j.status === 'pending'));
     if (liveJob) throw new HttpError(400, '该任务正在执行,不能丢弃它正在用的 worktree');
@@ -812,7 +815,10 @@ export function registerWorkbenchRoutes({
     // 开了 worktree 隔离的任务,历史轮次的 cwd 是 worktree 路径 —— 冲突判定和
     // 实际 spawn 都要用 worktreePath() 推出**同一个值**(与 taskRunner 内部的
     // ensureWorktree 复用逻辑一致:路径稳定,会话才续得上)。
-    const taskWorktreeOn = task.worktree === true;
+    // 三态:'auto' 任务跟着**上一轮的实际模式**走 —— 上一轮在 worktree 里跑的
+    // 会话就续 worktree,在主工作区跑的就续主工作区,否则 CLI 会话必断。
+    const taskWorktreeOn = task.worktree === true
+      || (task.worktree !== false && !!prevJob.worktree);
     const runDir = taskWorktreeOn && repoPath ? worktreePath(repoPath, task.id) : repoPath;
     // 工作目录变过就不能续（判据与事故背景见 resumeGuard.js）：
     // 「移动到其他项目」只改 task.projectPath，历史轮次的会话仍在旧目录的会话库里。
@@ -1756,6 +1762,64 @@ export function registerWorkbenchRoutes({
     await refreshJobsFromDisk();
     return buildRunningFacts({ jobs: Array.from(mergedJobs().values()), tasks: data.tasks || [] });
   }
+
+  // ── AI 自主合并(完全自主、无需申请,2026-11-26) ──────────────────────
+  // 「跑完 + 用了 worktree」的任务由服务端自动评估并合并:
+  //   · 预检(precheckMerge)是硬闸门 —— 脏工作区相交/冲突时模型说什么都合不了;
+  //   · 配置了模型就问一次「值不值得合并」,没配/判定失败按预检结果直接合;
+  //   · 合并只到本地 commit,**永不 push**;丢弃(discard)永不自动化;
+  //   · 结果落盘到任务上,看板卡片显示「AI 已合并」+ 理由,人随时可查可撤销
+  //     (合并错了一个 git reset 就回得来,这也是敢做全自主的底气)。
+  let autoMergeInFlight = new Set();
+  async function autoMergeAfterRun(task, job) {
+    const taskId = task && task.id;
+    if (!taskId || autoMergeInFlight.has(taskId)) return;
+    autoMergeInFlight.add(taskId);
+    try {
+      const repoPath = resolveTaskRepoPath(task, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
+      if (!repoPath) return;
+      const ctx = await readReportContext();
+      const outcome = await evaluateAndAutoMerge({
+        task, job, repoPath,
+        model: ctx.model,
+        worktreeStatusFn: worktreeStatus,
+        precheckMergeFn: precheckMerge,
+        mergeFn: mergeWorktree,
+        discardFn: discardWorktree,
+        logger,
+      });
+      if (outcome.outcome === 'skipped') return;
+
+      // 结果落盘到任务(独立重读重写:收尾钩子与用户保存之间可能交错,别整对象覆盖)
+      const data = await readJson(TASKS_FILE, { tasks: [] });
+      const t = (data.tasks || []).find(x => x && x.id === taskId);
+      if (!t) return;
+      delete t.aiMergeDeclined; // 新一轮的结论覆盖旧的
+      if (outcome.outcome === 'merged') {
+        t.aiMergedAt = nowIso();
+        t.aiMergeReason = outcome.reason || '';
+        t.aiMergedFiles = (outcome.files || []).length;
+      } else if (outcome.outcome === 'declined' || outcome.outcome === 'blocked') {
+        delete t.aiMergedAt;
+        delete t.aiMergeReason;
+        delete t.aiMergedFiles;
+        t.aiMergeDeclined = { at: nowIso(), outcome: outcome.outcome, reason: outcome.reason || '' };
+      } else if (outcome.outcome === 'nothing') {
+        delete t.aiMergedAt;
+        delete t.aiMergeReason;
+        delete t.aiMergedFiles;
+      }
+      t.updatedAt = nowIso();
+      await writeJson(TASKS_FILE, data);
+      publish('task:update', t);
+      logger.info(`[workbench] auto-merge(${taskId}): ${outcome.outcome} — ${outcome.reason || ''}`);
+    } catch (err) {
+      logger.warn(`[workbench] auto-merge(${taskId}) 异常: ${err?.message || err}`);
+    } finally {
+      autoMergeInFlight.delete(taskId);
+    }
+  }
+  setAutoMergeHandler(autoMergeAfterRun);
 
   /**
    * 生成并落盘一份进度报告。

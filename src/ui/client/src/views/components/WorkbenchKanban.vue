@@ -704,12 +704,20 @@ function coverTitle(img: BoardImage): string {
                 :style="projectTagStyle(t.projectPath)"
                 :title="t.projectPath"
               >{{ projectLabel(t) }}</span>
-              <!-- worktree 隔离徽标:这条任务的执行与主工作区互不干扰;悬停说清含义 -->
+              <!-- worktree 隔离徽标:这轮**实际**跑在独立工作树里(auto 模式下这是
+                   隔离真生效了的证据);悬停说清含义 -->
               <span
-                v-if="t.worktree"
+                v-if="t.worktreeUsed"
                 class="kb-card__wt-chip"
-                :title="$t('@WORKBENCH:worktree 隔离:任务跑在独立工作树里,合并与否由你决定')"
+                :title="$t('@WORKBENCH:本轮在独立 worktree 中执行,与主工作区互不干扰')"
               >{{ $t('@WORKBENCH:隔离') }}</span>
+              <!-- AI 已合并:这轮跑完由服务端自动评估并合并回主干(预检为硬闸门,
+                   永不 push);悬停给判定理由,合错了 git reset 可回退 -->
+              <span
+                v-if="t.aiMergedAt"
+                class="kb-card__wt-chip kb-card__ai-merge"
+                :title="$t('@WORKBENCH:已由 AI 自动合并:{reason}', { reason: t.aiMergeReason || '' })"
+              >{{ $t('@WORKBENCH:AI 已合并') }}</span>
               <p class="kb-card__title" :title="cardTitle(t)">{{ cardTitle(t) || $t('@WORKBENCH:未命名任务') }}</p>
               <span class="kb-card__time">{{ relativeTimeFromIso(cardTime(t)) }}</span>
             </div>
@@ -1724,6 +1732,12 @@ function coverTitle(img: BoardImage): string {
   font-size: var(--font-size-xs);
   line-height: 16px;
   white-space: nowrap;
+}
+/* AI 已合并:同一形状换成功色,和「隔离」并排时一眼分清"在隔离里跑"和"已经合回来了" */
+.kb-card__wt-chip.kb-card__ai-merge {
+  border-color: var(--tint-success-35, color-mix(in srgb, var(--color-success) 35%, transparent));
+  background: var(--tint-success-14, color-mix(in srgb, var(--color-success) 14%, transparent));
+  color: var(--color-success-dark, var(--color-success));
 }
 /* 列表行里要与任务名同行（.kb-table__name 是 inline）：
    抬 1px 是把胶囊的**文字基线**与同行任务名的基线对齐后做的光学微调——

@@ -116,8 +116,13 @@ export interface Task {
   projectPath?: string
   status: string
   attachments?: Attachment[]
-  /** 在独立 worktree 中执行(隔离并行任务的改动)。老任务没有这个字段(视为关) */
+  /** worktree 三态:true=强制开 / false=关 / 缺省=自动(git 仓库默认进 worktree) */
   worktree?: boolean
+  /** AI 自主合并结论(收尾钩子落盘,编辑器/卡片展示用) */
+  aiMergedAt?: string
+  aiMergeReason?: string
+  aiMergedFiles?: number
+  aiMergeDeclined?: { at: string; outcome: string; reason: string }
   createdAt?: string
   updatedAt?: string
 }
@@ -248,8 +253,18 @@ export interface BoardTask {
   title: string
   desc: string
   projectPath: string
-  /** worktree 隔离开关跟着任务走(卡片徽标数据源,服务端 decorateTaskForBoard 给) */
-  worktree?: boolean
+  /**
+   * worktree 三态(编辑器开关的状态源):true=强制开 / false=关 / null=自动。
+   * auto 的语义由服务端兜底:git 仓库就进 worktree,不是就退回主工作区。
+   */
+  worktree?: boolean | null
+  /** 最近一轮**实际**跑在了 worktree 里(卡片「隔离」徽标的数据源) */
+  worktreeUsed?: boolean
+  /** AI 自主合并的结论(收尾钩子落盘):有值 = 这单已由 AI 合并回主干 */
+  aiMergedAt?: string | null
+  aiMergeReason?: string
+  /** AI 想合但没合成的结论(blocked/declined),卡片不出徽标,编辑器里可查 */
+  aiMergeDeclined?: { at: string; outcome: string; reason: string } | null
   column: TaskColumn
   attachmentCount: number
   /**

@@ -91,6 +91,16 @@ export function setEnvContextProvider(fn) {
   envContextProvider = typeof fn === 'function' ? fn : null;
 }
 
+// ── AI 自主合并的收尾钩子 ──
+// taskRunner 不认识模型配置和任务落盘(那都是路由层的东西),所以合并评估由
+// index.js 注册进来,这里只在「跑完 + 用了 worktree」时调一次。fire-and-forget:
+// 评估要烧一次 LLM,不能把 job 终态阻塞在它上面。
+let autoMergeHandler = null;
+
+export function setAutoMergeHandler(fn) {
+  autoMergeHandler = typeof fn === 'function' ? fn : null;
+}
+
 /**
  * 取本次执行的运行环境上下文块。
  *
@@ -2015,15 +2025,26 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
   const opts = options || {};
   const resumeSessionId = opts.resumeSessionId || null;
   const executor = normalizeTaskExecutor(opts.executor);
-  // ── worktree 隔离:任务开了开关就从这里换 cwd ──
+  // ── worktree 隔离:三态语义 ──
+  //   opts.worktree === true   强制开(任务开关拨到开)
+  //   opts.worktree === false  强制关(任务开关拨到关)
+  //   opts.worktree === 'auto' 自动(任务从没拨过 = 默认):git 仓库就进 worktree,
+  //                            不是 git 仓库静默退回主工作区 —— 隔离是默认姿势,
+  //                            而不是要人记得拨的开关(2026-11-26 按用户要求改的)
   // worktree 是**每任务常驻**的(ensureWorktree 复用已存在的),续聊轮的 CLI
-  // 会话按 cwd 索引,路径一变会话就续不上。开关在任务上(opts.worktree 由
-  // 路由层从 task.worktree 抄过来),不在 job 上——job 只记录这一轮实际用的目录。
-  // 创建失败(不是 git 仓库等)直接抛,路由层把错误发布成 task:error。
-  const worktreeEnabled = opts.worktree === true;
+  // 会话按 cwd 索引,路径一变会话就续不上 —— 所以续聊轮的路由层会按上一轮
+  // job 的实际模式继承(opts.worktree 由路由层算好传进来),不在这里猜。
+  // 显式 true 时创建失败(不是 git 仓库等)直接抛,路由层把错误发布成 task:error;
+  // auto 时失败静默退回主工作区 —— 自动模式不该因为隔离做不了就把任务跑挂。
   let worktree = null;
-  if (worktreeEnabled && repoPath) {
-    worktree = await ensureWorktree(repoPath, task.id);
+  const worktreeMode = opts.worktree;
+  if (repoPath && (worktreeMode === true || worktreeMode === 'auto')) {
+    try {
+      worktree = await ensureWorktree(repoPath, task.id);
+    } catch (err) {
+      if (worktreeMode === true) throw err;
+      logger.warn(`[workbench] auto worktree 创建失败,退回主工作区(${task.id}): ${err?.message || err}`);
+    }
   }
   // 这一轮实际 spawn 的工作目录:开了隔离就是 worktree,否则还是项目目录
   const runDir = worktree ? worktree.path : (repoPath || process.cwd());
@@ -2307,6 +2328,19 @@ export async function runSingleSubtask(task, sub, repoPath, branch, options) {
       await flushJobsSaveNow();
     } catch (err) {
       logger.warn('[workbench] flushJobsSaveNow failed (job id=' + job.id + ', status=' + job.status + '):', err && err.message || err);
+    }
+    // AI 自主合并:只对「正常跑完 + 这轮用了 worktree」的任务评估一次。
+    // 刻意放在落盘之后且不等它 —— 合并是收尾的锦上添花,不该拖住 job 终态;
+    // 评估内部有预检硬闸门,最坏情况也只是"没合",任务照常显示。
+    if (job.status === 'done' && job.worktree && typeof autoMergeHandler === 'function') {
+      try {
+        const mergePromise = Promise.resolve(autoMergeHandler(task, job));
+        if (mergePromise && typeof mergePromise.catch === 'function') {
+          mergePromise.catch(err => logger.warn('[workbench] auto-merge hook failed:', err && err.message || err));
+        }
+      } catch (err) {
+        logger.warn('[workbench] auto-merge hook threw:', err && err.message || err);
+      }
     }
   }
   return job.status;  // 'done' | 'cancelled' | 'error'

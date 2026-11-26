@@ -147,7 +147,8 @@ test('autoRun=true：交给执行入口，执行器按参数 > 配置默认解�
   assert.equal(sub.promptOverride, task.simpleOverride);
   assert.equal(repoPath, proj);
   assert.equal(branch, '');
-  assert.deepEqual(opts, { executor: 'opencode' });
+  // worktree 三态随任务走:派发建的任务没拨过开关 = 'auto'(git 仓库自动进隔离)
+  assert.deepEqual(opts, { executor: 'opencode', worktree: 'auto' });
 
   // 不指定 → 配置里的全局默认（本例是 codex）
   const fallback = await dispatchInstruction({ text: '跟随全局默认', autoRun: true });
