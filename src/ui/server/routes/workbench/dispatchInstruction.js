@@ -43,6 +43,7 @@ import { readOrchestrator, resolveDispatchPrompt, appendInstruction } from './or
 import { buildProjectEntries } from './projectRegistry.js';
 import { resolveInstructionTarget } from './targetResolver.js';
 import { runSingleSubtask } from './taskRunner.js';
+import { worktreeIsolationEnabled } from './worktreeOps.js';
 // resolveModels 是运行期取模型的唯一入口（内置默认模型不落盘，直读 raw.models
 // 会判成"未配置模型"），见 config.js 的同名函数
 import { normalizeTaskExecutor as normalizeExecutorId, resolveModels } from '../../../../config.js';
@@ -257,8 +258,11 @@ export function createDispatcher({ configManager, getCurrentProjectPath, runTask
       executor = await resolveExecutor(payload.executor, configManager);
       launch(task, virtualSub, targetPath, '', {
         executor,
-        // worktree 三态与 POST /tasks/:id/run 同口径:auto = git 仓库自动进隔离
-        worktree: task.worktree === false ? false : (task.worktree === true ? true : 'auto'),
+        // worktree 三态与 POST /tasks/:id/run 同口径:auto = git 仓库自动进隔离;
+        // 全局总开关(worktreeIsolation,默认开)关掉时一律 false —— 任务开关失效
+        worktree: (await worktreeIsolationEnabled(configManager))
+          ? (task.worktree === false ? false : (task.worktree === true ? true : 'auto'))
+          : false,
       }).catch(err => {
         publish('task:error', { taskId: task.id, error: err.message });
       });

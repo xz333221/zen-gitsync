@@ -84,6 +84,27 @@ export function worktreePath(repoPath, taskId) {
   return path.join(repoPath, WORKTREE_DIR_NAME, taskId);
 }
 
+/**
+ * Worktree 隔离的**全局总开关**(config.json 的 worktreeIsolation,默认开)。
+ * 关 = 所有任务直接在项目目录执行,任务上的三态开关随之失效。
+ *
+ * @param {Object} [injectedConfigManager] 调用方已持有的 configManager(可注入,
+ *        单测靠它造"总开关关了"的夹具);不传就动态 import 默认的那个。
+ *
+ * 动态 import configManager:本模块其余部分刻意保持纯函数(单测直接拿临时仓库
+ * 调用,不起 express 也不读用户配置),只有这个助手在调用时才碰配置;
+ * 读不到配置(测试沙箱/损坏文件)按"开着"兜底 —— 隔离是默认姿势。
+ */
+export async function worktreeIsolationEnabled(injectedConfigManager = null) {
+  try {
+    const cm = injectedConfigManager || (await import('../../../../config.js')).default;
+    const cfg = await cm.loadConfig();
+    return cfg?.worktreeIsolation !== false;
+  } catch {
+    return true;
+  }
+}
+
 /** 这个任务分支的 ref 名 */
 export function worktreeBranchRef(taskId) {
   return `${BRANCH_PREFIX}${taskId}`;

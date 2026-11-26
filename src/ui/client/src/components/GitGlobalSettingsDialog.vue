@@ -177,6 +177,17 @@
                 </div>
               </div>
 
+              <!-- Worktree 隔离全局总开关：关掉后所有任务直接在项目目录执行，
+                   任务上的三态隔离开关（工作台执行栏那个按钮）随之隐藏。
+                   默认开 —— 隔离是默认姿势，开关是给"我就是不想用 worktree"的人留的出口。 -->
+              <div class="setting-row">
+                <label class="setting-label">{{ $t('@42BB9:WorkTree 隔离') }}</label>
+                <div class="project-toggle">
+                  <el-switch v-model="tempWorktreeIsolation" size="small" />
+                  <span class="setting-hint-block">{{ $t('@42BB9:任务执行时进独立工作树,合并与否由你决定;关闭后所有任务直接在项目目录执行') }}</span>
+                </div>
+              </div>
+
               <!-- 任务 / 对话执行结束提示：跑完一个任务或一轮对话时给个动静。
                    三个通道**平级且互相独立**（页面提示 / 浏览器通知 / 提示音），
                    默认只开页面提示与提示音 —— 浏览器通知要申请系统通知权限，
@@ -1174,6 +1185,8 @@ function optionExecutorModelTitle(id: TaskExecutorId): string {
 const tempNotifyPageOnTaskDone = ref(true)
 const tempNotifyBrowserOnTaskDone = ref(false)
 const tempNotifySoundOnTaskDone = ref(true)
+// Worktree 隔离全局总开关（默认开）：关掉后所有任务直接在项目目录执行
+const tempWorktreeIsolation = ref(true)
 // 只读镜像，用来在开关下方如实展示"系统通知到底能不能发出去"：
 // 权限已拒 / 环境不支持时，光看开关是不知道的，用户会以为开了却没动静。
 const notifyPermissionState = ref<NotifyPermission>('default')
@@ -1585,6 +1598,7 @@ let initTaskExecutor: TaskExecutorId = 'claude'
 let initNotifyPageOnTaskDone = true
 let initNotifyBrowserOnTaskDone = false
 let initNotifySoundOnTaskDone = true
+let initWorktreeIsolation = true
 
 // 同步 v-model
 watch(() => props.modelValue, async (val) => {
@@ -1611,6 +1625,7 @@ watch(() => props.modelValue, async (val) => {
     tempNotifyPageOnTaskDone.value = configStore.notifyPageOnTaskDone
     tempNotifyBrowserOnTaskDone.value = configStore.notifyBrowserOnTaskDone
     tempNotifySoundOnTaskDone.value = configStore.notifySoundOnTaskDone
+    tempWorktreeIsolation.value = configStore.worktreeIsolation
     // 每次打开都重读权限：用户可能在浏览器地址栏里改过，或上一次授权弹窗刚被关掉
     notifyPermissionState.value = notificationPermission()
     // 资源管理器右键菜单状态：可能在别的实例里加过/删过，同样每次打开重读
@@ -1656,6 +1671,7 @@ watch(() => props.modelValue, async (val) => {
     initNotifyPageOnTaskDone = tempNotifyPageOnTaskDone.value
     initNotifyBrowserOnTaskDone = tempNotifyBrowserOnTaskDone.value
     initNotifySoundOnTaskDone = tempNotifySoundOnTaskDone.value
+    initWorktreeIsolation = tempWorktreeIsolation.value
   }
 }, { immediate: true })
 
@@ -1868,7 +1884,7 @@ async function saveGlobalGitConfigs() {
 
 // 保存通用设置
 async function saveGeneralSettings() {
-  const settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: TaskExecutorId, notifyPageOnTaskDone?: boolean, notifyBrowserOnTaskDone?: boolean, notifySoundOnTaskDone?: boolean } = {}
+  const settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: TaskExecutorId, notifyPageOnTaskDone?: boolean, notifyBrowserOnTaskDone?: boolean, notifySoundOnTaskDone?: boolean, worktreeIsolation?: boolean } = {}
 
   // 保存主题设置（如果与初始值不同或需要强制保存）
   if (tempTheme.value !== initTheme) {
@@ -1903,9 +1919,14 @@ async function saveGeneralSettings() {
     settings.notifySoundOnTaskDone = tempNotifySoundOnTaskDone.value
     initNotifySoundOnTaskDone = tempNotifySoundOnTaskDone.value
   }
+  // Worktree 隔离总开关（只在变了对才发 —— 与提示通道同一套"只发改了的"语义）
+  if (tempWorktreeIsolation.value !== initWorktreeIsolation) {
+    settings.worktreeIsolation = tempWorktreeIsolation.value
+    initWorktreeIsolation = tempWorktreeIsolation.value
+  }
 
   // 只要有设置项就保存（包括主题或语言）
-  if (settings.theme !== undefined || settings.locale !== undefined || settings.taskExecutor !== undefined || settings.notifyPageOnTaskDone !== undefined || settings.notifyBrowserOnTaskDone !== undefined || settings.notifySoundOnTaskDone !== undefined) {
+  if (settings.theme !== undefined || settings.locale !== undefined || settings.taskExecutor !== undefined || settings.notifyPageOnTaskDone !== undefined || settings.notifyBrowserOnTaskDone !== undefined || settings.notifySoundOnTaskDone !== undefined || settings.worktreeIsolation !== undefined) {
     const saved = await configStore.saveGeneralSettings(settings)
     if (saved) {
       ElMessage.success($t('@42BB9:通用设置已保存'))

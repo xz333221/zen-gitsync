@@ -166,6 +166,17 @@ test('autoRun=true：交给执行入口，执行器按参数 > 配置默认解�
   assert.equal(noCfgResult.executor, 'claude', '配置读不出来时回落 claude，而不是派发失败');
 });
 
+test('worktree 全局总开关关闭：派发执行不进隔离（auto 任务也直接落主工作区）', async () => {
+  // 总开关在 config.json 的 worktreeIsolation（默认开）；关闭后任务上的三态开关失效
+  const { dispatchInstruction } = makeDispatcher({
+    configManager: { loadConfig: async () => ({ taskExecutor: 'codex', worktreeIsolation: false }) },
+  });
+  const result = await dispatchInstruction({ text: '总开关关了', autoRun: true });
+  assert.equal(result.ran, true);
+  const [, , , , opts] = launched[launched.length - 1];
+  assert.equal(opts.worktree, false, '总开关关 = 一律不进 worktree，哪怕任务是默认的 auto');
+});
+
 test('预设提示词按落点项目解析并抄进任务；显式关掉时不带', async () => {
   await setDefaultPrompt('派发时先跑一遍 lint');
   try {

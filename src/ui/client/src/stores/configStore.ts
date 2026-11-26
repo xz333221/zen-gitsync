@@ -252,6 +252,10 @@ export const useConfigStore = defineStore('config', () => {
   // 只在「设置 → 通用设置 → 任务执行器」里改。执行入口旁的临时切换记在 ui.lastTaskExecutor，
   // 两者分开存 —— 前者是"配好的默认"，后者是"上次用的"，互相覆盖就没有各自的意义了。
   const taskExecutor = ref<TaskExecutorId>('claude')
+  // Worktree 隔离的全局总开关（全局配置，默认开，与 src/config.js 的 defaultConfig 一致）。
+  // 关掉后**所有**任务直接在项目目录执行，任务上的三态隔离开关（WorkbenchView 的按钮）
+  // 也随之隐藏 —— 看板卡片上的「隔离」徽标仍是事实展示（那轮真跑在了 worktree 里）。
+  const worktreeIsolation = ref(true)
   // 任务/对话结束提示的三个通道（全局配置），三者**平级且互相独立**。
   // 默认值必须与 src/config.js 的 defaultConfig 一致，配置读取前的首屏也靠它们兜底。
   //
@@ -648,6 +652,10 @@ export const useConfigStore = defineStore('config', () => {
       }
       if (typeof configData.notifySoundOnTaskDone === 'boolean') {
         notifySoundOnTaskDone.value = configData.notifySoundOnTaskDone
+      }
+      // Worktree 隔离全局总开关（老配置里没有这个字段 → 保持上面的默认值 true）
+      if (typeof configData.worktreeIsolation === 'boolean') {
+        worktreeIsolation.value = configData.worktreeIsolation
       }
 
       // 加载通用设置
@@ -1830,7 +1838,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 保存通用设置
-  async function saveGeneralSettings(settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: TaskExecutorId, notifyPageOnTaskDone?: boolean, notifyBrowserOnTaskDone?: boolean, notifySoundOnTaskDone?: boolean }) {
+  async function saveGeneralSettings(settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: TaskExecutorId, notifyPageOnTaskDone?: boolean, notifyBrowserOnTaskDone?: boolean, notifySoundOnTaskDone?: boolean, worktreeIsolation?: boolean }) {
     try {
       const response = await fetch('/api/config/save-general-settings', {
         method: 'POST',
@@ -1865,6 +1873,9 @@ export const useConfigStore = defineStore('config', () => {
         if (typeof settings.notifySoundOnTaskDone === 'boolean') {
           notifySoundOnTaskDone.value = settings.notifySoundOnTaskDone
         }
+        if (typeof settings.worktreeIsolation === 'boolean') {
+          worktreeIsolation.value = settings.worktreeIsolation
+        }
         return true
       } else {
         ElMessage.error(`保存通用设置失败: ${result.error}`)
@@ -1893,6 +1904,7 @@ export const useConfigStore = defineStore('config', () => {
     notifyPageOnTaskDone,
     notifyBrowserOnTaskDone,
     notifySoundOnTaskDone,
+    worktreeIsolation,
     defaultCommitMessage,
     descriptionTemplates,
     scopeTemplates,

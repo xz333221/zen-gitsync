@@ -973,7 +973,7 @@ export function registerConfigRoutes({
     }
   })
 
-  // 保存通用设置（主题、语言、工作台任务执行器、任务完成提示）
+  // 保存通用设置（主题、语言、工作台任务执行器、任务完成提示、Worktree 隔离总开关）
   app.post('/api/config/save-general-settings', express.json(), async (req, res) => {
     try {
       const { theme, locale, taskExecutor, notifyPageOnTaskDone, notifyBrowserOnTaskDone, notifySoundOnTaskDone } = req.body
@@ -1009,12 +1009,19 @@ export function registerConfigRoutes({
         }
       }
 
+      // Worktree 隔离总开关（全局）：同样只接受布尔值，非法值静默忽略
+      const normalizedWorktreeIsolation = configManager.normalizeNotifySwitch(req.body.worktreeIsolation)
+      if (normalizedWorktreeIsolation !== null) {
+        rawConfig.worktreeIsolation = normalizedWorktreeIsolation
+      }
+
       // 直接写入原始配置，避免覆盖项目设置
       await configManager.writeRawConfigFile(rawConfig)
       res.json({
         success: true,
         taskExecutor: normalizedExecutor || undefined,
-        ...normalizedNotifies
+        ...normalizedNotifies,
+        ...(normalizedWorktreeIsolation !== null ? { worktreeIsolation: normalizedWorktreeIsolation } : {})
       })
     } catch (error) {
       res.status(500).json({ success: false, error: error.message })

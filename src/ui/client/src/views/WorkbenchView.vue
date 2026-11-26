@@ -1554,8 +1554,12 @@ const queueLabels = agentQueueLabels()
             探测到 worktree 还在(跑完没合并)时,给「合并回主干 / 丢弃」两个出口 ——
             合并与否是人的决定,服务端不会有任何自动合并。
             「回滚」看最新一轮的检查点:改坏了回到那一轮开始之前的状态。
+            全局总开关(configStore.worktreeIsolation)关掉时,这个任务级开关整个
+            隐藏 —— 摆着一个拨了也不生效的按钮只会让人困惑;合并/丢弃出口保留,
+            已存在的 worktree 还得能收尾。
           -->
           <button
+            v-if="configStore.worktreeIsolation"
             type="button"
             class="wb-logs-inline-btn"
             :class="{ 'is-active': selectedTask.worktree !== false }"

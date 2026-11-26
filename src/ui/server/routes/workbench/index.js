@@ -99,6 +99,7 @@ import {
   ensureWorktree,
   worktreePath,
   worktreeStatus,
+  worktreeIsolationEnabled,
   precheckMerge,
   mergeWorktree,
   discardWorktree,
@@ -482,7 +483,10 @@ export function registerWorkbenchRoutes({
       executor,
       // worktree 三态:任务拨到开 = true,拨到关 = false,没拨过 = 'auto'
       // (auto 由 taskRunner 兜底:git 仓库进 worktree,不是就静默退回主工作区)
-      worktree: task.worktree === false ? false : (task.worktree === true ? true : 'auto')
+      // 全局总开关(worktreeIsolation,默认开)关掉时一律 false —— 任务开关失效
+      worktree: (await worktreeIsolationEnabled())
+        ? (task.worktree === false ? false : (task.worktree === true ? true : 'auto'))
+        : false
     }).catch(err => {
       publish('task:error', { taskId: task.id, error: err.message });
     });
@@ -817,8 +821,12 @@ export function registerWorkbenchRoutes({
     // ensureWorktree 复用逻辑一致:路径稳定,会话才续得上)。
     // 三态:'auto' 任务跟着**上一轮的实际模式**走 —— 上一轮在 worktree 里跑的
     // 会话就续 worktree,在主工作区跑的就续主工作区,否则 CLI 会话必断。
-    const taskWorktreeOn = task.worktree === true
-      || (task.worktree !== false && !!prevJob.worktree);
+    // 全局总开关(worktreeIsolation)关掉时只保留"跟着上一轮实际模式"这一半:
+    // 上一轮在 worktree 里的会话仍续 worktree(换目录必断会话),但不再因
+    // task.worktree === true 强制进 worktree —— 新工作一律不进隔离。
+    const taskWorktreeOn = (await worktreeIsolationEnabled())
+      ? (task.worktree === true || (task.worktree !== false && !!prevJob.worktree))
+      : !!prevJob.worktree;
     const runDir = taskWorktreeOn && repoPath ? worktreePath(repoPath, task.id) : repoPath;
     // 工作目录变过就不能续（判据与事故背景见 resumeGuard.js）：
     // 「移动到其他项目」只改 task.projectPath，历史轮次的会话仍在旧目录的会话库里。

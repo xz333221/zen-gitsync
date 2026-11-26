@@ -1005,6 +1005,8 @@ export default {
   '@42BB9:任务执行': 'Task Execution',
   '@42BB9:任务执行器': 'Task executor',
   '@42BB9:工作台执行任务时使用的本地 CLI；模型跟随各自 CLI 的自身配置': 'Local CLI used by the workbench to run tasks; models follow each CLI\'s own configuration',
+  '@42BB9:WorkTree 隔离': 'WorkTree isolation',
+  '@42BB9:任务执行时进独立工作树,合并与否由你决定;关闭后所有任务直接在项目目录执行': 'Run tasks in an isolated worktree; merging back is your call. When off, all tasks run directly in the project directory',
   '@42BB9:未安装': 'Not installed',
   '@42BB9:未在配置中指定': 'Not specified in config',
   '@42BB9:当前模型：{model}': 'Current model: {model}',

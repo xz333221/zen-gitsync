@@ -446,6 +446,12 @@ const defaultConfig = {
   // 决定「执行任务 / 执行子任务 / 从此处开始 / 简单任务续聊」这条链路
   // 默认 spawn 哪个本地 CLI；执行入口可以按次覆盖（见 workbench 执行路由）。
   taskExecutor: 'claude',
+  // Worktree 隔离的**全局总开关**（2026-11-27，默认开）：工作台任务执行时是否
+  // 允许进独立工作树。关掉后所有任务直接在项目目录执行，任务上的三态开关
+  // （task.worktree）随之失效 —— 唯一的例外是已有 worktree 的**续聊轮**仍按
+  // 上一轮实际模式走（CLI 会话按 cwd 索引，强行换目录会把会话续断）。
+  // 非布尔值不落盘，规范化与提示通道开关同一套（normalizeNotifySwitch）。
+  worktreeIsolation: true,
   // 任务 / 对话执行结束提示的三个通道（全局）。三者**平级且互相独立**，
   // 见 resolveNotifySwitches 的注释（2026-10-05 从"总开关 + 提示音子开关"拆过来）。
   //
@@ -843,6 +849,7 @@ async function loadConfig() {
       agentDefaultPrompt: normalizeAgentDefaultPrompt(raw.agentDefaultPrompt)
         ?? defaultConfig.agentDefaultPrompt,
       webSearch: normalizeWebSearch(raw.webSearch) ?? defaultConfig.webSearch,
+      worktreeIsolation: normalizeNotifySwitch(raw.worktreeIsolation) ?? defaultConfig.worktreeIsolation,
       ...resolveNotifySwitches(raw)
     };
   }
@@ -874,6 +881,8 @@ async function loadConfig() {
       ?? defaultConfig.agentDefaultPrompt,
     // 同 agentDefaultPrompt：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
     webSearch: normalizeWebSearch(raw?.webSearch) ?? defaultConfig.webSearch,
+    // 同 webSearch：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
+    worktreeIsolation: normalizeNotifySwitch(raw?.worktreeIsolation) ?? defaultConfig.worktreeIsolation,
     ...resolveNotifySwitches(raw)
   };
 }
@@ -927,7 +936,7 @@ async function saveConfig(config) {
   // 项目级是这一族键最容易踩的坑。解构出来本身不写回顶层（它已不再被任何地方读取）。
   const {
     theme, locale, models, modelsSeeded, ui, aiMaxToolIterations, aiMaxRequestTokens, taskExecutor,
-    agentPresetPrompts, agentPresetPromptsByView, agentDefaultPrompt, webSearch,
+    agentPresetPrompts, agentPresetPromptsByView, agentDefaultPrompt, webSearch, worktreeIsolation,
     notifyOnTaskDone: legacyNotifyOnTaskDone,
     notifyPageOnTaskDone, notifyBrowserOnTaskDone, notifySoundOnTaskDone,
     ...projectConfig
@@ -980,6 +989,11 @@ async function saveConfig(config) {
     if (normalized !== null) {
       raw[key] = normalized;
     }
+  }
+  // Worktree 隔离总开关同属全局设置：非布尔值不落盘(保留磁盘旧值)，与上面同一套语义
+  const normalizedWorktreeIsolation = normalizeNotifySwitch(worktreeIsolation);
+  if (normalizedWorktreeIsolation !== null) {
+    raw.worktreeIsolation = normalizedWorktreeIsolation;
   }
   // 预设提示词同属全局设置：空数组是**合法值**（= 恢复内置默认），照写；
   // 非法值（结构坏）不落盘，保留磁盘旧值 —— 与上面各键同一套语义。
