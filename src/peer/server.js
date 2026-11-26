@@ -27,10 +27,11 @@
 import http from 'node:http';
 import express from 'express';
 
-import { tokenEquals, getSessionId, setSessionId, maskToken } from './store.js';
+import { tokenEquals, getSessionId, setSessionId, clearSessionId, maskToken } from './store.js';
 import { askLocalAgent } from './localAsk.js';
 import { describePlatform, describeShell } from './platform.js';
 import { isSessionBusy } from '../ui/server/routes/workbench/sessionGate.js';
+import { agentSessionStore } from '../ui/server/routes/workbench/agentSessionStore.js';
 import logger from '../ui/server/utils/logger.js';
 
 const MAX_QUESTION_CHARS = 4000;
@@ -38,6 +39,39 @@ const DEFAULT_ASK_TIMEOUT_MS = 10 * 60 * 1000;
 const STARTED_AT = new Date().toISOString();
 /** 提问方自报字段的上限：够放下"Windows 11 (win32/x64)"这类标签，又不会把前缀撑爆。 */
 const FROM_FIELD_MAX = 64;
+
+/**
+ * 一条 peer 会话攒到多少条消息就该换代。
+ *
+ * 会话按 `in:<from>` 一人一条、**永不轮换**，于是跨机器提问会把几个月里互不相关
+ * 的事全塞进同一条会话。实测 2026-11-26：890 条（5.84MB，单次请求约 25 万 token）
+ * 的那条，一轮部署要跑 417s 以上；提问方的工具守卫等不及就断开，答案回不去。
+ *
+ * 300 条足够装几十轮工具循环、连续追问不丢上下文；再长就该让模型从干净的
+ * 上下文开始 —— 跨机器提问本来就常常是"新的一件事"。
+ */
+export const PEER_SESSION_MAX_MESSAGES = 300;
+
+/**
+ * 读一条会话的体量。
+ *
+ * 返回 null 只代表"这条会话**不可能**再用"：文件被删了，或者 id 本身非法
+ * （peers.json 被手改坏过）。调用方据此换新会话，而不是拿一个不存在的 id
+ * 去问 —— 那样每一问都会回"会话不存在"，且映射永远不会自愈。
+ *
+ * 其它读失败（Windows 上偶发 EBUSY / EACCES）**不算缺失**：那种时候宁可
+ * 按"0 条"继续用旧会话，也不能因为一次瞬时 IO 错误悄悄把上下文清掉。
+ */
+async function readSessionStats(sessionId) {
+  try {
+    const data = await agentSessionStore.read(sessionId);
+    return { messages: Array.isArray(data?.messages) ? data.messages.length : 0 };
+  } catch (err) {
+    if (err?.statusCode === 404 || err?.statusCode === 400 || err?.code === 'ENOENT') return null;
+    logger.warn?.(`[peer] 读会话 ${sessionId} 失败，按"仍在"继续: ${err?.message || err}`);
+    return { messages: 0, unreadable: true };
+  }
+}
 
 /** 清洗提问方自报的字段：去换行（防止伪造前缀的多行结构）、限长。 */
 function cleanFromField(value) {
@@ -77,6 +111,9 @@ export function buildPeerQuestionPrefix({ from, fromName, fromOs } = {}) {
  * @param {() => string} [opts.getVersion]
  * @param {(key:string)=>Promise<string>} [opts.getSession] 会话读取（单测注入内存版）
  * @param {(key:string,id:string)=>Promise<void>} [opts.setSession] 会话写回
+ * @param {(sessionId:string)=>Promise<{messages:number}|null>} [opts.getSessionStats]
+ *   读会话体量；返回 null 表示"这条会话已经不在了"。单测注入内存版。
+ * @param {(key:string)=>Promise<void>} [opts.clearSession] 清掉某个键的绑定（换代用）
  */
 export function createPeerApp({
   self,
@@ -85,7 +122,9 @@ export function createPeerApp({
   timeoutMs = DEFAULT_ASK_TIMEOUT_MS,
   getVersion = () => '',
   getSession = getSessionId,
-  setSession = setSessionId
+  setSession = setSessionId,
+  getSessionStats = readSessionStats,
+  clearSession = clearSessionId
 } = {}) {
   if (!self || !self.token) throw new Error('createPeerApp 需要带令牌的本机身份（先 ensureSelf）');
 
@@ -138,7 +177,8 @@ export function createPeerApp({
    * 两者只用于拼上下文前缀，不参与鉴权、不参与会话 key（key 仍只看 from）。
    *
    * 会话连续性：每个提问方在**本机**占一个会话（key = `in:<from>`），这样 A 问
-   * 第二句时 B 还记得第一句，但 A 和 C 的上下文不会串。
+   * 第二句时 B 还记得第一句，但 A 和 C 的上下文不会串。这条会话不会永久续下去：
+   * 还在生成中 / 已被删 / 超过 PEER_SESSION_MAX_MESSAGES 条，都会换一条新的。
    */
   app.post('/api/peer/ask', async (req, res) => {
     const question = String(req.body?.question || '').trim();
@@ -159,22 +199,49 @@ export function createPeerApp({
 
     const sessionKey = `in:${from}`;
     let sessionId = await getSession(sessionKey).catch(() => '');
-    // 续接的那条会话还在生成中：闸是**按会话**占的，带着这个 id 进去必然撞
-    // SESSION_BUSY，而这一问的调用方可能早就放弃等待了（客户端有自己的超时，
-    // 到点只是本地不等，跨机器这一跳还在跑）。对端用户在界面上看不到任何在跑的
-    // 对话 —— peer 会话不属于任何项目 —— 于是表现为"我没和它说话，它却一直忙"。
+
+    // 已经绑定的会话为什么不能接着用 —— 三种情况，处理各不同：
     //
-    // 这里改用一条新会话：宁可这一问丢掉上下文，也不能让一个固定 key 把之后
-    // 每一问都堵死。两条会话各自落盘，不会互相覆盖（闸挡的本来就是同一份快照）。
-    if (sessionId && isSessionBusy(sessionId)) {
-      logger.info?.(`[peer] 会话 ${sessionId} 仍在生成中，本问改用新会话（from=${from}）`);
+    // ① busy：这条会话还在生成中。闸是**按会话**占的，带着这个 id 进去必然撞
+    //    SESSION_BUSY，而这一问的调用方可能早就放弃等待了（客户端有自己的超时，
+    //    到点只是本地不等，跨机器这一跳还在跑）。对端用户在界面上看不到任何在跑的
+    //    对话 —— peer 会话不属于任何项目 —— 于是表现为"我没和它说话，它却一直忙"。
+    //    这里改用一条新会话：宁可这一问丢掉上下文，也不能让一个固定 key 把之后
+    //    每一问都堵死。**先不清映射**：那一轮还在跑，它结束后这条旧绑定仍然有效
+    //    （本问若失败，下一问还能续上）。
+    //
+    // ② missing：会话文件被删了。留着映射的后果是每一问都回"会话不存在"，
+    //    而且映射永远不会自愈 —— 只能让用户去手改 peers.json。
+    //
+    // ③ oversized：会话太长了（见 PEER_SESSION_MAX_MESSAGES）。每条请求都要
+    //    把整包历史重新发一遍，几百条之后一轮动辄十几分钟，提问方等不到就断开。
+    //    换代比"继续拖"更接近用户想要的：跨机器提问大多是新的独立任务。
+    let resetReason = '';
+    if (sessionId) {
+      if (isSessionBusy(sessionId)) {
+        resetReason = 'busy';
+      } else {
+        const stats = await getSessionStats(sessionId).catch(() => null);
+        if (!stats) resetReason = 'missing';
+        else if (stats.messages >= PEER_SESSION_MAX_MESSAGES) resetReason = 'oversized';
+      }
+    }
+    if (resetReason) {
+      const why = resetReason === 'busy'
+        ? '仍在生成中'
+        : resetReason === 'missing'
+          ? '已不存在'
+          : `已有 ${PEER_SESSION_MAX_MESSAGES}+ 条消息`;
+      logger.info?.(`[peer] 会话 ${sessionId || '(空)'} ${why}，本问改用新会话（from=${from}）`);
       sessionId = '';
+      // busy 那条的绑定要留着（它还在跑）；另外两种已经没救了，清掉才不会再被选中
+      if (resetReason !== 'busy') await clearSession(sessionKey).catch(() => {});
     }
     logger.info?.(`[peer] 收到提问 from=${from} len=${question.length}`);
 
     // 提问方断开 = 这一轮没人要了：必须把本机那一轮一起掐掉。
     //
-    // 场景（2026-11-09 实测）：本机工具层 ask_peer 有 150s 上限，到点只是"本地不等了"，
+    // 场景（2026-11-09 实测）：本机工具层 ask_peer 到点后只是"本地不等了"，
     // 跨机器那一跳还在跑；对端把这一轮跑到底，会话闸一直占着 `in:<from>` 这个固定 key，
     // 于是后续每一次提问都在 1~2 秒内回 SESSION_BUSY —— 而对端用户在界面上看不到
     // 任何正在跑的对话（peer 会话不属于任何项目）。

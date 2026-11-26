@@ -21,6 +21,7 @@ import {
   TOOL_STALLED,
   TOOL_GUARD_MARGIN_MS,
   TOOL_GUARD_DEFAULT_MS,
+  ASK_PEER_GUARD_MS,
 } from './toolGuard.js';
 
 // ========== 预算:按各工具自己的上限推,不搞一刀切 ==========
@@ -48,6 +49,14 @@ test('toolGuardMs: background_task 要容下 wait_seconds 再留收尾', () => {
 test('toolGuardMs: 其余工具走固定上限', () => {
   assert.equal(toolGuardMs('read_file', { path: 'a.txt' }), TOOL_GUARD_DEFAULT_MS);
   assert.equal(toolGuardMs('mcp__foo__bar', {}), TOOL_GUARD_DEFAULT_MS);
+});
+
+test('toolGuardMs: ask_peer 按分钟级算，不能落回本地工具的 150s', () => {
+  // 回归（2026-11-26）：对端一轮部署实测 417s，而 ask_peer 落到默认 150s ——
+  // 本机到点放弃、连接一断，对端那一轮被判"提问方已断开"，答案回不来。
+  assert.equal(toolGuardMs('ask_peer', {}), ASK_PEER_GUARD_MS);
+  assert.ok(ASK_PEER_GUARD_MS > 10 * 60 * 1000, '必须盖住提问方/对端那两层 10 分钟超时');
+  assert.ok(ASK_PEER_GUARD_MS > TOOL_GUARD_DEFAULT_MS, '不能退回本地工具的 150s 口径');
 });
 
 // ========== 兜底本身:不吞正常结果、不吞工具自己的错、超时才判卡死 ==========

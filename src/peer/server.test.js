@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 
-import { createPeerApp, buildPeerQuestionPrefix } from './server.js';
+import { createPeerApp, buildPeerQuestionPrefix, PEER_SESSION_MAX_MESSAGES } from './server.js';
 import { describePlatform } from './platform.js';
 import { acquireSessionTurn, isSessionBusy, releaseSession } from '../ui/server/routes/workbench/sessionGate.js';
 
@@ -11,17 +11,24 @@ const SELF = { id: 'node-abc12345', name: '这台电脑', avatar: '', token: 'k'
 /**
  * 造一个 app：会话表用**内存版**注入。
  * 不注入就会落到真实 <DATA_DIR>/peers.json —— 单测不许写用户的真实数据目录。
+ *
+ * getSessionStats 也要注入：它默认会去读真实的 agent-sessions 目录，读不到就判
+ * "会话已不存在"→ 换代，那几条"第二问接着第一问"的断言会全部打翻。
+ * 默认给 0 条（会话还在、很短）；要模拟超长会话就往 `stats` 里塞条数。
  */
 function makeApp(opts = {}) {
   const sessions = new Map();
+  const stats = new Map();
   const app = createPeerApp({
     self: SELF,
     getLocalPort: () => 1234,
     getSession: async (k) => sessions.get(k) || '',
     setSession: async (k, v) => { sessions.set(k, v); },
+    getSessionStats: async (id) => ({ messages: stats.get(id) ?? 0 }),
+    clearSession: async (k) => { sessions.delete(k); },
     ...opts
   });
-  return { app, sessions };
+  return { app, sessions, stats };
 }
 
 /** 在随机端口起一个 app，返回 { url, close }。 */
@@ -296,6 +303,65 @@ test('存下来的会话仍在生成中时改用新会话，而不是把这一�
     assert.equal(isSessionBusy('sess-held'), true, '不许顺手放掉别人占着的闸');
   } finally {
     releaseSession('sess-held', held.token);
+    await close();
+  }
+});
+
+// 回归（2026-11-26 用户报"远端对话一直没回复"）：
+//
+// peer 会话按 `in:<from>` 永久复用，几个月下来攒到 890 条（实测 5.84MB，
+// 单次请求约 25 万 token）—— 一轮部署 417s 起步，提问方等不到就断开，
+// 答案回不去。超过上限必须换一条新的，而不是继续把整包历史发过去。
+test('会话攒过上限时自动开新会话，并清掉旧绑定', async () => {
+  const seenSessions = [];
+  const { app, sessions, stats } = makeApp({
+    ask: async ({ sessionId }) => {
+      seenSessions.push(sessionId);
+      return { answer: '重新开始', sessionId: sessionId || 'sess-fresh', ms: 1 };
+    }
+  });
+  sessions.set('in:node-fat', 'sess-fat');
+  stats.set('sess-fat', PEER_SESSION_MAX_MESSAGES + 1);
+  const { url, close } = await serve(app);
+  const headers = { Authorization: `Bearer ${SELF.token}`, 'Content-Type': 'application/json' };
+  try {
+    const res = await fetch(`${url}/api/peer/ask`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ question: '再部署一次', from: 'node-fat' })
+    });
+    assert.equal(res.status, 200);
+    assert.deepEqual(seenSessions, [''], '超长会话 id 不该再传进去');
+    assert.equal(sessions.get('in:node-fat'), 'sess-fresh', '下一问接着新会话走');
+  } finally {
+    await close();
+  }
+});
+
+// 用户从 UI 里删掉那条远端会话后，peers.json 仍指着它 —— 旧行为是每一问都回
+// "会话不存在"，而映射永远不自愈，只能手改 json。读不到就当作已删除，换新会话。
+test('绑定的会话已经不存在时自动换新会话（不再永久回「会话不存在」）', async () => {
+  const seenSessions = [];
+  const { app, sessions } = makeApp({
+    getSessionStats: async () => null,
+    ask: async ({ sessionId }) => {
+      seenSessions.push(sessionId);
+      return { answer: 'ok', sessionId: sessionId || 'sess-after-delete', ms: 1 };
+    }
+  });
+  sessions.set('in:node-del', 'sess-deleted');
+  const { url, close } = await serve(app);
+  const headers = { Authorization: `Bearer ${SELF.token}`, 'Content-Type': 'application/json' };
+  try {
+    const res = await fetch(`${url}/api/peer/ask`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ question: '还在吗', from: 'node-del' })
+    });
+    assert.equal(res.status, 200);
+    assert.deepEqual(seenSessions, ['']);
+    assert.equal(sessions.get('in:node-del'), 'sess-after-delete');
+  } finally {
     await close();
   }
 });

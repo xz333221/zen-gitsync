@@ -15,6 +15,7 @@ import {
   listPeers,
   getSessionId,
   setSessionId,
+  clearSessionId,
   maskToken,
   tokenEquals,
   PEER_DEFAULT_PORT
@@ -76,17 +77,34 @@ test('upsertPeer 按 url 去重，findPeer 认 id / 昵称 / 地址', async () =
   assert.equal(await findPeer('不存在', file), null);
 });
 
-test('removePeer 连带清掉该对端的会话 id', async () => {
+test('removePeer 连带清掉该对端的会话 id（in: / out: / 老版裸 id 三种键）', async () => {
   const file = await tmpFile();
   await ensureSelf(file);
   await upsertPeer({ id: 'node-aaaa1111', name: 'A', url: 'http://10.0.0.2:5599', token: 'x' }, file);
-  await setSessionId('node-aaaa1111', 'sess-1', file);
-  assert.equal(await getSessionId('node-aaaa1111', file), 'sess-1');
+  // 实际写入的三处：它来问我（in:）、我去问它（out:）、更早版本的裸 id。
+  // 2026-11-26 之前 removePeer 只删裸 id，于是删掉再加回来照样续上旧会话。
+  await setSessionId('in:node-aaaa1111', 'sess-in', file);
+  await setSessionId('out:node-aaaa1111', 'sess-out', file);
+  await setSessionId('node-aaaa1111', 'sess-legacy', file);
 
   const { removed } = await removePeer('A', file);
   assert.equal(removed, true);
+  assert.equal(await getSessionId('in:node-aaaa1111', file), '');
+  assert.equal(await getSessionId('out:node-aaaa1111', file), '');
   assert.equal(await getSessionId('node-aaaa1111', file), '');
   assert.deepEqual(await listPeers(file), []);
+});
+
+test('clearSessionId 只清指定键，空值不再被 setSessionId 静默吞掉', async () => {
+  const file = await tmpFile();
+  await ensureSelf(file);
+  await upsertPeer({ id: 'node-bbbb2222', name: 'B', url: 'http://10.0.0.3:5599', token: 'x' }, file);
+  await setSessionId('in:node-bbbb2222', 'sess-in', file);
+  await setSessionId('out:node-bbbb2222', 'sess-out', file);
+
+  await clearSessionId('in:node-bbbb2222', file);
+  assert.equal(await getSessionId('in:node-bbbb2222', file), '', '被清的键必须真的没了');
+  assert.equal(await getSessionId('out:node-bbbb2222', file), 'sess-out', '别的键不许连带清掉');
 });
 
 test('listPeers 不带令牌明文', async () => {

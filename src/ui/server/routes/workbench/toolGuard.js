@@ -44,12 +44,34 @@ export const TOOL_GUARD_MARGIN_MS = 30 * 1000;
  *
  * 150s 的依据：MCP 调用自带 120s（mcp.js CALL_TIMEOUT_MS），读写文件/搜索/列目录
  * 都是本地毫秒级，给到 150s 已经是"连同 GC 和慢盘一起算进去"还绰绰有余的数。
+ *
+ * 例外是 ask_peer —— 它问的是另一台机器上正在跑的智能体，天然是分钟级，
+ * 单独走下面的 ASK_PEER_GUARD_MS。
  */
 export const TOOL_GUARD_DEFAULT_MS = 150 * 1000;
 
 /** background_task 的 read 最长可以带 wait_seconds=60，再留一分钟收尾 */
 export const BG_WAIT_MAX_MS = 60 * 1000;
 export const BG_GUARD_EXTRA_MS = 60 * 1000;
+
+/**
+ * ask_peer 的兜底：跨机器问答是**分钟级**的，不能按本地工具的 150s 算。
+ *
+ * 三个超时必须层层放大，否则会出现"外面先挂、里面还在跑"的空回复：
+ *   · 工具守卫（这里）—— 最外层，要最后才开火；
+ *   · 提问方 `peer/client.js` 的 ASK_TIMEOUT_MS —— 10 分钟；
+ *   · 对端 `peer/server.js` 的 DEFAULT_ASK_TIMEOUT_MS —— 10 分钟。
+ *
+ * 2026-11-26 的事故就是这么来的：ask_peer 落到默认 150s，而对端一轮部署
+ * （build + pm2 restart + 验证）实测跑到 417s。150s 一到本机就放弃等待、
+ * 把连接掐了，对端那一轮随之被判"提问方已断开，本轮已取消" —— 用户在对端
+ * 界面上只看到半截工具卡，既没有正文也没有报错。工具自己的描述写的就是
+ * "可能几十秒到几分钟"，150s 从一开始就与之矛盾。
+ *
+ * 取 11 分钟而不是 10：让前两层（10 分钟）先超时、自己把话说清楚
+ * （"本机智能体超时"），这里只兜"连超时都没触发的不落地"。
+ */
+export const ASK_PEER_GUARD_MS = 11 * 60 * 1000;
 
 /** 兜底触发时抛出的错误码 —— 调用方靠它区分"卡住"与"工具自己报的错" */
 export const TOOL_STALLED = 'TOOL_STALLED';
@@ -66,6 +88,10 @@ export const TOOL_STALLED = 'TOOL_STALLED';
  */
 export function toolGuardMs(name, args = {}) {
   if (name === 'ask_user') return null;
+
+  // 跨机器问答有自己的一套分钟级超时（见 ASK_PEER_GUARD_MS 的注释）。
+  // 必须排在下面那行默认值之前 —— 否则又会退回 150s。
+  if (name === 'ask_peer') return ASK_PEER_GUARD_MS;
 
   if (name === 'run_command') {
     const command = typeof args?.command === 'string' ? args.command : '';

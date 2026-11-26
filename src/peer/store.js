@@ -256,7 +256,15 @@ export async function removePeer(ref, filePath = PEERS_FILE) {
   const state = await readState(filePath);
   state.peers = state.peers.filter((p) => p !== target && !(target.id && p.id === target.id) &&
     !(!target.id && p.url === target.url));
-  if (target.id) delete state.sessions[target.id];
+  if (target.id) {
+    // 三种键都要清：`in:` 是"它来问我"（本条机器上那条固定会话），`out:` 是
+    // "我去问它"，裸 id 是更早版本没加前缀时的写法。
+    // 2026-11-26 之前这里只删裸 id —— 而实际写入的一直是带前缀的两个键，
+    // 于是"删掉对端再重新加"并不会重置会话，下一问照样续上那条几千条的旧会话。
+    delete state.sessions[target.id];
+    delete state.sessions[`in:${target.id}`];
+    delete state.sessions[`out:${target.id}`];
+  }
   await writeState(state, filePath);
   return { removed: true, peer: target };
 }
@@ -282,6 +290,23 @@ export async function setSessionId(peerId, sessionId, filePath = PEERS_FILE) {
   if (!peerId || !sessionId) return;
   const state = await ensureSelf(filePath);
   state.sessions[peerId] = sessionId;
+  await writeState(state, filePath);
+}
+
+/**
+ * 忘掉某个键绑定的会话 id（下一问会开新会话）。
+ *
+ * 与 setSessionId(key, '') 的区别：后者把空串当"没传"直接 return，清不掉。
+ * 键不存在时什么都不写 —— 不能因为一次无意义的清理去重写 peers.json。
+ *
+ * @param {string} peerId `in:<id>` / `out:<id>` / 裸 id
+ * @param {string} [filePath]
+ */
+export async function clearSessionId(peerId, filePath = PEERS_FILE) {
+  if (!peerId) return;
+  const state = await readState(filePath);
+  if (!(peerId in state.sessions)) return;
+  delete state.sessions[peerId];
   await writeState(state, filePath);
 }
 
