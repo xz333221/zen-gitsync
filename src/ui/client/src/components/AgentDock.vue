@@ -137,8 +137,12 @@ watch([() => agentDockBus.pending, agentViewRef], async ([pending, vm]) => {
 // 面板里可能开着 EP 弹窗（引擎安装对话框等）：那之际 Esc 归弹窗，不关面板。
 // 判据必须是「可见的模态」：这个应用的对话框壳（.el-overlay.el-modal-dialog）
 // 会被 KeepAlive 的视图一直留在 DOM 里（display:none），数存在性会恒真。
+// el-image-viewer（附件缩略图 / 看板封面点开的大图）**不带** .el-overlay ——
+// 它的壳是 .el-image-viewer__wrapper，漏掉它时看图按 Esc 会连面板一起收掉
+// （两边的 keydown 互不知情：看图器在 window 上收、这里在 document 上收）。
+const OVERLAY_SELECTOR = '.el-overlay, .el-image-viewer__wrapper'
 function isModalOpen(): boolean {
-  return [...document.querySelectorAll('.el-overlay')].some((el) => {
+  return [...document.querySelectorAll(OVERLAY_SELECTOR)].some((el) => {
     const r = el.getBoundingClientRect()
     return r.width > 0 && r.height > 0
   })

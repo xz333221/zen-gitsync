@@ -136,6 +136,33 @@ describe('AgentDock 开合', () => {
     expect(panelShown(w)).toBe(false)
   })
 
+  // 看图器 / 弹窗开着时 Esc 归它们 —— 用户点附件缩略图预览后按 Esc 是「退图片」，
+  // 不能把整个对话面板一起收掉。el-image-viewer 的壳（.el-image-viewer__wrapper）
+  // 不在 .el-overlay 里，判据漏掉它就会两边一起关。
+  it('有可见的看图器时，Esc 不关面板；看图器关掉后 Esc 恢复关面板', async () => {
+    const w = mountDock()
+    await mascot(w).trigger('click')
+    await nextTick()
+    expect(panelShown(w)).toBe(true)
+
+    // jsdom 没有布局，getBoundingClientRect 恒为 0：手工给叠层壳一个非零面积，
+    // 语义等同「它正显示着」（判模态按可见面积，见 isModalOpen 的注释）
+    const viewer = document.createElement('div')
+    viewer.className = 'el-image-viewer__wrapper'
+    const area = { width: 800, height: 600, top: 0, left: 0, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => ({}) }
+    viewer.getBoundingClientRect = () => area as DOMRect
+    document.body.appendChild(viewer)
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await nextTick()
+    expect(panelShown(w)).toBe(true)
+
+    viewer.remove()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await nextTick()
+    expect(panelShown(w)).toBe(false)
+  })
+
   it('头部 ✕ 收起；最大化/还原切换面板 class', async () => {
     const w = mountDock()
     await mascot(w).trigger('click')
